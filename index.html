@@ -140,7 +140,7 @@
 <div id="setup" class="screen">
   <header style="border:none; padding:0 0 16px; background:transparent;">
     <h1><img src="logo-header.png" alt="Murat Gıda" style="height:30px; width:auto; display:block;"></h1>
-    <div class="sub">Sayım · hızlı barkod • offline • Android • build 33</div>
+    <div class="sub">Sayım · hızlı barkod • offline • Android • build 34</div>
   </header>
 
   <div class="card">
@@ -419,6 +419,9 @@
 
   personnelInput.value = state.personnel || "";
   serverInput.value = state.serverUrl || DEFAULT_SERVER_URL;
+  // Güvenlik ağı: her ne sebeple olursa olsun kutu boş kalırsa, bir sonraki
+  // olay döngüsünde tekrar zorla doldur.
+  setTimeout(function(){ if(!serverInput.value.trim()) serverInput.value = DEFAULT_SERVER_URL; }, 0);
 
   // Sayfa açılışında daha önce yüklenmiş kataloğu belleğe getir (varsa) —
   // her açılışta 50 bin satırı yeniden yüklemene gerek kalmaz.
@@ -475,8 +478,7 @@
 
   // ---------- KATALOĞU BULUTA GÖNDER / BULUTTAN ÇEK (telefonlar arası paylaşım) ----------
   function uploadCatalogToServer(entries){
-    var url = serverInput.value.trim();
-    if(!url) return; // adres yoksa sessizce atla, sorun değil
+    var url = serverInput.value.trim() || DEFAULT_SERVER_URL;
     fetch(url, {
       method:'POST', mode:'no-cors',
       headers:{'Content-Type':'text/plain;charset=utf-8'},
@@ -489,8 +491,7 @@
   // Sayım sırasında keşfedilen TEK bir yeni ürünü buluta gönderir — arka
   // planda, sessizce, sayım hızını hiç etkilemeden. Diğer ürünlere dokunmaz.
   function uploadCatalogItemToServer(entry){
-    var url = state.serverUrl;
-    if(!url) return;
+    var url = state.serverUrl || DEFAULT_SERVER_URL;
     fetch(url, {
       method:'POST', mode:'no-cors',
       headers:{'Content-Type':'text/plain;charset=utf-8'},
@@ -499,8 +500,7 @@
   }
 
   document.getElementById('fetchCatalogBtn').addEventListener('click', function(){
-    var url = serverInput.value.trim();
-    if(!url){ toast("Önce Gönderim Adresi'ni gir"); serverInput.focus(); return; }
+    var url = serverInput.value.trim() || DEFAULT_SERVER_URL;
     productCountEl.textContent = "Sunucudan çekiliyor…";
     fetchCatalogJsonp(url, function(err, data){
       if(err){
@@ -563,7 +563,7 @@
     if(!name){ toast("Lütfen personel adını gir"); personnelInput.focus(); return; }
     if(catalogMap.size === 0){ toast("Önce ürün listesi yükle"); return; }
     state.personnel = name;
-    state.serverUrl = serverInput.value.trim();
+    state.serverUrl = serverInput.value.trim() || DEFAULT_SERVER_URL;
     save();
     document.getElementById('setup').classList.add('hidden');
     document.getElementById('main').classList.remove('hidden');
