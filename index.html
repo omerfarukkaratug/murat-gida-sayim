@@ -140,18 +140,16 @@
 <div id="setup" class="screen">
   <header style="border:none; padding:0 0 16px; background:transparent;">
     <h1><img src="logo-header.png" alt="Murat Gıda" style="height:30px; width:auto; display:block;"></h1>
-    <div class="sub">Sayım · hızlı barkod • offline • Android • build 34</div>
+    <div class="sub">Sayım · hızlı barkod • offline • Android • build 35</div>
   </header>
 
   <div class="card">
-    <div class="row">
+    <div class="row" style="margin-bottom:0;">
       <label>Personel Adı</label>
       <input type="text" id="personnelInput" placeholder="Adınızı yazın">
     </div>
-    <div class="row" style="margin-bottom:0;">
-      <label>Gönderim Adresi (varsayılan hazır geliyor)</label>
-      <input type="url" id="serverInput" placeholder="https://sizin-sunucunuz.com/sayim">
-      <div class="hint">Bu adres zaten koda gömülü ve hazır — elle yazmana gerek yok. İstersen değiştirebilirsin, boş bırakırsan veriler sadece telefonda saklanır.</div>
+    <div class="hidden">
+      <input type="url" id="serverInput" value="">
     </div>
   </div>
 
@@ -167,13 +165,14 @@
       <span style="font-family:var(--mono)">Süt 1L;8690001112223;STK001;32<br>Süt 1L;8690001112230;STK001;32<br>Ekmek;8690009998887;STK002;120</span>
       <br>Ayırıcı olarak ; veya , kullanılabilir. Ya da aşağıya elle yapıştırabilirsin. Liste telefona kalıcı olarak kaydedilir — her açılışta yeniden yüklemene gerek kalmaz, sadece güncellemek istediğinde yeni dosya seç.</div>
     <textarea id="pasteArea" placeholder="İstersen listeyi buraya yapıştır: Ürün Adı;Barkod (her satıra bir tane)"></textarea>
-    <div class="row" style="margin:10px 0 0; text-align:center;">
-      Yüklü ürün: <span id="productCount">Kontrol ediliyor…</span>
+    <div class="row" style="margin:12px 0 0; text-align:center;">
+      <div>Yüklü ürün: <span id="productCount">Kontrol ediliyor…</span></div>
+      <div id="catalogSyncStatus" style="font-size:11.5px; color:var(--muted); font-family:var(--mono); margin-top:4px;"></div>
     </div>
     <button type="button" id="fetchCatalogBtn" style="width:100%; margin-top:10px; background:var(--panel2); border:1.5px solid var(--line); color:var(--text); padding:12px;">
       <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-3px; margin-right:5px;"><polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg>Sunucudan Kataloğu Çek
     </button>
-    <div class="hint" style="text-align:center;">Başka bir telefonda yüklenmiş listeyi buradan otomatik indirebilirsin — Gönderim Adresi girili olmalı.</div>
+    <div class="hint" style="text-align:center;">Başka bir telefonda yüklenmiş listeyi buradan otomatik indirebilirsin.</div>
   </div>
 
   <button class="btn-main" id="startBtn">Sayıma Başla</button>
@@ -428,6 +427,7 @@
   idbLoadAll().then(function(rows){
     rows.forEach(function(r){ catalogMap.set(r.barcode, { name: r.name, stockCode: r.stockCode || '', oldStock: r.oldStock || '' }); });
     updateProductCountLabel();
+    setSyncStatus();
   }).catch(function(){ productCountEl.textContent = "0"; });
 
   function updateProductCountLabel(){
@@ -479,13 +479,28 @@
   // ---------- KATALOĞU BULUTA GÖNDER / BULUTTAN ÇEK (telefonlar arası paylaşım) ----------
   function uploadCatalogToServer(entries){
     var url = serverInput.value.trim() || DEFAULT_SERVER_URL;
+    setSyncStatus('Sunucuya gönderiliyor…');
     fetch(url, {
       method:'POST', mode:'no-cors',
       headers:{'Content-Type':'text/plain;charset=utf-8'},
       body: JSON.stringify({ type:'katalog_bulk', entries: entries })
     }).then(function(){
       toast("Katalog buluta gönderildi, diğer telefonlar çekebilir");
-    }).catch(function(){ /* sessiz geç, yerel kayıt zaten yapıldı */ });
+      state.catalogSyncedAt = nowParts();
+      state.catalogSyncedCount = entries.length;
+      save();
+      setSyncStatus(null);
+    }).catch(function(){ /* sessiz geç, yerel kayıt zaten yapıldı */ setSyncStatus(null); });
+  }
+
+  function setSyncStatus(overrideText){
+    var el = document.getElementById('catalogSyncStatus');
+    if(overrideText){ el.textContent = overrideText; return; }
+    if(state.catalogSyncedAt){
+      el.textContent = '☁️ Dosyaya gönderildi — ' + state.catalogSyncedAt.date + ' ' + state.catalogSyncedAt.time + ' (' + (state.catalogSyncedCount||0) + ' kayıt)';
+    } else {
+      el.textContent = 'Henüz sunucuya gönderilmedi';
+    }
   }
 
   // Sayım sırasında keşfedilen TEK bir yeni ürünü buluta gönderir — arka
