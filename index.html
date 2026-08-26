@@ -140,7 +140,7 @@
 <div id="setup" class="screen">
   <header style="border:none; padding:0 0 16px; background:transparent;">
     <h1><img src="logo-header.png" alt="Murat Gıda" style="height:30px; width:auto; display:block;"></h1>
-    <div class="sub">Sayım · hızlı barkod • offline • Android • build 35</div>
+    <div class="sub">Sayım · hızlı barkod • offline • Android • build 36</div>
   </header>
 
   <div class="card">
@@ -516,7 +516,7 @@
 
   document.getElementById('fetchCatalogBtn').addEventListener('click', function(){
     var url = serverInput.value.trim() || DEFAULT_SERVER_URL;
-    productCountEl.textContent = "Sunucudan çekiliyor…";
+    productCountEl.textContent = "Sunucudan çekiliyor… (büyük listede 1 dakikaya kadar sürebilir)";
     fetchCatalogJsonp(url, function(err, data){
       if(err){
         updateProductCountLabel();
@@ -545,7 +545,7 @@
     var timeoutId = setTimeout(function(){
       cleanup();
       cb('zaman aşımı / bağlantı kurulamadı');
-    }, 20000);
+    }, 60000); // 35 bin satırlık kataloğu hazırlamak Google tarafında zaman alabiliyor
     function cleanup(){
       clearTimeout(timeoutId);
       delete window[cbName];
