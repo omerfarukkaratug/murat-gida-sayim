@@ -140,7 +140,7 @@
 <div id="setup" class="screen">
   <header style="border:none; padding:0 0 16px; background:transparent;">
     <h1><img src="logo-header.png" alt="Murat Gıda" style="height:30px; width:auto; display:block;"></h1>
-    <div class="sub">Sayım · hızlı barkod • offline • Android • build 30</div>
+    <div class="sub">Sayım · hızlı barkod • offline • Android • build 31</div>
   </header>
 
   <div class="card">
@@ -149,9 +149,9 @@
       <input type="text" id="personnelInput" placeholder="Adınızı yazın">
     </div>
     <div class="row" style="margin-bottom:0;">
-      <label>Gönderim Adresi (opsiyonel — internet görünce otomatik gönderir)</label>
+      <label>Gönderim Adresi (varsayılan hazır geliyor)</label>
       <input type="url" id="serverInput" placeholder="https://sizin-sunucunuz.com/sayim">
-      <div class="hint">Boş bırakırsan sorun değil: veriler telefonda saklanır, istediğin zaman Excel (CSV) olarak indirip mevcut programına elle aktarabilirsin. Adresi girersen internet bulunca otomatik gönderilir.</div>
+      <div class="hint">Bu adres zaten koda gömülü ve hazır — elle yazmana gerek yok. İstersen değiştirebilirsin, boş bırakırsan veriler sadece telefonda saklanır.</div>
     </div>
   </div>
 
@@ -411,8 +411,13 @@
   var productCountEl = document.getElementById('productCount');
   var startBtn = document.getElementById('startBtn');
 
+  // Sabit varsayılan gönderim adresi — telefonlar bunu elle yazmak zorunda
+  // kalmasın diye koda gömülü. Yine de istenirse değiştirilebilir.
+  var DEFAULT_SERVER_URL = 'https://script.google.com/macros/s/AKfycbx-6GuC4JZ89QhZB8ZkIZUOBNwxlR7gmByqdSJG85NLYEN04jXSfQqx2Sz1IeuBlNNitg/exec';
+  if(!state.serverUrl){ state.serverUrl = DEFAULT_SERVER_URL; save(); }
+
   personnelInput.value = state.personnel || "";
-  serverInput.value = state.serverUrl || "";
+  serverInput.value = state.serverUrl || DEFAULT_SERVER_URL;
 
   // Sayfa açılışında daha önce yüklenmiş kataloğu belleğe getir (varsa) —
   // her açılışta 50 bin satırı yeniden yüklemene gerek kalmaz.
