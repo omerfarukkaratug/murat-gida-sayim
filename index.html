@@ -140,7 +140,7 @@
 <div id="setup" class="screen">
   <header style="border:none; padding:0 0 16px; background:transparent;">
     <h1><img src="logo-header.png" alt="Murat Gıda" style="height:30px; width:auto; display:block;"></h1>
-    <div class="sub">Sayım · hızlı barkod • offline • Android • build 36</div>
+    <div class="sub">Sayım · hızlı barkod • offline • Android • build 37</div>
   </header>
 
   <div class="card">
@@ -412,8 +412,11 @@
 
   // Sabit varsayılan gönderim adresi — telefonlar bunu elle yazmak zorunda
   // kalmasın diye koda gömülü. Yine de istenirse değiştirilebilir.
-  var DEFAULT_SERVER_URL = 'https://script.google.com/macros/s/AKfycbw_5fiRSjpAAZ5dvkPjMrv88yj5f2ZyZon6-DPWHkp_ELz7O-fPTF_tZSdn3AFezsIACg/exec';
-  var OLD_WRONG_URLS = ['https://script.google.com/macros/s/AKfycbx-6GuC4JZ89QhZB8ZkIZUOBNwxlR7gmByqdSJG85NLYEN04jXSfQqx2Sz1IeuBlNNitg/exec'];
+  var DEFAULT_SERVER_URL = 'https://script.google.com/macros/s/AKfycbwIqOjcO6IhKwq-FQ5Jgd__y7UtvEBZfH6cds8Y0-i2_1640ojIZRUKDA361EIKG80awA/exec';
+  var OLD_WRONG_URLS = [
+    'https://script.google.com/macros/s/AKfycbx-6GuC4JZ89QhZB8ZkIZUOBNwxlR7gmByqdSJG85NLYEN04jXSfQqx2Sz1IeuBlNNitg/exec',
+    'https://script.google.com/macros/s/AKfycbw_5fiRSjpAAZ5dvkPjMrv88yj5f2ZyZon6-DPWHkp_ELz7O-fPTF_tZSdn3AFezsIACg/exec'
+  ];
   if(!state.serverUrl || OLD_WRONG_URLS.indexOf(state.serverUrl) !== -1){ state.serverUrl = DEFAULT_SERVER_URL; save(); }
 
   personnelInput.value = state.personnel || "";

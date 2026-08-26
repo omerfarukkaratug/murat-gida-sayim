@@ -1,6 +1,13 @@
+/**
+ * MURAT GIDA - SAYIM TOPLAMA SERVİSİ
+ * Bu dosyanın tamamını Apps Script'e yapıştırın (eski kodun üzerine, hiçbir
+ * satır kalmayacak şekilde tamamen silip baştan yapıştırın).
+ */
+
 function doGet(e) {
-  // ?action=katalog ile ürün kataloğunu JSON olarak döndürür (telefonlar bu
-  // adresi çağırarak listeyi otomatik çeker — elle dosya taşımaya gerek kalmaz)
+  // ?action=katalog ile ürün kataloğunu döndürür.
+  // ?callback=xxx varsa (uygulama içinden <script> etiketiyle çağrılır),
+  // JSONP formatında sarıp döner — CORS kısıtlamasına hiç takılmadan çalışır.
   if (e.parameter && e.parameter.action === 'katalog') {
     return getKatalog(e.parameter.callback);
   }
@@ -16,15 +23,12 @@ function getKatalog(callback) {
   if (sheet && sheet.getLastRow() >= 2) {
     var values = sheet.getRange(2, 1, sheet.getLastRow() - 1, 4).getValues();
     entries = values
-      .filter(function (r) { return r[0] && r[1]; }) // ürün adı ve barkod boş olmasın
+      .filter(function (r) { return r[0] && r[1]; })
       .map(function (r) {
         return { name: String(r[0]), barcode: String(r[1]), stockCode: String(r[2] || ''), oldStock: String(r[3] || '') };
       });
   }
   var json = JSON.stringify({ entries: entries });
-  // JSONP: callback parametresi varsa (tarayıcıdan <script> etiketiyle
-  // çağrıldığında), CORS kısıtlamasına hiç takılmadan çalışan bu yöntemi
-  // kullanırız — sonucu bir fonksiyon çağrısı gibi sarıp döndürürüz.
   if (callback) {
     return ContentService
       .createTextOutput(callback + '(' + json + ')')
@@ -37,19 +41,14 @@ function doPost(e) {
   try {
     var data = JSON.parse(e.postData.contents);
 
-    // Toplu liste yükleme (yeni dosya seçilince) — TÜM kataloğun üzerine yazar.
     if (data.type === 'katalog_bulk') {
       return saveKatalogBulk(data.entries || []);
     }
-
-    // Sayım sırasında tek bir yeni ürün eklendiğinde — SADECE o satırı ekler/
-    // günceller, diğer hiçbir ürünü etkilemez. Böylece bir telefonda okutulan
-    // yeni ürün, başka bir telefon kataloğu yeniden çekse bile kaybolmaz.
     if (data.type === 'katalog_item') {
       return saveKatalogItem(data.entry || {});
     }
 
-    // ---- Normal sayım verisi (mevcut davranış) ----
+    // ---- Normal sayım verisi ----
     var ss = SpreadsheetApp.getActiveSpreadsheet();
     var sheet = ss.getSheetByName('Sayim') || ss.getActiveSheet();
 
@@ -57,7 +56,7 @@ function doPost(e) {
     if (sheet.getLastRow() === 0) {
       sheet.appendRow(HEADERS);
     }
-    var idCol = HEADERS.indexOf('Kayıt ID'); // 0-index
+    var idCol = HEADERS.indexOf('Kayıt ID');
 
     var personnel = data.personnel || '';
     var sessionId = data.sessionId || '';
@@ -127,16 +126,16 @@ function saveKatalogItem(entry) {
   var lastRow = sheet.getLastRow();
   var rowData = [entry.name, entry.barcode, entry.stockCode || '', entry.oldStock || ''];
   if (lastRow >= 2) {
-    var barcodes = sheet.getRange(2, 2, lastRow - 1, 1).getValues(); // B sütunu = Barkod
+    var barcodes = sheet.getRange(2, 2, lastRow - 1, 1).getValues();
     for (var i = 0; i < barcodes.length; i++) {
       if (String(barcodes[i][0]) === String(entry.barcode)) {
-        sheet.getRange(i + 2, 1, 1, 4).setValues([rowData]); // var olanı güncelle
+        sheet.getRange(i + 2, 1, 1, 4).setValues([rowData]);
         return ContentService.createTextOutput(JSON.stringify({ status: 'ok', updated: true }))
           .setMimeType(ContentService.MimeType.JSON);
       }
     }
   }
-  sheet.appendRow(rowData); // yoksa yeni satır ekle
+  sheet.appendRow(rowData);
   return ContentService
     .createTextOutput(JSON.stringify({ status: 'ok', added: true }))
     .setMimeType(ContentService.MimeType.JSON);
