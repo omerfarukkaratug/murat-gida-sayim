@@ -140,7 +140,7 @@
 <div id="setup" class="screen">
   <header style="border:none; padding:0 0 16px; background:transparent;">
     <h1><img src="logo-header.png" alt="Murat Gıda" style="height:30px; width:auto; display:block;"></h1>
-    <div class="sub">Sayım · hızlı barkod • offline • Android • build 28</div>
+    <div class="sub">Sayım · hızlı barkod • offline • Android • build 30</div>
   </header>
 
   <div class="card">
@@ -170,6 +170,10 @@
     <div class="row" style="margin:10px 0 0; text-align:center;">
       Yüklü ürün: <span id="productCount">Kontrol ediliyor…</span>
     </div>
+    <button type="button" id="fetchCatalogBtn" style="width:100%; margin-top:10px; background:var(--panel2); border:1.5px solid var(--line); color:var(--text); padding:12px;">
+      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-3px; margin-right:5px;"><polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg>Sunucudan Kataloğu Çek
+    </button>
+    <div class="hint" style="text-align:center;">Başka bir telefonda yüklenmiş listeyi buradan otomatik indirebilirsin — Gönderim Adresi girili olmalı.</div>
   </div>
 
   <button class="btn-main" id="startBtn">Sayıma Başla</button>
@@ -456,11 +460,60 @@
       updateProductCountLabel();
       startBtn.disabled = false;
       toast(res.count + " ürün kaydedildi");
+      uploadCatalogToServer(res.entries); // diğer telefonlar da çekebilsin diye buluta gönder
     }).catch(function(err){
       startBtn.disabled = false;
       toast("Kaydetme hatası: " + err);
     });
   }
+
+  // ---------- KATALOĞU BULUTA GÖNDER / BULUTTAN ÇEK (telefonlar arası paylaşım) ----------
+  function uploadCatalogToServer(entries){
+    var url = serverInput.value.trim();
+    if(!url) return; // adres yoksa sessizce atla, sorun değil
+    fetch(url, {
+      method:'POST', mode:'no-cors',
+      headers:{'Content-Type':'text/plain;charset=utf-8'},
+      body: JSON.stringify({ type:'katalog_bulk', entries: entries })
+    }).then(function(){
+      toast("Katalog buluta gönderildi, diğer telefonlar çekebilir");
+    }).catch(function(){ /* sessiz geç, yerel kayıt zaten yapıldı */ });
+  }
+
+  // Sayım sırasında keşfedilen TEK bir yeni ürünü buluta gönderir — arka
+  // planda, sessizce, sayım hızını hiç etkilemeden. Diğer ürünlere dokunmaz.
+  function uploadCatalogItemToServer(entry){
+    var url = state.serverUrl;
+    if(!url) return;
+    fetch(url, {
+      method:'POST', mode:'no-cors',
+      headers:{'Content-Type':'text/plain;charset=utf-8'},
+      body: JSON.stringify({ type:'katalog_item', entry: entry })
+    }).catch(function(){ /* sessiz geç, yerel kayıt zaten yapıldı, veri kaybı yok */ });
+  }
+
+  document.getElementById('fetchCatalogBtn').addEventListener('click', function(){
+    var url = serverInput.value.trim();
+    if(!url){ toast("Önce Gönderim Adresi'ni gir"); serverInput.focus(); return; }
+    var getUrl = url + (url.indexOf('?') === -1 ? '?' : '&') + 'action=katalog';
+    productCountEl.textContent = "Sunucudan çekiliyor…";
+    fetch(getUrl)
+      .then(function(r){ if(!r.ok) throw new Error('HTTP ' + r.status); return r.json(); })
+      .then(function(data){
+        var entries = data.entries || [];
+        if(entries.length === 0){ toast("Sunucuda henüz katalog yok"); updateProductCountLabel(); return; }
+        return idbBulkReplace(entries).then(function(){
+          catalogMap = new Map();
+          entries.forEach(function(e){ catalogMap.set(e.barcode, { name: e.name, stockCode: e.stockCode || '', oldStock: e.oldStock || '' }); });
+          updateProductCountLabel();
+          toast(entries.length + " kayıt sunucudan indirildi");
+        });
+      })
+      .catch(function(err){
+        updateProductCountLabel();
+        toast("Çekme başarısız: " + (err && err.message ? err.message : 'bağlantı hatası'));
+      });
+  });
 
   fileInput.addEventListener('change', function(e){
     var f = e.target.files[0]; if(!f) return;
@@ -630,6 +683,7 @@
     var stockCode = nextNewProductStockCode();
     catalogMap.set(barcode, { name: name, stockCode: stockCode, oldStock: '' });
     idbPutOne({ barcode: barcode, name: name, stockCode: stockCode, oldStock: '' }).catch(function(){});
+    uploadCatalogItemToServer({ name: name, barcode: barcode, stockCode: stockCode, oldStock: '' }); // diğer telefonlar da bu ürünü tanısın
 
     var t = nowParts();
     state.session.scans.push({
