@@ -2,28 +2,35 @@ function doGet(e) {
   // ?action=katalog ile ürün kataloğunu JSON olarak döndürür (telefonlar bu
   // adresi çağırarak listeyi otomatik çeker — elle dosya taşımaya gerek kalmaz)
   if (e.parameter && e.parameter.action === 'katalog') {
-    return getKatalog();
+    return getKatalog(e.parameter.callback);
   }
   return ContentService
     .createTextOutput('Sayım toplama servisi çalışıyor ✅ (' + new Date().toISOString() + ')')
     .setMimeType(ContentService.MimeType.TEXT);
 }
 
-function getKatalog() {
+function getKatalog(callback) {
   var ss = SpreadsheetApp.getActiveSpreadsheet();
   var sheet = ss.getSheetByName('Katalog');
-  if (!sheet || sheet.getLastRow() < 2) {
-    return ContentService.createTextOutput(JSON.stringify({ entries: [] }))
-      .setMimeType(ContentService.MimeType.JSON);
+  var entries = [];
+  if (sheet && sheet.getLastRow() >= 2) {
+    var values = sheet.getRange(2, 1, sheet.getLastRow() - 1, 4).getValues();
+    entries = values
+      .filter(function (r) { return r[0] && r[1]; }) // ürün adı ve barkod boş olmasın
+      .map(function (r) {
+        return { name: String(r[0]), barcode: String(r[1]), stockCode: String(r[2] || ''), oldStock: String(r[3] || '') };
+      });
   }
-  var values = sheet.getRange(2, 1, sheet.getLastRow() - 1, 4).getValues();
-  var entries = values
-    .filter(function (r) { return r[0] && r[1]; }) // ürün adı ve barkod boş olmasın
-    .map(function (r) {
-      return { name: String(r[0]), barcode: String(r[1]), stockCode: String(r[2] || ''), oldStock: String(r[3] || '') };
-    });
-  return ContentService.createTextOutput(JSON.stringify({ entries: entries }))
-    .setMimeType(ContentService.MimeType.JSON);
+  var json = JSON.stringify({ entries: entries });
+  // JSONP: callback parametresi varsa (tarayıcıdan <script> etiketiyle
+  // çağrıldığında), CORS kısıtlamasına hiç takılmadan çalışan bu yöntemi
+  // kullanırız — sonucu bir fonksiyon çağrısı gibi sarıp döndürürüz.
+  if (callback) {
+    return ContentService
+      .createTextOutput(callback + '(' + json + ')')
+      .setMimeType(ContentService.MimeType.JAVASCRIPT);
+  }
+  return ContentService.createTextOutput(json).setMimeType(ContentService.MimeType.JSON);
 }
 
 function doPost(e) {

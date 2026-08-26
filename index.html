@@ -140,7 +140,7 @@
 <div id="setup" class="screen">
   <header style="border:none; padding:0 0 16px; background:transparent;">
     <h1><img src="logo-header.png" alt="Murat Gıda" style="height:30px; width:auto; display:block;"></h1>
-    <div class="sub">Sayım · hızlı barkod • offline • Android • build 31</div>
+    <div class="sub">Sayım · hızlı barkod • offline • Android • build 32</div>
   </header>
 
   <div class="card">
@@ -500,25 +500,51 @@
   document.getElementById('fetchCatalogBtn').addEventListener('click', function(){
     var url = serverInput.value.trim();
     if(!url){ toast("Önce Gönderim Adresi'ni gir"); serverInput.focus(); return; }
-    var getUrl = url + (url.indexOf('?') === -1 ? '?' : '&') + 'action=katalog';
     productCountEl.textContent = "Sunucudan çekiliyor…";
-    fetch(getUrl)
-      .then(function(r){ if(!r.ok) throw new Error('HTTP ' + r.status); return r.json(); })
-      .then(function(data){
-        var entries = data.entries || [];
-        if(entries.length === 0){ toast("Sunucuda henüz katalog yok"); updateProductCountLabel(); return; }
-        return idbBulkReplace(entries).then(function(){
-          catalogMap = new Map();
-          entries.forEach(function(e){ catalogMap.set(e.barcode, { name: e.name, stockCode: e.stockCode || '', oldStock: e.oldStock || '' }); });
-          updateProductCountLabel();
-          toast(entries.length + " kayıt sunucudan indirildi");
-        });
-      })
-      .catch(function(err){
+    fetchCatalogJsonp(url, function(err, data){
+      if(err){
         updateProductCountLabel();
-        toast("Çekme başarısız: " + (err && err.message ? err.message : 'bağlantı hatası'));
+        toast("Çekme başarısız: " + err);
+        return;
+      }
+      var entries = (data && data.entries) || [];
+      if(entries.length === 0){ toast("Sunucuda henüz katalog yok"); updateProductCountLabel(); return; }
+      idbBulkReplace(entries).then(function(){
+        catalogMap = new Map();
+        entries.forEach(function(e){ catalogMap.set(e.barcode, { name: e.name, stockCode: e.stockCode || '', oldStock: e.oldStock || '' }); });
+        updateProductCountLabel();
+        toast(entries.length + " kayıt sunucudan indirildi");
+      }).catch(function(err2){
+        updateProductCountLabel();
+        toast("Kaydetme hatası: " + err2);
       });
+    });
   });
+
+  // JSONP ile katalog çekme — normal fetch() bazı Apps Script yanıtlarında
+  // CORS kısıtlamasına takılabiliyor; <script> etiketiyle yükleme bu
+  // kısıtlamaya hiç girmediği için çok daha güvenilir çalışıyor.
+  function fetchCatalogJsonp(url, cb){
+    var cbName = 'sayimKatalogCb_' + Date.now();
+    var timeoutId = setTimeout(function(){
+      cleanup();
+      cb('zaman aşımı / bağlantı kurulamadı');
+    }, 20000);
+    function cleanup(){
+      clearTimeout(timeoutId);
+      delete window[cbName];
+      if(script.parentNode) script.parentNode.removeChild(script);
+    }
+    window[cbName] = function(data){
+      cleanup();
+      cb(null, data);
+    };
+    var sep = url.indexOf('?') === -1 ? '?' : '&';
+    var script = document.createElement('script');
+    script.src = url + sep + 'action=katalog&callback=' + cbName;
+    script.onerror = function(){ cleanup(); cb('sunucuya ulaşılamadı'); };
+    document.body.appendChild(script);
+  }
 
   fileInput.addEventListener('change', function(e){
     var f = e.target.files[0]; if(!f) return;
