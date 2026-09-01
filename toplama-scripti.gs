@@ -6,10 +6,14 @@
 
 function doGet(e) {
   // ?action=katalog ile ürün kataloğunu döndürür.
+  // ?action=ilerleme ile ekip genelinde sayım ilerlemesini (%) döndürür.
   // ?callback=xxx varsa (uygulama içinden <script> etiketiyle çağrılır),
   // JSONP formatında sarıp döner — CORS kısıtlamasına hiç takılmadan çalışır.
   if (e.parameter && e.parameter.action === 'katalog') {
     return getKatalog(e.parameter.callback);
+  }
+  if (e.parameter && e.parameter.action === 'ilerleme') {
+    return getIlerleme(e.parameter.callback);
   }
   return ContentService
     .createTextOutput('Sayım toplama servisi çalışıyor ✅ (' + new Date().toISOString() + ')')
@@ -29,6 +33,63 @@ function getKatalog(callback) {
       });
   }
   var json = JSON.stringify({ entries: entries });
+  if (callback) {
+    return ContentService
+      .createTextOutput(callback + '(' + json + ')')
+      .setMimeType(ContentService.MimeType.JAVASCRIPT);
+  }
+  return ContentService.createTextOutput(json).setMimeType(ContentService.MimeType.JSON);
+}
+
+// Ekip genelinde sayım ilerlemesi: 'Sayim' tablosundaki TÜM telefonlardan
+// gelmiş farklı barkod sayısı ÷ 'Katalog' tablosundaki toplam farklı barkod
+// sayısı. Tek bir telefonun kendi verisiyle değil, sunucudaki ortak veriyle
+// hesaplanır — bu yüzden gerçek ekip ilerlemesini yansıtır.
+function getIlerleme(callback) {
+  var ss = SpreadsheetApp.getActiveSpreadsheet();
+
+  var katalogSheet = ss.getSheetByName('Katalog');
+  var totalCatalog = 0;
+  if (katalogSheet && katalogSheet.getLastRow() >= 2) {
+    var katalogBarcodes = katalogSheet.getRange(2, 2, katalogSheet.getLastRow() - 1, 1).getValues();
+    var catalogSeen = {};
+    katalogBarcodes.forEach(function (r) {
+      var b = String(r[0] || '').trim();
+      if (b) catalogSeen[b] = true;
+    });
+    totalCatalog = Object.keys(catalogSeen).length;
+  }
+
+  var sayimSheet = ss.getSheetByName('Sayim');
+  var countedSeen = {};
+  var byReyon = {}; // reyon -> { barkod -> true }
+  if (sayimSheet && sayimSheet.getLastRow() >= 2) {
+    var HEADERS = ['Tarih', 'Saat', 'Personel', 'Ürün Adı', 'Stok Kodu', 'Barkod', 'Birim', 'Eski Stok', 'Sayılan Adet', 'Fark', 'Oturum ID', 'Kayıt ID', 'Reyon'];
+    var barcodeCol = HEADERS.indexOf('Barkod');
+    var reyonCol = HEADERS.indexOf('Reyon');
+    var sayimValues = sayimSheet.getRange(2, 1, sayimSheet.getLastRow() - 1, HEADERS.length).getValues();
+    sayimValues.forEach(function (r) {
+      var b = String(r[barcodeCol] || '').trim();
+      if (b) countedSeen[b] = true;
+      var reyon = String(r[reyonCol] || '').trim();
+      if (reyon && b) {
+        if (!byReyon[reyon]) byReyon[reyon] = {};
+        byReyon[reyon][b] = true;
+      }
+    });
+  }
+
+  var countedTotal = Object.keys(countedSeen).length;
+  var byReyonCounts = {};
+  Object.keys(byReyon).forEach(function (r) { byReyonCounts[r] = Object.keys(byReyon[r]).length; });
+
+  var result = {
+    totalCatalog: totalCatalog,
+    countedTotal: countedTotal,
+    percent: totalCatalog > 0 ? Math.round((countedTotal / totalCatalog) * 1000) / 10 : 0,
+    byReyon: byReyonCounts
+  };
+  var json = JSON.stringify(result);
   if (callback) {
     return ContentService
       .createTextOutput(callback + '(' + json + ')')
@@ -69,7 +130,7 @@ function doPost(e) {
     var ss = SpreadsheetApp.getActiveSpreadsheet();
     var sheet = ss.getSheetByName('Sayim') || ss.getActiveSheet();
 
-    var HEADERS = ['Tarih', 'Saat', 'Personel', 'Ürün Adı', 'Stok Kodu', 'Barkod', 'Birim', 'Eski Stok', 'Sayılan Adet', 'Fark', 'Oturum ID', 'Kayıt ID'];
+    var HEADERS = ['Tarih', 'Saat', 'Personel', 'Ürün Adı', 'Stok Kodu', 'Barkod', 'Birim', 'Eski Stok', 'Sayılan Adet', 'Fark', 'Oturum ID', 'Kayıt ID', 'Reyon'];
     if (sheet.getLastRow() === 0) {
       sheet.appendRow(HEADERS);
     }
@@ -97,7 +158,7 @@ function doPost(e) {
     rows.forEach(function (row) {
       var oldStock = (row.oldStock !== '' && row.oldStock !== undefined && !isNaN(Number(row.oldStock))) ? Number(row.oldStock) : '';
       var diff = oldStock !== '' ? (row.qty - oldStock) : '';
-      var rowData = [row.date, row.time, personnel, row.name, row.stockCode || '', row.barcode, row.unit || 'Adet', oldStock, row.qty, diff, sessionId, row.id || ''];
+      var rowData = [row.date, row.time, personnel, row.name, row.stockCode || '', row.barcode, row.unit || 'Adet', oldStock, row.qty, diff, sessionId, row.id || '', row.reyon || ''];
       if (row.id && existing[row.id]) {
         sheet.getRange(existing[row.id], 1, 1, HEADERS.length).setValues([rowData]);
       } else {
