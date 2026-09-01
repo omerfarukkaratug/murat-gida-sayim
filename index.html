@@ -153,7 +153,7 @@
 <div id="setup" class="screen">
   <header style="border:none; padding:0 0 16px; background:transparent;">
     <h1><img src="logo-header.png" alt="Murat Gıda" style="height:30px; width:auto; display:block;"></h1>
-    <div class="sub">Sayım · hızlı barkod • offline • Android • build 42</div>
+    <div class="sub">Sayım · hızlı barkod • offline • Android • build 43</div>
   </header>
 
   <div class="card">
@@ -331,7 +331,10 @@
   <!-- ---------- TÜM SAYILANLAR: ARA / FİLTRELE / SIRALA / DÜZENLE ---------- -->
   <div id="browseScreen" class="hidden" style="position:fixed; inset:0; background:var(--bg); z-index:46; display:flex; flex-direction:column;">
     <div style="padding:16px; border-bottom:1px solid var(--line); background:var(--panel); box-shadow:var(--sh-sm);">
-      <div style="font-weight:800; font-size:16px; margin-bottom:10px;">Sayılan Ürünler</div>
+      <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:10px;">
+        <div style="font-weight:800; font-size:16px;">Sayılan Ürünler</div>
+        <button type="button" id="browseCloseTopBtn" aria-label="Kapat" style="width:34px; height:34px; border-radius:50%; background:var(--panel2); border:1.5px solid var(--line); color:var(--text); font-size:18px; line-height:1; padding:0; display:flex; align-items:center; justify-content:center;">✕</button>
+      </div>
       <div style="position:relative; margin-bottom:10px;">
         <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.3" stroke-linecap="round" style="position:absolute; left:12px; top:50%; transform:translateY(-50%); color:var(--muted); pointer-events:none;"><circle cx="11" cy="11" r="7"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
         <input type="text" id="browseSearchInput" placeholder="Ürün adı veya barkod ara" style="padding-left:34px;">
@@ -379,7 +382,10 @@
   <!-- Ekip genelinde sayım ilerlemesi (sunucudan çekilir, tüm telefonların toplamı) -->
   <div id="progressModal" class="hidden" style="position:fixed; inset:0; background:rgba(10,10,10,.55); z-index:48; display:flex; align-items:center; justify-content:center; padding:22px;">
     <div class="qtyEntryCard" style="width:100%; max-width:360px; text-align:left;">
-      <div style="font-size:16px; font-weight:800; margin-bottom:12px; text-align:center;">📊 Sayım İlerlemesi (Tüm Ekip)</div>
+      <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:12px;">
+        <div style="font-size:16px; font-weight:800;">📊 Sayım İlerlemesi (Tüm Ekip)</div>
+        <button type="button" id="progressCloseTopBtn" aria-label="Kapat" style="width:30px; height:30px; border-radius:50%; background:var(--panel2); border:1.5px solid var(--line); color:var(--text); font-size:16px; line-height:1; padding:0; display:flex; align-items:center; justify-content:center; flex-shrink:0;">✕</button>
+      </div>
       <div id="progressContent" style="font-size:13.5px; line-height:1.75;">Yükleniyor…</div>
       <button id="progressCloseBtn" style="width:100%; margin-top:16px; background:linear-gradient(135deg, var(--accent2), var(--accent)); color:#fff; padding:12px;">Kapat</button>
     </div>
@@ -772,6 +778,49 @@
       osc.stop(audioCtx.currentTime + duration/1000 + 0.02);
     }catch(e){}
   }
+  // Kilometre taşı kutlaması için iki notalı, yükselen "ting" sesi — normal
+  // okuma bipinden bariz farklı, dikkat çekici ama rahatsız etmeyen bir ton.
+  function ting(){
+    beep(1318, 110, 0.14); // C6
+    setTimeout(function(){ beep(1760, 160, 0.16); }, 90); // A6 — hafif gecikmeli, "ting" hissi
+  }
+
+  // ---------- KİLOMETRE TAŞI KUTLAMALARI (moral + dikkat) ----------
+  // Uzun (72 saate varan) sayımlarda ekibi motive etmek ve dikkati canlı
+  // tutmak için, farklı ürün sayısı belirli eşikleri geçince kısa, eğlenceli
+  // bir mesaj + "ting" sesi ile kutlanır. Her eşik BİR OTURUM içinde sadece
+  // BİR KEZ gösterilir (state.session.shownMilestones içinde saklanır, sayfa
+  // yenilense bile tekrar tekrar çıkmaz). Yeni bir sayıma başlanınca (Bitir/
+  // Yeni) liste sıfırlanır, kutlamalar da baştan başlar.
+  var MILESTONES = [
+    { at: 50,    msg: '🚀 50 çeşit ürün! Hızlısın, bu tempo süper!' },
+    { at: 100,   msg: '🔥 100 çeşit ürün! Bu gidişle helal olsun!' },
+    { at: 250,   msg: '😲 250 çeşit ürün! Efsane bir hıza ulaştın!' },
+    { at: 500,   msg: '🏆 500 çeşit ürün! Artık durdurulamıyorsun!' },
+    { at: 1000,  msg: '🎉 1000 çeşit ürün! İnanılmazsın — kısa bir mola hak ettin!' },
+    { at: 2000,  msg: '🦸 2000 çeşit ürün! Market senin elinde eriyor!' },
+    { at: 5000,  msg: '👑 5000 çeşit ürün! Sayım kraliyet ailesindensin!' }
+  ];
+  function checkMilestone(distinctCount){
+    if(!state.session.shownMilestones) state.session.shownMilestones = [];
+    var hit = MILESTONES.find(function(m){
+      return distinctCount >= m.at && state.session.shownMilestones.indexOf(m.at) === -1;
+    });
+    // 5000'den sonra her 5000'de bir genel kutlama devam etsin
+    if(!hit && distinctCount >= 5000 && distinctCount % 5000 < 1){
+      var roundedAt = Math.floor(distinctCount/5000)*5000;
+      if(state.session.shownMilestones.indexOf(roundedAt) === -1){
+        hit = { at: roundedAt, msg: '🔥 ' + roundedAt + ' çeşit ürün! Bu performans şapka çıkartılır!' };
+      }
+    }
+    if(hit){
+      state.session.shownMilestones.push(hit.at);
+      save();
+      ting();
+      if(navigator.vibrate) navigator.vibrate([20,40,20,40,60]);
+      successToast(hit.msg);
+    }
+  }
 
   var pendingScan = null; // { barcode, name, stockCode, oldStock } — adet girişi bekleyen ürün
 
@@ -983,6 +1032,7 @@
     var scans = state.session.scans.slice().sort(function(a,b){ return b.ts - a.ts; });
     var distinctNames = new Set(scans.map(function(s){ return s.name; }));
     document.getElementById('sumProducts').textContent = distinctNames.size;
+    checkMilestone(distinctNames.size);
     document.getElementById('sumQty').textContent = scans.reduce(function(s,it){ return s + it.qty; }, 0);
 
     if(scans.length === 0){
@@ -1094,6 +1144,9 @@
     setTimeout(function(){ browseSearchInput.focus(); }, 80);
   });
   document.getElementById('browseCloseBtn').addEventListener('click', function(){
+    browseScreenEl.classList.add('hidden');
+  });
+  document.getElementById('browseCloseTopBtn').addEventListener('click', function(){
     browseScreenEl.classList.add('hidden');
   });
   document.getElementById('browseClearFilterBtn').addEventListener('click', function(){
@@ -1220,6 +1273,9 @@
   var progressModalEl = document.getElementById('progressModal');
   var progressContentEl = document.getElementById('progressContent');
   document.getElementById('progressCloseBtn').addEventListener('click', function(){
+    progressModalEl.classList.add('hidden');
+  });
+  document.getElementById('progressCloseTopBtn').addEventListener('click', function(){
     progressModalEl.classList.add('hidden');
   });
   document.getElementById('progressBtn').addEventListener('click', function(){
