@@ -151,7 +151,7 @@
 <div id="setup" class="screen">
   <header style="border:none; padding:0 0 16px; background:transparent;">
     <h1><img src="logo-header.png" alt="Murat Gıda" style="height:30px; width:auto; display:block;"></h1>
-    <div class="sub">Sayım · hızlı barkod • offline • Android • build 39</div>
+    <div class="sub">Sayım · hızlı barkod • offline • Android • build 40</div>
   </header>
 
   <div class="card">
@@ -449,13 +449,16 @@
 
   // Sabit varsayılan gönderim adresi — telefonlar bunu elle yazmak zorunda
   // kalmasın diye koda gömülü. Yine de istenirse değiştirilebilir.
+  // Bu adres kullanıcı arayüzünden HİÇBİR ZAMAN değiştirilemez (alan gizli,
+  // tamamen koda gömülü) — bu yüzden telefonda kayıtlı değerin güncel
+  // adresten farklı olmasının tek nedeni, önceki bir sürümden kalma eski bir
+  // dağıtım adresidir. Belirli eski adresleri tek tek listeleyip eşleşeni
+  // düzeltmek yerine (yeni bir eski adres çıktıkça listeyi büyütmek gerekir
+  // ve unutulursa o telefon sessizce eski/ölü adrese takılı kalır), HER
+  // SEFERİNDE güncel adrese zorluyoruz. Bu, hangi eski sürümden geliniyor
+  // olursa olsun kesin ve kalıcı bir düzeltme sağlar.
   var DEFAULT_SERVER_URL = 'https://script.google.com/macros/s/AKfycbwJ8GrGDEQczntnz6zA_rCaSPHmOXGV11dvOAebk2HsN86sq5N7xFSbnEgaNWpyWHI/exec';
-  var OLD_WRONG_URLS = [
-    'https://script.google.com/macros/s/AKfycbx-6GuC4JZ89QhZB8ZkIZUOBNwxlR7gmByqdSJG85NLYEN04jXSfQqx2Sz1IeuBlNNitg/exec',
-    'https://script.google.com/macros/s/AKfycbw_5fiRSjpAAZ5dvkPjMrv88yj5f2ZyZon6-DPWHkp_ELz7O-fPTF_tZSdn3AFezsIACg/exec',
-    'https://script.google.com/macros/s/AKfycbwIqOjcO6IhKwq-FQ5Jgd__y7UtvEBZfH6cds8Y0-i2_1640ojIZRUKDA361EIKG80awA/exec'
-  ];
-  if(!state.serverUrl || OLD_WRONG_URLS.indexOf(state.serverUrl) !== -1){ state.serverUrl = DEFAULT_SERVER_URL; save(); }
+  if (state.serverUrl !== DEFAULT_SERVER_URL) { state.serverUrl = DEFAULT_SERVER_URL; save(); }
 
   personnelInput.value = state.personnel || "";
   serverInput.value = state.serverUrl || DEFAULT_SERVER_URL;
