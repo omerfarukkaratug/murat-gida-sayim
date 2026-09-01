@@ -38,6 +38,23 @@ function getKatalog(callback) {
 }
 
 function doPost(e) {
+  // 10+ telefon aynı anda veri gönderebildiği için, sayfaya yazma işlemini
+  // KİLİTLİYORUZ. Kilit olmadan iki telefonun isteği aynı anda işlenirse,
+  // ikisi de "son satır şurada" bilgisini eski haliyle okuyup üzerine
+  // yazabilir — bu veri kaybına yol açar. LockService bunu engeller: bir
+  // istek yazarken diğerleri kısa süre (en fazla 30 sn) sırada bekler.
+  var lock = LockService.getScriptLock();
+  try {
+    lock.waitLock(30000);
+  } catch (lockErr) {
+    // 30 saniyede kilit açılmadıysa (aşırı yoğunluk) hatayı bildir —
+    // uygulama tarafı bunu ağ hatası gibi algılayıp veriyi kuyrukta tutar,
+    // hiçbir kayıt silinmez, birazdan otomatik tekrar dener.
+    return ContentService
+      .createTextOutput(JSON.stringify({ status: 'error', message: 'Sunucu yoğun, kilit alınamadı — tekrar denenecek' }))
+      .setMimeType(ContentService.MimeType.JSON);
+  }
+
   try {
     var data = JSON.parse(e.postData.contents);
 
@@ -72,6 +89,11 @@ function doPost(e) {
       }
     }
 
+    // Güncellenecek (mevcut) satırları ve yeni eklenecek satırları ayır.
+    // Yeni satırları TEK seferde toplu ekliyoruz (appendRow'u döngüde tekrar
+    // tekrar çağırmak yerine) — hem çok daha hızlı hem de sayfa büyüdükçe
+    // (binlerce satır, 72 saatlik sayım) performansı korur.
+    var newRows = [];
     rows.forEach(function (row) {
       var oldStock = (row.oldStock !== '' && row.oldStock !== undefined && !isNaN(Number(row.oldStock))) ? Number(row.oldStock) : '';
       var diff = oldStock !== '' ? (row.qty - oldStock) : '';
@@ -79,10 +101,12 @@ function doPost(e) {
       if (row.id && existing[row.id]) {
         sheet.getRange(existing[row.id], 1, 1, HEADERS.length).setValues([rowData]);
       } else {
-        sheet.appendRow(rowData);
-        if (row.id) existing[row.id] = sheet.getLastRow();
+        newRows.push(rowData);
       }
     });
+    if (newRows.length > 0) {
+      sheet.getRange(sheet.getLastRow() + 1, 1, newRows.length, HEADERS.length).setValues(newRows);
+    }
 
     return ContentService
       .createTextOutput(JSON.stringify({ status: 'ok', processed: rows.length }))
@@ -92,6 +116,8 @@ function doPost(e) {
     return ContentService
       .createTextOutput(JSON.stringify({ status: 'error', message: err.toString() }))
       .setMimeType(ContentService.MimeType.JSON);
+  } finally {
+    lock.releaseLock();
   }
 }
 

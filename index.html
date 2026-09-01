@@ -43,8 +43,16 @@
   button:active{transform:scale(.97);}
   .btn-main{background:linear-gradient(135deg, var(--accent2), var(--accent)); color:#fff; padding:16px; width:100%; font-size:15.5px; letter-spacing:.02em; box-shadow:0 6px 16px rgba(85,70,234,.32); border-radius:var(--r-md);}
   .filebtn{display:inline-block; background:var(--panel2); border:1.5px dashed #c4c4c9; color:var(--text);
-    padding:14px; border-radius:var(--r-sm); text-align:center; font-size:13px; cursor:pointer; width:100%; font-weight:600;}
+    padding:16px; border-radius:var(--r-sm); text-align:center; font-size:13px; cursor:pointer; width:100%; font-weight:600; transition:background .15s, border-color .15s;}
   .filebtn input{display:none;}
+  .filebtn.dragover{background:rgba(85,70,234,.09); border-color:var(--accent); border-style:solid;}
+  .filebtn .filebtn-sub{display:block; font-size:11px; font-weight:500; color:var(--muted); margin-top:4px;}
+  .stepLabel{display:inline-flex; align-items:center; justify-content:center; width:19px; height:19px; border-radius:50%;
+    background:var(--accent); color:#fff; font-size:11px; font-weight:800; margin-right:6px; flex-shrink:0;}
+  .stepTitle{display:flex; align-items:center; font-size:12.5px; font-weight:800; color:var(--text); margin:14px 0 8px;}
+  .stepTitle:first-child{margin-top:0;}
+  .orDivider{display:flex; align-items:center; gap:10px; margin:14px 0; color:var(--muted); font-size:11px; font-weight:700; text-transform:uppercase; letter-spacing:.06em;}
+  .orDivider::before, .orDivider::after{content:""; flex:1; height:1px; background:var(--line);}
   #productCount{font-family:var(--mono); color:var(--accent); font-weight:700;}
 
   /* MAIN */
@@ -127,9 +135,12 @@
   .badge{background:var(--accent); color:#fff; border-radius:10px; font-size:9.5px; padding:1px 6px; margin-left:5px; font-family:var(--mono);}
 
   #toast{position:fixed; left:16px; right:16px; bottom:84px; background:var(--text); color:#fff;
-    padding:12px 16px; border-radius:var(--r-md); font-size:13px; font-weight:600; text-align:center;
-    transform:translateY(140px); transition:transform .25s; z-index:50; box-shadow:var(--sh-md);}
+    padding:13px 16px; border-radius:var(--r-md); font-size:13.5px; font-weight:700; text-align:center;
+    transform:translateY(140px); transition:transform .25s; z-index:50; box-shadow:var(--sh-md); line-height:1.4;}
   #toast.show{transform:translateY(0);}
+  #toast.error{background:var(--red); box-shadow:0 8px 22px rgba(220,38,38,.4);}
+  #toast.warn{background:var(--amber); color:#241a02; box-shadow:0 8px 22px rgba(217,127,30,.35);}
+  #toast.success{background:var(--green); box-shadow:0 8px 22px rgba(22,163,74,.35);}
   .logo{width:22px; height:22px; flex-shrink:0;}
 </style>
 </head>
@@ -140,7 +151,7 @@
 <div id="setup" class="screen">
   <header style="border:none; padding:0 0 16px; background:transparent;">
     <h1><img src="logo-header.png" alt="Murat Gıda" style="height:30px; width:auto; display:block;"></h1>
-    <div class="sub">Sayım · hızlı barkod • offline • Android • build 37</div>
+    <div class="sub">Sayım · hızlı barkod • offline • Android • build 38</div>
   </header>
 
   <div class="card">
@@ -154,25 +165,38 @@
   </div>
 
   <div class="card">
-    <label>Ürün Listesi (Ürün Adı + Barkod + Stok Kodu + Eski Stok) — 50 bin ürüne kadar sorunsuz</label>
-    <label class="filebtn">
-      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-3px; margin-right:5px;"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8Z"/><polyline points="14 2 14 8 20 8"/></svg>CSV / TXT dosyası seç
-      <input type="file" id="fileInput" accept=".csv,.txt">
-    </label>
-    <div class="hint">Beklenen düzen — her satırda: <b>Ürün Adı;Barkod;Stok Kodu;Eski Stok</b> (Stok Kodu ve Eski Stok opsiyonel, boş bırakabilir veya hiç yazmayabilirsin)<br>
-      Eski Stok yazarsan, ürünü okuttuğunda ekranda sistemdeki mevcut stok da görünür — sayarken büyük farkları anında fark edersin.<br>
-      Bir üründe birden fazla barkod varsa aynı ürün adını birden fazla satırda, farklı barkodla tekrar yaz. Örnek:<br>
-      <span style="font-family:var(--mono)">Süt 1L;8690001112223;STK001;32<br>Süt 1L;8690001112230;STK001;32<br>Ekmek;8690009998887;STK002;120</span>
-      <br>Ayırıcı olarak ; veya , kullanılabilir. Ya da aşağıya elle yapıştırabilirsin. Liste telefona kalıcı olarak kaydedilir — her açılışta yeniden yüklemene gerek kalmaz, sadece güncellemek istediğinde yeni dosya seç.</div>
-    <textarea id="pasteArea" placeholder="İstersen listeyi buraya yapıştır: Ürün Adı;Barkod (her satıra bir tane)"></textarea>
-    <div class="row" style="margin:12px 0 0; text-align:center;">
-      <div>Yüklü ürün: <span id="productCount">Kontrol ediliyor…</span></div>
-      <div id="catalogSyncStatus" style="font-size:11.5px; color:var(--muted); font-family:var(--mono); margin-top:4px;"></div>
-    </div>
-    <button type="button" id="fetchCatalogBtn" style="width:100%; margin-top:10px; background:var(--panel2); border:1.5px solid var(--line); color:var(--text); padding:12px;">
+    <label>Ürün Listesi — 50 bin ürüne kadar sorunsuz çalışır</label>
+
+    <div class="stepTitle"><span class="stepLabel">1</span>Zaten çalışan bir telefon var mı?</div>
+    <button type="button" id="fetchCatalogBtn" style="width:100%; background:var(--panel2); border:1.5px solid var(--line); color:var(--text); padding:14px;">
       <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-3px; margin-right:5px;"><polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg>Sunucudan Kataloğu Çek
     </button>
-    <div class="hint" style="text-align:center;">Başka bir telefonda yüklenmiş listeyi buradan otomatik indirebilirsin.</div>
+    <div class="hint" style="text-align:center;">Başka bir telefon listeyi zaten yüklediyse en hızlısı bu — dosya aramana gerek kalmaz.</div>
+
+    <div class="orDivider">veya sıfırdan yükle</div>
+
+    <div class="stepTitle"><span class="stepLabel">2</span>Bilgisayardan / dosyalardan dosya seç</div>
+    <label class="filebtn" id="fileDropZone">
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="display:block; margin:0 auto 6px;"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8Z"/><polyline points="14 2 14 8 20 8"/></svg>
+      <span>Dosya seçmek için dokun</span>
+      <span class="filebtn-sub">.csv veya .txt — sürükleyip bırakmak da olur (bilgisayarda)</span>
+      <input type="file" id="fileInput" accept=".csv,.txt">
+    </label>
+
+    <div class="hint">Her satırda şu düzen olmalı: <b>Ürün Adı;Barkod;Stok Kodu;Eski Stok</b><br>
+      <span style="color:var(--muted);">(Stok Kodu ve Eski Stok isteğe bağlı — boş bırakabilir ya da hiç yazmayabilirsin)</span><br>
+      💡 Eski Stok yazarsan, ürünü okuttuğunda sistemdeki mevcut stok da ekranda görünür — büyük farkları anında fark edersin.<br>
+      💡 Bir ürünün birden fazla barkodu varsa aynı ürün adını farklı barkodlarla ayrı satırlarda tekrar yaz. Örnek:<br>
+      <span style="font-family:var(--mono); display:block; background:var(--panel2); padding:8px 10px; border-radius:8px; margin-top:4px;">Süt 1L;8690001112223;STK001;32<br>Süt 1L;8690001112230;STK001;32<br>Ekmek;8690009998887;STK002;120</span>
+      Ayırıcı olarak <b>;</b> veya <b>,</b> kullanabilirsin. Liste telefona kalıcı kaydedilir — her açılışta yeniden yüklemen gerekmez, sadece güncellemek istediğinde yeni dosya seç.</div>
+
+    <div class="stepTitle" style="margin-top:16px;"><span class="stepLabel">3</span>Ya da doğrudan yapıştır</div>
+    <textarea id="pasteArea" placeholder="Ürün Adı;Barkod (her satıra bir tane)"></textarea>
+
+    <div class="row" style="margin:14px 0 0; text-align:center;">
+      <div>📦 Yüklü ürün: <span id="productCount">Kontrol ediliyor…</span></div>
+      <div id="catalogSyncStatus" style="font-size:11.5px; color:var(--muted); font-family:var(--mono); margin-top:4px;"></div>
+    </div>
   </div>
 
   <button class="btn-main" id="startBtn">Sayıma Başla</button>
@@ -347,12 +371,25 @@
   }
 
   function load(){ try{ return JSON.parse(localStorage.getItem(STORE_KEY)); }catch(e){ return null; } }
-  function save(){ try{ localStorage.setItem(STORE_KEY, JSON.stringify(state)); }catch(e){ toast("Kaydetme hatası: depolama dolu olabilir"); } }
+  function save(){ try{ localStorage.setItem(STORE_KEY, JSON.stringify(state)); }catch(e){ errorToast("Kaydedilemedi — telefon hafızası dolu olabilir! Lütfen hemen CSV indirip yer açın."); } }
 
-  function toast(msg){
-    var t=document.getElementById('toast'); t.textContent=msg; t.classList.add('show');
-    clearTimeout(toast._t); toast._t=setTimeout(function(){t.classList.remove('show');}, 1800);
+  // Bildirim sistemi: türe göre renk + emoji ile anında ayırt edilebilir.
+  // toast()      -> nötr bilgi (koyu gri)
+  // successToast -> işlem başarıyla tamamlandı (yeşil, ✅)
+  // warnToast    -> kullanıcı girdisi/dikkat gerektiren durum (turuncu, ⚠️)
+  // errorToast   -> gerçek hata / veri gitmedi (kırmızı, ❌, daha uzun süre ekranda kalır)
+  function toast(msg, type, duration){
+    var t = document.getElementById('toast');
+    t.textContent = msg;
+    t.className = ''; // eski türü (error/warn/success) temizle
+    if(type) t.classList.add(type);
+    t.classList.add('show');
+    clearTimeout(toast._t);
+    toast._t = setTimeout(function(){ t.classList.remove('show'); }, duration || (type === 'error' ? 3600 : (type === 'warn' ? 2600 : 1800)));
   }
+  function successToast(msg){ toast('✅ ' + msg, 'success'); }
+  function warnToast(msg){ toast('⚠️ ' + msg, 'warn'); }
+  function errorToast(msg){ toast('❌ ' + msg, 'error'); }
 
   // ---------- BÜYÜK ÜRÜN KATALOĞU: IndexedDB ----------
   // 50.000 ürünlük liste localStorage yerine burada tutulur; sayım verisinden
@@ -412,10 +449,11 @@
 
   // Sabit varsayılan gönderim adresi — telefonlar bunu elle yazmak zorunda
   // kalmasın diye koda gömülü. Yine de istenirse değiştirilebilir.
-  var DEFAULT_SERVER_URL = 'https://script.google.com/macros/s/AKfycbwIqOjcO6IhKwq-FQ5Jgd__y7UtvEBZfH6cds8Y0-i2_1640ojIZRUKDA361EIKG80awA/exec';
+  var DEFAULT_SERVER_URL = 'https://script.google.com/macros/s/AKfycbwJ8GrGDEQczntnz6zA_rCaSPHmOXGV11dvOAebk2HsN86sq5N7xFSbnEgaNWpyWHI/exec';
   var OLD_WRONG_URLS = [
     'https://script.google.com/macros/s/AKfycbx-6GuC4JZ89QhZB8ZkIZUOBNwxlR7gmByqdSJG85NLYEN04jXSfQqx2Sz1IeuBlNNitg/exec',
-    'https://script.google.com/macros/s/AKfycbw_5fiRSjpAAZ5dvkPjMrv88yj5f2ZyZon6-DPWHkp_ELz7O-fPTF_tZSdn3AFezsIACg/exec'
+    'https://script.google.com/macros/s/AKfycbw_5fiRSjpAAZ5dvkPjMrv88yj5f2ZyZon6-DPWHkp_ELz7O-fPTF_tZSdn3AFezsIACg/exec',
+    'https://script.google.com/macros/s/AKfycbwIqOjcO6IhKwq-FQ5Jgd__y7UtvEBZfH6cds8Y0-i2_1640ojIZRUKDA361EIKG80awA/exec'
   ];
   if(!state.serverUrl || OLD_WRONG_URLS.indexOf(state.serverUrl) !== -1){ state.serverUrl = DEFAULT_SERVER_URL; save(); }
 
@@ -463,7 +501,7 @@
 
   function applyParsed(text){
     var res = parseList(text);
-    if(res.entries.length === 0){ toast("Geçerli satır bulunamadı"); return; }
+    if(res.entries.length === 0){ warnToast("Geçerli satır bulunamadı — dosya biçimini kontrol edin (Ürün Adı;Barkod)"); return; }
     productCountEl.textContent = "Kaydediliyor… (" + res.entries.length + " satır)";
     startBtn.disabled = true;
     idbBulkReplace(res.entries).then(function(){
@@ -471,29 +509,32 @@
       res.entries.forEach(function(e){ catalogMap.set(e.barcode, { name: e.name, stockCode: e.stockCode || '', oldStock: e.oldStock || '' }); });
       updateProductCountLabel();
       startBtn.disabled = false;
-      toast(res.count + " ürün kaydedildi");
+      successToast(res.count + " ürün telefona kaydedildi");
       uploadCatalogToServer(res.entries); // diğer telefonlar da çekebilsin diye buluta gönder
     }).catch(function(err){
       startBtn.disabled = false;
-      toast("Kaydetme hatası: " + err);
+      errorToast("Liste kaydedilemedi: " + err + " — telefon hafızasını kontrol edin");
     });
   }
 
   // ---------- KATALOĞU BULUTA GÖNDER / BULUTTAN ÇEK (telefonlar arası paylaşım) ----------
   function uploadCatalogToServer(entries){
     var url = serverInput.value.trim() || DEFAULT_SERVER_URL;
-    setSyncStatus('Sunucuya gönderiliyor…');
+    setSyncStatus('☁️ Diğer telefonların görmesi için gönderiliyor…');
     fetch(url, {
       method:'POST', mode:'no-cors',
       headers:{'Content-Type':'text/plain;charset=utf-8'},
       body: JSON.stringify({ type:'katalog_bulk', entries: entries })
     }).then(function(){
-      toast("Katalog buluta gönderildi, diğer telefonlar çekebilir");
+      successToast("Katalog buluta gönderildi — diğer telefonlar artık çekebilir");
       state.catalogSyncedAt = nowParts();
       state.catalogSyncedCount = entries.length;
       save();
       setSyncStatus(null);
-    }).catch(function(){ /* sessiz geç, yerel kayıt zaten yapıldı */ setSyncStatus(null); });
+    }).catch(function(){
+      errorToast("Katalog buluta gönderilemedi — internet yok. Liste telefonunuzda kayıtlı, tekrar deneyin.");
+      setSyncStatus(null);
+    });
   }
 
   function setSyncStatus(overrideText){
@@ -523,19 +564,19 @@
     fetchCatalogJsonp(url, function(err, data){
       if(err){
         updateProductCountLabel();
-        toast("Çekme başarısız: " + err);
+        errorToast("Katalog çekilemedi: " + err + " — internet bağlantınızı kontrol edin");
         return;
       }
       var entries = (data && data.entries) || [];
-      if(entries.length === 0){ toast("Sunucuda henüz katalog yok"); updateProductCountLabel(); return; }
+      if(entries.length === 0){ warnToast("Sunucuda henüz katalog yok — önce bir telefon yüklemeli"); updateProductCountLabel(); return; }
       idbBulkReplace(entries).then(function(){
         catalogMap = new Map();
         entries.forEach(function(e){ catalogMap.set(e.barcode, { name: e.name, stockCode: e.stockCode || '', oldStock: e.oldStock || '' }); });
         updateProductCountLabel();
-        toast(entries.length + " kayıt sunucudan indirildi");
+        successToast(entries.length + " kayıt sunucudan indirildi");
       }).catch(function(err2){
         updateProductCountLabel();
-        toast("Kaydetme hatası: " + err2);
+        errorToast("İndirilen katalog telefona kaydedilemedi: " + err2);
       });
     });
   });
@@ -565,11 +606,33 @@
     document.body.appendChild(script);
   }
 
-  fileInput.addEventListener('change', function(e){
-    var f = e.target.files[0]; if(!f) return;
+  function readListFile(f){
+    if(!f) return;
+    var okExt = /\.(csv|txt)$/i.test(f.name);
+    if(!okExt){ warnToast("Bu dosya .csv veya .txt değil — yine de denenecek, sonucu kontrol et"); }
+    if(f.size > 25 * 1024 * 1024){ warnToast("Dosya çok büyük görünüyor (" + Math.round(f.size/1024/1024) + " MB) — 50 bin satıra kadar test edildi, daha büyükse bölmen gerekebilir"); }
     var reader = new FileReader();
     reader.onload = function(ev){ pasteArea.value = ev.target.result; applyParsed(ev.target.result); };
+    reader.onerror = function(){ errorToast("Dosya okunamadı — dosya bozuk olabilir veya izin verilmedi, tekrar deneyin"); };
     reader.readAsText(f, 'UTF-8');
+  }
+
+  fileInput.addEventListener('change', function(e){
+    readListFile(e.target.files[0]);
+  });
+
+  // Sürükle-bırak (masaüstü tarayıcılarda kurulum yaparken kullanışlı;
+  // Android'de dokunmatik dosya seçici zaten normal şekilde çalışır).
+  var fileDropZone = document.getElementById('fileDropZone');
+  ['dragenter','dragover'].forEach(function(ev){
+    fileDropZone.addEventListener(ev, function(e){ e.preventDefault(); e.stopPropagation(); fileDropZone.classList.add('dragover'); });
+  });
+  ['dragleave','drop'].forEach(function(ev){
+    fileDropZone.addEventListener(ev, function(e){ e.preventDefault(); e.stopPropagation(); fileDropZone.classList.remove('dragover'); });
+  });
+  fileDropZone.addEventListener('drop', function(e){
+    var f = e.dataTransfer && e.dataTransfer.files && e.dataTransfer.files[0];
+    if(f) readListFile(f);
   });
 
   pasteArea.addEventListener('blur', function(){
@@ -578,8 +641,8 @@
 
   startBtn.addEventListener('click', function(){
     var name = personnelInput.value.trim();
-    if(!name){ toast("Lütfen personel adını gir"); personnelInput.focus(); return; }
-    if(catalogMap.size === 0){ toast("Önce ürün listesi yükle"); return; }
+    if(!name){ warnToast("Lütfen personel adını gir"); personnelInput.focus(); return; }
+    if(catalogMap.size === 0){ warnToast("Önce ürün listesi yükle veya sunucudan çek"); return; }
     state.personnel = name;
     state.serverUrl = serverInput.value.trim() || DEFAULT_SERVER_URL;
     save();
@@ -601,7 +664,7 @@
     var online = navigator.onLine;
     statusBadge.textContent = online ? "Çevrimiçi" : "Çevrimdışı";
     statusBadge.className = "status " + (online ? "online" : "offline");
-    if(online) trySync();
+    if(online) trySync(true);
   }
   window.addEventListener('online', updateStatus);
   window.addEventListener('offline', updateStatus);
@@ -665,7 +728,7 @@
 
   document.getElementById('newProductAskNo').addEventListener('click', function(){
     newProductAskEl.classList.add('hidden');
-    toast("Atlandı: " + pendingNewBarcode);
+    warnToast("Atlandı: " + pendingNewBarcode);
     showPlaceholder();
   });
 
@@ -713,17 +776,17 @@
 
   document.getElementById('newProductCancel').addEventListener('click', function(){
     newProductEl.classList.add('hidden');
-    toast("Atlandı: " + newProductBarcodeVal);
+    warnToast("Atlandı: " + newProductBarcodeVal);
     showPlaceholder();
   });
 
   document.getElementById('newProductConfirm').addEventListener('click', function(){
     var name = newProductNameInput.value.trim();
-    if(!name){ toast("Ürün adı gir"); newProductNameInput.focus(); return; }
+    if(!name){ warnToast("Ürün adı gir"); newProductNameInput.focus(); return; }
     var barcode = newProductBarcodeVal;
     var unit = unitFor(barcode);
     var qty = parseQtyForBarcode(newProductQtyInput.value, barcode);
-    if(!qty || qty <= 0){ toast(unit === 'Kg' ? "Geçerli bir kilo gir" : "Geçerli bir adet gir"); newProductQtyInput.focus(); return; }
+    if(!qty || qty <= 0){ warnToast(unit === 'Kg' ? "Geçerli bir kilo gir" : "Geçerli bir adet gir"); newProductQtyInput.focus(); return; }
     var abnormalLimit = unit === 'Kg' ? 50 : ABNORMAL_QTY;
     if(qty > abnormalLimit){
       if(!confirm(name + ' için ' + qty + ' ' + unit + ' girdin — bu çok yüksek görünüyor.\nBu doğru mu?')){
@@ -743,7 +806,7 @@
     save();
     renderList();
     whoLabel.textContent = state.personnel + " · " + countDistinctProducts() + " kalem";
-    toast(name + ' (' + stockCode + ') eklendi: +' + qty + ' ' + unit);
+    successToast(name + ' (' + stockCode + ') eklendi: +' + qty + ' ' + unit);
     newProductEl.classList.add('hidden');
     if(autoRescan){ startCamera(); } else { showPlaceholder(); }
     autoQueueAndSync();
@@ -806,7 +869,7 @@
     if(!pendingScan) return;
     var unit = unitFor(pendingScan.barcode);
     var addQty = parseQtyForBarcode(qtyEntryInput.value, pendingScan.barcode);
-    if(!addQty || addQty <= 0){ toast(unit === 'Kg' ? "Geçerli bir kilo gir" : "Geçerli bir adet gir"); qtyEntryInput.focus(); return; }
+    if(!addQty || addQty <= 0){ warnToast(unit === 'Kg' ? "Geçerli bir kilo gir" : "Geçerli bir adet gir"); qtyEntryInput.focus(); return; }
     var abnormalLimit = unit === 'Kg' ? 50 : ABNORMAL_QTY;
     if(addQty > abnormalLimit){
       if(!confirm(pendingScan.name + ' için ' + addQty + ' ' + unit + ' girdin — bu çok yüksek görünüyor.\nBu doğru mu?')){
@@ -824,7 +887,7 @@
     save();
     renderList();
     whoLabel.textContent = state.personnel + " · " + countDistinctProducts() + " kalem";
-    toast(pendingScan.name + ': ' + addQty + ' ' + unit + ' eklendi');
+    successToast(pendingScan.name + ': ' + addQty + ' ' + unit + ' eklendi');
     pendingScan = null;
     qtyEntryEl.classList.add('hidden');
     if(autoRescan){ startCamera(); } else { showPlaceholder(); }
@@ -1014,7 +1077,7 @@
 
   function startCamera(){
     if(!('BarcodeDetector' in window)){
-      toast("Bu tarayıcı otomatik taramayı desteklemiyor, elle barkod gir");
+      errorToast("Bu tarayıcı otomatik taramayı desteklemiyor — lütfen barkodu elle gir");
       return;
     }
     document.getElementById('scanPlaceholder').classList.add('hidden');
@@ -1031,7 +1094,8 @@
         scanLoop(detector);
       })
       .catch(function(err){
-        document.getElementById('camLive').innerHTML = '<div class="noCam">Kameraya erişilemedi.<br>İzin verildiğinden ve sayfanın https üzerinden açıldığından emin ol.<br>('+err.message+')</div>';
+        document.getElementById('camLive').innerHTML = '<div class="noCam" style="color:var(--red); font-weight:700;">❌ Kameraya erişilemedi<br><span style="color:var(--muted); font-weight:400;">Telefon ayarlarından bu siteye kamera izni verildiğinden emin olun.<br>('+escapeHtml(err.message)+')</span></div>';
+        errorToast("Kamera açılamadı — izinleri kontrol edin");
       });
   }
 
@@ -1052,7 +1116,7 @@
     if(!cameraTrack) return;
     torchOn = !torchOn;
     cameraTrack.applyConstraints({ advanced: [{ torch: torchOn }] }).catch(function(){
-      toast("El feneri bu cihazda desteklenmiyor");
+      warnToast("El feneri bu cihazda desteklenmiyor");
       torchOn = false;
     });
     torchBtn.classList.toggle('on', torchOn);
@@ -1066,7 +1130,26 @@
   }
   document.addEventListener('visibilitychange', function(){
     if(document.visibilityState === 'visible' && !document.getElementById('main').classList.contains('hidden')) requestWakeLock();
+    if(document.visibilityState === 'hidden'){ queueCurrentSession(); flushPendingWithBeacon(); }
   });
+  window.addEventListener('pagehide', function(){ queueCurrentSession(); flushPendingWithBeacon(); });
+
+  // Son çare güvenlik ağı: uygulama arka plana alınırken/kapanırken normal
+  // fetch() bitmeden işletim sistemi süreci öldürebilir. sendBeacon() tarayıcı
+  // tarafından arka planda garanti teslim edilmeye çalışılır (kısa istekler
+  // için). Başarı/başarısızlığı bildirmediği için kuyruktan SİLMİYORUZ —
+  // aynı veriyi normal akış tekrar gönderse bile satır kimliği (id) aynı
+  // olduğundan sunucu bunu üzerine yazma (güncelleme) olarak işler, kopya
+  // satır oluşmaz. Bu sayede "iki kez gönderilse bile veri bozulmaz" garantisi
+  // korunmuş olur.
+  function flushPendingWithBeacon(){
+    if(!navigator.sendBeacon || !state.serverUrl || state.pendingSessions.length === 0) return;
+    state.pendingSessions.forEach(function(payload){
+      try{
+        navigator.sendBeacon(state.serverUrl, new Blob([JSON.stringify(payload)], { type: 'text/plain;charset=utf-8' }));
+      }catch(e){ /* sessiz geç — veri kuyrukta kalmaya devam ediyor, kayıp yok */ }
+    });
+  }
 
   function scanLoop(detector){
     if(!detecting) return;
@@ -1103,31 +1186,52 @@
     a.href = url; a.download = 'sayim_' + state.personnel.replace(/\s+/g,'_') + '_' + d.date + '.csv';
     document.body.appendChild(a); a.click(); document.body.removeChild(a);
     setTimeout(function(){ URL.revokeObjectURL(url); }, 2000);
-    toast("CSV indirildi");
+    successToast("CSV indirildi");
   });
 
   // ---------- SYNC ----------
-  function trySync(){
+  // silent=true -> arka planda otomatik gönderim (her okutmadan sonra tetiklenir);
+  // başarı durumunda sessiz kal (bildirim akışı kesmesin), sadece HATADA uyar.
+  // silent=false -> "Gönder" butonuna elle basıldığında; her durumda net bildirim ver.
+  var syncInProgress = false;
+  function trySync(silent){
     if(!navigator.onLine || !state.serverUrl || state.pendingSessions.length === 0) return;
+    if(syncInProgress) return; // aynı anda iki gönderim çakışmasın
+    syncInProgress = true;
     var remaining = [];
+    var anyError = null;
+    var sentCount = 0;
     var sendNext = function(i){
-      if(i >= state.pendingSessions.length){ state.pendingSessions = remaining; save(); updatePendingBadge(); return; }
+      if(i >= state.pendingSessions.length){
+        state.pendingSessions = remaining; save(); updatePendingBadge();
+        syncInProgress = false;
+        if(!silent){
+          if(anyError) errorToast("Bazı kayıtlar gönderilemedi: " + anyError + " — internet gelince otomatik tekrar denenecek");
+          else if(sentCount > 0) successToast("Tüm kayıtlar gönderildi (Google Tablo'dan kontrol edebilirsiniz)");
+        } else if(anyError){
+          // Arka planda bile olsa gerçek bir hata varsa kullanıcıyı bilgilendir —
+          // veri telefonda güvende ama gönderim başarısız, sessiz geçilmemeli.
+          errorToast("Otomatik gönderim başarısız: " + anyError + " — veriniz telefonda güvende, tekrar denenecek");
+        }
+        return;
+      }
       var payload = state.pendingSessions[i];
       // Not: mode 'no-cors' kullanıyoruz — Google Apps Script'in tarayıcı CORS
       // başlıklarını tam desteklememesi yüzünden, isteği yollayıp cevabı OKUMAYA
       // ÇALIŞMADAN (opak yanıt) gönderiyoruz. İstek sunucuya normal şekilde ulaşır
       // ve satır eklenir; sadece tarayıcı tarafında "başarılı mı" diye HTTP durum
-      // kodunu kontrol edemiyoruz — bu yüzden gönderdikten sonra Google Tablo'yu
-      // gözle kontrol etmek en sağlam doğrulama yöntemi.
+      // kodunu kontrol edemiyoruz — sadece AĞ hatalarını (internet yok, zaman aşımı)
+      // yakalayabiliyoruz. Bu yüzden veri telefonda silinmeden, başarı sinyali
+      // gelene kadar (ya da kullanıcı elle onaylayana kadar) kuyrukta tutuluyoruz.
       fetch(state.serverUrl, {
         method:'POST', mode:'no-cors',
         headers:{'Content-Type':'text/plain;charset=utf-8'},
         body: JSON.stringify(payload)
       })
-        .then(function(){ toast("Gönderildi: " + payload.personnel + " (Tablo'dan kontrol et)"); })
+        .then(function(){ sentCount++; })
         .catch(function(err){
-          remaining.push(payload);
-          toast("Gönderim başarısız: " + (err && err.message ? err.message : 'bağlantı hatası'));
+          remaining.push(payload); // gönderilemedi — kuyrukta kalsın, veri kaybı yok
+          anyError = (err && err.message) ? err.message : 'bağlantı hatası';
         })
         .finally(function(){ sendNext(i+1); });
     };
@@ -1140,9 +1244,10 @@
   }
 
   document.getElementById('syncBtn').addEventListener('click', function(){
-    if(!state.serverUrl){ toast("Önce ayarlardan gönderim adresi gir"); return; }
+    if(!state.serverUrl){ warnToast("Önce ayarlardan gönderim adresi gir"); return; }
+    if(!navigator.onLine){ warnToast("İnternet yok — veriniz telefonda güvende, bağlantı gelince otomatik gönderilecek"); return; }
     queueCurrentSession();
-    trySync();
+    trySync(false);
   });
 
   function queueCurrentSession(){
@@ -1165,11 +1270,18 @@
     save(); updatePendingBadge();
   }
 
-  // Her ürün eklendiğinde/düzeltildiğinde otomatik olarak kuyruğa al ve
-  // internet varsa hemen göndermeyi dene — elle "Gönder"e basmaya gerek yok.
+  // Her ürün eklendiğinde/düzeltildiğinde otomatik olarak kuyruğa al (bu adım
+  // ANINDA ve HER ZAMAN çalışır — veri önce telefona yazılır, kaybolmaz).
+  // Ağ gönderimini ise kısa bir süre geciktiriyoruz (debounce): hızlı art arda
+  // 10-15 barkod okutulduğunda her seferinde koca listeyi tekrar tekrar
+  // sunucuya yollamak yerine, tarama bir nefes durunca TEK seferde gönderir.
+  // Bu, 10+ telefonun aynı anda saatlerce kullandığı senaryoda sunucuyu
+  // gereksiz yere boğmaz ve taramayı kesintisiz akıcı tutar.
+  var syncDebounceTimer = null;
   function autoQueueAndSync(){
-    queueCurrentSession();
-    trySync();
+    queueCurrentSession(); // localStorage'a anında yazılır — veri kaybı riski yok
+    clearTimeout(syncDebounceTimer);
+    syncDebounceTimer = setTimeout(function(){ trySync(true); }, 2000);
   }
 
   document.getElementById('newBtn').addEventListener('click', function(){
@@ -1208,9 +1320,9 @@
     state.session = { scans:[], id: makeId() }; // yeni oturum = yeni kimlik
     save();
     renderList();
-    trySync();
+    trySync(false);
     document.getElementById('reviewScreen').classList.add('hidden');
-    toast("Sayım tamamlandı, yeni sayım başladı");
+    successToast("Sayım tamamlandı, yeni sayım başladı");
   });
 
   updatePendingBadge();
