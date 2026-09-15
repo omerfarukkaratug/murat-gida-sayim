@@ -61,3 +61,30 @@ Bu yüzden: ya düzeltmeyi telefonda yapıp öyle gönder, ya da o oturum
 Kurulumu bitirdikten sonra bir telefonda birkaç ürün say, internete
 bağlıyken birkaç saniye bekle, Google E-Tablo'yu aç — satırların
 otomatik düştüğünü göreceksin.
+
+## 5) Yönetici PIN'i ayarlama (dosya temizleme + rapor için)
+Uygulamadaki "⚙ Yönetici Paneli" iki işlemi PIN ile korur: **Dosyayı
+Temizle** ve **Sayımı Bitir ve Rapor Oluştur**. Varsayılan PIN **2026**'dır
+— değiştirmen önerilir:
+1. Apps Script editöründe sol menüden **Proje Ayarları (Project Settings)**
+2. **Script Özellikleri (Script Properties)** → **Özellik Ekle (Add script property)**
+3. Özellik adı: `ADMIN_PIN`, değer: istediğin PIN (örn. `4837`)
+4. Kaydet — yeniden dağıtım (deploy) yapmana gerek yok, hemen etkin olur
+
+## 6) Yapay zeka değerlendirmesini açma (opsiyonel)
+"Sayımı Bitir ve Rapor Oluştur" işlemi, dikkat çeken stok farkları varsa
+bunları kısaca Türkçe yorumlatmak için Anthropic API'ye istek atabilir.
+Bunun çalışması için bir Anthropic API anahtarı gerekir (console.anthropic.com
+üzerinden alınır):
+1. Aynı **Script Özellikleri** ekranına ikinci bir özellik ekle
+2. Özellik adı: `ANTHROPIC_API_KEY`, değer: kendi API anahtarın
+3. Bu özellik boşsa rapor sorunsuz oluşur, sadece yapay zeka yorumu olmadan —
+   yani bu adım tamamen opsiyoneldir
+
+## "Yönetici Raporu" sekmesi hakkında not
+Bu sekme personel bazlı hız/performans bilgisi içerdiği için rapor
+oluşturulunca otomatik gizlenir (sekme çubuğunda görünmez). Ama bu **kesin
+bir gizlilik değildir** — tabloyu düzenleme/görme yetkisi olan biri "Gizli
+sayfaları göster" ile açabilir. Gerçekten sadece senin görmen gerekiyorsa,
+ya bu sekmeyi ayrı, sadece sana paylaşılmış bir Google E-Tablo'ya taşımanı
+ya da ana tabloyu sadece kendi hesabınla paylaşmanı öneririm.

@@ -153,7 +153,7 @@
 <div id="setup" class="screen">
   <header style="border:none; padding:0 0 16px; background:transparent;">
     <h1><img src="logo-header.png" alt="Murat Gıda" style="height:30px; width:auto; display:block;"></h1>
-    <div class="sub">Sayım · hızlı barkod • offline • Android • build 43</div>
+    <div class="sub">Sayım · hızlı barkod • offline • Android • build 44</div>
   </header>
 
   <div class="card">
@@ -203,6 +203,7 @@
 
   <button class="btn-main" id="startBtn">Sayıma Başla</button>
   <div class="hint" style="text-align:center; margin-top:10px;">Kamera izni istenecek. Barkodu okuttuğunda kamera otomatik kapanır, adedi klavyeyle girersin.</div>
+  <div class="hint" style="text-align:center; margin-top:16px;"><a href="#" id="adminOpenLink" style="color:var(--muted); text-decoration:underline;">⚙ Yönetici Paneli</a></div>
 </div>
 
 <div id="main" class="screen hidden">
@@ -391,6 +392,31 @@
     </div>
   </div>
 
+  <!-- Yönetici Paneli: PIN korumalı — dosya temizleme + sayımı sonlandırıp rapor üretme -->
+  <div id="adminModal" class="hidden" style="position:fixed; inset:0; background:rgba(10,10,10,.55); z-index:49; display:flex; align-items:center; justify-content:center; padding:22px;">
+    <div class="qtyEntryCard" style="width:100%; max-width:360px; text-align:left;">
+      <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:12px;">
+        <div style="font-size:16px; font-weight:800;">⚙️ Yönetici Paneli</div>
+        <button type="button" id="adminCloseTopBtn" aria-label="Kapat" style="width:30px; height:30px; border-radius:50%; background:var(--panel2); border:1.5px solid var(--line); color:var(--text); font-size:16px; line-height:1; padding:0; display:flex; align-items:center; justify-content:center; flex-shrink:0;">✕</button>
+      </div>
+      <div id="adminPinStep">
+        <div class="hint" style="margin-bottom:8px;">Bu işlemler tüm ekibin verisini etkiler. Devam etmek için yönetici PIN'ini gir.</div>
+        <input type="text" id="adminPinInput" inputmode="numeric" placeholder="PIN">
+        <button id="adminPinConfirm" style="width:100%; margin-top:12px; background:linear-gradient(135deg, var(--accent2), var(--accent)); color:#fff; padding:12px;">Devam Et</button>
+      </div>
+      <div id="adminActionsStep" class="hidden">
+        <button id="adminFinalizeBtn" style="width:100%; margin-bottom:10px; background:linear-gradient(135deg, var(--accent2), var(--accent)); color:#fff; padding:14px; text-align:left; line-height:1.5;">
+          📊 Sayımı Bitir ve Rapor Oluştur<br><span style="font-weight:500; font-size:11px; opacity:.85;">Aynı stok kodlarını birleştirir, isimleri düzeltir, son stok listesini ve detaylı raporu oluşturur</span>
+        </button>
+        <button id="adminClearBtn" style="width:100%; margin-bottom:10px; background:linear-gradient(135deg, var(--red), #a91d1d); color:#fff; padding:14px; text-align:left; line-height:1.5;">
+          🧹 Dosyayı Temizle<br><span style="font-weight:500; font-size:11px; opacity:.9;">Kayıtları arşivler, tabloyu boşaltır, tüm telefonların yerel kuyruğunu sıfırlar</span>
+        </button>
+        <div id="adminResult" style="font-size:12.5px; line-height:1.7; margin-top:6px; white-space:pre-wrap;"></div>
+      </div>
+      <button id="adminCloseBtn" style="width:100%; margin-top:14px; background:#fff; border:1.5px solid var(--text); color:var(--text); padding:12px;">Kapat</button>
+    </div>
+  </div>
+
   <div id="reviewScreen" class="hidden" style="position:fixed; inset:0; background:var(--bg); z-index:40; display:flex; flex-direction:column;">
     <div style="padding:16px; border-bottom:1px solid var(--line); background:var(--panel); box-shadow:var(--sh-sm);">
       <div style="font-weight:800; font-size:16px;">Sayımı Bitirmeden Önce Kontrol Et</div>
@@ -540,6 +566,7 @@
   // Güvenlik ağı: her ne sebeple olursa olsun kutu boş kalırsa, bir sonraki
   // olay döngüsünde tekrar zorla doldur.
   setTimeout(function(){ if(!serverInput.value.trim()) serverInput.value = DEFAULT_SERVER_URL; }, 0);
+  checkResetToken();
 
   // Sayfa açılışında daha önce yüklenmiş kataloğu belleğe getir (varsa) —
   // her açılışta 50 bin satırı yeniden yüklemene gerek kalmaz.
@@ -691,6 +718,46 @@
     jsonpRequest(url, 'ilerleme', cb, 30000);
   }
 
+  // jsonpRequest'in parametreli hâli — yönetici işlemleri (temizle/finalize)
+  // PIN gibi ek parametreler gönderebilsin diye.
+  function jsonpRequestP(url, params, cb, timeoutMs){
+    var cbName = 'sayimCb_' + (params.action||'x') + '_' + Date.now();
+    var timeoutId = setTimeout(function(){ cleanup(); cb('zaman aşımı / bağlantı kurulamadı'); }, timeoutMs || 60000);
+    function cleanup(){ clearTimeout(timeoutId); delete window[cbName]; if(script.parentNode) script.parentNode.removeChild(script); }
+    window[cbName] = function(data){ cleanup(); cb(null, data); };
+    var qs = Object.keys(params).map(function(k){ return encodeURIComponent(k) + '=' + encodeURIComponent(params[k]); }).join('&');
+    qs += '&callback=' + cbName;
+    var sep = url.indexOf('?') === -1 ? '?' : '&';
+    var script = document.createElement('script');
+    script.src = url + sep + qs;
+    script.onerror = function(){ cleanup(); cb('sunucuya ulaşılamadı'); };
+    document.body.appendChild(script);
+  }
+
+  // Yönetici dosyayı temizlediğinde sunucudaki RESET_TOKEN değişir. Her
+  // telefon açılışta ve her online olduğunda bunu kontrol eder; token
+  // değiştiyse bu telefonun bekleyen/gönderilmiş eski kuyruğunu sıfırlar —
+  // "temizledim ama eski deneme taramaları geri geldi" sorunu böyle çözülür.
+  function checkResetToken(){
+    if(!navigator.onLine) return;
+    var url = state.serverUrl || DEFAULT_SERVER_URL;
+    jsonpRequest(url, 'resetcheck', function(err, data){
+      if(err || !data || !data.resetToken) return;
+      if(state.lastResetToken && state.lastResetToken !== data.resetToken){
+        state.session = { scans:[], id: makeId() };
+        state.pendingSessions = [];
+        state.lastResetToken = data.resetToken;
+        save();
+        if(typeof renderList === 'function') renderList();
+        if(typeof updatePendingBadge === 'function') updatePendingBadge();
+        warnToast('Yönetici sayım dosyasını temizledi — bu telefondaki eski kayıtlar sıfırlandı');
+      } else if(!state.lastResetToken){
+        state.lastResetToken = data.resetToken;
+        save();
+      }
+    }, 15000);
+  }
+
   function readListFile(f){
     if(!f) return;
     var okExt = /\.(csv|txt)$/i.test(f.name);
@@ -749,7 +816,7 @@
     var online = navigator.onLine;
     statusBadge.textContent = online ? "Çevrimiçi" : "Çevrimdışı";
     statusBadge.className = "status " + (online ? "online" : "offline");
-    if(online) trySync(true);
+    if(online){ trySync(true); checkResetToken(); }
   }
   window.addEventListener('online', updateStatus);
   window.addEventListener('offline', updateStatus);
@@ -1301,6 +1368,73 @@
       }
       progressContentEl.innerHTML = html;
     });
+  });
+
+  // ---------- YÖNETİCİ PANELİ ----------
+  var adminModalEl = document.getElementById('adminModal');
+  var adminPinStepEl = document.getElementById('adminPinStep');
+  var adminActionsStepEl = document.getElementById('adminActionsStep');
+  var adminPinInputEl = document.getElementById('adminPinInput');
+  var adminResultEl = document.getElementById('adminResult');
+
+  function openAdminModal(){
+    adminPinStepEl.classList.remove('hidden');
+    adminActionsStepEl.classList.add('hidden');
+    adminPinInputEl.value = '';
+    adminResultEl.textContent = '';
+    adminModalEl.classList.remove('hidden');
+    setTimeout(function(){ adminPinInputEl.focus(); }, 80);
+  }
+  function closeAdminModal(){ adminModalEl.classList.add('hidden'); }
+
+  document.getElementById('adminOpenLink').addEventListener('click', function(e){ e.preventDefault(); openAdminModal(); });
+  document.getElementById('adminCloseBtn').addEventListener('click', closeAdminModal);
+  document.getElementById('adminCloseTopBtn').addEventListener('click', closeAdminModal);
+
+  document.getElementById('adminPinConfirm').addEventListener('click', function(){
+    if(!adminPinInputEl.value.trim()){ warnToast('PIN gir'); return; }
+    adminPinStepEl.classList.add('hidden');
+    adminActionsStepEl.classList.remove('hidden');
+  });
+  adminPinInputEl.addEventListener('keydown', function(e){
+    if(e.key === 'Enter') document.getElementById('adminPinConfirm').click();
+  });
+
+  document.getElementById('adminFinalizeBtn').addEventListener('click', function(){
+    if(!navigator.onLine){ warnToast('İnternet yok — bu işlem için sunucuya bağlanmak gerekiyor'); return; }
+    var pin = adminPinInputEl.value.trim();
+    var url = state.serverUrl || DEFAULT_SERVER_URL;
+    adminResultEl.textContent = '⏳ Rapor hazırlanıyor… (büyük sayımlarda 1 dakikaya kadar sürebilir)';
+    jsonpRequestP(url, { action: 'finalize', pin: pin }, function(err, data){
+      if(err){ adminResultEl.textContent = '❌ ' + err; return; }
+      if(!data || data.status === 'error'){ adminResultEl.textContent = '❌ ' + ((data && data.message) || 'bilinmeyen hata'); return; }
+      adminResultEl.textContent =
+        '✅ Rapor hazır — "Son Stok Sayimi" ve "Yönetici Raporu" sayfalarına yazıldı.\n\n' +
+        'Ürün çeşidi: ' + data.toplamCesit + '\n' +
+        'Toplam adet (birleştirilmiş): ' + data.toplamAdet + '\n' +
+        'Ortalama doğruluk: %' + data.ortalamaDogruluk + '\n' +
+        'Dikkat çeken fark sayısı: ' + data.anomaliSayisi +
+        (data.aiYorum ? ('\n\n🤖 ' + data.aiYorum) : '');
+    }, 90000);
+  });
+
+  document.getElementById('adminClearBtn').addEventListener('click', function(){
+    if(!navigator.onLine){ warnToast('İnternet yok — bu işlem için sunucuya bağlanmak gerekiyor'); return; }
+    var pin = adminPinInputEl.value.trim();
+    if(!window.confirm('Emin misin? Tüm sayım kayıtları arşivlenip tablo boşaltılacak, tüm telefonların yerel kuyruğu sıfırlanacak.')) return;
+    var url = state.serverUrl || DEFAULT_SERVER_URL;
+    adminResultEl.textContent = '⏳ Temizleniyor…';
+    jsonpRequestP(url, { action: 'temizle', pin: pin }, function(err, data){
+      if(err){ adminResultEl.textContent = '❌ ' + err; return; }
+      if(!data || data.status === 'error'){ adminResultEl.textContent = '❌ ' + ((data && data.message) || 'bilinmeyen hata'); return; }
+      state.lastResetToken = data.resetToken;
+      state.session = { scans: [], id: makeId() };
+      state.pendingSessions = [];
+      save();
+      if(typeof renderList === 'function') renderList();
+      if(typeof updatePendingBadge === 'function') updatePendingBadge();
+      adminResultEl.textContent = '✅ Tablo temizlendi (eski veri "' + data.archivedSheet + '" sayfasına arşivlendi). Diğer telefonlar bir sonraki açılışta/online olduklarında otomatik sıfırlanacak.';
+    }, 30000);
   });
 
   document.getElementById('manualAdd').addEventListener('click', function(){

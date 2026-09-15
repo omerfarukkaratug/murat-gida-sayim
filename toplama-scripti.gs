@@ -15,9 +15,35 @@ function doGet(e) {
   if (e.parameter && e.parameter.action === 'ilerleme') {
     return getIlerleme(e.parameter.callback);
   }
+  // ---- Yönetici işlemleri (PIN korumalı) ----
+  if (e.parameter && e.parameter.action === 'resetcheck') {
+    return outJson({ resetToken: PropertiesService.getScriptProperties().getProperty('RESET_TOKEN') || '' }, e.parameter.callback);
+  }
+  if (e.parameter && e.parameter.action === 'temizle') {
+    return handleTemizle(e.parameter.pin, e.parameter.callback);
+  }
+  if (e.parameter && e.parameter.action === 'finalize') {
+    return handleFinalize(e.parameter.pin, e.parameter.callback);
+  }
   return ContentService
     .createTextOutput('Sayım toplama servisi çalışıyor ✅ (' + new Date().toISOString() + ')')
     .setMimeType(ContentService.MimeType.TEXT);
+}
+
+// ---- Yardımcılar ----
+function outJson(obj, callback) {
+  var json = JSON.stringify(obj);
+  if (callback) {
+    return ContentService.createTextOutput(callback + '(' + json + ')').setMimeType(ContentService.MimeType.JAVASCRIPT);
+  }
+  return ContentService.createTextOutput(json).setMimeType(ContentService.MimeType.JSON);
+}
+
+// Yönetici PIN'i Apps Script > Proje Ayarları > Script Özellikleri'nden
+// ADMIN_PIN adıyla değiştirilebilir. Hiç ayarlanmazsa varsayılan '2026' kullanılır.
+function checkPin(pin) {
+  var real = PropertiesService.getScriptProperties().getProperty('ADMIN_PIN') || '2026';
+  return !!pin && String(pin) === String(real);
 }
 
 function getKatalog(callback) {
@@ -226,4 +252,219 @@ function saveKatalogItem(entry) {
   return ContentService
     .createTextOutput(JSON.stringify({ status: 'ok', added: true }))
     .setMimeType(ContentService.MimeType.JSON);
+}
+
+// ============================================================
+// YÖNETİCİ: DOSYA TEMİZLEME
+// 'Sayim' sekmesini önce 'Arsiv_TARİH' adıyla kopyalar (veri kaybolmaz),
+// sonra boşaltır ve yeni bir RESET_TOKEN üretir. Telefonlar bu token'ı
+// açılışta/online olduklarında kontrol edip değiştiğini görünce kendi
+// yerel kuyruklarını (henüz gönderilmemiş / eski test taramaları) otomatik
+// sıfırlar — "temizlendi ama eski taramalar geri geldi" sorunu budur.
+// ============================================================
+function handleTemizle(pin, callback) {
+  if (!checkPin(pin)) return outJson({ status: 'error', message: 'Yanlış PIN' }, callback);
+  var lock = LockService.getScriptLock();
+  try { lock.waitLock(30000); } catch (e) { return outJson({ status: 'error', message: 'Sunucu meşgul, birazdan tekrar dene' }, callback); }
+  try {
+    var ss = SpreadsheetApp.getActiveSpreadsheet();
+    var sheet = ss.getSheetByName('Sayim');
+    var archivedName = '(arşivlenecek veri yoktu)';
+    if (sheet && sheet.getLastRow() > 1) {
+      archivedName = 'Arsiv_' + Utilities.formatDate(new Date(), Session.getScriptTimeZone() || 'GMT+3', 'yyyyMMdd_HHmm');
+      var copy = sheet.copyTo(ss);
+      copy.setName(archivedName);
+    }
+    if (sheet && sheet.getLastRow() > 1) {
+      sheet.getRange(2, 1, sheet.getLastRow() - 1, sheet.getLastColumn()).clearContent();
+    }
+    var token = new Date().toISOString();
+    PropertiesService.getScriptProperties().setProperty('RESET_TOKEN', token);
+    return outJson({ status: 'ok', resetToken: token, archivedSheet: archivedName }, callback);
+  } catch (err) {
+    return outJson({ status: 'error', message: err.toString() }, callback);
+  } finally {
+    lock.releaseLock();
+  }
+}
+
+// ============================================================
+// YÖNETİCİ: SAYIMI SONLANDIR VE RAPOR OLUŞTUR
+// - Aynı Stok Kodu (yoksa Barkod) altındaki tüm okutmaları TEK satıra
+//   birleştirir; en son okutulan değeri "final" sayım olarak alır.
+// - Ürün adını Katalog sekmesindeki kanonik isimle değiştirir (isim
+//   düzeltme burada otomatik olur — ham 'Sayim' verisi hiç bozulmaz).
+// - 'Son Stok Sayimi' sekmesine yazar.
+// - 'Yönetici Raporu' sekmesine: ürün çeşidi, toplam adet, ortalama
+//   doğruluk, personel bazlı hız, dikkat çeken farklar yazar ve bu
+//   sekmeyi gizler (hideSheet) — sıradan kullanıcı sekme listesinde
+//   görmez. NOT: Sheets'te gerçek "sadece yönetici görsün" ancak ayrı
+//   bir dosyada / paylaşım kısıtlamasıyla garanti edilir; hideSheet
+//   sadece kazara görülmeyi engeller, sıkı gizlilik değildir.
+// - ANTHROPIC_API_KEY script özelliği ayarlıysa, dikkat çeken farklar
+//   için kısa bir yapay zeka değerlendirmesi ister.
+// ============================================================
+function handleFinalize(pin, callback) {
+  if (!checkPin(pin)) return outJson({ status: 'error', message: 'Yanlış PIN' }, callback);
+  var lock = LockService.getScriptLock();
+  try { lock.waitLock(30000); } catch (e) { return outJson({ status: 'error', message: 'Sunucu meşgul, birazdan tekrar dene' }, callback); }
+  try {
+    var ss = SpreadsheetApp.getActiveSpreadsheet();
+    var HEADERS = ['Tarih', 'Saat', 'Personel', 'Ürün Adı', 'Stok Kodu', 'Barkod', 'Birim', 'Eski Stok', 'Sayılan Adet', 'Fark', 'Oturum ID', 'Kayıt ID', 'Reyon'];
+    var sayimSheet = ss.getSheetByName('Sayim');
+    var rows = [];
+    if (sayimSheet && sayimSheet.getLastRow() > 1) {
+      rows = sayimSheet.getRange(2, 1, sayimSheet.getLastRow() - 1, HEADERS.length).getValues();
+    }
+    if (rows.length === 0) return outJson({ status: 'error', message: 'Sayım tablosunda veri yok' }, callback);
+
+    var idx = {}; HEADERS.forEach(function (h, i) { idx[h] = i; });
+
+    // Katalog'dan kanonik isim eşlemesi (Stok Kodu öncelikli, yoksa Barkod)
+    var canonByStock = {}, canonByBarcode = {};
+    var katalogSheet = ss.getSheetByName('Katalog');
+    if (katalogSheet && katalogSheet.getLastRow() >= 2) {
+      var kv = katalogSheet.getRange(2, 1, katalogSheet.getLastRow() - 1, 4).getValues();
+      kv.forEach(function (r) {
+        var name = String(r[0] || '').trim(), barcode = String(r[1] || '').trim(), stock = String(r[2] || '').trim();
+        if (stock && name && !canonByStock[stock]) canonByStock[stock] = name;
+        if (barcode && name && !canonByBarcode[barcode]) canonByBarcode[barcode] = name;
+      });
+    }
+
+    var groups = {};
+    rows.forEach(function (r) {
+      var stockCode = String(r[idx['Stok Kodu']] || '').trim();
+      var barcode = String(r[idx['Barkod']] || '').trim();
+      var key = stockCode || ('B:' + barcode);
+      if (key === 'B:' || !key) return;
+      var ts = String(r[idx['Tarih']]) + ' ' + String(r[idx['Saat']]);
+      if (!groups[key]) {
+        groups[key] = {
+          stockCode: stockCode, barcode: barcode, name: String(r[idx['Ürün Adı']] || ''),
+          unit: String(r[idx['Birim']] || 'Adet'), oldStock: r[idx['Eski Stok']],
+          finalQty: Number(r[idx['Sayılan Adet']]) || 0, lastPersonnel: String(r[idx['Personel']] || ''),
+          lastTs: ts, scanCount: 0
+        };
+      }
+      groups[key].scanCount++;
+      if (ts >= groups[key].lastTs) {
+        groups[key].lastTs = ts;
+        groups[key].finalQty = Number(r[idx['Sayılan Adet']]) || 0;
+        groups[key].lastPersonnel = String(r[idx['Personel']] || '');
+        if (r[idx['Eski Stok']] !== '' && r[idx['Eski Stok']] !== undefined) groups[key].oldStock = r[idx['Eski Stok']];
+      }
+    });
+
+    var finalRows = [];
+    var toplamAdet = 0, dogrulukToplam = 0, dogrulukSayisi = 0;
+    var anomaliler = [];
+    Object.keys(groups).forEach(function (key) {
+      var g = groups[key];
+      var canonName = (g.stockCode && canonByStock[g.stockCode]) || canonByBarcode[g.barcode] || g.name;
+      var oldStockNum = (g.oldStock !== '' && g.oldStock !== undefined && !isNaN(Number(g.oldStock))) ? Number(g.oldStock) : null;
+      var fark = oldStockNum !== null ? (g.finalQty - oldStockNum) : '';
+      toplamAdet += g.finalQty;
+      if (oldStockNum !== null && oldStockNum > 0) {
+        var dogruluk = Math.max(0, 1 - Math.min(1, Math.abs(fark) / oldStockNum));
+        dogrulukToplam += dogruluk; dogrulukSayisi++;
+        if (Math.abs(fark) / oldStockNum > 0.3) {
+          anomaliler.push(canonName + ' (Stok Kodu: ' + (g.stockCode || '-') + '): eski ' + oldStockNum + ', sayılan ' + g.finalQty + ', fark ' + fark);
+        }
+      }
+      finalRows.push([g.stockCode, canonName, g.barcode, g.unit, oldStockNum === null ? '' : oldStockNum, g.finalQty, fark, g.lastPersonnel, g.lastTs, g.scanCount]);
+    });
+
+    var sonSheet = ss.getSheetByName('Son Stok Sayimi');
+    if (!sonSheet) sonSheet = ss.insertSheet('Son Stok Sayimi'); else sonSheet.clear();
+    sonSheet.appendRow(['Stok Kodu', 'Ürün Adı', 'Barkod', 'Birim', 'Eski Stok', 'Final Adet', 'Fark', 'Son Sayan', 'Son Zaman', 'Kaç Kez Okutuldu']);
+    if (finalRows.length > 0) sonSheet.getRange(2, 1, finalRows.length, finalRows[0].length).setValues(finalRows);
+
+    var personelStats = {};
+    rows.forEach(function (r) {
+      var p = String(r[idx['Personel']] || '—');
+      var ts = String(r[idx['Tarih']]) + ' ' + String(r[idx['Saat']]);
+      if (!personelStats[p]) personelStats[p] = { satir: 0, ilkTs: ts, sonTs: ts, urunler: {} };
+      personelStats[p].satir++;
+      if (ts < personelStats[p].ilkTs) personelStats[p].ilkTs = ts;
+      if (ts > personelStats[p].sonTs) personelStats[p].sonTs = ts;
+      var stockKey = String(r[idx['Stok Kodu']] || '') || ('B:' + String(r[idx['Barkod']] || ''));
+      personelStats[p].urunler[stockKey] = true;
+    });
+
+    var raporSheet = ss.getSheetByName('Yönetici Raporu');
+    if (!raporSheet) raporSheet = ss.insertSheet('Yönetici Raporu'); else raporSheet.clear();
+    var ortalamaDogruluk = dogrulukSayisi > 0 ? Math.round((dogrulukToplam / dogrulukSayisi) * 1000) / 10 : null;
+
+    raporSheet.appendRow(['MURAT GIDA — SAYIM YÖNETİCİ RAPORU', Utilities.formatDate(new Date(), Session.getScriptTimeZone() || 'GMT+3', 'yyyy-MM-dd HH:mm')]);
+    raporSheet.appendRow([]);
+    raporSheet.appendRow(['Toplam farklı ürün çeşidi', Object.keys(groups).length]);
+    raporSheet.appendRow(['Toplam sayılan adet (final, birleştirilmiş)', toplamAdet]);
+    raporSheet.appendRow(['Toplam okutma (ham satır) sayısı', rows.length]);
+    raporSheet.appendRow(['Ortalama doğruluk (eski stoğa göre)', ortalamaDogruluk !== null ? ('%' + ortalamaDogruluk) : '—']);
+    raporSheet.appendRow([]);
+    raporSheet.appendRow(['PERSONEL BAZLI']);
+    raporSheet.appendRow(['Personel', 'Okutma Sayısı', 'Farklı Ürün', 'İlk Kayıt', 'Son Kayıt', 'Süre (saat)', 'Hız (okutma/saat)']);
+    Object.keys(personelStats).forEach(function (p) {
+      var s = personelStats[p];
+      var sureSaat = Math.max((new Date(s.sonTs) - new Date(s.ilkTs)) / 3600000, 0.05);
+      var hiz = Math.round((s.satir / sureSaat) * 10) / 10;
+      raporSheet.appendRow([p, s.satir, Object.keys(s.urunler).length, s.ilkTs, s.sonTs, Math.round(sureSaat * 10) / 10, hiz]);
+    });
+    raporSheet.appendRow([]);
+    raporSheet.appendRow(['DİKKAT ÇEKEN FARKLAR (eski stoğa göre %30+ sapma)']);
+    if (anomaliler.length === 0) raporSheet.appendRow(['(yok)']);
+    anomaliler.forEach(function (a) { raporSheet.appendRow([a]); });
+
+    var aiYorum = '';
+    var apiKey = PropertiesService.getScriptProperties().getProperty('ANTHROPIC_API_KEY');
+    if (apiKey && anomaliler.length > 0) {
+      try {
+        aiYorum = getAiYorum(apiKey, anomaliler, Object.keys(groups).length, toplamAdet, ortalamaDogruluk);
+        if (aiYorum) {
+          raporSheet.appendRow([]);
+          raporSheet.appendRow(['YAPAY ZEKA DEĞERLENDİRMESİ']);
+          raporSheet.appendRow([aiYorum]);
+        }
+      } catch (aiErr) {
+        raporSheet.appendRow(['YAPAY ZEKA DEĞERLENDİRMESİ (çalışmadı: ' + aiErr + ')']);
+      }
+    }
+
+    try { raporSheet.hideSheet(); } catch (hideErr) { /* önemli değil */ }
+
+    return outJson({
+      status: 'ok',
+      toplamCesit: Object.keys(groups).length,
+      toplamAdet: toplamAdet,
+      ortalamaDogruluk: ortalamaDogruluk !== null ? ortalamaDogruluk : '—',
+      anomaliSayisi: anomaliler.length,
+      aiYorum: aiYorum
+    }, callback);
+  } catch (err) {
+    return outJson({ status: 'error', message: err.toString() }, callback);
+  } finally {
+    lock.releaseLock();
+  }
+}
+
+// Dikkat çeken farkları kısaca Türkçe yorumlatmak için Anthropic API'ye
+// istek atar. ANTHROPIC_API_KEY ayarlı değilse handleFinalize bu fonksiyonu
+// hiç çağırmaz — anahtar yoksa rapor, yapay zeka bölümü olmadan üretilir.
+function getAiYorum(apiKey, anomaliler, cesit, adet, dogruluk) {
+  var prompt = 'Bir market sayım raporunu değerlendiriyorsun. Toplam ürün çeşidi: ' + cesit +
+    ', toplam sayılan adet: ' + adet + ', ortalama doğruluk: %' + dogruluk + '.\n' +
+    'Dikkat çeken farklar:\n' + anomaliler.slice(0, 30).join('\n') + '\n\n' +
+    'Bu verilere bakarak yöneticiye 3-4 cümlelik, Türkçe, aksiyon odaklı kısa bir değerlendirme yaz ' +
+    '(hangi ürünlere öncelikle bakılmalı, olası sayım hatası mı yoksa gerçek stok kaybı mı olabilir).';
+  var res = UrlFetchApp.fetch('https://api.anthropic.com/v1/messages', {
+    method: 'post',
+    contentType: 'application/json',
+    headers: { 'x-api-key': apiKey, 'anthropic-version': '2023-06-01' },
+    payload: JSON.stringify({ model: 'claude-sonnet-5', max_tokens: 400, messages: [{ role: 'user', content: prompt }] }),
+    muteHttpExceptions: true
+  });
+  var body = JSON.parse(res.getContentText());
+  if (body.content && body.content[0] && body.content[0].text) return body.content[0].text.trim();
+  return '';
 }
