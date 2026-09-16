@@ -63,12 +63,15 @@ function outJson(obj, callback) {
 // Rol "yonetici" ise TÜM yetkiler otomatik verilir. Rol "kullanici" ise
 // sadece Yetkiler sütununda yazılanlar (virgülle ayrılmış:
 // rapor, temizle, kullanici_yonetimi, ayarlar) geçerlidir.
-// Sekme hiç yoksa/boşsa, yalnızca admin/admin ile ilk giriş yapılabilir —
-// bu girişte sekme otomatik oluşturulup admin satırı yazılır (kurulum
-// kolaylığı için). NOT: Şifreler düz metin olarak saklanır (Apps Script'in
-// sunduğu basit bir koruma) — kurumsal güvenlik seviyesinde değildir, sadece
-// ekip içi yetkilendirme için yeterlidir. Tabloyu düzenleme yetkisi olan
-// herkes şifreleri görebilir.
+// "admin" / "admin", sekmede ADI "admin" olan bir satır TANIMLANMADIĞI
+// SÜRECE her zaman yedek bir giriştir (sadece sekme boşken değil) —
+// böylece daha önce başka isimlerle kullanıcı eklenmiş olsa bile ilk kurulum
+// kilitlenmez. Bir kişi "admin" adıyla kaydedilip farklı bir şifre
+// verildiğinde, o satır geçerli olur ve bu yedek devre dışı kalır. NOT:
+// Şifreler düz metin olarak saklanır (Apps Script'in sunduğu basit bir
+// koruma) — kurumsal güvenlik seviyesinde değildir, sadece ekip içi
+// yetkilendirme için yeterlidir. Tabloyu düzenleme yetkisi olan herkes
+// şifreleri görebilir.
 // ============================================================
 var ALL_PERMS = ['rapor', 'temizle', 'kullanici_yonetimi', 'ayarlar'];
 
@@ -78,23 +81,23 @@ function authenticate(user, pass) {
   if (!user) return { ok: false, message: 'Kullanıcı adı gir' };
   var ss = SpreadsheetApp.getActiveSpreadsheet();
   var sheet = ss.getSheetByName('Kullanicilar');
-  if (!sheet || sheet.getLastRow() < 2) {
-    if (user.toLowerCase() === 'admin' && pass === 'admin') {
-      return { ok: true, role: 'yonetici', permissions: ALL_PERMS, bootstrap: true };
+  if (sheet && sheet.getLastRow() >= 2) {
+    var values = sheet.getRange(2, 1, sheet.getLastRow() - 1, 5).getValues();
+    for (var i = 0; i < values.length; i++) {
+      var name = String(values[i][0] || '').trim();
+      if (name.toLowerCase() !== user.toLowerCase()) continue;
+      var pw = String(values[i][1] || '');
+      var role = String(values[i][2] || 'kullanici').trim().toLowerCase() === 'yonetici' ? 'yonetici' : 'kullanici';
+      var yetkiler = String(values[i][3] || '').split(',').map(function (s) { return s.trim(); }).filter(Boolean);
+      var active = String(values[i][4] || 'evet').trim().toLowerCase() !== 'hayir';
+      if (!active) return { ok: false, message: 'Bu kullanıcı pasif duruma alınmış' };
+      if (pw !== pass) return { ok: false, message: 'Şifre yanlış' };
+      return { ok: true, role: role, permissions: role === 'yonetici' ? ALL_PERMS : yetkiler };
     }
-    return { ok: false, message: 'Kullanıcı listesi henüz kurulmadı — önce admin/admin ile giriş yap' };
   }
-  var values = sheet.getRange(2, 1, sheet.getLastRow() - 1, 5).getValues();
-  for (var i = 0; i < values.length; i++) {
-    var name = String(values[i][0] || '').trim();
-    if (name.toLowerCase() !== user.toLowerCase()) continue;
-    var pw = String(values[i][1] || '');
-    var role = String(values[i][2] || 'kullanici').trim().toLowerCase() === 'yonetici' ? 'yonetici' : 'kullanici';
-    var yetkiler = String(values[i][3] || '').split(',').map(function (s) { return s.trim(); }).filter(Boolean);
-    var active = String(values[i][4] || 'evet').trim().toLowerCase() !== 'hayir';
-    if (!active) return { ok: false, message: 'Bu kullanıcı pasif duruma alınmış' };
-    if (pw !== pass) return { ok: false, message: 'Şifre yanlış' };
-    return { ok: true, role: role, permissions: role === 'yonetici' ? ALL_PERMS : yetkiler };
+  // Listede "admin" adında bir satır yok — yedek girişi dene.
+  if (user.toLowerCase() === 'admin' && pass === 'admin') {
+    return { ok: true, role: 'yonetici', permissions: ALL_PERMS, bootstrap: true };
   }
   return { ok: false, message: 'Kullanıcı bulunamadı' };
 }
@@ -109,15 +112,18 @@ function requirePermission(user, pass, perm) {
 function handleLogin(user, pass, callback) {
   var auth = authenticate(user, pass);
   if (!auth.ok) return outJson({ status: 'error', message: auth.message }, callback);
-  // İlk (bootstrap) admin/admin girişinde kalıcı satırı oluştur ki Kullanıcı
-  // Yönetimi ekranında görünsün ve admin şifresini değiştirebilsin.
+  // Yedek (bootstrap) admin/admin girişinde kalıcı bir "admin" satırı
+  // oluştur ki Kullanıcı Yönetimi ekranında görünsün ve şifresi
+  // değiştirilebilsin — sheet boş olsun ya da başka kullanıcılar zaten
+  // tanımlanmış olsun fark etmez, authenticate() zaten "admin" adında bir
+  // satır YOKSA bootstrap döndürür.
   if (auth.bootstrap) {
     try {
       var ss = SpreadsheetApp.getActiveSpreadsheet();
       var sheet = ss.getSheetByName('Kullanicilar');
       if (!sheet) sheet = ss.insertSheet('Kullanicilar');
       if (sheet.getLastRow() < 1) sheet.appendRow(['Ad', 'Şifre', 'Rol', 'Yetkiler', 'Aktif']);
-      if (sheet.getLastRow() < 2) sheet.appendRow(['admin', 'admin', 'yonetici', '', 'evet']);
+      sheet.appendRow(['admin', 'admin', 'yonetici', '', 'evet']);
     } catch (e) { /* kritik değil, bir sonraki girişte tekrar denenir */ }
   }
   return outJson({ status: 'ok', role: auth.role, permissions: auth.permissions }, callback);
