@@ -88,3 +88,31 @@ bir gizlilik değildir** — tabloyu düzenleme/görme yetkisi olan biri "Gizli
 sayfaları göster" ile açabilir. Gerçekten sadece senin görmen gerekiyorsa,
 ya bu sekmeyi ayrı, sadece sana paylaşılmış bir Google E-Tablo'ya taşımanı
 ya da ana tabloyu sadece kendi hesabınla paylaşmanı öneririm.
+
+## 7) Kullanıcı Yönetimi (kim "kullanıcı", kim "yönetici")
+Yönetici Paneli'nde PIN girip devam ettiğinde, açılan ekranda **👤 Kullanıcı
+Yönetimi** bölümü var:
+- Her satıra bir kişi: `Ad;Rol` — yönetici yapmak istediğin kişinin
+  satırının sonuna `;yonetici` yaz, diğerlerini boş bırak (otomatik
+  "kullanıcı" olur)
+- **Kullanıcı Listesini Kaydet**'e bas — bu liste sunucudaki `Kullanicilar`
+  sekmesine yazılır
+- Bu listeye eklenen isimler, sayım açılış ekranındaki "Personel Adı"
+  kutusunda **otomatik tamamlama** olarak çıkar (telefonlar bunu online
+  olduklarında otomatik çeker)
+- Sadece rolü **yonetici** olan bir isim girildiğinde "⚙ Yönetici Paneli"
+  bağlantısı görünür — normal personelin ekranında bu bağlantı hiç
+  görünmez. (Gerçek yetki kontrolü yine PIN'dir; bu sadece kazara
+  tıklamayı önler.) Liste hiç doldurulmamışsa herkese görünür — yani ilk
+  kurulumda kimse dışarıda kalmaz.
+
+## 8) Ekran Açık Kalma Ayarı (pil tasarrufu)
+Sayım sırasında telefon ekranı hiç kararmasın diye uygulama varsayılan
+olarak ekranı sürekli açık tutar — uzun sayımlarda pili hızlı bitirebilir.
+İki yerden kontrol edilir:
+- **Her telefonda**: üst çubuktaki 🔆/🌙 butonuna dokunarak o telefonda
+  anlık açıp kapatabilirsin. Bir kez elle değiştirdiğinde, o telefon
+  yöneticinin göndereceği varsayılandan artık etkilenmez.
+- **Yönetici Paneli → 🔆 Ekran Ayarı**: hiç dokunulmamış (yeni açılan)
+  telefonlar için varsayılanı sen belirlersin — kutuyu işaretle/kaldır,
+  **Varsayılanı Kaydet**'e bas.

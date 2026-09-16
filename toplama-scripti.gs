@@ -17,13 +17,25 @@ function doGet(e) {
   }
   // ---- Yönetici işlemleri (PIN korumalı) ----
   if (e.parameter && e.parameter.action === 'resetcheck') {
-    return outJson({ resetToken: PropertiesService.getScriptProperties().getProperty('RESET_TOKEN') || '' }, e.parameter.callback);
+    return outJson({
+      resetToken: PropertiesService.getScriptProperties().getProperty('RESET_TOKEN') || '',
+      defaultWakeLock: PropertiesService.getScriptProperties().getProperty('DEFAULT_WAKE_LOCK') || 'true'
+    }, e.parameter.callback);
   }
   if (e.parameter && e.parameter.action === 'temizle') {
     return handleTemizle(e.parameter.pin, e.parameter.callback);
   }
   if (e.parameter && e.parameter.action === 'finalize') {
     return handleFinalize(e.parameter.pin, e.parameter.callback);
+  }
+  if (e.parameter && e.parameter.action === 'kullanicilar') {
+    return getKullanicilar(e.parameter.callback);
+  }
+  if (e.parameter && e.parameter.action === 'kullanicilar_kaydet') {
+    return handleKullanicilarKaydet(e.parameter.pin, e.parameter.data, e.parameter.callback);
+  }
+  if (e.parameter && e.parameter.action === 'ayar_kaydet') {
+    return handleAyarKaydet(e.parameter.pin, e.parameter.wakelock, e.parameter.callback);
   }
   return ContentService
     .createTextOutput('Sayım toplama servisi çalışıyor ✅ (' + new Date().toISOString() + ')')
@@ -467,4 +479,65 @@ function getAiYorum(apiKey, anomaliler, cesit, adet, dogruluk) {
   var body = JSON.parse(res.getContentText());
   if (body.content && body.content[0] && body.content[0].text) return body.content[0].text.trim();
   return '';
+}
+
+// ============================================================
+// KULLANICI YÖNETİMİ — hangi personel "kullanıcı", hangisi "yönetici"
+// Yönetici Paneli'ndeki PIN gerçek yetki kontrolüdür; buradaki rol bilgisi
+// sadece kimin "⚙ Yönetici Paneli" bağlantısını görüp göremeyeceğini
+// belirler (kazara tıklamayı önler) — PIN olmadan hiçbir işlem yapılamaz.
+// ============================================================
+function getKullanicilar(callback) {
+  var ss = SpreadsheetApp.getActiveSpreadsheet();
+  var sheet = ss.getSheetByName('Kullanicilar');
+  var users = [];
+  if (sheet && sheet.getLastRow() >= 2) {
+    var values = sheet.getRange(2, 1, sheet.getLastRow() - 1, 3).getValues();
+    users = values.filter(function (r) { return r[0]; }).map(function (r) {
+      return {
+        name: String(r[0]).trim(),
+        role: String(r[1] || 'kullanici').trim().toLowerCase() === 'yonetici' ? 'yonetici' : 'kullanici',
+        active: String(r[2] || 'evet').trim().toLowerCase() !== 'hayir'
+      };
+    });
+  }
+  return outJson({ users: users }, callback);
+}
+
+// data: "Ad;Rol" formatında, her satırda bir kullanıcı (Rol: "yonetici" ya
+// da boş/"kullanici"). Tüm listeyi tek seferde değiştirir (Katalog yükleme
+// mantığıyla aynı — admin panelinde tek bir metin kutusuna yapıştırılır).
+function handleKullanicilarKaydet(pin, data, callback) {
+  if (!checkPin(pin)) return outJson({ status: 'error', message: 'Yanlış PIN' }, callback);
+  var ss = SpreadsheetApp.getActiveSpreadsheet();
+  var sheet = ss.getSheetByName('Kullanicilar');
+  if (!sheet) sheet = ss.insertSheet('Kullanicilar');
+  sheet.clear();
+  sheet.appendRow(['Ad', 'Rol', 'Aktif']);
+  var lines = String(data || '').split('\n');
+  var rows = [];
+  lines.forEach(function (line) {
+    line = line.trim();
+    if (!line) return;
+    var parts = line.split(';');
+    var name = (parts[0] || '').trim();
+    if (!name) return;
+    var role = (parts[1] || 'kullanici').trim().toLowerCase();
+    if (role !== 'yonetici') role = 'kullanici';
+    rows.push([name, role, 'evet']);
+  });
+  if (rows.length > 0) sheet.getRange(2, 1, rows.length, 3).setValues(rows);
+  return outJson({ status: 'ok', saved: rows.length }, callback);
+}
+
+// ============================================================
+// AYARLAR — şimdilik tek ayar: sayım sırasında telefon ekranının açık
+// kalıp kalmayacağı (varsayılan). Her telefon kendi ekranında bunu elle
+// de değiştirebilir; buradaki değer sadece yeni açılan / hiç
+// değiştirilmemiş telefonlar için varsayılanı belirler.
+// ============================================================
+function handleAyarKaydet(pin, wakelock, callback) {
+  if (!checkPin(pin)) return outJson({ status: 'error', message: 'Yanlış PIN' }, callback);
+  PropertiesService.getScriptProperties().setProperty('DEFAULT_WAKE_LOCK', wakelock === 'false' ? 'false' : 'true');
+  return outJson({ status: 'ok' }, callback);
 }
