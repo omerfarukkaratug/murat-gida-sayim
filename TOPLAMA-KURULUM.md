@@ -62,23 +62,30 @@ Kurulumu bitirdikten sonra bir telefonda birkaç ürün say, internete
 bağlıyken birkaç saniye bekle, Google E-Tablo'yu aç — satırların
 otomatik düştüğünü göreceksin.
 
-## 5) Yönetici PIN'i ayarlama (dosya temizleme + rapor için)
-Uygulamadaki "⚙ Yönetici Paneli" iki işlemi PIN ile korur: **Dosyayı
-Temizle** ve **Sayımı Bitir ve Rapor Oluştur**. Varsayılan PIN **2026**'dır
-— değiştirmen önerilir:
-1. Apps Script editöründe sol menüden **Proje Ayarları (Project Settings)**
-2. **Script Özellikleri (Script Properties)** → **Özellik Ekle (Add script property)**
-3. Özellik adı: `ADMIN_PIN`, değer: istediğin PIN (örn. `4837`)
-4. Kaydet — yeniden dağıtım (deploy) yapmana gerek yok, hemen etkin olur
+## 5) Giriş Sistemi (Kullanıcı Adı + Şifre)
+PIN sistemi kaldırıldı — artık her personel kendi kullanıcı adı ve
+şifresiyle giriş yapıyor, yönetici işlemleri PIN yerine **kişinin kendi
+yetkisine** göre çalışıyor.
+
+**İlk kurulum:** Uygulamayı ilk açtığında kullanıcı listesi boştur.
+Kullanıcı adı **admin**, şifre **admin** ile giriş yap — bu, sana tüm
+yetkileri (rapor, temizleme, kullanıcı yönetimi, ekran ayarı) veren bir
+yönetici hesabıdır. **Giriş yapar yapmaz Yönetici Paneli → Kullanıcı
+Yönetimi'nden admin şifresini değiştir.**
+
+⚠️ Şifreler `Kullanicilar` sekmesinde düz metin olarak durur — bu,
+kurumsal bir güvenlik sistemi değil, ekip içi basit bir yetkilendirmedir.
+Tabloyu düzenleme yetkisi olan biri şifreleri görebilir.
 
 ## 6) Yapay zeka değerlendirmesini açma (opsiyonel)
 "Sayımı Bitir ve Rapor Oluştur" işlemi, dikkat çeken stok farkları varsa
 bunları kısaca Türkçe yorumlatmak için Anthropic API'ye istek atabilir.
 Bunun çalışması için bir Anthropic API anahtarı gerekir (console.anthropic.com
 üzerinden alınır):
-1. Aynı **Script Özellikleri** ekranına ikinci bir özellik ekle
-2. Özellik adı: `ANTHROPIC_API_KEY`, değer: kendi API anahtarın
-3. Bu özellik boşsa rapor sorunsuz oluşur, sadece yapay zeka yorumu olmadan —
+1. Apps Script editöründe sol menüden **Proje Ayarları (Project Settings)**
+2. **Script Özellikleri (Script Properties)** → **Özellik Ekle (Add script property)**
+3. Özellik adı: `ANTHROPIC_API_KEY`, değer: kendi API anahtarın
+4. Bu özellik boşsa rapor sorunsuz oluşur, sadece yapay zeka yorumu olmadan —
    yani bu adım tamamen opsiyoneldir
 
 ## "Yönetici Raporu" sekmesi hakkında not
@@ -89,22 +96,37 @@ sayfaları göster" ile açabilir. Gerçekten sadece senin görmen gerekiyorsa,
 ya bu sekmeyi ayrı, sadece sana paylaşılmış bir Google E-Tablo'ya taşımanı
 ya da ana tabloyu sadece kendi hesabınla paylaşmanı öneririm.
 
-## 7) Kullanıcı Yönetimi (kim "kullanıcı", kim "yönetici")
-Yönetici Paneli'nde PIN girip devam ettiğinde, açılan ekranda **👤 Kullanıcı
-Yönetimi** bölümü var:
-- Her satıra bir kişi: `Ad;Rol` — yönetici yapmak istediğin kişinin
-  satırının sonuna `;yonetici` yaz, diğerlerini boş bırak (otomatik
-  "kullanıcı" olur)
-- **Kullanıcı Listesini Kaydet**'e bas — bu liste sunucudaki `Kullanicilar`
-  sekmesine yazılır
-- Bu listeye eklenen isimler, sayım açılış ekranındaki "Personel Adı"
-  kutusunda **otomatik tamamlama** olarak çıkar (telefonlar bunu online
-  olduklarında otomatik çeker)
-- Sadece rolü **yonetici** olan bir isim girildiğinde "⚙ Yönetici Paneli"
-  bağlantısı görünür — normal personelin ekranında bu bağlantı hiç
-  görünmez. (Gerçek yetki kontrolü yine PIN'dir; bu sadece kazara
-  tıklamayı önler.) Liste hiç doldurulmamışsa herkese görünür — yani ilk
-  kurulumda kimse dışarıda kalmaz.
+## 7) Kullanıcı Yönetimi ve Yetkilendirme
+Giriş yaptıktan sonra, yetkin varsa "⚙ Yönetici Paneli" bağlantısı
+görünür (yetkisi olmayan personelin ekranında bu bağlantı hiç çıkmaz).
+**👤 Kullanıcı Yönetimi** bölümünde her satır bir kişi:
+
+```
+Ad;Şifre;Rol;Yetkiler
+```
+- **Rol** `yonetici` ise o kişi otomatik olarak TÜM işlemleri yapabilir
+  (rapor, temizleme, kullanıcı yönetimi, ekran ayarı)
+- **Rol** boş/`kullanici` ise, sadece **Yetkiler** alanına yazdıkların
+  çalışır — virgülle ayrılmış şu dörtten istediğin kadarını yaz:
+  `rapor`, `temizle`, `kullanici_yonetimi`, `ayarlar`
+
+Örnek — 2 yönetici + kısmi yetkili bir kullanıcı + hiç yetkisi olmayanlar:
+```
+admin;yeniSifre123;yonetici
+Ayşe Yılmaz;4521;yonetici
+Mehmet Demir;1111;kullanici;rapor
+Fatma Kaya;2222
+```
+Burada Mehmet raporu görebilir ama dosyayı temizleyemez veya kullanıcı
+ekleyemez; Fatma'nın sayım dışında hiçbir yönetici yetkisi yoktur.
+
+**Kullanıcı Listesini Kaydet**'e bastığında panel önce mevcut listeyi
+sunucudan çeker ve kutuyu onunla doldurur — üstüne ekleme/çıkarma
+yaparak kaydet, TÜM liste o an kutuda ne yazıyorsa onunla değişir.
+
+Bu liste ayrıca giriş ekranındaki "Kullanıcı Adı" kutusunda otomatik
+tamamlama olarak da kullanılır (telefonlar bunu online olduklarında
+otomatik çeker).
 
 ## 8) Ekran Açık Kalma Ayarı (pil tasarrufu)
 Sayım sırasında telefon ekranı hiç kararmasın diye uygulama varsayılan
@@ -113,6 +135,6 @@ olarak ekranı sürekli açık tutar — uzun sayımlarda pili hızlı bitirebil
 - **Her telefonda**: üst çubuktaki 🔆/🌙 butonuna dokunarak o telefonda
   anlık açıp kapatabilirsin. Bir kez elle değiştirdiğinde, o telefon
   yöneticinin göndereceği varsayılandan artık etkilenmez.
-- **Yönetici Paneli → 🔆 Ekran Ayarı**: hiç dokunulmamış (yeni açılan)
-  telefonlar için varsayılanı sen belirlersin — kutuyu işaretle/kaldır,
-  **Varsayılanı Kaydet**'e bas.
+- **Yönetici Paneli → 🔆 Ekran Ayarı** (bu yetkiye sahip olanlarda
+  görünür): hiç dokunulmamış (yeni açılan) telefonlar için varsayılanı
+  sen belirlersin — kutuyu işaretle/kaldır, **Varsayılanı Kaydet**'e bas.

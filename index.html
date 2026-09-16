@@ -32,10 +32,10 @@
   #setup{padding:18px 16px 28px; overflow-y:auto; background:var(--bg);}
   #setup .card{background:var(--panel); border-radius:var(--r-lg); padding:18px; margin-bottom:16px; box-shadow:var(--sh-sm);}
   label{display:block; font-size:11px; letter-spacing:.08em; text-transform:uppercase; color:var(--muted); margin-bottom:7px; font-weight:700;}
-  input[type=text], input[type=url], textarea{
+  input[type=text], input[type=url], input[type=password], textarea{
     width:100%; background:var(--panel2); border:1.5px solid transparent; color:var(--text);
     padding:12px 13px; border-radius:var(--r-sm); font-size:15px; font-family:var(--sans); transition:border-color .15s;}
-  input[type=text]:focus, input[type=url]:focus, textarea:focus{outline:none; border-color:var(--accent); background:var(--panel);}
+  input[type=text]:focus, input[type=url]:focus, input[type=password]:focus, textarea:focus{outline:none; border-color:var(--accent); background:var(--panel);}
   textarea{font-family:var(--mono); font-size:12px; min-height:110px; resize:vertical;}
   .row{margin-bottom:14px;}
   .hint{font-size:11.5px; color:var(--muted); margin-top:6px; line-height:1.55;}
@@ -153,20 +153,35 @@
 <div id="setup" class="screen">
   <header style="border:none; padding:0 0 16px; background:transparent;">
     <h1><img src="logo-header.png" alt="Murat Gıda" style="height:30px; width:auto; display:block;"></h1>
-    <div class="sub">Sayım · hızlı barkod • offline • Android • build 45</div>
+    <div class="sub">Sayım · hızlı barkod • offline • Android • build 46</div>
   </header>
 
-  <div class="card">
-    <div class="row" style="margin-bottom:0;">
-      <label>Personel Adı</label>
-      <input type="text" id="personnelInput" placeholder="Adınızı yazın" list="personnelList">
+  <div class="card" id="loginCard">
+    <div class="row" style="margin-bottom:12px;">
+      <label>Kullanıcı Adı</label>
+      <input type="text" id="loginUserInput" placeholder="Kullanıcı adını yaz" list="personnelList" autocomplete="username">
       <datalist id="personnelList"></datalist>
     </div>
+    <div class="row" style="margin-bottom:0;">
+      <label>Şifre</label>
+      <input type="password" id="loginPassInput" placeholder="Şifre" autocomplete="current-password">
+    </div>
+    <button class="btn-main" id="loginBtn" style="margin-top:14px;">Giriş Yap</button>
+    <div class="hint" id="loginHint" style="text-align:center; margin-top:8px; min-height:14px;"></div>
+    <div class="hint" style="text-align:center; margin-top:10px;">İlk kurulumda yönetici girişi: kullanıcı adı <b>admin</b>, şifre <b>admin</b> — giriş yaptıktan sonra Yönetici Paneli'nden hemen değiştir.</div>
     <div class="hidden">
       <input type="url" id="serverInput" value="">
     </div>
   </div>
 
+  <div class="card hidden" id="loggedInCard">
+    <div style="display:flex; align-items:center; justify-content:space-between;">
+      <div style="font-size:14px;">👤 <b id="loggedInName">—</b> olarak giriş yaptın</div>
+      <a href="#" id="logoutLink" style="color:var(--muted); font-size:12.5px; text-decoration:underline; white-space:nowrap; margin-left:10px;">Çıkış Yap</a>
+    </div>
+  </div>
+
+  <div id="afterLoginArea" class="hidden">
   <div class="card">
     <label>Ürün Listesi — 50 bin ürüne kadar sorunsuz çalışır</label>
 
@@ -204,7 +219,8 @@
 
   <button class="btn-main" id="startBtn">Sayıma Başla</button>
   <div class="hint" style="text-align:center; margin-top:10px;">Kamera izni istenecek. Barkodu okuttuğunda kamera otomatik kapanır, adedi klavyeyle girersin.</div>
-  <div class="hint" style="text-align:center; margin-top:16px;"><a href="#" id="adminOpenLink" style="color:var(--muted); text-decoration:underline;">⚙ Yönetici Paneli</a></div>
+  <div class="hint hidden" id="adminOpenLinkWrap" style="text-align:center; margin-top:16px;"><a href="#" id="adminOpenLink" style="color:var(--muted); text-decoration:underline;">⚙ Yönetici Paneli</a></div>
+  </div>
 </div>
 
 <div id="main" class="screen hidden">
@@ -394,45 +410,47 @@
     </div>
   </div>
 
-  <!-- Yönetici Paneli: PIN korumalı — dosya temizleme + sayımı sonlandırıp rapor üretme -->
+  <!-- Yönetici Paneli: giriş yapan kullanıcının yetkilerine göre bölümler görünür -->
   <div id="adminModal" class="hidden" style="position:fixed; inset:0; background:rgba(10,10,10,.55); z-index:49; display:flex; align-items:center; justify-content:center; padding:22px;">
     <div class="qtyEntryCard" style="width:100%; max-width:360px; max-height:88vh; overflow-y:auto; text-align:left;">
       <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:12px;">
         <div style="font-size:16px; font-weight:800;">⚙️ Yönetici Paneli</div>
         <button type="button" id="adminCloseTopBtn" aria-label="Kapat" style="width:30px; height:30px; border-radius:50%; background:var(--panel2); border:1.5px solid var(--line); color:var(--text); font-size:16px; line-height:1; padding:0; display:flex; align-items:center; justify-content:center; flex-shrink:0;">✕</button>
       </div>
-      <div id="adminPinStep">
-        <div class="hint" style="margin-bottom:8px;">Bu işlemler tüm ekibin verisini etkiler. Devam etmek için yönetici PIN'ini gir.</div>
-        <input type="text" id="adminPinInput" inputmode="numeric" placeholder="PIN">
-        <button id="adminPinConfirm" style="width:100%; margin-top:12px; background:linear-gradient(135deg, var(--accent2), var(--accent)); color:#fff; padding:12px;">Devam Et</button>
-      </div>
-      <div id="adminActionsStep" class="hidden">
+
+      <div id="adminSectionRapor" class="hidden">
         <button id="adminFinalizeBtn" style="width:100%; margin-bottom:10px; background:linear-gradient(135deg, var(--accent2), var(--accent)); color:#fff; padding:14px; text-align:left; line-height:1.5;">
           📊 Sayımı Bitir ve Rapor Oluştur<br><span style="font-weight:500; font-size:11px; opacity:.85;">Aynı stok kodlarını birleştirir, isimleri düzeltir, son stok listesini ve detaylı raporu oluşturur</span>
         </button>
+      </div>
+      <div id="adminSectionTemizle" class="hidden">
         <button id="adminClearBtn" style="width:100%; margin-bottom:10px; background:linear-gradient(135deg, var(--red), #a91d1d); color:#fff; padding:14px; text-align:left; line-height:1.5;">
           🧹 Dosyayı Temizle<br><span style="font-weight:500; font-size:11px; opacity:.9;">Kayıtları arşivler, tabloyu boşaltır, tüm telefonların yerel kuyruğunu sıfırlar</span>
         </button>
-
-        <div style="border-top:1px solid var(--line); margin:14px 0 12px; padding-top:12px;">
-          <div style="font-weight:800; font-size:13px; margin-bottom:6px;">👤 Kullanıcı Yönetimi</div>
-          <div class="hint" style="margin-bottom:8px;">Her satıra bir kişi: <b>Ad;Rol</b> — Rol için <b>yonetici</b> yaz, boş bırakırsan kullanıcı olur.<br>
-            <span style="font-family:var(--mono); display:block; background:var(--panel2); padding:6px 9px; border-radius:8px; margin-top:4px;">Ayşe Yılmaz;yonetici<br>Mehmet Demir</span></div>
-          <textarea id="adminUsersArea" placeholder="Ayşe Yılmaz;yonetici&#10;Mehmet Demir" style="min-height:90px;"></textarea>
-          <button id="adminUsersSave" style="width:100%; margin-top:8px; background:var(--text); color:#fff; padding:11px;">Kullanıcı Listesini Kaydet</button>
-        </div>
-
-        <div style="border-top:1px solid var(--line); margin:14px 0 12px; padding-top:12px;">
-          <div style="font-weight:800; font-size:13px; margin-bottom:6px;">🔆 Ekran Ayarı</div>
-          <div style="display:flex; align-items:center; gap:8px; margin-bottom:8px;">
-            <input type="checkbox" id="adminWakeLockCheck" style="width:20px; height:20px; accent-color:var(--accent);">
-            <label style="margin:0; text-transform:none; letter-spacing:0; font-size:13px; color:var(--text); font-weight:600;" for="adminWakeLockCheck">Yeni açılan telefonlarda sayım sırasında ekran açık kalsın</label>
-          </div>
-          <button id="adminWakeLockSave" style="width:100%; background:var(--text); color:#fff; padding:11px;">Varsayılanı Kaydet</button>
-        </div>
-
-        <div id="adminResult" style="font-size:12.5px; line-height:1.7; margin-top:10px; white-space:pre-wrap;"></div>
       </div>
+
+      <div id="adminSectionKullanici" class="hidden" style="border-top:1px solid var(--line); margin:14px 0 12px; padding-top:12px;">
+        <div style="font-weight:800; font-size:13px; margin-bottom:6px;">👤 Kullanıcı Yönetimi</div>
+        <div class="hint" style="margin-bottom:8px;">Her satıra bir kişi: <b>Ad;Şifre;Rol;Yetkiler</b><br>
+          Rol için <b>yonetici</b> yaz (tüm yetkilere sahip olur) ya da boş bırak (kullanıcı olur).<br>
+          Kullanıcıya özel yetki vermek istersen, Yetkiler'e virgülle şunlardan istediğini yaz: <b>rapor, temizle, kullanici_yonetimi, ayarlar</b><br>
+          <span style="font-family:var(--mono); display:block; background:var(--panel2); padding:6px 9px; border-radius:8px; margin-top:4px; word-break:break-all;">admin;yeniSifre123;yonetici<br>Ayşe Yılmaz;4521;yonetici<br>Mehmet Demir;1111;kullanici;rapor<br>Fatma Kaya;2222</span>
+          ⚠️ Kaydettiğinde TÜM liste bu kutudaki haliyle değişir — önce mevcut listeyi çekmesini bekle, sonra düzenle.</div>
+        <textarea id="adminUsersArea" placeholder="⏳ Mevcut liste yükleniyor…" style="min-height:110px;"></textarea>
+        <button id="adminUsersSave" style="width:100%; margin-top:8px; background:var(--text); color:#fff; padding:11px;">Kullanıcı Listesini Kaydet</button>
+      </div>
+
+      <div id="adminSectionAyarlar" class="hidden" style="border-top:1px solid var(--line); margin:14px 0 12px; padding-top:12px;">
+        <div style="font-weight:800; font-size:13px; margin-bottom:6px;">🔆 Ekran Ayarı</div>
+        <div style="display:flex; align-items:center; gap:8px; margin-bottom:8px;">
+          <input type="checkbox" id="adminWakeLockCheck" style="width:20px; height:20px; accent-color:var(--accent);">
+          <label style="margin:0; text-transform:none; letter-spacing:0; font-size:13px; color:var(--text); font-weight:600;" for="adminWakeLockCheck">Yeni açılan telefonlarda sayım sırasında ekran açık kalsın</label>
+        </div>
+        <button id="adminWakeLockSave" style="width:100%; background:var(--text); color:#fff; padding:11px;">Varsayılanı Kaydet</button>
+      </div>
+
+      <div id="adminNoPerm" class="hidden hint" style="text-align:center; padding:10px 0;">Şu an hiçbir yönetici işlemi için yetkin yok.</div>
+      <div id="adminResult" style="font-size:12.5px; line-height:1.7; margin-top:10px; white-space:pre-wrap;"></div>
       <button id="adminCloseBtn" style="width:100%; margin-top:14px; background:#fff; border:1.5px solid var(--text); color:var(--text); padding:12px;">Kapat</button>
     </div>
   </div>
@@ -470,6 +488,8 @@
   }
   if(!state.newProductCounter) state.newProductCounter = 1;
   if(!state.userRoster) state.userRoster = [];
+  if(state.currentUser === undefined) state.currentUser = null;
+  if(state.savedCredentials === undefined) state.savedCredentials = null;
   if(!state.session.id) state.session.id = makeId();
   var catalogMap = new Map(); // barkod -> {name, stockCode} (RAM'de, 50 bin satır dahi sorunsuz)
 
@@ -562,7 +582,6 @@
   }
 
   // ---------- SETUP SCREEN ----------
-  var personnelInput = document.getElementById('personnelInput');
   var serverInput = document.getElementById('serverInput');
   var pasteArea = document.getElementById('pasteArea');
   var fileInput = document.getElementById('fileInput');
@@ -582,20 +601,31 @@
   var DEFAULT_SERVER_URL = 'https://script.google.com/macros/s/AKfycbwJ8GrGDEQczntnz6zA_rCaSPHmOXGV11dvOAebk2HsN86sq5N7xFSbnEgaNWpyWHI/exec';
   if (state.serverUrl !== DEFAULT_SERVER_URL) { state.serverUrl = DEFAULT_SERVER_URL; save(); }
 
-  personnelInput.value = state.personnel || "";
   serverInput.value = state.serverUrl || DEFAULT_SERVER_URL;
   // Güvenlik ağı: her ne sebeple olursa olsun kutu boş kalırsa, bir sonraki
   // olay döngüsünde tekrar zorla doldur.
   setTimeout(function(){ if(!serverInput.value.trim()) serverInput.value = DEFAULT_SERVER_URL; }, 0);
   checkResetToken();
 
-  // ---------- KULLANICI / YÖNETİCİ ROLLERİ ----------
-  // Kullanıcı listesi yöneticiden gelir (Kullanıcı Yönetimi panelinden).
-  // "⚙ Yönetici Paneli" bağlantısı, sadece rolü "yonetici" olan bir isim
-  // girildiğinde görünür — bu sadece kazara tıklamayı önler, gerçek yetki
-  // kontrolü hâlâ PIN'dir. Liste hiç kurulmamışsa (boşsa) herkese gösterilir.
+  // ---------- GİRİŞ (KULLANICI ADI + ŞİFRE) ----------
+  // Yönetici, Kullanıcı Yönetimi panelinden kimin "kullanıcı" kimin
+  // "yönetici" olduğunu ve her birinin hangi işlemleri yapabileceğini
+  // belirler. Bu telefon, ilk başarılı girişten sonra o kişinin bilgisini
+  // (state.savedCredentials) saklar — böylece internet olmasa bile aynı
+  // kişi tekrar giriş yapabilir. NOT: Bu, kurumsal bir güvenlik sistemi
+  // değildir — şifre bu telefonda düz metin olarak durur. Küçük bir ekip
+  // içi yetkilendirme için yeterlidir, hassas/paylaşılan telefonlarda
+  // dikkatli kullanılmalı.
+  var loginCardEl = document.getElementById('loginCard');
+  var loggedInCardEl = document.getElementById('loggedInCard');
+  var afterLoginAreaEl = document.getElementById('afterLoginArea');
+  var loginUserInput = document.getElementById('loginUserInput');
+  var loginPassInput = document.getElementById('loginPassInput');
+  var loginHintEl = document.getElementById('loginHint');
   var adminLinkEl = document.getElementById('adminOpenLink');
+  var adminLinkWrapEl = document.getElementById('adminOpenLinkWrap');
   var personnelListEl = document.getElementById('personnelList');
+
   function fillPersonnelDatalist(users){
     personnelListEl.innerHTML = '';
     (users||[]).forEach(function(u){
@@ -605,16 +635,7 @@
       personnelListEl.appendChild(opt);
     });
   }
-  function updateAdminLinkVisibility(){
-    if(!state.userRoster || state.userRoster.length === 0){ adminLinkEl.classList.remove('hidden'); return; }
-    var name = personnelInput.value.trim().toLowerCase();
-    var match = state.userRoster.find(function(u){ return u.name.trim().toLowerCase() === name; });
-    if(match && match.role === 'yonetici') adminLinkEl.classList.remove('hidden');
-    else adminLinkEl.classList.add('hidden');
-  }
-  fillPersonnelDatalist(state.userRoster); // önbellekten anında doldur (offline dahil)
-  updateAdminLinkVisibility();
-  personnelInput.addEventListener('input', updateAdminLinkVisibility);
+  fillPersonnelDatalist(state.userRoster);
   function fetchUserRoster(){
     if(!navigator.onLine) return;
     var url = state.serverUrl || DEFAULT_SERVER_URL;
@@ -623,10 +644,76 @@
       state.userRoster = data.users;
       save();
       fillPersonnelDatalist(data.users);
-      updateAdminLinkVisibility();
     }, 15000);
   }
   fetchUserRoster();
+
+  function hasPerm(perm){
+    if(!state.currentUser) return false;
+    if(state.currentUser.role === 'yonetici') return true;
+    return (state.currentUser.permissions || []).indexOf(perm) !== -1;
+  }
+
+  function showLoggedInUI(){
+    loginCardEl.classList.add('hidden');
+    loggedInCardEl.classList.remove('hidden');
+    afterLoginAreaEl.classList.remove('hidden');
+    document.getElementById('loggedInName').textContent = state.currentUser.name;
+    if(hasPerm('rapor') || hasPerm('temizle') || hasPerm('kullanici_yonetimi') || hasPerm('ayarlar')) adminLinkWrapEl.classList.remove('hidden');
+    else adminLinkWrapEl.classList.add('hidden');
+  }
+  function showLoginUI(){
+    loginCardEl.classList.remove('hidden');
+    loggedInCardEl.classList.add('hidden');
+    afterLoginAreaEl.classList.add('hidden');
+    loginPassInput.value = '';
+  }
+
+  if(state.currentUser){ showLoggedInUI(); } else { showLoginUI(); }
+
+  document.getElementById('logoutLink').addEventListener('click', function(e){
+    e.preventDefault();
+    state.currentUser = null;
+    save();
+    loginUserInput.value = '';
+    showLoginUI();
+  });
+
+  document.getElementById('loginBtn').addEventListener('click', function(){
+    var user = loginUserInput.value.trim();
+    var pass = loginPassInput.value;
+    if(!user || !pass){ loginHintEl.textContent = 'Kullanıcı adı ve şifre gir'; return; }
+    loginHintEl.textContent = '';
+    if(navigator.onLine){
+      var url = state.serverUrl || DEFAULT_SERVER_URL;
+      loginHintEl.textContent = '⏳ Giriş yapılıyor…';
+      jsonpRequestP(url, { action:'login', user:user, pass:pass }, function(err, data){
+        if(err){
+          // Sunucuya ulaşılamadıysa yerelde kayıtlı girişi dene (çevrimdışı yedek)
+          tryOfflineLogin(user, pass);
+          return;
+        }
+        if(!data || data.status === 'error'){ loginHintEl.textContent = '❌ ' + ((data && data.message) || 'giriş başarısız'); return; }
+        state.currentUser = { name: user, role: data.role, permissions: data.permissions || [] };
+        state.savedCredentials = { name: user, pass: pass };
+        state.personnel = user;
+        save();
+        showLoggedInUI();
+      }, 20000);
+    } else {
+      tryOfflineLogin(user, pass);
+    }
+  });
+  function tryOfflineLogin(user, pass){
+    if(state.savedCredentials && state.savedCredentials.name.toLowerCase() === user.toLowerCase() && state.savedCredentials.pass === pass && state.currentUser){
+      state.personnel = user;
+      save();
+      showLoggedInUI();
+    } else {
+      loginHintEl.textContent = '❌ İnternet yok — bu telefonda daha önce bu bilgilerle giriş yapılmamış';
+    }
+  }
+  loginPassInput.addEventListener('keydown', function(e){ if(e.key === 'Enter') document.getElementById('loginBtn').click(); });
 
   // Sayfa açılışında daha önce yüklenmiş kataloğu belleğe getir (varsa) —
   // her açılışta 50 bin satırı yeniden yüklemene gerek kalmaz.
@@ -863,8 +950,8 @@
   });
 
   startBtn.addEventListener('click', function(){
-    var name = personnelInput.value.trim();
-    if(!name){ warnToast("Lütfen personel adını gir"); personnelInput.focus(); return; }
+    var name = (state.currentUser && state.currentUser.name) || state.personnel || '';
+    if(!name){ warnToast("Önce giriş yap"); return; }
     if(catalogMap.size === 0){ warnToast("Önce ürün listesi yükle veya sunucudan çek"); return; }
     state.personnel = name;
     state.serverUrl = serverInput.value.trim() || DEFAULT_SERVER_URL;
@@ -1441,20 +1528,47 @@
     });
   });
 
-  // ---------- YÖNETİCİ PANELİ ----------
+  // ---------- YÖNETİCİ PANELİ (yetkiye göre görünür bölümler) ----------
   var adminModalEl = document.getElementById('adminModal');
-  var adminPinStepEl = document.getElementById('adminPinStep');
-  var adminActionsStepEl = document.getElementById('adminActionsStep');
-  var adminPinInputEl = document.getElementById('adminPinInput');
   var adminResultEl = document.getElementById('adminResult');
 
+  function currentAuth(){
+    // Yönetici işlemleri için sunucuya gönderilecek kimlik bilgisi — giriş
+    // yapan kişinin kendi kullanıcı adı/şifresi, ayrı bir PIN yok.
+    if(!state.currentUser || !state.savedCredentials) return null;
+    return { user: state.currentUser.name, pass: state.savedCredentials.pass };
+  }
+
   function openAdminModal(){
-    adminPinStepEl.classList.remove('hidden');
-    adminActionsStepEl.classList.add('hidden');
-    adminPinInputEl.value = '';
     adminResultEl.textContent = '';
+    var canRapor = hasPerm('rapor'), canTemizle = hasPerm('temizle'),
+        canKullanici = hasPerm('kullanici_yonetimi'), canAyarlar = hasPerm('ayarlar');
+    document.getElementById('adminSectionRapor').classList.toggle('hidden', !canRapor);
+    document.getElementById('adminSectionTemizle').classList.toggle('hidden', !canTemizle);
+    document.getElementById('adminSectionKullanici').classList.toggle('hidden', !canKullanici);
+    document.getElementById('adminSectionAyarlar').classList.toggle('hidden', !canAyarlar);
+    document.getElementById('adminNoPerm').classList.toggle('hidden', canRapor || canTemizle || canKullanici || canAyarlar);
     adminModalEl.classList.remove('hidden');
-    setTimeout(function(){ adminPinInputEl.focus(); }, 80);
+
+    var auth = currentAuth();
+    var url = state.serverUrl || DEFAULT_SERVER_URL;
+    if(!auth || !navigator.onLine) return;
+    if(canKullanici){
+      jsonpRequestP(url, { action:'kullanicilar_detay', user:auth.user, pass:auth.pass }, function(err, data){
+        if(!err && data && data.status === 'ok' && data.users){
+          document.getElementById('adminUsersArea').value = data.users.map(function(u){
+            return u.name + ';' + u.pass + ';' + u.role + (u.yetkiler ? (';' + u.yetkiler) : '');
+          }).join('\n');
+        }
+      }, 15000);
+    }
+    if(canAyarlar){
+      jsonpRequest(url, 'resetcheck', function(err, data){
+        if(!err && data && data.defaultWakeLock !== undefined){
+          document.getElementById('adminWakeLockCheck').checked = data.defaultWakeLock !== 'false';
+        }
+      }, 15000);
+    }
   }
   function closeAdminModal(){ adminModalEl.classList.add('hidden'); }
 
@@ -1462,38 +1576,14 @@
   document.getElementById('adminCloseBtn').addEventListener('click', closeAdminModal);
   document.getElementById('adminCloseTopBtn').addEventListener('click', closeAdminModal);
 
-  document.getElementById('adminPinConfirm').addEventListener('click', function(){
-    if(!adminPinInputEl.value.trim()){ warnToast('PIN gir'); return; }
-    adminPinStepEl.classList.add('hidden');
-    adminActionsStepEl.classList.remove('hidden');
-    // Panel açılırken güncel kullanıcı listesini ve ekran ayarını çek (varsa)
-    var url = state.serverUrl || DEFAULT_SERVER_URL;
-    if(navigator.onLine){
-      jsonpRequest(url, 'kullanicilar', function(err, data){
-        if(!err && data && data.users){
-          document.getElementById('adminUsersArea').value = data.users.map(function(u){
-            return u.name + (u.role === 'yonetici' ? ';yonetici' : '');
-          }).join('\n');
-        }
-      }, 15000);
-      jsonpRequest(url, 'resetcheck', function(err, data){
-        if(!err && data && data.defaultWakeLock !== undefined){
-          document.getElementById('adminWakeLockCheck').checked = data.defaultWakeLock !== 'false';
-        }
-      }, 15000);
-    }
-  });
-  adminPinInputEl.addEventListener('keydown', function(e){
-    if(e.key === 'Enter') document.getElementById('adminPinConfirm').click();
-  });
-
   document.getElementById('adminUsersSave').addEventListener('click', function(){
+    var auth = currentAuth();
+    if(!auth){ warnToast('Önce giriş yap'); return; }
     if(!navigator.onLine){ warnToast('İnternet yok — bu işlem için sunucuya bağlanmak gerekiyor'); return; }
-    var pin = adminPinInputEl.value.trim();
     var data = document.getElementById('adminUsersArea').value;
     var url = state.serverUrl || DEFAULT_SERVER_URL;
     adminResultEl.textContent = '⏳ Kullanıcı listesi kaydediliyor…';
-    jsonpRequestP(url, { action: 'kullanicilar_kaydet', pin: pin, data: data }, function(err, res){
+    jsonpRequestP(url, { action: 'kullanicilar_kaydet', user: auth.user, pass: auth.pass, data: data }, function(err, res){
       if(err){ adminResultEl.textContent = '❌ ' + err; return; }
       if(!res || res.status === 'error'){ adminResultEl.textContent = '❌ ' + ((res && res.message) || 'bilinmeyen hata'); return; }
       adminResultEl.textContent = '✅ ' + res.saved + ' kullanıcı kaydedildi. Telefonlar bir sonraki açılışta/online olduklarında listeyi otomatik çekecek.';
@@ -1502,12 +1592,13 @@
   });
 
   document.getElementById('adminWakeLockSave').addEventListener('click', function(){
+    var auth = currentAuth();
+    if(!auth){ warnToast('Önce giriş yap'); return; }
     if(!navigator.onLine){ warnToast('İnternet yok — bu işlem için sunucuya bağlanmak gerekiyor'); return; }
-    var pin = adminPinInputEl.value.trim();
     var wanted = document.getElementById('adminWakeLockCheck').checked;
     var url = state.serverUrl || DEFAULT_SERVER_URL;
     adminResultEl.textContent = '⏳ Ayar kaydediliyor…';
-    jsonpRequestP(url, { action: 'ayar_kaydet', pin: pin, wakelock: wanted ? 'true' : 'false' }, function(err, res){
+    jsonpRequestP(url, { action: 'ayar_kaydet', user: auth.user, pass: auth.pass, wakelock: wanted ? 'true' : 'false' }, function(err, res){
       if(err){ adminResultEl.textContent = '❌ ' + err; return; }
       if(!res || res.status === 'error'){ adminResultEl.textContent = '❌ ' + ((res && res.message) || 'bilinmeyen hata'); return; }
       adminResultEl.textContent = '✅ Varsayılan kaydedildi — sadece elle değiştirilmemiş telefonları etkiler.';
@@ -1515,11 +1606,12 @@
   });
 
   document.getElementById('adminFinalizeBtn').addEventListener('click', function(){
+    var auth = currentAuth();
+    if(!auth){ warnToast('Önce giriş yap'); return; }
     if(!navigator.onLine){ warnToast('İnternet yok — bu işlem için sunucuya bağlanmak gerekiyor'); return; }
-    var pin = adminPinInputEl.value.trim();
     var url = state.serverUrl || DEFAULT_SERVER_URL;
     adminResultEl.textContent = '⏳ Rapor hazırlanıyor… (büyük sayımlarda 1 dakikaya kadar sürebilir)';
-    jsonpRequestP(url, { action: 'finalize', pin: pin }, function(err, data){
+    jsonpRequestP(url, { action: 'finalize', user: auth.user, pass: auth.pass }, function(err, data){
       if(err){ adminResultEl.textContent = '❌ ' + err; return; }
       if(!data || data.status === 'error'){ adminResultEl.textContent = '❌ ' + ((data && data.message) || 'bilinmeyen hata'); return; }
       adminResultEl.textContent =
@@ -1533,12 +1625,13 @@
   });
 
   document.getElementById('adminClearBtn').addEventListener('click', function(){
+    var auth = currentAuth();
+    if(!auth){ warnToast('Önce giriş yap'); return; }
     if(!navigator.onLine){ warnToast('İnternet yok — bu işlem için sunucuya bağlanmak gerekiyor'); return; }
-    var pin = adminPinInputEl.value.trim();
     if(!window.confirm('Emin misin? Tüm sayım kayıtları arşivlenip tablo boşaltılacak, tüm telefonların yerel kuyruğu sıfırlanacak.')) return;
     var url = state.serverUrl || DEFAULT_SERVER_URL;
     adminResultEl.textContent = '⏳ Temizleniyor…';
-    jsonpRequestP(url, { action: 'temizle', pin: pin }, function(err, data){
+    jsonpRequestP(url, { action: 'temizle', user: auth.user, pass: auth.pass }, function(err, data){
       if(err){ adminResultEl.textContent = '❌ ' + err; return; }
       if(!data || data.status === 'error'){ adminResultEl.textContent = '❌ ' + ((data && data.message) || 'bilinmeyen hata'); return; }
       state.lastResetToken = data.resetToken;

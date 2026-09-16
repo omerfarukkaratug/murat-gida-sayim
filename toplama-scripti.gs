@@ -15,7 +15,10 @@ function doGet(e) {
   if (e.parameter && e.parameter.action === 'ilerleme') {
     return getIlerleme(e.parameter.callback);
   }
-  // ---- Yönetici işlemleri (PIN korumalı) ----
+  // ---- Giriş / yetkilendirme ----
+  if (e.parameter && e.parameter.action === 'login') {
+    return handleLogin(e.parameter.user, e.parameter.pass, e.parameter.callback);
+  }
   if (e.parameter && e.parameter.action === 'resetcheck') {
     return outJson({
       resetToken: PropertiesService.getScriptProperties().getProperty('RESET_TOKEN') || '',
@@ -23,19 +26,22 @@ function doGet(e) {
     }, e.parameter.callback);
   }
   if (e.parameter && e.parameter.action === 'temizle') {
-    return handleTemizle(e.parameter.pin, e.parameter.callback);
+    return handleTemizle(e.parameter.user, e.parameter.pass, e.parameter.callback);
   }
   if (e.parameter && e.parameter.action === 'finalize') {
-    return handleFinalize(e.parameter.pin, e.parameter.callback);
+    return handleFinalize(e.parameter.user, e.parameter.pass, e.parameter.callback);
   }
   if (e.parameter && e.parameter.action === 'kullanicilar') {
     return getKullanicilar(e.parameter.callback);
   }
+  if (e.parameter && e.parameter.action === 'kullanicilar_detay') {
+    return getKullanicilarDetay(e.parameter.user, e.parameter.pass, e.parameter.callback);
+  }
   if (e.parameter && e.parameter.action === 'kullanicilar_kaydet') {
-    return handleKullanicilarKaydet(e.parameter.pin, e.parameter.data, e.parameter.callback);
+    return handleKullanicilarKaydet(e.parameter.user, e.parameter.pass, e.parameter.data, e.parameter.callback);
   }
   if (e.parameter && e.parameter.action === 'ayar_kaydet') {
-    return handleAyarKaydet(e.parameter.pin, e.parameter.wakelock, e.parameter.callback);
+    return handleAyarKaydet(e.parameter.user, e.parameter.pass, e.parameter.wakelock, e.parameter.callback);
   }
   return ContentService
     .createTextOutput('Sayım toplama servisi çalışıyor ✅ (' + new Date().toISOString() + ')')
@@ -51,11 +57,70 @@ function outJson(obj, callback) {
   return ContentService.createTextOutput(json).setMimeType(ContentService.MimeType.JSON);
 }
 
-// Yönetici PIN'i Apps Script > Proje Ayarları > Script Özellikleri'nden
-// ADMIN_PIN adıyla değiştirilebilir. Hiç ayarlanmazsa varsayılan '2026' kullanılır.
-function checkPin(pin) {
-  var real = PropertiesService.getScriptProperties().getProperty('ADMIN_PIN') || '2026';
-  return !!pin && String(pin) === String(real);
+// ============================================================
+// GİRİŞ / YETKİLENDİRME
+// 'Kullanicilar' sekmesi: Ad | Şifre | Rol | Yetkiler | Aktif
+// Rol "yonetici" ise TÜM yetkiler otomatik verilir. Rol "kullanici" ise
+// sadece Yetkiler sütununda yazılanlar (virgülle ayrılmış:
+// rapor, temizle, kullanici_yonetimi, ayarlar) geçerlidir.
+// Sekme hiç yoksa/boşsa, yalnızca admin/admin ile ilk giriş yapılabilir —
+// bu girişte sekme otomatik oluşturulup admin satırı yazılır (kurulum
+// kolaylığı için). NOT: Şifreler düz metin olarak saklanır (Apps Script'in
+// sunduğu basit bir koruma) — kurumsal güvenlik seviyesinde değildir, sadece
+// ekip içi yetkilendirme için yeterlidir. Tabloyu düzenleme yetkisi olan
+// herkes şifreleri görebilir.
+// ============================================================
+var ALL_PERMS = ['rapor', 'temizle', 'kullanici_yonetimi', 'ayarlar'];
+
+function authenticate(user, pass) {
+  user = String(user || '').trim();
+  pass = String(pass || '');
+  if (!user) return { ok: false, message: 'Kullanıcı adı gir' };
+  var ss = SpreadsheetApp.getActiveSpreadsheet();
+  var sheet = ss.getSheetByName('Kullanicilar');
+  if (!sheet || sheet.getLastRow() < 2) {
+    if (user.toLowerCase() === 'admin' && pass === 'admin') {
+      return { ok: true, role: 'yonetici', permissions: ALL_PERMS, bootstrap: true };
+    }
+    return { ok: false, message: 'Kullanıcı listesi henüz kurulmadı — önce admin/admin ile giriş yap' };
+  }
+  var values = sheet.getRange(2, 1, sheet.getLastRow() - 1, 5).getValues();
+  for (var i = 0; i < values.length; i++) {
+    var name = String(values[i][0] || '').trim();
+    if (name.toLowerCase() !== user.toLowerCase()) continue;
+    var pw = String(values[i][1] || '');
+    var role = String(values[i][2] || 'kullanici').trim().toLowerCase() === 'yonetici' ? 'yonetici' : 'kullanici';
+    var yetkiler = String(values[i][3] || '').split(',').map(function (s) { return s.trim(); }).filter(Boolean);
+    var active = String(values[i][4] || 'evet').trim().toLowerCase() !== 'hayir';
+    if (!active) return { ok: false, message: 'Bu kullanıcı pasif duruma alınmış' };
+    if (pw !== pass) return { ok: false, message: 'Şifre yanlış' };
+    return { ok: true, role: role, permissions: role === 'yonetici' ? ALL_PERMS : yetkiler };
+  }
+  return { ok: false, message: 'Kullanıcı bulunamadı' };
+}
+
+function requirePermission(user, pass, perm) {
+  var auth = authenticate(user, pass);
+  if (!auth.ok) return auth;
+  if (auth.permissions.indexOf(perm) === -1) return { ok: false, message: 'Bu işlem için yetkin yok' };
+  return auth;
+}
+
+function handleLogin(user, pass, callback) {
+  var auth = authenticate(user, pass);
+  if (!auth.ok) return outJson({ status: 'error', message: auth.message }, callback);
+  // İlk (bootstrap) admin/admin girişinde kalıcı satırı oluştur ki Kullanıcı
+  // Yönetimi ekranında görünsün ve admin şifresini değiştirebilsin.
+  if (auth.bootstrap) {
+    try {
+      var ss = SpreadsheetApp.getActiveSpreadsheet();
+      var sheet = ss.getSheetByName('Kullanicilar');
+      if (!sheet) sheet = ss.insertSheet('Kullanicilar');
+      if (sheet.getLastRow() < 1) sheet.appendRow(['Ad', 'Şifre', 'Rol', 'Yetkiler', 'Aktif']);
+      if (sheet.getLastRow() < 2) sheet.appendRow(['admin', 'admin', 'yonetici', '', 'evet']);
+    } catch (e) { /* kritik değil, bir sonraki girişte tekrar denenir */ }
+  }
+  return outJson({ status: 'ok', role: auth.role, permissions: auth.permissions }, callback);
 }
 
 function getKatalog(callback) {
@@ -274,8 +339,9 @@ function saveKatalogItem(entry) {
 // yerel kuyruklarını (henüz gönderilmemiş / eski test taramaları) otomatik
 // sıfırlar — "temizlendi ama eski taramalar geri geldi" sorunu budur.
 // ============================================================
-function handleTemizle(pin, callback) {
-  if (!checkPin(pin)) return outJson({ status: 'error', message: 'Yanlış PIN' }, callback);
+function handleTemizle(user, pass, callback) {
+  var auth = requirePermission(user, pass, 'temizle');
+  if (!auth.ok) return outJson({ status: 'error', message: auth.message }, callback);
   var lock = LockService.getScriptLock();
   try { lock.waitLock(30000); } catch (e) { return outJson({ status: 'error', message: 'Sunucu meşgul, birazdan tekrar dene' }, callback); }
   try {
@@ -316,8 +382,9 @@ function handleTemizle(pin, callback) {
 // - ANTHROPIC_API_KEY script özelliği ayarlıysa, dikkat çeken farklar
 //   için kısa bir yapay zeka değerlendirmesi ister.
 // ============================================================
-function handleFinalize(pin, callback) {
-  if (!checkPin(pin)) return outJson({ status: 'error', message: 'Yanlış PIN' }, callback);
+function handleFinalize(user, pass, callback) {
+  var auth = requirePermission(user, pass, 'rapor');
+  if (!auth.ok) return outJson({ status: 'error', message: auth.message }, callback);
   var lock = LockService.getScriptLock();
   try { lock.waitLock(30000); } catch (e) { return outJson({ status: 'error', message: 'Sunucu meşgul, birazdan tekrar dene' }, callback); }
   try {
@@ -482,38 +549,61 @@ function getAiYorum(apiKey, anomaliler, cesit, adet, dogruluk) {
 }
 
 // ============================================================
-// KULLANICI YÖNETİMİ — hangi personel "kullanıcı", hangisi "yönetici"
-// Yönetici Paneli'ndeki PIN gerçek yetki kontrolüdür; buradaki rol bilgisi
-// sadece kimin "⚙ Yönetici Paneli" bağlantısını görüp göremeyeceğini
-// belirler (kazara tıklamayı önler) — PIN olmadan hiçbir işlem yapılamaz.
+// KULLANICI YÖNETİMİ
+// getKullanicilar: herkese açık, sadece isim + aktiflik döner (giriş
+// ekranındaki kullanıcı adı otomatik tamamlama için) — şifre/rol/yetki
+// İÇERMEZ, böylece her telefonun önbelleğinde başkalarının şifresi
+// birikmez.
+// getKullanicilarDetay: SADECE 'kullanici_yonetimi' yetkisi olan biri
+// çağırabilir, tam listeyi (şifreler dahil) döner — Yönetici Paneli'nde
+// listeyi düzenlerken mevcut hâlini göstermek için kullanılır.
 // ============================================================
 function getKullanicilar(callback) {
   var ss = SpreadsheetApp.getActiveSpreadsheet();
   var sheet = ss.getSheetByName('Kullanicilar');
   var users = [];
   if (sheet && sheet.getLastRow() >= 2) {
-    var values = sheet.getRange(2, 1, sheet.getLastRow() - 1, 3).getValues();
+    var values = sheet.getRange(2, 1, sheet.getLastRow() - 1, 5).getValues();
     users = values.filter(function (r) { return r[0]; }).map(function (r) {
-      return {
-        name: String(r[0]).trim(),
-        role: String(r[1] || 'kullanici').trim().toLowerCase() === 'yonetici' ? 'yonetici' : 'kullanici',
-        active: String(r[2] || 'evet').trim().toLowerCase() !== 'hayir'
-      };
+      return { name: String(r[0]).trim(), active: String(r[4] || 'evet').trim().toLowerCase() !== 'hayir' };
     });
   }
   return outJson({ users: users }, callback);
 }
 
-// data: "Ad;Rol" formatında, her satırda bir kullanıcı (Rol: "yonetici" ya
-// da boş/"kullanici"). Tüm listeyi tek seferde değiştirir (Katalog yükleme
-// mantığıyla aynı — admin panelinde tek bir metin kutusuna yapıştırılır).
-function handleKullanicilarKaydet(pin, data, callback) {
-  if (!checkPin(pin)) return outJson({ status: 'error', message: 'Yanlış PIN' }, callback);
+function getKullanicilarDetay(user, pass, callback) {
+  var auth = requirePermission(user, pass, 'kullanici_yonetimi');
+  if (!auth.ok) return outJson({ status: 'error', message: auth.message }, callback);
+  var ss = SpreadsheetApp.getActiveSpreadsheet();
+  var sheet = ss.getSheetByName('Kullanicilar');
+  var users = [];
+  if (sheet && sheet.getLastRow() >= 2) {
+    var values = sheet.getRange(2, 1, sheet.getLastRow() - 1, 5).getValues();
+    users = values.filter(function (r) { return r[0]; }).map(function (r) {
+      return {
+        name: String(r[0]).trim(), pass: String(r[1] || ''),
+        role: String(r[2] || 'kullanici').trim().toLowerCase() === 'yonetici' ? 'yonetici' : 'kullanici',
+        yetkiler: String(r[3] || ''), active: String(r[4] || 'evet').trim().toLowerCase() !== 'hayir'
+      };
+    });
+  }
+  return outJson({ status: 'ok', users: users }, callback);
+}
+
+// data: "Ad;Şifre;Rol;Yetkiler" formatında, her satırda bir kullanıcı.
+// Rol "yonetici" ya da boş/"kullanici" olabilir; Yetkiler sadece rol
+// "kullanici" iken anlamlıdır (rapor,temizle,kullanici_yonetimi,ayarlar
+// arasından virgülle ayrılmış bir alt küme). Tüm listeyi tek seferde
+// değiştirir — düzenlerken önce getKullanicilarDetay ile mevcut hâli çekip
+// üstüne yazman gerekir (Katalog yükleme mantığıyla aynı).
+function handleKullanicilarKaydet(user, pass, data, callback) {
+  var auth = requirePermission(user, pass, 'kullanici_yonetimi');
+  if (!auth.ok) return outJson({ status: 'error', message: auth.message }, callback);
   var ss = SpreadsheetApp.getActiveSpreadsheet();
   var sheet = ss.getSheetByName('Kullanicilar');
   if (!sheet) sheet = ss.insertSheet('Kullanicilar');
   sheet.clear();
-  sheet.appendRow(['Ad', 'Rol', 'Aktif']);
+  sheet.appendRow(['Ad', 'Şifre', 'Rol', 'Yetkiler', 'Aktif']);
   var lines = String(data || '').split('\n');
   var rows = [];
   lines.forEach(function (line) {
@@ -522,11 +612,13 @@ function handleKullanicilarKaydet(pin, data, callback) {
     var parts = line.split(';');
     var name = (parts[0] || '').trim();
     if (!name) return;
-    var role = (parts[1] || 'kullanici').trim().toLowerCase();
+    var passw = (parts[1] || '').trim();
+    var role = (parts[2] || 'kullanici').trim().toLowerCase();
     if (role !== 'yonetici') role = 'kullanici';
-    rows.push([name, role, 'evet']);
+    var yetkiler = (parts[3] || '').trim();
+    rows.push([name, passw, role, yetkiler, 'evet']);
   });
-  if (rows.length > 0) sheet.getRange(2, 1, rows.length, 3).setValues(rows);
+  if (rows.length > 0) sheet.getRange(2, 1, rows.length, 5).setValues(rows);
   return outJson({ status: 'ok', saved: rows.length }, callback);
 }
 
@@ -536,8 +628,9 @@ function handleKullanicilarKaydet(pin, data, callback) {
 // de değiştirebilir; buradaki değer sadece yeni açılan / hiç
 // değiştirilmemiş telefonlar için varsayılanı belirler.
 // ============================================================
-function handleAyarKaydet(pin, wakelock, callback) {
-  if (!checkPin(pin)) return outJson({ status: 'error', message: 'Yanlış PIN' }, callback);
+function handleAyarKaydet(user, pass, wakelock, callback) {
+  var auth = requirePermission(user, pass, 'ayarlar');
+  if (!auth.ok) return outJson({ status: 'error', message: auth.message }, callback);
   PropertiesService.getScriptProperties().setProperty('DEFAULT_WAKE_LOCK', wakelock === 'false' ? 'false' : 'true');
   return outJson({ status: 'ok' }, callback);
 }
