@@ -1,4 +1,4 @@
-const CACHE = 'sayim-v47';
+const CACHE = 'sayim-v48';
 const FILES = ['./manifest.json', './icon.svg', './icon-192.png', './icon-512.png', './icon-512-maskable.png', './logo-header.png'];
 
 self.addEventListener('install', (e) => {

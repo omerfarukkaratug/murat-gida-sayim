@@ -153,7 +153,7 @@
 <div id="setup" class="screen">
   <header style="border:none; padding:0 0 16px; background:transparent;">
     <h1><img src="logo-header.png" alt="Murat Gıda" style="height:30px; width:auto; display:block;"></h1>
-    <div class="sub">Sayım · hızlı barkod • offline • Android • build 47</div>
+    <div class="sub">Sayım · hızlı barkod • offline • Android • build 48</div>
   </header>
 
   <div class="card" id="loginCard">
@@ -689,8 +689,12 @@
       loginHintEl.textContent = '⏳ Giriş yapılıyor…';
       jsonpRequestP(url, { action:'login', user:user, pass:pass }, function(err, data){
         if(err){
-          // Sunucuya ulaşılamadıysa yerelde kayıtlı girişi dene (çevrimdışı yedek)
-          tryOfflineLogin(user, pass);
+          // Cihaz "online" görünüyor ama Apps Script'e istek başarısız oldu —
+          // önce bu telefonda daha önce başarılı giriş yapılmışsa onu dene,
+          // olmazsa gerçek nedeni ("internet yok" DEĞİL, sunucuya ulaşılamadı) göster.
+          if(!tryOfflineLogin(user, pass)){
+            loginHintEl.textContent = '❌ Sunucuya ulaşılamadı (' + err + '). İnternetin çalışıyorsa, Apps Script dağıtım adresi yanlış/eski olabilir — Dağıtımları Yönet\'ten /exec adresini kontrol et.';
+          }
           return;
         }
         if(!data || data.status === 'error'){ loginHintEl.textContent = '❌ ' + ((data && data.message) || 'giriş başarısız'); return; }
@@ -701,7 +705,9 @@
         showLoggedInUI();
       }, 20000);
     } else {
-      tryOfflineLogin(user, pass);
+      if(!tryOfflineLogin(user, pass)){
+        loginHintEl.textContent = '❌ İnternet yok — bu telefonda daha önce bu bilgilerle giriş yapılmamış';
+      }
     }
   });
   function tryOfflineLogin(user, pass){
@@ -709,9 +715,9 @@
       state.personnel = user;
       save();
       showLoggedInUI();
-    } else {
-      loginHintEl.textContent = '❌ İnternet yok — bu telefonda daha önce bu bilgilerle giriş yapılmamış';
+      return true;
     }
+    return false;
   }
   loginPassInput.addEventListener('keydown', function(e){ if(e.key === 'Enter') document.getElementById('loginBtn').click(); });
 
