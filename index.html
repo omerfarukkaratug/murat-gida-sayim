@@ -53,7 +53,13 @@
   .stepTitle:first-child{margin-top:0;}
   .orDivider{display:flex; align-items:center; gap:10px; margin:14px 0; color:var(--muted); font-size:11px; font-weight:700; text-transform:uppercase; letter-spacing:.06em;}
   .orDivider::before, .orDivider::after{content:""; flex:1; height:1px; background:var(--line);}
-  #productCount{font-family:var(--mono); color:var(--accent); font-weight:700;}
+  #productCount{font-family:var(--mono); font-weight:700;}
+  .tabSwitch{display:flex; background:var(--panel2); border-radius:12px; padding:4px; gap:4px; margin-bottom:16px;}
+  .tabBtn{flex:1; background:transparent; color:var(--muted); font-size:11.5px; font-weight:700; padding:9px 2px; border-radius:9px; transition:background .15s, color .15s; white-space:nowrap;}
+  .tabBtn.active{background:#fff; color:var(--text); box-shadow:var(--sh-sm);}
+  .btn-secondary{width:100%; background:var(--panel2); border:1.5px solid var(--line); color:var(--text); padding:14px; border-radius:var(--r-sm); font-size:13.5px; font-weight:700;}
+  details > summary{list-style:none;}
+  details > summary::-webkit-details-marker{display:none;}
 
   /* MAIN */
   #main{display:flex; flex-direction:column; height:100%; background:var(--bg);}
@@ -153,7 +159,7 @@
 <div id="setup" class="screen">
   <header style="border:none; padding:0 0 16px; background:transparent;">
     <h1><img src="logo-header.png" alt="Murat Gıda" style="height:30px; width:auto; display:block;"></h1>
-    <div class="sub">Sayım · hızlı barkod • offline • Android • build 48</div>
+    <div class="sub">Sayım · hızlı barkod • offline • Android • build 50</div>
   </header>
 
   <div class="card" id="loginCard">
@@ -183,41 +189,54 @@
 
   <div id="afterLoginArea" class="hidden">
   <div class="card">
-    <label>Ürün Listesi — 50 bin ürüne kadar sorunsuz çalışır</label>
-
-    <div class="stepTitle"><span class="stepLabel">1</span>Zaten çalışan bir telefon var mı?</div>
-    <button type="button" id="fetchCatalogBtn" style="width:100%; background:var(--panel2); border:1.5px solid var(--line); color:var(--text); padding:14px;">
-      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-3px; margin-right:5px;"><polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg>Sunucudan Kataloğu Çek
-    </button>
-    <div class="hint" style="text-align:center;">Başka bir telefon listeyi zaten yüklediyse en hızlısı bu — dosya aramana gerek kalmaz.</div>
-
-    <div class="orDivider">veya sıfırdan yükle</div>
-
-    <div class="stepTitle"><span class="stepLabel">2</span>Bilgisayardan / dosyalardan dosya seç</div>
-    <label class="filebtn" id="fileDropZone">
-      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="display:block; margin:0 auto 6px;"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8Z"/><polyline points="14 2 14 8 20 8"/></svg>
-      <span>Dosya seçmek için dokun</span>
-      <span class="filebtn-sub">.csv veya .txt — sürükleyip bırakmak da olur (bilgisayarda)</span>
-      <input type="file" id="fileInput" accept=".csv,.txt">
-    </label>
-
-    <div class="hint">Her satırda şu düzen olmalı: <b>Ürün Adı;Barkod;Stok Kodu;Eski Stok</b><br>
-      <span style="color:var(--muted);">(Stok Kodu ve Eski Stok isteğe bağlı — boş bırakabilir ya da hiç yazmayabilirsin)</span><br>
-      💡 Eski Stok yazarsan, ürünü okuttuğunda sistemdeki mevcut stok da ekranda görünür — büyük farkları anında fark edersin.<br>
-      💡 Bir ürünün birden fazla barkodu varsa aynı ürün adını farklı barkodlarla ayrı satırlarda tekrar yaz. Örnek:<br>
-      <span style="font-family:var(--mono); display:block; background:var(--panel2); padding:8px 10px; border-radius:8px; margin-top:4px;">Süt 1L;8690001112223;STK001;32<br>Süt 1L;8690001112230;STK001;32<br>Ekmek;8690009998887;STK002;120</span>
-      Ayırıcı olarak <b>;</b> veya <b>,</b> kullanabilirsin. Liste telefona kalıcı kaydedilir — her açılışta yeniden yüklemen gerekmez, sadece güncellemek istediğinde yeni dosya seç.</div>
-
-    <div class="stepTitle" style="margin-top:16px;"><span class="stepLabel">3</span>Ya da doğrudan yapıştır</div>
-    <textarea id="pasteArea" placeholder="Ürün Adı;Barkod (her satıra bir tane)"></textarea>
-
-    <div class="row" style="margin:14px 0 0; text-align:center;">
-      <div>📦 Yüklü ürün: <span id="productCount">Kontrol ediliyor…</span></div>
-      <div id="catalogSyncStatus" style="font-size:11.5px; color:var(--muted); font-family:var(--mono); margin-top:4px;"></div>
+    <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:14px;">
+      <label style="margin:0;">Ürün Listesi</label>
+      <div id="productCountBadge" style="display:flex; align-items:center; gap:6px; background:var(--panel2); padding:6px 12px; border-radius:20px; font-size:12px; font-weight:700; white-space:nowrap;">
+        📦 <span id="productCount">Kontrol ediliyor…</span>
+      </div>
     </div>
+
+    <div class="tabSwitch" role="tablist">
+      <button type="button" class="tabBtn active" data-tab="server">☁️ Sunucudan Çek</button>
+      <button type="button" class="tabBtn" data-tab="file">📄 Dosya</button>
+      <button type="button" class="tabBtn" data-tab="paste">✏️ Yapıştır</button>
+    </div>
+
+    <div class="tabPanel" data-panel="server">
+      <button type="button" id="fetchCatalogBtn" class="btn-secondary">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-3px; margin-right:5px;"><polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg>Sunucudan Kataloğu Çek
+      </button>
+      <div class="hint" style="text-align:center;">Başka bir telefon listeyi zaten yüklediyse en hızlısı bu — dosya aramana gerek kalmaz.</div>
+    </div>
+
+    <div class="tabPanel hidden" data-panel="file">
+      <label class="filebtn" id="fileDropZone">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="display:block; margin:0 auto 6px;"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8Z"/><polyline points="14 2 14 8 20 8"/></svg>
+        <span>Dosya seçmek için dokun</span>
+        <span class="filebtn-sub">.csv veya .txt — sürükleyip bırakmak da olur (bilgisayarda)</span>
+        <input type="file" id="fileInput" accept=".csv,.txt">
+      </label>
+    </div>
+
+    <div class="tabPanel hidden" data-panel="paste">
+      <textarea id="pasteArea" placeholder="Ürün Adı;Barkod (her satıra bir tane)"></textarea>
+    </div>
+
+    <details style="margin-top:14px;">
+      <summary style="cursor:pointer; font-size:12px; font-weight:700; color:var(--accent); list-style:none;">📋 Dosya/yapıştırma formatı nasıl olmalı?</summary>
+      <div class="hint" style="margin-top:8px;">Her satırda şu düzen olmalı: <b>Ürün Adı;Barkod;Stok Kodu;Eski Stok</b><br>
+        <span style="color:var(--muted);">(Stok Kodu ve Eski Stok isteğe bağlı — boş bırakabilir ya da hiç yazmayabilirsin)</span><br>
+        💡 Eski Stok yazarsan, ürünü okuttuğunda sistemdeki mevcut stok da ekranda görünür — büyük farkları anında fark edersin.<br>
+        💡 Bir ürünün birden fazla barkodu varsa aynı ürün adını farklı barkodlarla ayrı satırlarda tekrar yaz. Örnek:<br>
+        <span style="font-family:var(--mono); display:block; background:var(--panel2); padding:8px 10px; border-radius:8px; margin-top:4px;">Süt 1L;8690001112223;STK001;32<br>Süt 1L;8690001112230;STK001;32<br>Ekmek;8690009998887;STK002;120</span>
+        Ayırıcı olarak <b>;</b> veya <b>,</b> kullanabilirsin. Liste telefona kalıcı kaydedilir — her açılışta yeniden yüklemen gerekmez, sadece güncellemek istediğinde yeni dosya seç.</div>
+    </details>
+
+    <div id="catalogSyncStatus" style="font-size:11.5px; color:var(--muted); font-family:var(--mono); margin-top:12px; text-align:center;"></div>
   </div>
 
   <button class="btn-main" id="startBtn">Sayıma Başla</button>
+
   <div class="hint" style="text-align:center; margin-top:10px;">Kamera izni istenecek. Barkodu okuttuğunda kamera otomatik kapanır, adedi klavyeyle girersin.</div>
   <div class="hint hidden" id="adminOpenLinkWrap" style="text-align:center; margin-top:16px;"><a href="#" id="adminOpenLink" style="color:var(--muted); text-decoration:underline;">⚙ Yönetici Paneli</a></div>
   </div>
@@ -430,14 +449,10 @@
       </div>
 
       <div id="adminSectionKullanici" class="hidden" style="border-top:1px solid var(--line); margin:14px 0 12px; padding-top:12px;">
-        <div style="font-weight:800; font-size:13px; margin-bottom:6px;">👤 Kullanıcı Yönetimi</div>
-        <div class="hint" style="margin-bottom:8px;">Her satıra bir kişi: <b>Ad;Şifre;Rol;Yetkiler</b><br>
-          Rol için <b>yonetici</b> yaz (tüm yetkilere sahip olur) ya da boş bırak (kullanıcı olur).<br>
-          Kullanıcıya özel yetki vermek istersen, Yetkiler'e virgülle şunlardan istediğini yaz: <b>rapor, temizle, kullanici_yonetimi, ayarlar</b><br>
-          <span style="font-family:var(--mono); display:block; background:var(--panel2); padding:6px 9px; border-radius:8px; margin-top:4px; word-break:break-all;">admin;yeniSifre123;yonetici<br>Ayşe Yılmaz;4521;yonetici<br>Mehmet Demir;1111;kullanici;rapor<br>Fatma Kaya;2222</span>
-          ⚠️ Kaydettiğinde TÜM liste bu kutudaki haliyle değişir — önce mevcut listeyi çekmesini bekle, sonra düzenle.</div>
-        <textarea id="adminUsersArea" placeholder="⏳ Mevcut liste yükleniyor…" style="min-height:110px;"></textarea>
-        <button id="adminUsersSave" style="width:100%; margin-top:8px; background:var(--text); color:#fff; padding:11px;">Kullanıcı Listesini Kaydet</button>
+        <div style="font-weight:800; font-size:13px; margin-bottom:8px;">👤 Kullanıcı Yönetimi</div>
+        <div id="adminUsersList"></div>
+        <button type="button" id="adminAddUserBtn" style="width:100%; background:#fff; border:1.5px dashed var(--line); color:var(--text); padding:11px; margin-bottom:8px;">➕ Kullanıcı Ekle</button>
+        <button id="adminUsersSave" style="width:100%; background:var(--text); color:#fff; padding:11px;">💾 Kullanıcı Listesini Kaydet</button>
       </div>
 
       <div id="adminSectionAyarlar" class="hidden" style="border-top:1px solid var(--line); margin:14px 0 12px; padding-top:12px;">
@@ -727,12 +742,18 @@
     rows.forEach(function(r){ catalogMap.set(r.barcode, { name: r.name, stockCode: r.stockCode || '', oldStock: r.oldStock || '' }); });
     updateProductCountLabel();
     setSyncStatus();
-  }).catch(function(){ productCountEl.textContent = "0"; });
+  }).catch(function(){ productCountEl.textContent = "Henüz ürün yok"; });
 
   function updateProductCountLabel(){
     var names = new Set();
     catalogMap.forEach(function(v){ names.add(v.name); });
-    productCountEl.textContent = catalogMap.size === 0 ? "0" : (names.size + " ürün / " + catalogMap.size + " barkod");
+    var empty = catalogMap.size === 0;
+    productCountEl.textContent = empty ? "Henüz ürün yok" : (names.size + " ürün / " + catalogMap.size + " barkod");
+    var badge = document.getElementById('productCountBadge');
+    if(badge){
+      badge.style.background = empty ? 'var(--panel2)' : 'rgba(22,163,74,.12)';
+      badge.style.color = empty ? 'var(--muted)' : 'var(--green)';
+    }
   }
 
   function parseList(text){
@@ -815,6 +836,18 @@
       body: JSON.stringify({ type:'katalog_item', entry: entry })
     }).catch(function(){ /* sessiz geç, yerel kayıt zaten yapıldı, veri kaybı yok */ });
   }
+
+  // ---------- Ürün Listesi sekmeleri (Sunucudan Çek / Dosya / Yapıştır) ----------
+  document.querySelectorAll('.tabBtn').forEach(function(btn){
+    btn.addEventListener('click', function(){
+      document.querySelectorAll('.tabBtn').forEach(function(b){ b.classList.remove('active'); });
+      btn.classList.add('active');
+      var tab = btn.getAttribute('data-tab');
+      document.querySelectorAll('.tabPanel').forEach(function(p){
+        p.classList.toggle('hidden', p.getAttribute('data-panel') !== tab);
+      });
+    });
+  });
 
   document.getElementById('fetchCatalogBtn').addEventListener('click', function(){
     var url = serverInput.value.trim() || DEFAULT_SERVER_URL;
@@ -1560,12 +1593,16 @@
     var url = state.serverUrl || DEFAULT_SERVER_URL;
     if(!auth || !navigator.onLine) return;
     if(canKullanici){
+      document.getElementById('adminUsersList').innerHTML = '<div class="hint">⏳ Mevcut liste yükleniyor…</div>';
       jsonpRequestP(url, { action:'kullanicilar_detay', user:auth.user, pass:auth.pass }, function(err, data){
         if(!err && data && data.status === 'ok' && data.users){
-          document.getElementById('adminUsersArea').value = data.users.map(function(u){
-            return u.name + ';' + u.pass + ';' + u.role + (u.yetkiler ? (';' + u.yetkiler) : '');
-          }).join('\n');
+          adminUsersData = data.users.map(function(u){
+            return { name: u.name, pass: u.pass, role: u.role, perms: permsFromString(u.yetkiler) };
+          });
+        } else {
+          adminUsersData = [];
         }
+        renderUsersList();
       }, 15000);
     }
     if(canAyarlar){
@@ -1582,11 +1619,97 @@
   document.getElementById('adminCloseBtn').addEventListener('click', closeAdminModal);
   document.getElementById('adminCloseTopBtn').addEventListener('click', closeAdminModal);
 
+  // ---------- Kullanıcı Yönetimi: tik kutulu, kart tabanlı düzenleyici ----------
+  var adminUsersData = []; // { name, pass, role: 'yonetici'|'kullanici', perms: {rapor,temizle,kullanici_yonetimi,ayarlar} }
+  var PERM_LABELS = [
+    { key: 'rapor', label: '📊 Rapor' },
+    { key: 'temizle', label: '🧹 Temizle' },
+    { key: 'kullanici_yonetimi', label: '👤 Kullanıcılar' },
+    { key: 'ayarlar', label: '🔆 Ayarlar' }
+  ];
+
+  function permsFromString(s){
+    var list = String(s || '').split(',').map(function(x){ return x.trim(); }).filter(Boolean);
+    return {
+      rapor: list.indexOf('rapor') !== -1,
+      temizle: list.indexOf('temizle') !== -1,
+      kullanici_yonetimi: list.indexOf('kullanici_yonetimi') !== -1,
+      ayarlar: list.indexOf('ayarlar') !== -1
+    };
+  }
+  function permsToString(p){
+    return PERM_LABELS.filter(function(pl){ return p[pl.key]; }).map(function(pl){ return pl.key; }).join(',');
+  }
+  function escAttr(s){ return String(s == null ? '' : s).replace(/"/g, '&quot;'); }
+
+  function renderUsersList(){
+    var container = document.getElementById('adminUsersList');
+    container.innerHTML = '';
+    if(adminUsersData.length === 0){
+      container.innerHTML = '<div class="hint" style="margin-bottom:8px;">Henüz kullanıcı yok — "➕ Kullanıcı Ekle" ile başla.</div>';
+    }
+    adminUsersData.forEach(function(u, i){
+      var isYonetici = u.role === 'yonetici';
+      var row = document.createElement('div');
+      row.style.cssText = 'background:var(--panel2); border:1.5px solid var(--line); border-radius:12px; padding:10px; margin-bottom:8px;';
+
+      var permsHtml = PERM_LABELS.map(function(pl){
+        var checked = isYonetici || u.perms[pl.key];
+        return '<label style="display:flex; align-items:center; gap:5px; font-size:11.5px; color:var(--text); font-weight:600; text-transform:none; letter-spacing:0; margin:0;">' +
+          '<input type="checkbox" class="u-perm" data-perm="' + pl.key + '" ' + (checked ? 'checked' : '') + (isYonetici ? ' disabled' : '') + ' style="width:17px; height:17px; accent-color:var(--accent);">' +
+          pl.label + '</label>';
+      }).join('');
+
+      row.innerHTML =
+        '<div style="display:flex; gap:6px; margin-bottom:8px;">' +
+          '<input type="text" class="u-name" placeholder="👤 İsim" value="' + escAttr(u.name) + '" style="flex:1.2; padding:9px; font-size:13px;">' +
+          '<input type="text" class="u-pass" placeholder="🔑 Şifre" value="' + escAttr(u.pass) + '" style="flex:1; padding:9px; font-size:13px; font-family:var(--mono);">' +
+          '<button type="button" class="u-del" title="Sil" style="width:36px; flex-shrink:0; background:transparent; border:none; font-size:19px; padding:0;">🗑️</button>' +
+        '</div>' +
+        '<div style="display:flex; gap:6px; margin-bottom:8px;">' +
+          '<button type="button" class="u-role-user" style="flex:1; padding:8px; font-size:12px; font-weight:700; border-radius:8px; background:' + (!isYonetici ? 'var(--accent)' : '#fff') + '; color:' + (!isYonetici ? '#fff' : 'var(--text)') + '; border:1.5px solid var(--line);">🙂 Kullanıcı</button>' +
+          '<button type="button" class="u-role-admin" style="flex:1; padding:8px; font-size:12px; font-weight:700; border-radius:8px; background:' + (isYonetici ? 'var(--accent)' : '#fff') + '; color:' + (isYonetici ? '#fff' : 'var(--text)') + '; border:1.5px solid var(--line);">👑 Yönetici</button>' +
+        '</div>' +
+        '<div style="display:grid; grid-template-columns:1fr 1fr; gap:6px 10px; opacity:' + (isYonetici ? '.5' : '1') + ';">' + permsHtml + '</div>';
+
+      row.querySelector('.u-name').addEventListener('input', function(e){ adminUsersData[i].name = e.target.value; });
+      row.querySelector('.u-pass').addEventListener('input', function(e){ adminUsersData[i].pass = e.target.value; });
+      row.querySelector('.u-del').addEventListener('click', function(){
+        if(!window.confirm('"' + (adminUsersData[i].name || 'bu kullanıcı') + '" silinsin mi?')) return;
+        adminUsersData.splice(i, 1); renderUsersList();
+      });
+      row.querySelector('.u-role-user').addEventListener('click', function(){ adminUsersData[i].role = 'kullanici'; renderUsersList(); });
+      row.querySelector('.u-role-admin').addEventListener('click', function(){ adminUsersData[i].role = 'yonetici'; renderUsersList(); });
+      row.querySelectorAll('.u-perm').forEach(function(box){
+        box.addEventListener('change', function(){
+          adminUsersData[i].perms[box.getAttribute('data-perm')] = box.checked;
+        });
+      });
+
+      container.appendChild(row);
+    });
+  }
+
+  document.getElementById('adminAddUserBtn').addEventListener('click', function(){
+    adminUsersData.push({ name: '', pass: '', role: 'kullanici', perms: { rapor: false, temizle: false, kullanici_yonetimi: false, ayarlar: false } });
+    renderUsersList();
+  });
+
   document.getElementById('adminUsersSave').addEventListener('click', function(){
     var auth = currentAuth();
     if(!auth){ warnToast('Önce giriş yap'); return; }
     if(!navigator.onLine){ warnToast('İnternet yok — bu işlem için sunucuya bağlanmak gerekiyor'); return; }
-    var data = document.getElementById('adminUsersArea').value;
+    var missing = adminUsersData.some(function(u){ return !u.name.trim() || !u.pass.trim(); });
+    if(missing){ warnToast('Her kullanıcının bir ismi ve şifresi olmalı'); return; }
+    var data = adminUsersData.map(function(u){
+      var line = u.name.trim() + ';' + u.pass;
+      line += ';' + u.role;
+      if(u.role !== 'yonetici'){
+        var permStr = permsToString(u.perms);
+        if(permStr) line += ';' + permStr;
+      }
+      return line;
+    }).join('\n');
     var url = state.serverUrl || DEFAULT_SERVER_URL;
     adminResultEl.textContent = '⏳ Kullanıcı listesi kaydediliyor…';
     jsonpRequestP(url, { action: 'kullanicilar_kaydet', user: auth.user, pass: auth.pass, data: data }, function(err, res){
@@ -1596,6 +1719,7 @@
       fetchUserRoster();
     }, 20000);
   });
+
 
   document.getElementById('adminWakeLockSave').addEventListener('click', function(){
     var auth = currentAuth();
