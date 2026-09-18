@@ -167,7 +167,7 @@
 <div id="setup" class="screen">
   <header style="border:none; padding:0 0 16px; background:transparent;">
     <h1><img src="logo-header.png" alt="Murat Gıda" style="height:30px; width:auto; display:block;"></h1>
-    <div class="sub">Sayım · hızlı barkod • offline • Android • build 56</div>
+    <div class="sub">Sayım · hızlı barkod • offline • Android • build 57</div>
   </header>
 
   <div class="card" id="loginCard">
@@ -253,6 +253,7 @@
 <div id="main" class="screen hidden">
   <div class="topbar">
     <button type="button" id="backToSetupBtn" title="Ayarlara / giriş ekranına dön" style="background:var(--panel2); border:1.5px solid var(--line); color:var(--text); width:34px; height:34px; border-radius:50%; font-size:16px; padding:0; display:flex; align-items:center; justify-content:center; flex-shrink:0;">⚙</button>
+    <button type="button" id="mainAdminBtn" title="Yönetici Paneli" class="hidden" style="background:var(--panel2); border:1.5px solid var(--line); color:var(--text); width:34px; height:34px; border-radius:50%; font-size:15px; padding:0; display:flex; align-items:center; justify-content:center; flex-shrink:0;">👑</button>
     <div class="who" id="whoLabel">—</div>
     <button type="button" id="wakeLockToggleBtn" title="Ekran açık kalsın mı?" style="background:var(--panel2); border:1.5px solid var(--line); color:var(--text); width:34px; height:34px; border-radius:50%; font-size:15px; padding:0; display:flex; align-items:center; justify-content:center; flex-shrink:0;">🔆</button>
     <div class="status offline" id="statusBadge">Çevrimdışı</div>
@@ -712,13 +713,16 @@
     return (state.currentUser.permissions || []).indexOf(perm) !== -1;
   }
 
+  function hasAnyAdminPerm(){
+    return hasPerm('rapor') || hasPerm('temizle') || hasPerm('kullanici_yonetimi') || hasPerm('ayarlar') || hasPerm('canli_durum') || hasPerm('duzelt');
+  }
   function showLoggedInUI(){
     loginCardEl.classList.add('hidden');
     loggedInCardEl.classList.remove('hidden');
     afterLoginAreaEl.classList.remove('hidden');
     document.getElementById('loggedInName').textContent = state.currentUser.name;
-    if(hasPerm('rapor') || hasPerm('temizle') || hasPerm('kullanici_yonetimi') || hasPerm('ayarlar') || hasPerm('canli_durum') || hasPerm('duzelt')) adminLinkWrapEl.classList.remove('hidden');
-    else adminLinkWrapEl.classList.add('hidden');
+    adminLinkWrapEl.classList.toggle('hidden', !hasAnyAdminPerm());
+    document.getElementById('mainAdminBtn').classList.toggle('hidden', !hasAnyAdminPerm());
     startBtn.textContent = (state.session.scans && state.session.scans.length > 0) ? '▶ Sayıma Devam Et' : 'Sayıma Başla';
   }
   function showLoginUI(){
@@ -1790,6 +1794,7 @@
   function closeAdminModal(){ adminModalEl.classList.add('hidden'); }
 
   document.getElementById('adminOpenLink').addEventListener('click', function(e){ e.preventDefault(); openAdminModal(); });
+  document.getElementById('mainAdminBtn').addEventListener('click', function(){ openAdminModal(); }); // sayım ekranından ayrılmadan direkt panel açılır
   document.getElementById('adminCloseBtn').addEventListener('click', closeAdminModal);
   document.getElementById('adminCloseTopBtn').addEventListener('click', closeAdminModal);
 
