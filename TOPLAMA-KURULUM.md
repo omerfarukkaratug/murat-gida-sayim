@@ -160,6 +160,13 @@ Paneli'nden "📥 Son Stok Sayımını İndir (CSV)" ile o anki "Son Stok
 Sayimi" sekmesini doğrudan telefona/bilgisayara CSV olarak indirebilirsin
 — ERP12'ye aktarmak için Google Sheets'e hiç girmene gerek kalmaz.
 
+## 12) Yedek E-posta (📧 rapor yetkisi ile aynı Ayarlar bölümünde)
+Yönetici Paneli → 🔆 Ekran Ayarı bölümüne bir e-posta adresi girip
+kaydedersen, "Sayımı Bitir ve Rapor Oluştur" her çalıştığında Son Stok
+Sayımı otomatik olarak o adrese CSV eki ile gönderilir — Google Sheets'e
+hiç girmeden e-postandan da erişebilirsin. Boş bırakırsan hiç mail
+gönderilmez. E-posta Apps Script'in kendi Gmail/Google hesabından gider.
+
 ## 8) Ekran Açık Kalma ve Boşta Kalma Ayarları (pil tasarrufu)
 Sayım sırasında telefon ekranı hiç kararmasın diye uygulama varsayılan
 olarak ekranı sürekli açık tutar — uzun sayımlarda pili hızlı bitirebilir.

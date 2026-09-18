@@ -42,7 +42,10 @@ function doGet(e) {
     return handleKullanicilarKaydet(e.parameter.user, e.parameter.pass, e.parameter.data, e.parameter.callback);
   }
   if (e.parameter && e.parameter.action === 'ayar_kaydet') {
-    return handleAyarKaydet(e.parameter.user, e.parameter.pass, e.parameter.wakelock, e.parameter.idleMinutes, e.parameter.callback);
+    return handleAyarKaydet(e.parameter.user, e.parameter.pass, e.parameter.wakelock, e.parameter.idleMinutes, e.parameter.backupEmail, e.parameter.callback);
+  }
+  if (e.parameter && e.parameter.action === 'ayar_getir') {
+    return getAyarlar(e.parameter.user, e.parameter.pass, e.parameter.callback);
   }
   if (e.parameter && e.parameter.action === 'son_stok_getir') {
     return getSonStokGetir(e.parameter.user, e.parameter.pass, e.parameter.callback);
@@ -556,6 +559,40 @@ function handleFinalize(user, pass, callback) {
 
     try { raporSheet.hideSheet(); } catch (hideErr) { /* önemli değil */ }
 
+    // Yönetici bir yedek e-posta adresi tanımladıysa, Son Stok Sayımı'nı
+    // CSV eki olarak otomatik gönder. Adres tanımlı değilse hiçbir şey
+    // yapılmaz, rapor normal şekilde oluşur.
+    var backupEmail = PropertiesService.getScriptProperties().getProperty('BACKUP_EMAIL');
+    var emailGonderildi = false;
+    if (backupEmail) {
+      try {
+        var csvHeaders = ['Stok Kodu', 'Ürün Adı', 'Barkod', 'Birim', 'Eski Stok', 'Final Adet', 'Fark', 'Son Sayan', 'Son Zaman', 'Kaç Kez Okutuldu'];
+        var csvLines = [csvHeaders.join(';')];
+        finalRows.forEach(function (r) {
+          csvLines.push(r.map(function (v) {
+            var s = (v === null || v === undefined) ? '' : String(v);
+            if (s.indexOf(';') !== -1 || s.indexOf('"') !== -1) s = '"' + s.replace(/"/g, '""') + '"';
+            return s;
+          }).join(';'));
+        });
+        var csvBlob = Utilities.newBlob('\uFEFF' + csvLines.join('\r\n'), 'text/csv', 'son-stok-sayimi.csv');
+        var tarihStr = Utilities.formatDate(new Date(), Session.getScriptTimeZone() || 'GMT+3', 'yyyy-MM-dd HH:mm');
+        MailApp.sendEmail({
+          to: backupEmail,
+          subject: 'Murat Gıda Sayım Raporu — ' + tarihStr,
+          body: 'Sayım tamamlandı.\n\n' +
+            'Ürün çeşidi: ' + Object.keys(groups).length + '\n' +
+            'Toplam adet: ' + toplamAdet + '\n' +
+            'Ortalama doğruluk: %' + (ortalamaDogruluk !== null ? ortalamaDogruluk : '—') + '\n' +
+            'Dikkat çeken fark sayısı: ' + anomaliler.length + '\n\n' +
+            'Son Stok Sayımı ekte CSV olarak bulunuyor.' +
+            (aiYorum ? ('\n\nYapay zeka değerlendirmesi:\n' + aiYorum) : ''),
+          attachments: [csvBlob]
+        });
+        emailGonderildi = true;
+      } catch (mailErr) { /* mail gönderilemezse rapor yine de oluşur, sessiz geç */ }
+    }
+
     return outJson({
       status: 'ok',
       toplamCesit: Object.keys(groups).length,
@@ -564,7 +601,9 @@ function handleFinalize(user, pass, callback) {
       anomaliSayisi: anomaliler.length,
       anomaliler: anomaliler.slice(0, 40),
       personelListesi: personelListesi,
-      aiYorum: aiYorum
+      aiYorum: aiYorum,
+      emailGonderildi: emailGonderildi,
+      backupEmail: emailGonderildi ? backupEmail : ''
     }, callback);
   } catch (err) {
     return outJson({ status: 'error', message: err.toString() }, callback);
@@ -687,11 +726,14 @@ function handleKullanicilarKaydet(user, pass, data, callback) {
 //   kalmayacağı (varsayılan).
 // - DEFAULT_IDLE_MINUTES: kaç dakika hiç dokunulmazsa ekranın kendi
 //   haline (kararmaya) bırakılacağı — 0 ise devre dışı, hiç kapanmaz.
+// - BACKUP_EMAIL: "Sayımı Bitir ve Rapor Oluştur" her çalıştığında, Son
+//   Stok Sayımı'nı CSV eki olarak bu adrese otomatik gönderir. Boşsa mail
+//   hiç gönderilmez.
 // Her telefon kendi ekranında bunu elle de değiştirebilir; buradaki değer
 // sadece yeni açılan / hiç değiştirilmemiş telefonlar için varsayılanı
 // belirler.
 // ============================================================
-function handleAyarKaydet(user, pass, wakelock, idleMinutes, callback) {
+function handleAyarKaydet(user, pass, wakelock, idleMinutes, backupEmail, callback) {
   var auth = requirePermission(user, pass, 'ayarlar');
   if (!auth.ok) return outJson({ status: 'error', message: auth.message }, callback);
   var props = PropertiesService.getScriptProperties();
@@ -699,7 +741,27 @@ function handleAyarKaydet(user, pass, wakelock, idleMinutes, callback) {
   var mins = parseInt(idleMinutes, 10);
   if (isNaN(mins) || mins < 0) mins = 0;
   props.setProperty('DEFAULT_IDLE_MINUTES', String(mins));
+  var email = String(backupEmail || '').trim();
+  if (email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+    return outJson({ status: 'error', message: 'Geçersiz e-posta adresi' }, callback);
+  }
+  props.setProperty('BACKUP_EMAIL', email);
   return outJson({ status: 'ok' }, callback);
+}
+
+// Ayarlar sadece 'ayarlar' yetkisi olana gösterilir — resetcheck (herkese
+// açık) yalnızca defaultWakeLock/idleMinutes döner, e-posta adresini asla
+// içermez (gereksiz yere her telefona sızmasın diye).
+function getAyarlar(user, pass, callback) {
+  var auth = requirePermission(user, pass, 'ayarlar');
+  if (!auth.ok) return outJson({ status: 'error', message: auth.message }, callback);
+  var props = PropertiesService.getScriptProperties();
+  return outJson({
+    status: 'ok',
+    defaultWakeLock: props.getProperty('DEFAULT_WAKE_LOCK') || 'true',
+    idleMinutes: props.getProperty('DEFAULT_IDLE_MINUTES') || '0',
+    backupEmail: props.getProperty('BACKUP_EMAIL') || ''
+  }, callback);
 }
 
 // ============================================================

@@ -127,6 +127,7 @@
   .item .meta .oldStock{color:var(--amber); font-weight:700;}
   .qtyBox{display:flex; align-items:center; gap:8px;}
   .itemDelBtn{background:transparent; border:none; color:var(--red); font-size:17px; padding:4px; flex-shrink:0; line-height:1;}
+  .syncDot{display:inline-block; width:8px; height:8px; border-radius:50%; margin-right:6px; vertical-align:middle;}
   .qtyInput{font-family:var(--mono); font-weight:800; font-size:17px; width:56px; text-align:center;    background:var(--panel2); border:1.5px solid transparent; border-radius:var(--r-sm); color:var(--text); padding:8px 0; transition:border-color .15s;}
   .qtyInput:focus{outline:none; border-color:var(--accent);}
   .qtyInput::-webkit-outer-spin-button, .qtyInput::-webkit-inner-spin-button{-webkit-appearance:none; margin:0;}
@@ -166,7 +167,7 @@
 <div id="setup" class="screen">
   <header style="border:none; padding:0 0 16px; background:transparent;">
     <h1><img src="logo-header.png" alt="Murat Gıda" style="height:30px; width:auto; display:block;"></h1>
-    <div class="sub">Sayım · hızlı barkod • offline • Android • build 54</div>
+    <div class="sub">Sayım · hızlı barkod • offline • Android • build 56</div>
   </header>
 
   <div class="card" id="loginCard">
@@ -479,10 +480,13 @@
           <input type="checkbox" id="adminWakeLockCheck" style="width:20px; height:20px; accent-color:var(--accent);">
           <label style="margin:0; text-transform:none; letter-spacing:0; font-size:13px; color:var(--text); font-weight:600;" for="adminWakeLockCheck">Yeni açılan telefonlarda sayım sırasında ekran açık kalsın</label>
         </div>
-        <div style="display:flex; align-items:center; gap:8px; margin-bottom:10px;">
+        <div style="display:flex; align-items:center; gap:8px; margin-bottom:14px;">
           <input type="number" id="adminIdleMinutes" inputmode="numeric" min="0" placeholder="0" style="width:70px; padding:8px; font-size:13px; text-align:center;">
           <label style="margin:0; text-transform:none; letter-spacing:0; font-size:13px; color:var(--text); font-weight:600; flex:1;" for="adminIdleMinutes">dakika hiç dokunulmazsa ekran normal kararabilsin (0 = hiç kapanmasın)</label>
         </div>
+        <div style="font-weight:800; font-size:13px; margin-bottom:6px;">📧 Yedek E-posta</div>
+        <div class="hint" style="margin-bottom:8px;">"Sayımı Bitir ve Rapor Oluştur" her çalıştığında, Son Stok Sayımı bu adrese CSV eki olarak otomatik gönderilir. Boş bırakırsan mail gönderilmez.</div>
+        <input type="text" id="adminBackupEmail" placeholder="ornek@murat-gida.com" style="margin-bottom:10px;">
         <button id="adminWakeLockSave" style="width:100%; background:var(--text); color:#fff; padding:11px;">Ayarları Kaydet</button>
       </div>
 
@@ -525,7 +529,7 @@
 (function(){
   "use strict";
   var STORE_KEY = "sayimApp_meta_v2"; // küçük veri: personel, sunucu, sayım oturumu, kuyruk
-  var state = load() || { personnel:"", serverUrl:"", session:{scans:[], id:null, deletedIds:[]}, pendingSessions:[], newProductCounter:1 };
+  var state = load() || { personnel:"", serverUrl:"", session:{scans:[], id:null, deletedIds:[], sentIds:[]}, pendingSessions:[], newProductCounter:1 };
   if(!state.session.scans){
     // Eski sürümden geçiş: birleştirilmiş kayıtları ayrı taramalara çevir
     var migrated = [];
@@ -541,6 +545,7 @@
   if(!state.userRoster) state.userRoster = [];
   if(state.idleMinutes === undefined) state.idleMinutes = 0;
   if(!state.session.deletedIds) state.session.deletedIds = [];
+  if(!state.session.sentIds) state.session.sentIds = [];
   if(state.currentUser === undefined) state.currentUser = null;
   if(state.savedCredentials === undefined) state.savedCredentials = null;
   if(!state.session.id) state.session.id = makeId();
@@ -1001,7 +1006,7 @@
       if(err || !data) return;
       if(data.resetToken){
         if(state.lastResetToken && state.lastResetToken !== data.resetToken){
-          state.session = { scans:[], id: makeId(), deletedIds: [] };
+          state.session = { scans:[], id: makeId(), deletedIds: [], sentIds: [] };
           state.pendingSessions = [];
           state.lastResetToken = data.resetToken;
           save();
@@ -1439,8 +1444,10 @@
     var unit = unitFor(it.barcode);
     var unitHtml = unit === 'Kg' ? ' · <span class="oldStock">Kg</span>' : '';
     var reyonHtml = it.reyon ? ' · <span class="oldStock">'+escapeHtml(it.reyon)+'</span>' : '';
+    var sent = isScanSent(it.id);
+    var syncDot = '<span class="syncDot" title="'+(sent?'Dosyaya gönderildi':'Henüz dosyaya gönderilmedi')+'" style="background:'+(sent?'var(--green)':'var(--red)')+';"></span>';
     return '<div class="item">' +
-      '<div class="info"><div class="name">'+escapeHtml(it.name)+'</div>' +
+      '<div class="info"><div class="name">'+syncDot+escapeHtml(it.name)+'</div>' +
       '<div class="meta">'+escapeHtml(it.barcode)+' · '+it.time+oldStockHtml+unitHtml+reyonHtml+'</div></div>' +
       '<div class="qtyBox">' +
         '<input class="qtyInput" type="number" inputmode="'+(unit==='Kg'?'decimal':'numeric')+'" step="'+(unit==='Kg'?'0.001':'1')+'" value="'+it.qty+'" data-id="'+it.id+'">' +
@@ -1484,6 +1491,17 @@
     if(!state.session.deletedIds) state.session.deletedIds = [];
     if(state.session.deletedIds.indexOf(id) === -1) state.session.deletedIds.push(id);
   }
+  // Bir kayıt düzenlendiğinde (adedi değiştiğinde), sunucudaki eski hâli
+  // artık güncel değildir — yeniden gönderilip onaylanana kadar "gönderildi"
+  // (yeşil) değil "bekliyor" (kırmızı) göstermek için sentIds'ten çıkarır.
+  function markScanPending(id){
+    if(!state.session.sentIds) return;
+    var i = state.session.sentIds.indexOf(id);
+    if(i !== -1) state.session.sentIds.splice(i, 1);
+  }
+  function isScanSent(id){
+    return !!(state.session.sentIds && state.session.sentIds.indexOf(id) !== -1);
+  }
 
   function setQty(id, newQty){
     var idx = state.session.scans.findIndex(function(s){ return s.id === id; });
@@ -1510,6 +1528,7 @@
       }
     }
     it.qty = newQty;
+    markScanPending(id);
     save(); renderList();
     autoQueueAndSync();
   }
@@ -1610,8 +1629,10 @@
     }
     var reyonHtml = it.reyon ? ' · <span class="oldStock">'+escapeHtml(it.reyon)+'</span>' : '';
     var unit = unitFor(it.barcode);
+    var sent = isScanSent(it.id);
+    var syncDot = '<span class="syncDot" title="'+(sent?'Dosyaya gönderildi':'Henüz dosyaya gönderilmedi')+'" style="background:'+(sent?'var(--green)':'var(--red)')+';"></span>';
     return '<div class="item browseItem" data-browse-id="'+it.id+'">' +
-      '<div class="info"><div class="name">'+escapeHtml(it.name)+'</div>' +
+      '<div class="info"><div class="name">'+syncDot+escapeHtml(it.name)+'</div>' +
       '<div class="meta">'+escapeHtml(it.barcode)+' · '+it.date+' '+it.time+oldStockHtml+reyonHtml+'</div></div>' +
       '<div class="qtyBox" style="font-family:var(--mono); font-weight:800; font-size:16px;">'+it.qty+' '+unit+'</div>' +
     '</div>';
@@ -1755,10 +1776,11 @@
       }, 15000);
     }
     if(canAyarlar){
-      jsonpRequest(url, 'resetcheck', function(err, data){
-        if(!err && data){
+      jsonpRequestP(url, { action:'ayar_getir', user:auth.user, pass:auth.pass }, function(err, data){
+        if(!err && data && data.status === 'ok'){
           if(data.defaultWakeLock !== undefined) document.getElementById('adminWakeLockCheck').checked = data.defaultWakeLock !== 'false';
           if(data.idleMinutes !== undefined) document.getElementById('adminIdleMinutes').value = data.idleMinutes;
+          document.getElementById('adminBackupEmail').value = data.backupEmail || '';
         }
       }, 15000);
     }
@@ -1880,12 +1902,13 @@
     var wanted = document.getElementById('adminWakeLockCheck').checked;
     var idleMin = parseInt(document.getElementById('adminIdleMinutes').value, 10);
     if(isNaN(idleMin) || idleMin < 0) idleMin = 0;
+    var backupEmail = document.getElementById('adminBackupEmail').value.trim();
     var url = state.serverUrl || DEFAULT_SERVER_URL;
     adminResultEl.textContent = '⏳ Ayarlar kaydediliyor…';
-    jsonpRequestP(url, { action: 'ayar_kaydet', user: auth.user, pass: auth.pass, wakelock: wanted ? 'true' : 'false', idleMinutes: idleMin }, function(err, res){
+    jsonpRequestP(url, { action: 'ayar_kaydet', user: auth.user, pass: auth.pass, wakelock: wanted ? 'true' : 'false', idleMinutes: idleMin, backupEmail: backupEmail }, function(err, res){
       if(err){ adminResultEl.textContent = '❌ ' + err; return; }
       if(!res || res.status === 'error'){ adminResultEl.textContent = '❌ ' + ((res && res.message) || 'bilinmeyen hata'); return; }
-      adminResultEl.textContent = '✅ Ayarlar kaydedildi — sadece elle değiştirilmemiş telefonları etkiler.';
+      adminResultEl.textContent = '✅ Ayarlar kaydedildi — ekran ayarı sadece elle değiştirilmemiş telefonları etkiler.';
       applyIdleMinutes(idleMin); // bu telefona da hemen uygula (elle değiştirilmemişse)
     }, 15000);
   });
@@ -2048,8 +2071,12 @@
       ? '<div style="margin-top:12px; background:rgba(85,70,234,.08); border:1.5px solid rgba(85,70,234,.25); border-radius:10px; padding:10px 12px; font-size:12.5px; line-height:1.6;">🤖 ' + escapeHtml(data.aiYorum) + '</div>'
       : '';
 
+    var emailHtml = data.emailGonderildi
+      ? '<div class="hint" style="margin-top:8px; color:var(--green);">📧 CSV yedeği ' + escapeHtml(data.backupEmail) + ' adresine gönderildi.</div>'
+      : '';
+
     return '<div style="font-weight:800; font-size:13px; color:var(--green);">✅ Rapor hazır</div>' +
-      '<div class="hint" style="margin:4px 0 0;">"Son Stok Sayimi" ve "Yönetici Raporu" sayfalarına da yazıldı.</div>' +
+      '<div class="hint" style="margin:4px 0 0;">"Son Stok Sayimi" ve "Yönetici Raporu" sayfalarına da yazıldı.</div>' + emailHtml +
       pillsHtml + personelHtml + anomaliHtml + aiHtml;
   }
   function statPill(emoji, label, value){
@@ -2071,7 +2098,7 @@
       if(err){ adminResultEl.textContent = '❌ ' + err; return; }
       if(!data || data.status === 'error'){ adminResultEl.textContent = '❌ ' + ((data && data.message) || 'bilinmeyen hata'); return; }
       state.lastResetToken = data.resetToken;
-      state.session = { scans: [], id: makeId(), deletedIds: [] };
+      state.session = { scans: [], id: makeId(), deletedIds: [], sentIds: [] };
       state.pendingSessions = [];
       save();
       if(typeof renderList === 'function') renderList();
@@ -2371,7 +2398,19 @@
         headers:{'Content-Type':'text/plain;charset=utf-8'},
         body: JSON.stringify(payload)
       })
-        .then(function(){ sentCount++; })
+        .then(function(){
+          sentCount++;
+          // Bu, geçerli (hâlâ açık) oturuma aitse, içindeki kayıtları
+          // "gönderildi" (yeşil) olarak işaretle ki listede görünsün.
+          if(payload.sessionId === state.session.id){
+            if(!state.session.sentIds) state.session.sentIds = [];
+            payload.rows.forEach(function(r){
+              if(state.session.sentIds.indexOf(r.id) === -1) state.session.sentIds.push(r.id);
+            });
+            save();
+            if(typeof renderList === 'function') renderList();
+          }
+        })
         .catch(function(err){
           remaining.push(payload); // gönderilemedi — kuyrukta kalsın, veri kaybı yok
           anyError = (err && err.message) ? err.message : 'bağlantı hatası';
@@ -2464,7 +2503,7 @@
 
   document.getElementById('reviewConfirm').addEventListener('click', function(){
     queueCurrentSession();
-    state.session = { scans:[], id: makeId(), deletedIds: [] }; // yeni oturum = yeni kimlik
+    state.session = { scans:[], id: makeId(), deletedIds: [], sentIds: [] }; // yeni oturum = yeni kimlik
     save();
     renderList();
     trySync(false);
