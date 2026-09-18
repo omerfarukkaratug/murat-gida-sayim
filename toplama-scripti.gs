@@ -294,6 +294,26 @@ function doPost(e) {
       sheet.getRange(sheet.getLastRow() + 1, 1, newRows.length, HEADERS.length).setValues(newRows);
     }
 
+    // Telefonda silinmiş kayıtları tablodan da sil. "rows" listesinde
+    // artık bulunmaması tek başına yeterli değildir — sunucu bunu "hiç
+    // gönderilmedi" ile ayırt edemez, bu yüzden istemci silinen id'leri
+    // ayrıca bildirir (deletedIds).
+    var deletedIds = (data.deletedIds || []).map(String);
+    if (deletedIds.length > 0) {
+      var lastRowAfter = sheet.getLastRow();
+      if (lastRowAfter > 1) {
+        var idColValues = sheet.getRange(2, idCol + 1, lastRowAfter - 1, 1).getValues();
+        var rowsToDelete = [];
+        for (var j = 0; j < idColValues.length; j++) {
+          var cellId = idColValues[j][0];
+          if (cellId && deletedIds.indexOf(String(cellId)) !== -1) rowsToDelete.push(j + 2);
+        }
+        // Sondan başa doğru sil ki silme sırasında satır numaraları kaymasın.
+        rowsToDelete.sort(function (a, b) { return b - a; });
+        rowsToDelete.forEach(function (rowNum) { sheet.deleteRow(rowNum); });
+      }
+    }
+
     return ContentService
       .createTextOutput(JSON.stringify({ status: 'ok', processed: rows.length }))
       .setMimeType(ContentService.MimeType.JSON);

@@ -166,7 +166,7 @@
 <div id="setup" class="screen">
   <header style="border:none; padding:0 0 16px; background:transparent;">
     <h1><img src="logo-header.png" alt="Murat Gıda" style="height:30px; width:auto; display:block;"></h1>
-    <div class="sub">Sayım · hızlı barkod • offline • Android • build 53</div>
+    <div class="sub">Sayım · hızlı barkod • offline • Android • build 54</div>
   </header>
 
   <div class="card" id="loginCard">
@@ -251,6 +251,7 @@
 
 <div id="main" class="screen hidden">
   <div class="topbar">
+    <button type="button" id="backToSetupBtn" title="Ayarlara / giriş ekranına dön" style="background:var(--panel2); border:1.5px solid var(--line); color:var(--text); width:34px; height:34px; border-radius:50%; font-size:16px; padding:0; display:flex; align-items:center; justify-content:center; flex-shrink:0;">⚙</button>
     <div class="who" id="whoLabel">—</div>
     <button type="button" id="wakeLockToggleBtn" title="Ekran açık kalsın mı?" style="background:var(--panel2); border:1.5px solid var(--line); color:var(--text); width:34px; height:34px; border-radius:50%; font-size:15px; padding:0; display:flex; align-items:center; justify-content:center; flex-shrink:0;">🔆</button>
     <div class="status offline" id="statusBadge">Çevrimdışı</div>
@@ -524,7 +525,7 @@
 (function(){
   "use strict";
   var STORE_KEY = "sayimApp_meta_v2"; // küçük veri: personel, sunucu, sayım oturumu, kuyruk
-  var state = load() || { personnel:"", serverUrl:"", session:{scans:[], id:null}, pendingSessions:[], newProductCounter:1 };
+  var state = load() || { personnel:"", serverUrl:"", session:{scans:[], id:null, deletedIds:[]}, pendingSessions:[], newProductCounter:1 };
   if(!state.session.scans){
     // Eski sürümden geçiş: birleştirilmiş kayıtları ayrı taramalara çevir
     var migrated = [];
@@ -539,6 +540,7 @@
   if(!state.newProductCounter) state.newProductCounter = 1;
   if(!state.userRoster) state.userRoster = [];
   if(state.idleMinutes === undefined) state.idleMinutes = 0;
+  if(!state.session.deletedIds) state.session.deletedIds = [];
   if(state.currentUser === undefined) state.currentUser = null;
   if(state.savedCredentials === undefined) state.savedCredentials = null;
   if(!state.session.id) state.session.id = makeId();
@@ -710,8 +712,9 @@
     loggedInCardEl.classList.remove('hidden');
     afterLoginAreaEl.classList.remove('hidden');
     document.getElementById('loggedInName').textContent = state.currentUser.name;
-    if(hasPerm('rapor') || hasPerm('temizle') || hasPerm('kullanici_yonetimi') || hasPerm('ayarlar')) adminLinkWrapEl.classList.remove('hidden');
+    if(hasPerm('rapor') || hasPerm('temizle') || hasPerm('kullanici_yonetimi') || hasPerm('ayarlar') || hasPerm('canli_durum') || hasPerm('duzelt')) adminLinkWrapEl.classList.remove('hidden');
     else adminLinkWrapEl.classList.add('hidden');
+    startBtn.textContent = (state.session.scans && state.session.scans.length > 0) ? '▶ Sayıma Devam Et' : 'Sayıma Başla';
   }
   function showLoginUI(){
     loginCardEl.classList.remove('hidden');
@@ -998,7 +1001,7 @@
       if(err || !data) return;
       if(data.resetToken){
         if(state.lastResetToken && state.lastResetToken !== data.resetToken){
-          state.session = { scans:[], id: makeId() };
+          state.session = { scans:[], id: makeId(), deletedIds: [] };
           state.pendingSessions = [];
           state.lastResetToken = data.resetToken;
           save();
@@ -1077,6 +1080,16 @@
     renderList();
     updateStatus();
     requestWakeLock();
+  });
+
+  // Sayım ekranındayken ayarlara / giriş ekranına geri dönmek için —
+  // oturum verisi (sayılanlar) kaybolmaz, sadece ekran değişir. "Sayıma
+  // Başla" butonu geri dönüldüğünde kaldığın yerden devam ettirir.
+  document.getElementById('backToSetupBtn').addEventListener('click', function(){
+    stopCamera();
+    document.getElementById('main').classList.add('hidden');
+    document.getElementById('setup').classList.remove('hidden');
+    if(state.currentUser) startBtn.textContent = (state.session.scans && state.session.scans.length > 0) ? '▶ Sayıma Devam Et' : 'Sayıma Başla';
   });
 
   // ---------- MAIN SCREEN ----------
@@ -1461,6 +1474,17 @@
     save();
   });
 
+  // Bir kaydı hem yerel listeden hem de (daha önce senkronize edildiyse)
+  // sunucudaki 'Sayim' tablosundan silinmek üzere işaretler. Sunucu bunu
+  // yalnızca bir sonraki senkronda (autoQueueAndSync) öğrenir — bu yüzden
+  // silinen kayıtların kimliği ayrıca tutulur (deletedIds), aksi halde
+  // sunucu sadece "bu id artık gönderilen listede yok" diye bir şey
+  // anlamaz ve eski satır tabloda öylece kalırdı.
+  function markScanDeleted(id){
+    if(!state.session.deletedIds) state.session.deletedIds = [];
+    if(state.session.deletedIds.indexOf(id) === -1) state.session.deletedIds.push(id);
+  }
+
   function setQty(id, newQty){
     var idx = state.session.scans.findIndex(function(s){ return s.id === id; });
     if(idx === -1) return;
@@ -1473,6 +1497,7 @@
         return;
       }
       state.session.scans.splice(idx, 1);
+      markScanDeleted(id);
       save(); renderList();
       autoQueueAndSync();
       return;
@@ -1502,6 +1527,7 @@
     var it = state.session.scans[idx];
     if(!confirm('"' + it.name + '" kaydı (' + it.qty + ' ' + unitFor(it.barcode) + ') silinsin mi?')) return;
     state.session.scans.splice(idx, 1);
+    markScanDeleted(id);
     save(); renderList();
     autoQueueAndSync();
   });
@@ -2045,7 +2071,7 @@
       if(err){ adminResultEl.textContent = '❌ ' + err; return; }
       if(!data || data.status === 'error'){ adminResultEl.textContent = '❌ ' + ((data && data.message) || 'bilinmeyen hata'); return; }
       state.lastResetToken = data.resetToken;
-      state.session = { scans: [], id: makeId() };
+      state.session = { scans: [], id: makeId(), deletedIds: [] };
       state.pendingSessions = [];
       save();
       if(typeof renderList === 'function') renderList();
@@ -2369,7 +2395,7 @@
 
   function queueCurrentSession(){
     var items = state.session.scans;
-    if(items.length === 0) return;
+    if(items.length === 0 && (!state.session.deletedIds || state.session.deletedIds.length === 0)) return;
     var payload = {
       personnel: state.personnel,
       sessionId: state.session.id,
@@ -2377,7 +2403,11 @@
       // Her okutma kendi eşsiz kimliğiyle (id) ayrı satır olarak gider —
       // tabloda birleşmez. Aynı id tekrar gönderilirse (düzeltme), o satır
       // güncellenir, yenisi eklenmez.
-      rows: items.map(function(it){ return { id:it.id, name:it.name, stockCode: it.stockCode||'', barcode:it.barcode, unit: unitFor(it.barcode), oldStock: it.oldStock||'', date:it.date, time:it.time, qty:it.qty, reyon: it.reyon||'' }; })
+      rows: items.map(function(it){ return { id:it.id, name:it.name, stockCode: it.stockCode||'', barcode:it.barcode, unit: unitFor(it.barcode), oldStock: it.oldStock||'', date:it.date, time:it.time, qty:it.qty, reyon: it.reyon||'' }; }),
+      // Bu telefonda silinmiş kayıtların kimlikleri — sunucu bunları
+      // 'Sayim' tablosundan da siler (yoksa sadece "rows" listesinden eksik
+      // olması sunucuya hiçbir şey ifade etmez, satır tabloda kalırdı).
+      deletedIds: (state.session.deletedIds || []).slice()
     };
     // Aynı oturum kimliği kuyrukta zaten varsa üzerine yaz (kopya oluşmasın),
     // yoksa kuyruğa ekle. Sunucu tarafı da bunu DÜZELTME olarak işleyecek.
@@ -2434,7 +2464,7 @@
 
   document.getElementById('reviewConfirm').addEventListener('click', function(){
     queueCurrentSession();
-    state.session = { scans:[], id: makeId() }; // yeni oturum = yeni kimlik
+    state.session = { scans:[], id: makeId(), deletedIds: [] }; // yeni oturum = yeni kimlik
     save();
     renderList();
     trySync(false);
