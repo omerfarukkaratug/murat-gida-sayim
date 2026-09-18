@@ -22,7 +22,8 @@ function doGet(e) {
   if (e.parameter && e.parameter.action === 'resetcheck') {
     return outJson({
       resetToken: PropertiesService.getScriptProperties().getProperty('RESET_TOKEN') || '',
-      defaultWakeLock: PropertiesService.getScriptProperties().getProperty('DEFAULT_WAKE_LOCK') || 'true'
+      defaultWakeLock: PropertiesService.getScriptProperties().getProperty('DEFAULT_WAKE_LOCK') || 'true',
+      idleMinutes: PropertiesService.getScriptProperties().getProperty('DEFAULT_IDLE_MINUTES') || '0'
     }, e.parameter.callback);
   }
   if (e.parameter && e.parameter.action === 'temizle') {
@@ -41,7 +42,22 @@ function doGet(e) {
     return handleKullanicilarKaydet(e.parameter.user, e.parameter.pass, e.parameter.data, e.parameter.callback);
   }
   if (e.parameter && e.parameter.action === 'ayar_kaydet') {
-    return handleAyarKaydet(e.parameter.user, e.parameter.pass, e.parameter.wakelock, e.parameter.callback);
+    return handleAyarKaydet(e.parameter.user, e.parameter.pass, e.parameter.wakelock, e.parameter.idleMinutes, e.parameter.callback);
+  }
+  if (e.parameter && e.parameter.action === 'son_stok_getir') {
+    return getSonStokGetir(e.parameter.user, e.parameter.pass, e.parameter.callback);
+  }
+  if (e.parameter && e.parameter.action === 'canli_durum') {
+    return getCanliDurum(e.parameter.user, e.parameter.pass, e.parameter.callback);
+  }
+  if (e.parameter && e.parameter.action === 'sayim_ara') {
+    return sayimAra(e.parameter.user, e.parameter.pass, e.parameter.q, e.parameter.callback);
+  }
+  if (e.parameter && e.parameter.action === 'sayim_guncelle') {
+    return sayimGuncelle(e.parameter.user, e.parameter.pass, e.parameter.kayitId, e.parameter.adet, e.parameter.callback);
+  }
+  if (e.parameter && e.parameter.action === 'sayim_sil') {
+    return sayimSil(e.parameter.user, e.parameter.pass, e.parameter.kayitId, e.parameter.callback);
   }
   return ContentService
     .createTextOutput('Sayım toplama servisi çalışıyor ✅ (' + new Date().toISOString() + ')')
@@ -73,7 +89,7 @@ function outJson(obj, callback) {
 // yetkilendirme için yeterlidir. Tabloyu düzenleme yetkisi olan herkes
 // şifreleri görebilir.
 // ============================================================
-var ALL_PERMS = ['rapor', 'temizle', 'kullanici_yonetimi', 'ayarlar'];
+var ALL_PERMS = ['rapor', 'temizle', 'kullanici_yonetimi', 'ayarlar', 'canli_durum', 'duzelt'];
 
 function authenticate(user, pass) {
   user = String(user || '').trim();
@@ -600,47 +616,235 @@ function getKullanicilarDetay(user, pass, callback) {
   return outJson({ status: 'ok', users: users }, callback);
 }
 
-// data: "Ad;Şifre;Rol;Yetkiler" formatında, her satırda bir kullanıcı.
+// data: "Ad;Şifre;Rol;Yetkiler;Aktif" formatında, her satırda bir kullanıcı.
 // Rol "yonetici" ya da boş/"kullanici" olabilir; Yetkiler sadece rol
-// "kullanici" iken anlamlıdır (rapor,temizle,kullanici_yonetimi,ayarlar
-// arasından virgülle ayrılmış bir alt küme). Tüm listeyi tek seferde
-// değiştirir — düzenlerken önce getKullanicilarDetay ile mevcut hâli çekip
-// üstüne yazman gerekir (Katalog yükleme mantığıyla aynı).
+// "kullanici" iken anlamlıdır (rapor,temizle,kullanici_yonetimi,ayarlar,
+// canli_durum,duzelt arasından virgülle ayrılmış bir alt küme). Aktif
+// "evet"/"hayir" — boş bırakılırsa "evet" sayılır (geriye dönük uyumluluk).
+// Tüm listeyi tek seferde değiştirir — düzenlerken önce getKullanicilarDetay
+// ile mevcut hâli çekip üstüne yazman gerekir (Katalog yükleme mantığıyla
+// aynı). LockService ile korunur: iki yönetici aynı anda kaydederse biri
+// diğerini beklemeden ezmesin diye.
 function handleKullanicilarKaydet(user, pass, data, callback) {
   var auth = requirePermission(user, pass, 'kullanici_yonetimi');
   if (!auth.ok) return outJson({ status: 'error', message: auth.message }, callback);
-  var ss = SpreadsheetApp.getActiveSpreadsheet();
-  var sheet = ss.getSheetByName('Kullanicilar');
-  if (!sheet) sheet = ss.insertSheet('Kullanicilar');
-  sheet.clear();
-  sheet.appendRow(['Ad', 'Şifre', 'Rol', 'Yetkiler', 'Aktif']);
-  var lines = String(data || '').split('\n');
-  var rows = [];
-  lines.forEach(function (line) {
-    line = line.trim();
-    if (!line) return;
-    var parts = line.split(';');
-    var name = (parts[0] || '').trim();
-    if (!name) return;
-    var passw = (parts[1] || '').trim();
-    var role = (parts[2] || 'kullanici').trim().toLowerCase();
-    if (role !== 'yonetici') role = 'kullanici';
-    var yetkiler = (parts[3] || '').trim();
-    rows.push([name, passw, role, yetkiler, 'evet']);
-  });
-  if (rows.length > 0) sheet.getRange(2, 1, rows.length, 5).setValues(rows);
-  return outJson({ status: 'ok', saved: rows.length }, callback);
+  var lock = LockService.getScriptLock();
+  try { lock.waitLock(30000); } catch (e) { return outJson({ status: 'error', message: 'Sunucu meşgul, birazdan tekrar dene' }, callback); }
+  try {
+    var ss = SpreadsheetApp.getActiveSpreadsheet();
+    var sheet = ss.getSheetByName('Kullanicilar');
+    if (!sheet) sheet = ss.insertSheet('Kullanicilar');
+    sheet.clear();
+    sheet.appendRow(['Ad', 'Şifre', 'Rol', 'Yetkiler', 'Aktif']);
+    var lines = String(data || '').split('\n');
+    var rows = [];
+    lines.forEach(function (line) {
+      line = line.trim();
+      if (!line) return;
+      var parts = line.split(';');
+      var name = (parts[0] || '').trim();
+      if (!name) return;
+      var passw = (parts[1] || '').trim();
+      var role = (parts[2] || 'kullanici').trim().toLowerCase();
+      if (role !== 'yonetici') role = 'kullanici';
+      var yetkiler = (parts[3] || '').trim();
+      var aktif = (parts[4] || 'evet').trim().toLowerCase();
+      if (aktif !== 'hayir') aktif = 'evet';
+      rows.push([name, passw, role, yetkiler, aktif]);
+    });
+    if (rows.length > 0) sheet.getRange(2, 1, rows.length, 5).setValues(rows);
+    return outJson({ status: 'ok', saved: rows.length }, callback);
+  } catch (err) {
+    return outJson({ status: 'error', message: err.toString() }, callback);
+  } finally {
+    lock.releaseLock();
+  }
 }
 
 // ============================================================
-// AYARLAR — şimdilik tek ayar: sayım sırasında telefon ekranının açık
-// kalıp kalmayacağı (varsayılan). Her telefon kendi ekranında bunu elle
-// de değiştirebilir; buradaki değer sadece yeni açılan / hiç
-// değiştirilmemiş telefonlar için varsayılanı belirler.
+// AYARLAR
+// - DEFAULT_WAKE_LOCK: sayım sırasında telefon ekranının açık kalıp
+//   kalmayacağı (varsayılan).
+// - DEFAULT_IDLE_MINUTES: kaç dakika hiç dokunulmazsa ekranın kendi
+//   haline (kararmaya) bırakılacağı — 0 ise devre dışı, hiç kapanmaz.
+// Her telefon kendi ekranında bunu elle de değiştirebilir; buradaki değer
+// sadece yeni açılan / hiç değiştirilmemiş telefonlar için varsayılanı
+// belirler.
 // ============================================================
-function handleAyarKaydet(user, pass, wakelock, callback) {
+function handleAyarKaydet(user, pass, wakelock, idleMinutes, callback) {
   var auth = requirePermission(user, pass, 'ayarlar');
   if (!auth.ok) return outJson({ status: 'error', message: auth.message }, callback);
-  PropertiesService.getScriptProperties().setProperty('DEFAULT_WAKE_LOCK', wakelock === 'false' ? 'false' : 'true');
+  var props = PropertiesService.getScriptProperties();
+  props.setProperty('DEFAULT_WAKE_LOCK', wakelock === 'false' ? 'false' : 'true');
+  var mins = parseInt(idleMinutes, 10);
+  if (isNaN(mins) || mins < 0) mins = 0;
+  props.setProperty('DEFAULT_IDLE_MINUTES', String(mins));
   return outJson({ status: 'ok' }, callback);
+}
+
+// ============================================================
+// SON STOK SAYIMINI İNDİRME (CSV için veri kaynağı)
+// "Sayımı Bitir ve Rapor Oluştur" ile üretilen 'Son Stok Sayimi' sekmesini
+// JSON olarak döner — istemci bunu CSV'ye çevirip telefona indirir.
+// ============================================================
+function getSonStokGetir(user, pass, callback) {
+  var auth = requirePermission(user, pass, 'rapor');
+  if (!auth.ok) return outJson({ status: 'error', message: auth.message }, callback);
+  var ss = SpreadsheetApp.getActiveSpreadsheet();
+  var sheet = ss.getSheetByName('Son Stok Sayimi');
+  var headers = [];
+  var rows = [];
+  if (sheet && sheet.getLastRow() >= 1) {
+    headers = sheet.getRange(1, 1, 1, sheet.getLastColumn()).getValues()[0].map(String);
+    if (sheet.getLastRow() >= 2) {
+      rows = sheet.getRange(2, 1, sheet.getLastRow() - 1, sheet.getLastColumn()).getValues();
+    }
+  }
+  return outJson({ status: 'ok', headers: headers, rows: rows }, callback);
+}
+
+// ============================================================
+// CANLI DURUM
+// 'Sayim' sekmesindeki TÜM ham satırlardan, her personelin en son ne zaman
+// okutma yaptığını ve o ana kadar kaç farklı ürün / toplam kaç okutma
+// yaptığını çıkarır. Gerçek "şu an aktif mi" bilgisi yok (telefonlar
+// heartbeat göndermiyor) — bunun yerine en son okutma zamanını "aktif/son
+// görülme" göstergesi olarak sunuyoruz: 10 dakikadan yeniyse muhtemelen hâlâ
+// sayıyor, değilse durmuş/molada demektir.
+// ============================================================
+function getCanliDurum(user, pass, callback) {
+  var auth = requirePermission(user, pass, 'canli_durum');
+  if (!auth.ok) return outJson({ status: 'error', message: auth.message }, callback);
+  var ss = SpreadsheetApp.getActiveSpreadsheet();
+  var sheet = ss.getSheetByName('Sayim');
+  var HEADERS = ['Tarih', 'Saat', 'Personel', 'Ürün Adı', 'Stok Kodu', 'Barkod', 'Birim', 'Eski Stok', 'Sayılan Adet', 'Fark', 'Oturum ID', 'Kayıt ID', 'Reyon'];
+  var idx = {}; HEADERS.forEach(function (h, i) { idx[h] = i; });
+  var stats = {};
+  if (sheet && sheet.getLastRow() >= 2) {
+    var values = sheet.getRange(2, 1, sheet.getLastRow() - 1, HEADERS.length).getValues();
+    values.forEach(function (r) {
+      var p = String(r[idx['Personel']] || '—');
+      var tsStr = String(r[idx['Tarih']]) + 'T' + String(r[idx['Saat']]);
+      var ts = new Date(tsStr).getTime();
+      if (!stats[p]) stats[p] = { okutma: 0, urunler: {}, sonTs: 0, sonZaman: '', sonUrun: '', sonReyon: '' };
+      stats[p].okutma++;
+      var stockKey = String(r[idx['Stok Kodu']] || '') || ('B:' + String(r[idx['Barkod']] || ''));
+      stats[p].urunler[stockKey] = true;
+      if (!isNaN(ts) && ts >= stats[p].sonTs) {
+        stats[p].sonTs = ts;
+        stats[p].sonZaman = String(r[idx['Tarih']]) + ' ' + String(r[idx['Saat']]);
+        stats[p].sonUrun = String(r[idx['Ürün Adı']] || '');
+        stats[p].sonReyon = String(r[idx['Reyon']] || '');
+      }
+    });
+  }
+  var now = new Date().getTime();
+  var personeller = Object.keys(stats).map(function (p) {
+    var s = stats[p];
+    var dakikaOnce = s.sonTs ? Math.round((now - s.sonTs) / 60000) : null;
+    return {
+      personel: p, okutma: s.okutma, farkliUrun: Object.keys(s.urunler).length,
+      sonZaman: s.sonZaman, sonUrun: s.sonUrun, sonReyon: s.sonReyon,
+      dakikaOnce: dakikaOnce, aktif: dakikaOnce !== null && dakikaOnce <= 10
+    };
+  }).sort(function (a, b) { return (a.dakikaOnce === null ? 999999 : a.dakikaOnce) - (b.dakikaOnce === null ? 999999 : b.dakikaOnce); });
+  return outJson({ status: 'ok', personeller: personeller }, callback);
+}
+
+// ============================================================
+// SAYIM KAYITLARINI DÜZELTME
+// sayimAra: ürün adı / personel / barkod / stok koduna göre ham 'Sayim'
+// satırlarını arar (q boşsa en son 50 kaydı döner). sayimGuncelle: bir
+// kaydın adedini değiştirir (Farkı da yeniden hesaplar). sayimSil: bir
+// kaydı tamamen siler. Hepsi 'Kayıt ID' üzerinden çalışır — bu kolon her
+// satır için benzersizdir (doPost sırasında telefon tarafında üretilir).
+// ============================================================
+function sayimAra(user, pass, q, callback) {
+  var auth = requirePermission(user, pass, 'duzelt');
+  if (!auth.ok) return outJson({ status: 'error', message: auth.message }, callback);
+  var ss = SpreadsheetApp.getActiveSpreadsheet();
+  var sheet = ss.getSheetByName('Sayim');
+  var HEADERS = ['Tarih', 'Saat', 'Personel', 'Ürün Adı', 'Stok Kodu', 'Barkod', 'Birim', 'Eski Stok', 'Sayılan Adet', 'Fark', 'Oturum ID', 'Kayıt ID', 'Reyon'];
+  var idx = {}; HEADERS.forEach(function (h, i) { idx[h] = i; });
+  var sonuc = [];
+  if (sheet && sheet.getLastRow() >= 2) {
+    var values = sheet.getRange(2, 1, sheet.getLastRow() - 1, HEADERS.length).getValues();
+    var kelimeler = String(q || '').trim().toLowerCase().split(/\s+/).filter(Boolean);
+    for (var i = values.length - 1; i >= 0 && sonuc.length < 100; i--) {
+      var r = values[i];
+      if (kelimeler.length > 0) {
+        var hedef = (String(r[idx['Ürün Adı']] || '') + ' ' + String(r[idx['Personel']] || '') + ' ' + String(r[idx['Barkod']] || '') + ' ' + String(r[idx['Stok Kodu']] || '')).toLowerCase();
+        var hepsiVar = kelimeler.every(function (k) { return hedef.indexOf(k) !== -1; });
+        if (!hepsiVar) continue;
+      }
+      sonuc.push({
+        kayitId: String(r[idx['Kayıt ID']] || ''), tarih: String(r[idx['Tarih']] || ''), saat: String(r[idx['Saat']] || ''),
+        personel: String(r[idx['Personel']] || ''), ad: String(r[idx['Ürün Adı']] || ''), stokKodu: String(r[idx['Stok Kodu']] || ''),
+        barkod: String(r[idx['Barkod']] || ''), birim: String(r[idx['Birim']] || 'Adet'), eskiStok: r[idx['Eski Stok']],
+        adet: r[idx['Sayılan Adet']], fark: r[idx['Fark']], reyon: String(r[idx['Reyon']] || '')
+      });
+      if (kelimeler.length === 0 && sonuc.length >= 50) break;
+    }
+  }
+  return outJson({ status: 'ok', sonuclar: sonuc }, callback);
+}
+
+function sayimGuncelle(user, pass, kayitId, adet, callback) {
+  var auth = requirePermission(user, pass, 'duzelt');
+  if (!auth.ok) return outJson({ status: 'error', message: auth.message }, callback);
+  if (!kayitId) return outJson({ status: 'error', message: 'Kayıt ID eksik' }, callback);
+  var yeniAdet = parseFloat(adet);
+  if (isNaN(yeniAdet) || yeniAdet < 0) return outJson({ status: 'error', message: 'Geçersiz adet' }, callback);
+  var lock = LockService.getScriptLock();
+  try { lock.waitLock(30000); } catch (e) { return outJson({ status: 'error', message: 'Sunucu meşgul, birazdan tekrar dene' }, callback); }
+  try {
+    var ss = SpreadsheetApp.getActiveSpreadsheet();
+    var sheet = ss.getSheetByName('Sayim');
+    var HEADERS = ['Tarih', 'Saat', 'Personel', 'Ürün Adı', 'Stok Kodu', 'Barkod', 'Birim', 'Eski Stok', 'Sayılan Adet', 'Fark', 'Oturum ID', 'Kayıt ID', 'Reyon'];
+    var idx = {}; HEADERS.forEach(function (h, i) { idx[h] = i; });
+    if (!sheet || sheet.getLastRow() < 2) return outJson({ status: 'error', message: 'Kayıt bulunamadı' }, callback);
+    var values = sheet.getRange(2, 1, sheet.getLastRow() - 1, HEADERS.length).getValues();
+    for (var i = 0; i < values.length; i++) {
+      if (String(values[i][idx['Kayıt ID']]) === String(kayitId)) {
+        var rowNum = i + 2;
+        var eskiStok = values[i][idx['Eski Stok']];
+        var fark = (eskiStok !== '' && eskiStok !== undefined && !isNaN(Number(eskiStok))) ? (yeniAdet - Number(eskiStok)) : '';
+        sheet.getRange(rowNum, idx['Sayılan Adet'] + 1).setValue(yeniAdet);
+        sheet.getRange(rowNum, idx['Fark'] + 1).setValue(fark);
+        return outJson({ status: 'ok' }, callback);
+      }
+    }
+    return outJson({ status: 'error', message: 'Kayıt bulunamadı (silinmiş olabilir)' }, callback);
+  } catch (err) {
+    return outJson({ status: 'error', message: err.toString() }, callback);
+  } finally {
+    lock.releaseLock();
+  }
+}
+
+function sayimSil(user, pass, kayitId, callback) {
+  var auth = requirePermission(user, pass, 'duzelt');
+  if (!auth.ok) return outJson({ status: 'error', message: auth.message }, callback);
+  if (!kayitId) return outJson({ status: 'error', message: 'Kayıt ID eksik' }, callback);
+  var lock = LockService.getScriptLock();
+  try { lock.waitLock(30000); } catch (e) { return outJson({ status: 'error', message: 'Sunucu meşgul, birazdan tekrar dene' }, callback); }
+  try {
+    var ss = SpreadsheetApp.getActiveSpreadsheet();
+    var sheet = ss.getSheetByName('Sayim');
+    var HEADERS = ['Tarih', 'Saat', 'Personel', 'Ürün Adı', 'Stok Kodu', 'Barkod', 'Birim', 'Eski Stok', 'Sayılan Adet', 'Fark', 'Oturum ID', 'Kayıt ID', 'Reyon'];
+    var idx = {}; HEADERS.forEach(function (h, i) { idx[h] = i; });
+    if (!sheet || sheet.getLastRow() < 2) return outJson({ status: 'error', message: 'Kayıt bulunamadı' }, callback);
+    var values = sheet.getRange(2, 1, sheet.getLastRow() - 1, HEADERS.length).getValues();
+    for (var i = 0; i < values.length; i++) {
+      if (String(values[i][idx['Kayıt ID']]) === String(kayitId)) {
+        sheet.deleteRow(i + 2);
+        return outJson({ status: 'ok' }, callback);
+      }
+    }
+    return outJson({ status: 'error', message: 'Kayıt bulunamadı (zaten silinmiş olabilir)' }, callback);
+  } catch (err) {
+    return outJson({ status: 'error', message: err.toString() }, callback);
+  } finally {
+    lock.releaseLock();
+  }
 }

@@ -166,7 +166,7 @@
 <div id="setup" class="screen">
   <header style="border:none; padding:0 0 16px; background:transparent;">
     <h1><img src="logo-header.png" alt="Murat Gıda" style="height:30px; width:auto; display:block;"></h1>
-    <div class="sub">Sayım · hızlı barkod • offline • Android • build 52</div>
+    <div class="sub">Sayım · hızlı barkod • offline • Android • build 53</div>
   </header>
 
   <div class="card" id="loginCard">
@@ -455,6 +455,9 @@
         <button id="adminFinalizeBtn" style="width:100%; margin-bottom:10px; background:linear-gradient(135deg, var(--accent2), var(--accent)); color:#fff; padding:14px; text-align:left; line-height:1.5;">
           📊 Sayımı Bitir ve Rapor Oluştur<br><span style="font-weight:500; font-size:11px; opacity:.85;">Aynı stok kodlarını birleştirir, isimleri düzeltir, son stok listesini ve detaylı raporu oluşturur</span>
         </button>
+        <button id="adminExportBtn" style="width:100%; margin-bottom:10px; background:#fff; border:1.5px solid var(--line); color:var(--text); padding:12px; text-align:left; line-height:1.5;">
+          📥 Son Stok Sayımını İndir (CSV)<br><span style="font-weight:500; font-size:11px; color:var(--muted);">"Sayımı Bitir"i en az bir kez çalıştırmış olman gerekir — ERP12'ye aktarmak için</span>
+        </button>
       </div>
       <div id="adminSectionTemizle" class="hidden">
         <button id="adminClearBtn" style="width:100%; margin-bottom:10px; background:linear-gradient(135deg, var(--red), #a91d1d); color:#fff; padding:14px; text-align:left; line-height:1.5;">
@@ -471,11 +474,29 @@
 
       <div id="adminSectionAyarlar" class="hidden" style="border-top:1px solid var(--line); margin:14px 0 12px; padding-top:12px;">
         <div style="font-weight:800; font-size:13px; margin-bottom:6px;">🔆 Ekran Ayarı</div>
-        <div style="display:flex; align-items:center; gap:8px; margin-bottom:8px;">
+        <div style="display:flex; align-items:center; gap:8px; margin-bottom:10px;">
           <input type="checkbox" id="adminWakeLockCheck" style="width:20px; height:20px; accent-color:var(--accent);">
           <label style="margin:0; text-transform:none; letter-spacing:0; font-size:13px; color:var(--text); font-weight:600;" for="adminWakeLockCheck">Yeni açılan telefonlarda sayım sırasında ekran açık kalsın</label>
         </div>
-        <button id="adminWakeLockSave" style="width:100%; background:var(--text); color:#fff; padding:11px;">Varsayılanı Kaydet</button>
+        <div style="display:flex; align-items:center; gap:8px; margin-bottom:10px;">
+          <input type="number" id="adminIdleMinutes" inputmode="numeric" min="0" placeholder="0" style="width:70px; padding:8px; font-size:13px; text-align:center;">
+          <label style="margin:0; text-transform:none; letter-spacing:0; font-size:13px; color:var(--text); font-weight:600; flex:1;" for="adminIdleMinutes">dakika hiç dokunulmazsa ekran normal kararabilsin (0 = hiç kapanmasın)</label>
+        </div>
+        <button id="adminWakeLockSave" style="width:100%; background:var(--text); color:#fff; padding:11px;">Ayarları Kaydet</button>
+      </div>
+
+      <div id="adminSectionCanliDurum" class="hidden" style="border-top:1px solid var(--line); margin:14px 0 12px; padding-top:12px;">
+        <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:8px;">
+          <div style="font-weight:800; font-size:13px;">📡 Canlı Durum</div>
+          <button type="button" id="adminCanliRefreshBtn" style="background:transparent; border:none; color:var(--accent); font-size:12px; font-weight:700; padding:2px 4px;">↻ Yenile</button>
+        </div>
+        <div id="adminCanliList"><div class="hint">⏳ Yükleniyor…</div></div>
+      </div>
+
+      <div id="adminSectionDuzelt" class="hidden" style="border-top:1px solid var(--line); margin:14px 0 12px; padding-top:12px;">
+        <div style="font-weight:800; font-size:13px; margin-bottom:8px;">✏️ Sayım Kayıtlarını Düzelt</div>
+        <input type="text" id="adminDuzeltSearch" placeholder="Ürün, personel, barkod veya stok kodu ara…" style="margin-bottom:8px;">
+        <div id="adminDuzeltList"><div class="hint">Ürün adı ya da personel adı yazıp ara, ya da boş bırakıp son kayıtları gör.</div></div>
       </div>
 
       <div id="adminNoPerm" class="hidden hint" style="text-align:center; padding:10px 0;">Şu an hiçbir yönetici işlemi için yetkin yok.</div>
@@ -517,6 +538,7 @@
   }
   if(!state.newProductCounter) state.newProductCounter = 1;
   if(!state.userRoster) state.userRoster = [];
+  if(state.idleMinutes === undefined) state.idleMinutes = 0;
   if(state.currentUser === undefined) state.currentUser = null;
   if(state.savedCredentials === undefined) state.savedCredentials = null;
   if(!state.session.id) state.session.id = makeId();
@@ -792,9 +814,40 @@
     return { entries: entries, count: Object.keys(names).length };
   }
 
+  // Aynı barkodun iki farklı isimle, ya da aynı stok kodunun iki farklı
+  // ürün için kullanılmış olmasını yakalar — yanlışlıkla iki farklı ürünü
+  // birbirine karıştırmayı önler. Aynı ismin birden fazla barkodu olması
+  // (Süt 1L örneğindeki gibi) KASTEN desteklendiği için uyarı SAYILMAZ.
+  function checkCatalogConsistency(entries){
+    var warnings = [];
+    var byBarcode = {}, byStock = {};
+    entries.forEach(function(e){
+      if(e.barcode){
+        if(byBarcode[e.barcode] && byBarcode[e.barcode] !== e.name){
+          warnings.push('Barkod ' + e.barcode + ': "' + byBarcode[e.barcode] + '" ve "' + e.name + '" olarak iki farklı isimle geçiyor');
+        }
+        byBarcode[e.barcode] = e.name;
+      }
+      if(e.stockCode){
+        if(byStock[e.stockCode] && byStock[e.stockCode] !== e.name){
+          warnings.push('Stok Kodu ' + e.stockCode + ': "' + byStock[e.stockCode] + '" ve "' + e.name + '" için kullanılmış');
+        }
+        byStock[e.stockCode] = e.name;
+      }
+    });
+    return warnings;
+  }
+
   function applyParsed(text){
     var res = parseList(text);
     if(res.entries.length === 0){ warnToast("Geçerli satır bulunamadı — dosya biçimini kontrol edin (Ürün Adı;Barkod)"); return; }
+    var warnings = checkCatalogConsistency(res.entries);
+    if(warnings.length > 0){
+      var msg = 'Listede ' + warnings.length + ' tutarsızlık bulundu, ilk birkaçı:\n\n' + warnings.slice(0,5).join('\n') +
+        (warnings.length > 5 ? ('\n… ve ' + (warnings.length - 5) + ' tane daha') : '') +
+        '\n\nBu muhtemelen bir yazım/veri hatası. Yine de bu haliyle devam edilsin mi?';
+      if(!window.confirm(msg)) return;
+    }
     productCountEl.textContent = "Kaydediliyor… (" + res.entries.length + " satır)";
     startBtn.disabled = true;
     idbBulkReplace(res.entries).then(function(){
@@ -942,18 +995,20 @@
     if(!navigator.onLine) return;
     var url = state.serverUrl || DEFAULT_SERVER_URL;
     jsonpRequest(url, 'resetcheck', function(err, data){
-      if(err || !data || !data.resetToken) return;
-      if(state.lastResetToken && state.lastResetToken !== data.resetToken){
-        state.session = { scans:[], id: makeId() };
-        state.pendingSessions = [];
-        state.lastResetToken = data.resetToken;
-        save();
-        if(typeof renderList === 'function') renderList();
-        if(typeof updatePendingBadge === 'function') updatePendingBadge();
-        warnToast('Yönetici sayım dosyasını temizledi — bu telefondaki eski kayıtlar sıfırlandı');
-      } else if(!state.lastResetToken){
-        state.lastResetToken = data.resetToken;
-        save();
+      if(err || !data) return;
+      if(data.resetToken){
+        if(state.lastResetToken && state.lastResetToken !== data.resetToken){
+          state.session = { scans:[], id: makeId() };
+          state.pendingSessions = [];
+          state.lastResetToken = data.resetToken;
+          save();
+          if(typeof renderList === 'function') renderList();
+          if(typeof updatePendingBadge === 'function') updatePendingBadge();
+          warnToast('Yönetici sayım dosyasını temizledi — bu telefondaki eski kayıtlar sıfırlandı');
+        } else if(!state.lastResetToken){
+          state.lastResetToken = data.resetToken;
+          save();
+        }
       }
       // Yönetici varsayılanı: kullanıcı bu telefonda elle bir tercih
       // yapmadıysa (state.wakeLockUserSet), ekran açık/kapalı varsayılanını
@@ -964,6 +1019,13 @@
           state.wakeLockEnabled = wanted;
           save();
           if(typeof updateWakeLockBtn === 'function') updateWakeLockBtn();
+        }
+      }
+      // Boşta kalma süresi de aynı şekilde yöneticiden senkronize edilir.
+      if(data.idleMinutes !== undefined){
+        var mins = parseInt(data.idleMinutes, 10);
+        if(!isNaN(mins) && state.idleMinutes !== mins && typeof applyIdleMinutes === 'function'){
+          applyIdleMinutes(mins);
         }
       }
     }, 15000);
@@ -1490,9 +1552,10 @@
     var items = state.session.scans.slice();
 
     if(term){
-      var q = term.toLocaleLowerCase('tr');
+      var kelimeler = term.toLocaleLowerCase('tr').split(/\s+/).filter(Boolean);
       items = items.filter(function(it){
-        return it.name.toLocaleLowerCase('tr').indexOf(q) !== -1 || it.barcode.indexOf(term) !== -1;
+        var hedef = it.name.toLocaleLowerCase('tr') + ' ' + it.barcode.toLowerCase();
+        return kelimeler.every(function(k){ return hedef.indexOf(k) !== -1; });
       });
     }
     if(reyonFilter) items = items.filter(function(it){ return it.reyon === reyonFilter; });
@@ -1638,12 +1701,15 @@
   function openAdminModal(){
     adminResultEl.textContent = '';
     var canRapor = hasPerm('rapor'), canTemizle = hasPerm('temizle'),
-        canKullanici = hasPerm('kullanici_yonetimi'), canAyarlar = hasPerm('ayarlar');
+        canKullanici = hasPerm('kullanici_yonetimi'), canAyarlar = hasPerm('ayarlar'),
+        canCanliDurum = hasPerm('canli_durum'), canDuzelt = hasPerm('duzelt');
     document.getElementById('adminSectionRapor').classList.toggle('hidden', !canRapor);
     document.getElementById('adminSectionTemizle').classList.toggle('hidden', !canTemizle);
     document.getElementById('adminSectionKullanici').classList.toggle('hidden', !canKullanici);
     document.getElementById('adminSectionAyarlar').classList.toggle('hidden', !canAyarlar);
-    document.getElementById('adminNoPerm').classList.toggle('hidden', canRapor || canTemizle || canKullanici || canAyarlar);
+    document.getElementById('adminSectionCanliDurum').classList.toggle('hidden', !canCanliDurum);
+    document.getElementById('adminSectionDuzelt').classList.toggle('hidden', !canDuzelt);
+    document.getElementById('adminNoPerm').classList.toggle('hidden', canRapor || canTemizle || canKullanici || canAyarlar || canCanliDurum || canDuzelt);
     adminModalEl.classList.remove('hidden');
 
     var auth = currentAuth();
@@ -1654,7 +1720,7 @@
       jsonpRequestP(url, { action:'kullanicilar_detay', user:auth.user, pass:auth.pass }, function(err, data){
         if(!err && data && data.status === 'ok' && data.users){
           adminUsersData = data.users.map(function(u){
-            return { name: u.name, pass: u.pass, role: u.role, perms: permsFromString(u.yetkiler) };
+            return { name: u.name, pass: u.pass, role: u.role, active: u.active !== false, perms: permsFromString(u.yetkiler) };
           });
         } else {
           adminUsersData = [];
@@ -1664,11 +1730,14 @@
     }
     if(canAyarlar){
       jsonpRequest(url, 'resetcheck', function(err, data){
-        if(!err && data && data.defaultWakeLock !== undefined){
-          document.getElementById('adminWakeLockCheck').checked = data.defaultWakeLock !== 'false';
+        if(!err && data){
+          if(data.defaultWakeLock !== undefined) document.getElementById('adminWakeLockCheck').checked = data.defaultWakeLock !== 'false';
+          if(data.idleMinutes !== undefined) document.getElementById('adminIdleMinutes').value = data.idleMinutes;
         }
       }, 15000);
     }
+    if(canCanliDurum) fetchCanliDurum();
+    if(canDuzelt) fetchDuzeltSonuclari('');
   }
   function closeAdminModal(){ adminModalEl.classList.add('hidden'); }
 
@@ -1682,17 +1751,16 @@
     { key: 'rapor', label: '📊 Rapor' },
     { key: 'temizle', label: '🧹 Temizle' },
     { key: 'kullanici_yonetimi', label: '👤 Kullanıcılar' },
-    { key: 'ayarlar', label: '🔆 Ayarlar' }
+    { key: 'ayarlar', label: '🔆 Ayarlar' },
+    { key: 'canli_durum', label: '📡 Canlı Durum' },
+    { key: 'duzelt', label: '✏️ Düzeltme' }
   ];
 
   function permsFromString(s){
     var list = String(s || '').split(',').map(function(x){ return x.trim(); }).filter(Boolean);
-    return {
-      rapor: list.indexOf('rapor') !== -1,
-      temizle: list.indexOf('temizle') !== -1,
-      kullanici_yonetimi: list.indexOf('kullanici_yonetimi') !== -1,
-      ayarlar: list.indexOf('ayarlar') !== -1
-    };
+    var out = {};
+    PERM_LABELS.forEach(function(pl){ out[pl.key] = list.indexOf(pl.key) !== -1; });
+    return out;
   }
   function permsToString(p){
     return PERM_LABELS.filter(function(pl){ return p[pl.key]; }).map(function(pl){ return pl.key; }).join(',');
@@ -1726,6 +1794,7 @@
         '<div style="display:flex; gap:6px; margin-bottom:8px;">' +
           '<button type="button" class="u-role-user" style="flex:1; padding:8px; font-size:12px; font-weight:700; border-radius:8px; background:' + (!isYonetici ? 'var(--accent)' : '#fff') + '; color:' + (!isYonetici ? '#fff' : 'var(--text)') + '; border:1.5px solid var(--line);">🙂 Kullanıcı</button>' +
           '<button type="button" class="u-role-admin" style="flex:1; padding:8px; font-size:12px; font-weight:700; border-radius:8px; background:' + (isYonetici ? 'var(--accent)' : '#fff') + '; color:' + (isYonetici ? '#fff' : 'var(--text)') + '; border:1.5px solid var(--line);">👑 Yönetici</button>' +
+          '<button type="button" class="u-active-toggle" style="flex:0.8; padding:8px; font-size:12px; font-weight:700; border-radius:8px; background:' + (u.active !== false ? 'rgba(22,163,74,.14)' : 'rgba(220,38,38,.1)') + '; color:' + (u.active !== false ? 'var(--green)' : 'var(--red)') + '; border:1.5px solid var(--line);">' + (u.active !== false ? '✅ Aktif' : '⛔ Pasif') + '</button>' +
         '</div>' +
         '<div style="display:grid; grid-template-columns:1fr 1fr; gap:6px 10px; opacity:' + (isYonetici ? '.5' : '1') + ';">' + permsHtml + '</div>';
 
@@ -1737,6 +1806,7 @@
       });
       row.querySelector('.u-role-user').addEventListener('click', function(){ adminUsersData[i].role = 'kullanici'; renderUsersList(); });
       row.querySelector('.u-role-admin').addEventListener('click', function(){ adminUsersData[i].role = 'yonetici'; renderUsersList(); });
+      row.querySelector('.u-active-toggle').addEventListener('click', function(){ adminUsersData[i].active = adminUsersData[i].active === false ? true : false; renderUsersList(); });
       row.querySelectorAll('.u-perm').forEach(function(box){
         box.addEventListener('change', function(){
           adminUsersData[i].perms[box.getAttribute('data-perm')] = box.checked;
@@ -1748,7 +1818,7 @@
   }
 
   document.getElementById('adminAddUserBtn').addEventListener('click', function(){
-    adminUsersData.push({ name: '', pass: '', role: 'kullanici', perms: { rapor: false, temizle: false, kullanici_yonetimi: false, ayarlar: false } });
+    adminUsersData.push({ name: '', pass: '', role: 'kullanici', active: true, perms: { rapor: false, temizle: false, kullanici_yonetimi: false, ayarlar: false, canli_durum: false, duzelt: false } });
     renderUsersList();
   });
 
@@ -1761,10 +1831,9 @@
     var data = adminUsersData.map(function(u){
       var line = u.name.trim() + ';' + u.pass;
       line += ';' + u.role;
-      if(u.role !== 'yonetici'){
-        var permStr = permsToString(u.perms);
-        if(permStr) line += ';' + permStr;
-      }
+      var permStr = u.role !== 'yonetici' ? permsToString(u.perms) : '';
+      line += ';' + permStr;
+      line += ';' + (u.active === false ? 'hayir' : 'evet');
       return line;
     }).join('\n');
     var url = state.serverUrl || DEFAULT_SERVER_URL;
@@ -1783,14 +1852,126 @@
     if(!auth){ warnToast('Önce giriş yap'); return; }
     if(!navigator.onLine){ warnToast('İnternet yok — bu işlem için sunucuya bağlanmak gerekiyor'); return; }
     var wanted = document.getElementById('adminWakeLockCheck').checked;
+    var idleMin = parseInt(document.getElementById('adminIdleMinutes').value, 10);
+    if(isNaN(idleMin) || idleMin < 0) idleMin = 0;
     var url = state.serverUrl || DEFAULT_SERVER_URL;
-    adminResultEl.textContent = '⏳ Ayar kaydediliyor…';
-    jsonpRequestP(url, { action: 'ayar_kaydet', user: auth.user, pass: auth.pass, wakelock: wanted ? 'true' : 'false' }, function(err, res){
+    adminResultEl.textContent = '⏳ Ayarlar kaydediliyor…';
+    jsonpRequestP(url, { action: 'ayar_kaydet', user: auth.user, pass: auth.pass, wakelock: wanted ? 'true' : 'false', idleMinutes: idleMin }, function(err, res){
       if(err){ adminResultEl.textContent = '❌ ' + err; return; }
       if(!res || res.status === 'error'){ adminResultEl.textContent = '❌ ' + ((res && res.message) || 'bilinmeyen hata'); return; }
-      adminResultEl.textContent = '✅ Varsayılan kaydedildi — sadece elle değiştirilmemiş telefonları etkiler.';
+      adminResultEl.textContent = '✅ Ayarlar kaydedildi — sadece elle değiştirilmemiş telefonları etkiler.';
+      applyIdleMinutes(idleMin); // bu telefona da hemen uygula (elle değiştirilmemişse)
     }, 15000);
   });
+
+  // ---------- CANLI DURUM ----------
+  function fetchCanliDurum(){
+    var auth = currentAuth();
+    var listEl2 = document.getElementById('adminCanliList');
+    if(!auth || !navigator.onLine){ listEl2.innerHTML = '<div class="hint">İnternet yok</div>'; return; }
+    listEl2.innerHTML = '<div class="hint">⏳ Yükleniyor…</div>';
+    var url = state.serverUrl || DEFAULT_SERVER_URL;
+    jsonpRequestP(url, { action:'canli_durum', user:auth.user, pass:auth.pass }, function(err, data){
+      if(err){ listEl2.innerHTML = '<div class="hint" style="color:var(--red);">❌ ' + escapeHtml(err) + '</div>'; return; }
+      if(!data || data.status === 'error'){ listEl2.innerHTML = '<div class="hint" style="color:var(--red);">❌ ' + escapeHtml((data && data.message) || 'hata') + '</div>'; return; }
+      if(!data.personeller || data.personeller.length === 0){ listEl2.innerHTML = '<div class="hint">Henüz hiç kayıt yok.</div>'; return; }
+      listEl2.innerHTML = data.personeller.map(function(p){
+        var durum = p.aktif ? '🟢 Şu an sayıyor olabilir' : (p.dakikaOnce !== null ? '⚪ ' + p.dakikaOnce + ' dk önce' : '⚪ Hiç veri yok');
+        return '<div style="background:var(--panel2); border-radius:10px; padding:9px 11px; margin-bottom:6px; font-size:12px;">' +
+          '<div style="display:flex; justify-content:space-between; font-weight:700;"><span>' + escapeHtml(p.personel) + '</span><span style="color:' + (p.aktif ? 'var(--green)' : 'var(--muted)') + ';">' + durum + '</span></div>' +
+          '<div style="color:var(--muted); margin-top:3px;">' + p.okutma + ' okutma · ' + p.farkliUrun + ' farklı ürün' + (p.sonUrun ? (' · son: ' + escapeHtml(p.sonUrun)) : '') + (p.sonReyon ? (' (' + escapeHtml(p.sonReyon) + ')') : '') + '</div>' +
+        '</div>';
+      }).join('');
+    }, 20000);
+  }
+  document.getElementById('adminCanliRefreshBtn').addEventListener('click', fetchCanliDurum);
+
+  // ---------- SAYIM KAYITLARINI DÜZELT ----------
+  var duzeltDebounce = null;
+  document.getElementById('adminDuzeltSearch').addEventListener('input', function(e){
+    clearTimeout(duzeltDebounce);
+    var q = e.target.value;
+    duzeltDebounce = setTimeout(function(){ fetchDuzeltSonuclari(q); }, 400);
+  });
+
+  function fetchDuzeltSonuclari(q){
+    var auth = currentAuth();
+    var listEl3 = document.getElementById('adminDuzeltList');
+    if(!auth || !navigator.onLine){ listEl3.innerHTML = '<div class="hint">İnternet yok</div>'; return; }
+    listEl3.innerHTML = '<div class="hint">⏳ Aranıyor…</div>';
+    var url = state.serverUrl || DEFAULT_SERVER_URL;
+    jsonpRequestP(url, { action:'sayim_ara', user:auth.user, pass:auth.pass, q: q || '' }, function(err, data){
+      if(err){ listEl3.innerHTML = '<div class="hint" style="color:var(--red);">❌ ' + escapeHtml(err) + '</div>'; return; }
+      if(!data || data.status === 'error'){ listEl3.innerHTML = '<div class="hint" style="color:var(--red);">❌ ' + escapeHtml((data && data.message) || 'hata') + '</div>'; return; }
+      if(!data.sonuclar || data.sonuclar.length === 0){ listEl3.innerHTML = '<div class="hint">Sonuç yok.</div>'; return; }
+      listEl3.innerHTML = data.sonuclar.map(function(r){
+        return '<div class="duzeltRow" data-kayit-id="' + escAttr(r.kayitId) + '" style="background:var(--panel2); border-radius:10px; padding:8px 10px; margin-bottom:6px;">' +
+          '<div style="font-size:12px; font-weight:700;">' + escapeHtml(r.ad) + '</div>' +
+          '<div style="font-size:10.5px; color:var(--muted); margin-bottom:6px;">' + escapeHtml(r.personel) + ' · ' + escapeHtml(r.tarih) + ' ' + escapeHtml(r.saat) + (r.reyon ? (' · ' + escapeHtml(r.reyon)) : '') + '</div>' +
+          '<div style="display:flex; gap:6px; align-items:center;">' +
+            '<input type="number" class="duzeltAdet" value="' + escAttr(r.adet) + '" style="flex:1; padding:6px; font-size:12px; font-family:var(--mono);">' +
+            '<button type="button" class="duzeltKaydet" style="background:var(--accent); color:#fff; padding:6px 10px; font-size:11px; font-weight:700; border-radius:7px;">Kaydet</button>' +
+            '<button type="button" class="duzeltSil" style="background:transparent; border:none; color:var(--red); font-size:17px; padding:0 4px;">🗑️</button>' +
+          '</div></div>';
+      }).join('');
+      listEl3.querySelectorAll('.duzeltKaydet').forEach(function(btn){
+        btn.addEventListener('click', function(){
+          var row = btn.closest('.duzeltRow');
+          var kayitId = row.getAttribute('data-kayit-id');
+          var yeniAdet = row.querySelector('.duzeltAdet').value;
+          var auth2 = currentAuth();
+          btn.textContent = '⏳';
+          jsonpRequestP(state.serverUrl || DEFAULT_SERVER_URL, { action:'sayim_guncelle', user:auth2.user, pass:auth2.pass, kayitId: kayitId, adet: yeniAdet }, function(err2, res2){
+            if(err2 || !res2 || res2.status === 'error'){ warnToast('❌ ' + (err2 || (res2 && res2.message) || 'güncellenemedi')); btn.textContent = 'Kaydet'; return; }
+            successToast('Güncellendi'); btn.textContent = 'Kaydet';
+          }, 20000);
+        });
+      });
+      listEl3.querySelectorAll('.duzeltSil').forEach(function(btn){
+        btn.addEventListener('click', function(){
+          var row = btn.closest('.duzeltRow');
+          var kayitId = row.getAttribute('data-kayit-id');
+          if(!window.confirm('Bu kayıt tamamen silinsin mi?')) return;
+          var auth2 = currentAuth();
+          jsonpRequestP(state.serverUrl || DEFAULT_SERVER_URL, { action:'sayim_sil', user:auth2.user, pass:auth2.pass, kayitId: kayitId }, function(err2, res2){
+            if(err2 || !res2 || res2.status === 'error'){ warnToast('❌ ' + (err2 || (res2 && res2.message) || 'silinemedi')); return; }
+            row.remove();
+            successToast('Silindi');
+          }, 20000);
+        });
+      });
+    }, 20000);
+  }
+
+  // ---------- SON STOK SAYIMINI CSV OLARAK İNDİRME ----------
+  document.getElementById('adminExportBtn').addEventListener('click', function(){
+    var auth = currentAuth();
+    if(!auth){ warnToast('Önce giriş yap'); return; }
+    if(!navigator.onLine){ warnToast('İnternet yok — bu işlem için sunucuya bağlanmak gerekiyor'); return; }
+    var url = state.serverUrl || DEFAULT_SERVER_URL;
+    adminResultEl.textContent = '⏳ Dosya hazırlanıyor…';
+    jsonpRequestP(url, { action:'son_stok_getir', user:auth.user, pass:auth.pass }, function(err, data){
+      if(err){ adminResultEl.textContent = '❌ ' + err; return; }
+      if(!data || data.status === 'error'){ adminResultEl.textContent = '❌ ' + ((data && data.message) || 'hata'); return; }
+      if(!data.rows || data.rows.length === 0){ adminResultEl.textContent = '⚠️ "Son Stok Sayimi" boş — önce "Sayımı Bitir ve Rapor Oluştur"a bas.'; return; }
+      function csvEsc(v){
+        var s = (v === null || v === undefined) ? '' : String(v);
+        if(s.indexOf(';') !== -1 || s.indexOf('"') !== -1 || s.indexOf('\n') !== -1){
+          s = '"' + s.replace(/"/g, '""') + '"';
+        }
+        return s;
+      }
+      var csv = '\uFEFF' + data.headers.map(csvEsc).join(';') + '\r\n' +
+        data.rows.map(function(r){ return r.map(csvEsc).join(';'); }).join('\r\n');
+      var blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+      var a = document.createElement('a');
+      a.href = URL.createObjectURL(blob);
+      a.download = 'son-stok-sayimi-' + nowParts().date + '.csv';
+      document.body.appendChild(a); a.click(); document.body.removeChild(a);
+      adminResultEl.textContent = '✅ İndirildi — Excel/ERP12 için hazır (' + data.rows.length + ' satır).';
+    }, 30000);
+  });
+
 
   document.getElementById('adminFinalizeBtn').addEventListener('click', function(){
     var auth = currentAuth();
@@ -1899,17 +2080,19 @@
   });
 
   function renderNameSearchResults(term){
-    // Ürün adı, barkod ve stok koduna göre arar. Aynı üründen birden fazla
-    // barkod eşleşse bile ada göre tekilleştirip tek satır gösterir —
+    // Ürün adı, barkod ve stok koduna göre arar. Kelime kelime arar — yazılan
+    // sıraya bakmaksızın tüm kelimeler adında/barkodunda/stok kodunda geçen
+    // her ürünü bulur (örn. "süt tam yağ" yazınca "Tam Yağlı Süt 1L" de
+    // bulunur), baştan sona birebir eşleşme aramaz. Aynı üründen birden
+    // fazla barkod eşleşse bile ada göre tekilleştirip tek satır gösterir —
     // ama arama terimi bir barkoda/stok koduna özel eşleşiyorsa o kaydı öne alır.
-    var q = term.toLocaleLowerCase('tr');
+    var kelimeler = term.toLocaleLowerCase('tr').trim().split(/\s+/).filter(Boolean);
     var seen = {}; var matches = [];
     catalogMap.forEach(function(entry, barcode){
-      if(term){
-        var nameMatch = entry.name.toLocaleLowerCase('tr').indexOf(q) !== -1;
-        var barcodeMatch = barcode.toLowerCase().indexOf(q) !== -1;
-        var stockMatch = (entry.stockCode || '').toLowerCase().indexOf(q) !== -1;
-        if(!nameMatch && !barcodeMatch && !stockMatch) return;
+      if(kelimeler.length > 0){
+        var hedef = (entry.name.toLocaleLowerCase('tr') + ' ' + barcode.toLowerCase() + ' ' + (entry.stockCode||'').toLowerCase());
+        var hepsiVar = kelimeler.every(function(k){ return hedef.indexOf(k) !== -1; });
+        if(!hepsiVar) return;
       }
       var key = entry.name + '|' + barcode; // farklı barkodları da ayrı göster ki barkod/stok kodu araması net eşleşsin
       if(seen[key]) return;
@@ -2032,6 +2215,40 @@
     if(document.visibilityState === 'hidden'){ queueCurrentSession(); flushPendingWithBeacon(); }
   });
   window.addEventListener('pagehide', function(){ queueCurrentSession(); flushPendingWithBeacon(); });
+
+  // ---------- BOŞTA KALMA (pil tasarrufu) ----------
+  // Yönetici Paneli → Ekran Ayarı'ndan belirlenen dakika kadar hiç dokunma
+  // olmazsa, ekranın açık kalmasını sağlayan kilit serbest bırakılır ve
+  // telefon işletim sisteminin kendi ekran kararma süresine bırakılır.
+  // Herhangi bir dokunuşta (tarama, buton, klavye) tekrar sayaç sıfırlanır
+  // ve kullanıcı ekranın açık kalmasını istiyorsa (🔆 açıksa) kilit yeniden
+  // alınır.
+  var idleTimeoutMinutes = state.idleMinutes || 0;
+  var lastActivityTs = Date.now();
+  var idleReleased = false;
+  function applyIdleMinutes(mins){
+    idleTimeoutMinutes = mins || 0;
+    state.idleMinutes = idleTimeoutMinutes;
+    save();
+  }
+  function markActivity(){
+    lastActivityTs = Date.now();
+    if(idleReleased){
+      idleReleased = false;
+      if(isWakeLockEnabled() && !document.getElementById('main').classList.contains('hidden')) requestWakeLock();
+    }
+  }
+  document.addEventListener('touchstart', markActivity, { passive: true });
+  document.addEventListener('click', markActivity);
+  document.addEventListener('keydown', markActivity);
+  setInterval(function(){
+    if(idleTimeoutMinutes <= 0 || idleReleased) return;
+    if(document.getElementById('main').classList.contains('hidden')) return;
+    if(Date.now() - lastActivityTs >= idleTimeoutMinutes * 60000){
+      idleReleased = true;
+      releaseWakeLock();
+    }
+  }, 30000);
 
 
   // Son çare güvenlik ağı: uygulama arka plana alınırken/kapanırken normal

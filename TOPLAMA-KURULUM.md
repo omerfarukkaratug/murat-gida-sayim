@@ -110,15 +110,28 @@ Ad;Şifre;Rol;Yetkiler
   çalışır — virgülle ayrılmış şu dörtten istediğin kadarını yaz:
   `rapor`, `temizle`, `kullanici_yonetimi`, `ayarlar`
 
-Örnek — 2 yönetici + kısmi yetkili bir kullanıcı + hiç yetkisi olmayanlar:
+Örnek — 2 yönetici + kısmi yetkili bir kullanıcı + hiç yetkisi olmayanlar
+(bu formatlar artık Yönetici Paneli'ndeki kartlı ekrandan otomatik
+oluşturuluyor, elle yazmana gerek yok — bilgi amaçlı):
 ```
-admin;yeniSifre123;yonetici
-Ayşe Yılmaz;4521;yonetici
-Mehmet Demir;1111;kullanici;rapor
-Fatma Kaya;2222
+admin;yeniSifre123;yonetici;;evet
+Ayşe Yılmaz;4521;yonetici;;evet
+Mehmet Demir;1111;kullanici;rapor;evet
+Fatma Kaya;2222;kullanici;;hayir
 ```
 Burada Mehmet raporu görebilir ama dosyayı temizleyemez veya kullanıcı
-ekleyemez; Fatma'nın sayım dışında hiçbir yönetici yetkisi yoktur.
+ekleyemez; Fatma pasif durumda olduğu için artık hiç giriş yapamaz
+(hesabı silmeden geçici olarak devre dışı bırakmak için kullanılır).
+
+Yetkiler artık altısı: `rapor`, `temizle`, `kullanici_yonetimi`,
+`ayarlar`, `canli_durum` (kim ne sayıyor canlı görme), `duzelt` (yanlış
+girilmiş sayım kayıtlarını düzeltme/silme).
+
+**Şifremi unuttum / admin dışarıda kaldı:** Kullanıcı Yönetimi yetkisi
+olan kimse kalmadıysa, Google E-Tablo'yu aç → **Kullanicilar** sekmesi →
+ilgili kişinin **Şifre** hücresini elle değiştir (ya da o satırı tamamen
+silip admin/admin yedek girişinin tekrar çalışmasını sağla — bunun için
+sekmede "admin" adında bir satır kalmamalı).
 
 **Kullanıcı Listesini Kaydet**'e bastığında panel önce mevcut listeyi
 sunucudan çeker ve kutuyu onunla doldurur — üstüne ekleme/çıkarma
@@ -128,13 +141,34 @@ Bu liste ayrıca giriş ekranındaki "Kullanıcı Adı" kutusunda otomatik
 tamamlama olarak da kullanılır (telefonlar bunu online olduklarında
 otomatik çeker).
 
-## 8) Ekran Açık Kalma Ayarı (pil tasarrufu)
+## 9) Canlı Durum (📡 canli_durum yetkisi)
+Yönetici Paneli'nde, o an (ya da en son) kim ne sayıyor gösterir —
+personel bazlı toplam okutma, farklı ürün sayısı, son okutulan ürün ve
+"kaç dakika önce" bilgisi. Telefonlar bir "buradayım" sinyali göndermiyor;
+bu yüzden "🟢 şu an sayıyor olabilir" etiketi, o kişinin son 10 dakika
+içinde en az bir okutma yapmış olmasına dayanır — kesin bir çevrimiçi
+göstergesi değil, iyi bir tahmindir.
+
+## 10) Sayım Kayıtlarını Düzelt (✏️ duzelt yetkisi)
+Google E-Tablo'yu hiç açmadan, telefon/personel/ürün adıyla arayıp
+yanlış girilmiş bir sayım kaydının adedini düzeltebilir ya da tamamen
+silebilirsin. Arama kutusu boşken en son 50 kayıt listelenir.
+
+## 11) Son Stok Sayımını CSV Olarak İndirme (📥 rapor yetkisi)
+"Sayımı Bitir ve Rapor Oluştur" çalıştırıldıktan sonra, aynı Yönetici
+Paneli'nden "📥 Son Stok Sayımını İndir (CSV)" ile o anki "Son Stok
+Sayimi" sekmesini doğrudan telefona/bilgisayara CSV olarak indirebilirsin
+— ERP12'ye aktarmak için Google Sheets'e hiç girmene gerek kalmaz.
+
+## 8) Ekran Açık Kalma ve Boşta Kalma Ayarları (pil tasarrufu)
 Sayım sırasında telefon ekranı hiç kararmasın diye uygulama varsayılan
 olarak ekranı sürekli açık tutar — uzun sayımlarda pili hızlı bitirebilir.
-İki yerden kontrol edilir:
 - **Her telefonda**: üst çubuktaki 🔆/🌙 butonuna dokunarak o telefonda
   anlık açıp kapatabilirsin. Bir kez elle değiştirdiğinde, o telefon
   yöneticinin göndereceği varsayılandan artık etkilenmez.
 - **Yönetici Paneli → 🔆 Ekran Ayarı** (bu yetkiye sahip olanlarda
-  görünür): hiç dokunulmamış (yeni açılan) telefonlar için varsayılanı
-  sen belirlersin — kutuyu işaretle/kaldır, **Varsayılanı Kaydet**'e bas.
+  görünür): hiç dokunulmamış (yeni açılan) telefonlar için ekranın açık
+  kalıp kalmayacağını, VE kaç dakika hiç dokunulmazsa ekranın normal
+  kararmaya bırakılacağını (0 = hiç bırakılmasın, örn. 10 = 10 dakika
+  boşta kalınca telefonun kendi ekran kararma süresine bırakılır)
+  buradan tek seferde ayarlarsın.
