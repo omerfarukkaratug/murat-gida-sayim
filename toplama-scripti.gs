@@ -490,11 +490,13 @@ function handleFinalize(user, pass, callback) {
     raporSheet.appendRow([]);
     raporSheet.appendRow(['PERSONEL BAZLI']);
     raporSheet.appendRow(['Personel', 'Okutma Sayısı', 'Farklı Ürün', 'İlk Kayıt', 'Son Kayıt', 'Süre (saat)', 'Hız (okutma/saat)']);
+    var personelListesi = [];
     Object.keys(personelStats).forEach(function (p) {
       var s = personelStats[p];
       var sureSaat = Math.max((new Date(s.sonTs) - new Date(s.ilkTs)) / 3600000, 0.05);
       var hiz = Math.round((s.satir / sureSaat) * 10) / 10;
       raporSheet.appendRow([p, s.satir, Object.keys(s.urunler).length, s.ilkTs, s.sonTs, Math.round(sureSaat * 10) / 10, hiz]);
+      personelListesi.push({ personel: p, okutma: s.satir, farkliUrun: Object.keys(s.urunler).length, hiz: hiz });
     });
     raporSheet.appendRow([]);
     raporSheet.appendRow(['DİKKAT ÇEKEN FARKLAR (eski stoğa göre %30+ sapma)']);
@@ -524,6 +526,8 @@ function handleFinalize(user, pass, callback) {
       toplamAdet: toplamAdet,
       ortalamaDogruluk: ortalamaDogruluk !== null ? ortalamaDogruluk : '—',
       anomaliSayisi: anomaliler.length,
+      anomaliler: anomaliler.slice(0, 40),
+      personelListesi: personelListesi,
       aiYorum: aiYorum
     }, callback);
   } catch (err) {

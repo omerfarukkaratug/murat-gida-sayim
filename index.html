@@ -126,6 +126,7 @@
   .item .meta{font-size:10.5px; color:var(--muted); font-family:var(--mono); margin-top:3px;}
   .item .meta .oldStock{color:var(--amber); font-weight:700;}
   .qtyBox{display:flex; align-items:center; gap:8px;}
+  .itemDelBtn{background:transparent; border:none; color:var(--red); font-size:17px; padding:4px; flex-shrink:0; line-height:1;}
   .qtyInput{font-family:var(--mono); font-weight:800; font-size:17px; width:56px; text-align:center;    background:var(--panel2); border:1.5px solid transparent; border-radius:var(--r-sm); color:var(--text); padding:8px 0; transition:border-color .15s;}
   .qtyInput:focus{outline:none; border-color:var(--accent);}
   .qtyInput::-webkit-outer-spin-button, .qtyInput::-webkit-inner-spin-button{-webkit-appearance:none; margin:0;}
@@ -135,7 +136,7 @@
   .qtyCalcInput:focus{outline:none; border-color:var(--accent);}
   .qtyCalcInput::-webkit-outer-spin-button, .qtyCalcInput::-webkit-inner-spin-button{-webkit-appearance:none; margin:0;}
   .qtyCalcInput[type=number]{-moz-appearance:textfield;}
-  .qtyCalcX{font-weight:800; color:var(--muted); font-size:15px;}
+  .qtyCalcOpBtn{background:var(--panel2); border:1.5px solid var(--line); color:var(--accent); width:36px; height:38px; border-radius:8px; font-weight:800; font-size:15px; padding:0; flex-shrink:0;}
   .qtyCalcApplyBtn{background:var(--accent); color:#fff; width:38px; height:38px; border-radius:9px; font-size:17px; font-weight:800; padding:0; flex-shrink:0;}
   .empty{text-align:center; color:var(--muted); font-size:12.5px; padding:44px 20px; font-family:var(--mono); line-height:1.8;}
   .browseItem{user-select:none; -webkit-user-select:none; -webkit-touch-callout:none; touch-action:pan-y;}
@@ -165,7 +166,7 @@
 <div id="setup" class="screen">
   <header style="border:none; padding:0 0 16px; background:transparent;">
     <h1><img src="logo-header.png" alt="Murat Gıda" style="height:30px; width:auto; display:block;"></h1>
-    <div class="sub">Sayım · hızlı barkod • offline • Android • build 51</div>
+    <div class="sub">Sayım · hızlı barkod • offline • Android • build 52</div>
   </header>
 
   <div class="card" id="loginCard">
@@ -310,11 +311,12 @@
         <div id="qtyEntryMeta"></div>
         <input type="number" id="qtyEntryInput" inputmode="numeric" placeholder="Adet gir">
         <div class="qtyCalcRow">
-          <input type="number" id="qtyCalcKoli" inputmode="numeric" placeholder="Koli" class="qtyCalcInput">
-          <span class="qtyCalcX">×</span>
-          <input type="number" id="qtyCalcPerKoli" inputmode="numeric" placeholder="Adet/Koli" class="qtyCalcInput">
+          <input type="number" id="qtyCalcA" inputmode="numeric" placeholder="Sayı 1" class="qtyCalcInput">
+          <button type="button" id="qtyCalcOp" class="qtyCalcOpBtn" title="İşlemi değiştirmek için dokun">×</button>
+          <input type="number" id="qtyCalcB" inputmode="numeric" placeholder="Sayı 2" class="qtyCalcInput">
           <button type="button" id="qtyCalcApply" class="qtyCalcApplyBtn" title="Hesapla ve adete yaz">=</button>
         </div>
+        <div class="hint" style="margin-top:2px;">Örn: 8 koli × 12 adet, ya da 45 + 3, ya da 50 − 2. İşlem simgesine dokunarak değiştir.</div>
         <div class="qtyEntryBtns">
           <button id="qtyEntryCancel">İptal</button>
           <button id="qtyEntryConfirm">Ekle</button>
@@ -1219,8 +1221,11 @@
   // ---------- ADET GİRİŞ KARTI ----------
   var qtyEntryEl = document.getElementById('qtyEntry');
   var qtyEntryInput = document.getElementById('qtyEntryInput');
-  var qtyCalcKoliEl = document.getElementById('qtyCalcKoli');
-  var qtyCalcPerKoliEl = document.getElementById('qtyCalcPerKoli');
+  var qtyCalcAEl = document.getElementById('qtyCalcA');
+  var qtyCalcBEl = document.getElementById('qtyCalcB');
+  var qtyCalcOpBtn = document.getElementById('qtyCalcOp');
+  var qtyCalcOps = ['×', '+', '−'];
+  var qtyCalcOpIndex = 0;
 
   function openQtyEntry(){
     if(!pendingScan) return;
@@ -1245,8 +1250,10 @@
       qtyEntryInput.placeholder = 'Adet gir';
     }
     qtyEntryInput.value = '';
-    qtyCalcKoliEl.value = '';
-    qtyCalcPerKoliEl.value = '';
+    qtyCalcAEl.value = '';
+    qtyCalcBEl.value = '';
+    qtyCalcOpIndex = 0;
+    qtyCalcOpBtn.textContent = qtyCalcOps[0];
     setTimeout(function(){ qtyEntryInput.focus(); }, 80); // klavye otomatik açılsın
   }
 
@@ -1273,18 +1280,25 @@
   document.getElementById('qtyEntryConfirm').addEventListener('click', confirmQtyEntry);
   qtyEntryInput.addEventListener('keydown', function(e){ if(e.key === 'Enter') confirmQtyEntry(); });
 
-  // Koli × Adet/Koli hesap makinesi — blok/koli ürünlerde elle çarpma
-  // yapmaya gerek kalmadan toplam adedi doğrudan "Adet gir" kutusuna yazar.
+  // Koli×adet, ya da elde kalan fazla/eksikleri toplayıp çıkarmak için basit
+  // hesap makinesi — sonucu doğrudan "Adet gir" kutusuna yazar.
   function applyQtyCalc(){
-    var koli = parseFloat(qtyCalcKoliEl.value);
-    var perKoli = parseFloat(qtyCalcPerKoliEl.value);
-    if(isNaN(koli) || isNaN(perKoli) || koli < 0 || perKoli < 0){ warnToast('Koli ve adet/koli sayılarını gir'); return; }
-    qtyEntryInput.value = Math.round(koli * perKoli * 1000) / 1000;
+    var a = parseFloat(qtyCalcAEl.value);
+    var b = parseFloat(qtyCalcBEl.value);
+    if(isNaN(a) || isNaN(b)){ warnToast('İki sayıyı da gir'); return; }
+    var op = qtyCalcOps[qtyCalcOpIndex];
+    var result = op === '×' ? (a * b) : op === '+' ? (a + b) : (a - b);
+    if(result < 0) result = 0;
+    qtyEntryInput.value = Math.round(result * 1000) / 1000;
     qtyEntryInput.focus();
   }
+  qtyCalcOpBtn.addEventListener('click', function(){
+    qtyCalcOpIndex = (qtyCalcOpIndex + 1) % qtyCalcOps.length;
+    qtyCalcOpBtn.textContent = qtyCalcOps[qtyCalcOpIndex];
+  });
   document.getElementById('qtyCalcApply').addEventListener('click', applyQtyCalc);
-  qtyCalcKoliEl.addEventListener('keydown', function(e){ if(e.key === 'Enter'){ e.preventDefault(); qtyCalcPerKoliEl.focus(); } });
-  qtyCalcPerKoliEl.addEventListener('keydown', function(e){ if(e.key === 'Enter'){ e.preventDefault(); applyQtyCalc(); } });
+  qtyCalcAEl.addEventListener('keydown', function(e){ if(e.key === 'Enter'){ e.preventDefault(); qtyCalcBEl.focus(); } });
+  qtyCalcBEl.addEventListener('keydown', function(e){ if(e.key === 'Enter'){ e.preventDefault(); applyQtyCalc(); } });
 
   function confirmQtyEntry(){
     if(!pendingScan) return;
@@ -1308,6 +1322,7 @@
     save();
     renderList();
     whoLabel.textContent = state.personnel + " · " + countDistinctProducts() + " kalem";
+    beep(880, 70, 0.13); if(navigator.vibrate) navigator.vibrate(35); // eklendi onayı — sesli + titreşimli
     successToast(pendingScan.name + ': ' + addQty + ' ' + unit + ' eklendi');
     pendingScan = null;
     qtyEntryEl.classList.add('hidden');
@@ -1354,6 +1369,7 @@
       '<div class="meta">'+escapeHtml(it.barcode)+' · '+it.time+oldStockHtml+unitHtml+reyonHtml+'</div></div>' +
       '<div class="qtyBox">' +
         '<input class="qtyInput" type="number" inputmode="'+(unit==='Kg'?'decimal':'numeric')+'" step="'+(unit==='Kg'?'0.001':'1')+'" value="'+it.qty+'" data-id="'+it.id+'">' +
+        '<button type="button" class="itemDelBtn" data-id="'+it.id+'" title="Bu kaydı sil">🗑️</button>' +
       '</div></div>';
   }
   function escapeHtml(s){ return String(s).replace(/[&<>"']/g, function(c){ return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]; }); }
@@ -1414,6 +1430,18 @@
   listEl.addEventListener('change', function(e){
     if(!e.target.classList.contains('qtyInput')) return;
     setQty(e.target.getAttribute('data-id'), e.target.value);
+  });
+  listEl.addEventListener('click', function(e){
+    var btn = e.target.closest('.itemDelBtn');
+    if(!btn) return;
+    var id = btn.getAttribute('data-id');
+    var idx = state.session.scans.findIndex(function(s){ return s.id === id; });
+    if(idx === -1) return;
+    var it = state.session.scans[idx];
+    if(!confirm('"' + it.name + '" kaydı (' + it.qty + ' ' + unitFor(it.barcode) + ') silinsin mi?')) return;
+    state.session.scans.splice(idx, 1);
+    save(); renderList();
+    autoQueueAndSync();
   });
   listEl.addEventListener('focusin', function(e){
     if(e.target.classList.contains('qtyInput')) e.target.select();
@@ -1769,19 +1797,61 @@
     if(!auth){ warnToast('Önce giriş yap'); return; }
     if(!navigator.onLine){ warnToast('İnternet yok — bu işlem için sunucuya bağlanmak gerekiyor'); return; }
     var url = state.serverUrl || DEFAULT_SERVER_URL;
-    adminResultEl.textContent = '⏳ Rapor hazırlanıyor… (büyük sayımlarda 1 dakikaya kadar sürebilir)';
+    adminResultEl.innerHTML = '<div class="hint">⏳ Rapor hazırlanıyor… (büyük sayımlarda 1 dakikaya kadar sürebilir)</div>';
     jsonpRequestP(url, { action: 'finalize', user: auth.user, pass: auth.pass }, function(err, data){
-      if(err){ adminResultEl.textContent = '❌ ' + err; return; }
-      if(!data || data.status === 'error'){ adminResultEl.textContent = '❌ ' + ((data && data.message) || 'bilinmeyen hata'); return; }
-      adminResultEl.textContent =
-        '✅ Rapor hazır — "Son Stok Sayimi" ve "Yönetici Raporu" sayfalarına yazıldı.\n\n' +
-        'Ürün çeşidi: ' + data.toplamCesit + '\n' +
-        'Toplam adet (birleştirilmiş): ' + data.toplamAdet + '\n' +
-        'Ortalama doğruluk: %' + data.ortalamaDogruluk + '\n' +
-        'Dikkat çeken fark sayısı: ' + data.anomaliSayisi +
-        (data.aiYorum ? ('\n\n🤖 ' + data.aiYorum) : '');
+      if(err){ adminResultEl.innerHTML = '<div class="hint" style="color:var(--red);">❌ ' + escapeHtml(err) + '</div>'; return; }
+      if(!data || data.status === 'error'){ adminResultEl.innerHTML = '<div class="hint" style="color:var(--red);">❌ ' + escapeHtml((data && data.message) || 'bilinmeyen hata') + '</div>'; return; }
+      adminResultEl.innerHTML = renderReportHtml(data);
     }, 90000);
   });
+
+  // Finalize sonucunu düz metin yerine okunaklı bir mini-rapor olarak
+  // gösterir — Sheets'e hiç geçmeden Yönetici Paneli içinde görülebilsin diye.
+  function renderReportHtml(data){
+    var pillsHtml =
+      '<div style="display:grid; grid-template-columns:1fr 1fr; gap:8px; margin:10px 0;">' +
+        statPill('📦', 'Ürün Çeşidi', data.toplamCesit) +
+        statPill('🔢', 'Toplam Adet', data.toplamAdet) +
+        statPill('🎯', 'Ortalama Doğruluk', '%' + data.ortalamaDogruluk) +
+        statPill('⚠️', 'Dikkat Çeken Fark', data.anomaliSayisi) +
+      '</div>';
+
+    var personelHtml = '';
+    if(data.personelListesi && data.personelListesi.length){
+      personelHtml = '<div style="font-weight:800; font-size:12.5px; margin:12px 0 6px;">👥 Personel Bazlı</div>' +
+        '<div style="border:1.5px solid var(--line); border-radius:10px; overflow:hidden;">' +
+        data.personelListesi.map(function(p, i){
+          return '<div style="display:flex; justify-content:space-between; align-items:center; padding:8px 10px; font-size:12px; ' + (i > 0 ? 'border-top:1px solid var(--line);' : '') + '">' +
+            '<span style="font-weight:700;">' + escapeHtml(p.personel) + '</span>' +
+            '<span style="color:var(--muted);">' + p.okutma + ' okutma · ' + p.farkliUrun + ' ürün · ' + p.hiz + '/saat</span>' +
+          '</div>';
+        }).join('') + '</div>';
+    }
+
+    var anomaliHtml = '';
+    if(data.anomaliler && data.anomaliler.length){
+      anomaliHtml = '<details style="margin-top:12px;">' +
+        '<summary style="cursor:pointer; font-weight:800; font-size:12.5px; color:var(--amber);">⚠️ ' + data.anomaliler.length + ' dikkat çeken fark — görmek için dokun</summary>' +
+        '<div style="font-size:11.5px; line-height:1.7; color:var(--muted); margin-top:6px; background:var(--panel2); padding:8px 10px; border-radius:8px;">' +
+          data.anomaliler.map(function(a){ return escapeHtml(a); }).join('<br>') +
+        '</div></details>';
+    }
+
+    var aiHtml = data.aiYorum
+      ? '<div style="margin-top:12px; background:rgba(85,70,234,.08); border:1.5px solid rgba(85,70,234,.25); border-radius:10px; padding:10px 12px; font-size:12.5px; line-height:1.6;">🤖 ' + escapeHtml(data.aiYorum) + '</div>'
+      : '';
+
+    return '<div style="font-weight:800; font-size:13px; color:var(--green);">✅ Rapor hazır</div>' +
+      '<div class="hint" style="margin:4px 0 0;">"Son Stok Sayimi" ve "Yönetici Raporu" sayfalarına da yazıldı.</div>' +
+      pillsHtml + personelHtml + anomaliHtml + aiHtml;
+  }
+  function statPill(emoji, label, value){
+    return '<div style="background:var(--panel2); border-radius:10px; padding:10px; text-align:center;">' +
+      '<div style="font-size:18px;">' + emoji + '</div>' +
+      '<div style="font-size:15px; font-weight:800; margin-top:2px;">' + value + '</div>' +
+      '<div style="font-size:10px; color:var(--muted); text-transform:uppercase; letter-spacing:.04em; margin-top:2px;">' + label + '</div>' +
+    '</div>';
+  }
 
   document.getElementById('adminClearBtn').addEventListener('click', function(){
     var auth = currentAuth();
