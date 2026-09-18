@@ -126,11 +126,17 @@
   .item .meta{font-size:10.5px; color:var(--muted); font-family:var(--mono); margin-top:3px;}
   .item .meta .oldStock{color:var(--amber); font-weight:700;}
   .qtyBox{display:flex; align-items:center; gap:8px;}
-  .qtyInput{font-family:var(--mono); font-weight:800; font-size:17px; width:56px; text-align:center;
-    background:var(--panel2); border:1.5px solid transparent; border-radius:var(--r-sm); color:var(--text); padding:8px 0; transition:border-color .15s;}
+  .qtyInput{font-family:var(--mono); font-weight:800; font-size:17px; width:56px; text-align:center;    background:var(--panel2); border:1.5px solid transparent; border-radius:var(--r-sm); color:var(--text); padding:8px 0; transition:border-color .15s;}
   .qtyInput:focus{outline:none; border-color:var(--accent);}
   .qtyInput::-webkit-outer-spin-button, .qtyInput::-webkit-inner-spin-button{-webkit-appearance:none; margin:0;}
   .qtyInput[type=number]{-moz-appearance:textfield;}
+  .qtyCalcRow{display:flex; align-items:center; justify-content:center; gap:6px; margin-top:12px;}
+  .qtyCalcInput{font-family:var(--mono); font-weight:700; font-size:14px; width:64px; text-align:center; background:var(--panel2); border:1.5px solid var(--line); border-radius:8px; padding:8px 4px; color:var(--text);}
+  .qtyCalcInput:focus{outline:none; border-color:var(--accent);}
+  .qtyCalcInput::-webkit-outer-spin-button, .qtyCalcInput::-webkit-inner-spin-button{-webkit-appearance:none; margin:0;}
+  .qtyCalcInput[type=number]{-moz-appearance:textfield;}
+  .qtyCalcX{font-weight:800; color:var(--muted); font-size:15px;}
+  .qtyCalcApplyBtn{background:var(--accent); color:#fff; width:38px; height:38px; border-radius:9px; font-size:17px; font-weight:800; padding:0; flex-shrink:0;}
   .empty{text-align:center; color:var(--muted); font-size:12.5px; padding:44px 20px; font-family:var(--mono); line-height:1.8;}
   .browseItem{user-select:none; -webkit-user-select:none; -webkit-touch-callout:none; touch-action:pan-y;}
   .browseItem:active{background:var(--panel2);}
@@ -159,7 +165,7 @@
 <div id="setup" class="screen">
   <header style="border:none; padding:0 0 16px; background:transparent;">
     <h1><img src="logo-header.png" alt="Murat Gıda" style="height:30px; width:auto; display:block;"></h1>
-    <div class="sub">Sayım · hızlı barkod • offline • Android • build 50</div>
+    <div class="sub">Sayım · hızlı barkod • offline • Android • build 51</div>
   </header>
 
   <div class="card" id="loginCard">
@@ -303,6 +309,12 @@
         <div id="qtyEntryName">—</div>
         <div id="qtyEntryMeta"></div>
         <input type="number" id="qtyEntryInput" inputmode="numeric" placeholder="Adet gir">
+        <div class="qtyCalcRow">
+          <input type="number" id="qtyCalcKoli" inputmode="numeric" placeholder="Koli" class="qtyCalcInput">
+          <span class="qtyCalcX">×</span>
+          <input type="number" id="qtyCalcPerKoli" inputmode="numeric" placeholder="Adet/Koli" class="qtyCalcInput">
+          <button type="button" id="qtyCalcApply" class="qtyCalcApplyBtn" title="Hesapla ve adete yaz">=</button>
+        </div>
         <div class="qtyEntryBtns">
           <button id="qtyEntryCancel">İptal</button>
           <button id="qtyEntryConfirm">Ekle</button>
@@ -1207,6 +1219,8 @@
   // ---------- ADET GİRİŞ KARTI ----------
   var qtyEntryEl = document.getElementById('qtyEntry');
   var qtyEntryInput = document.getElementById('qtyEntryInput');
+  var qtyCalcKoliEl = document.getElementById('qtyCalcKoli');
+  var qtyCalcPerKoliEl = document.getElementById('qtyCalcPerKoli');
 
   function openQtyEntry(){
     if(!pendingScan) return;
@@ -1231,6 +1245,8 @@
       qtyEntryInput.placeholder = 'Adet gir';
     }
     qtyEntryInput.value = '';
+    qtyCalcKoliEl.value = '';
+    qtyCalcPerKoliEl.value = '';
     setTimeout(function(){ qtyEntryInput.focus(); }, 80); // klavye otomatik açılsın
   }
 
@@ -1256,6 +1272,19 @@
   document.getElementById('qtyEntryCancel').addEventListener('click', closeQtyEntry);
   document.getElementById('qtyEntryConfirm').addEventListener('click', confirmQtyEntry);
   qtyEntryInput.addEventListener('keydown', function(e){ if(e.key === 'Enter') confirmQtyEntry(); });
+
+  // Koli × Adet/Koli hesap makinesi — blok/koli ürünlerde elle çarpma
+  // yapmaya gerek kalmadan toplam adedi doğrudan "Adet gir" kutusuna yazar.
+  function applyQtyCalc(){
+    var koli = parseFloat(qtyCalcKoliEl.value);
+    var perKoli = parseFloat(qtyCalcPerKoliEl.value);
+    if(isNaN(koli) || isNaN(perKoli) || koli < 0 || perKoli < 0){ warnToast('Koli ve adet/koli sayılarını gir'); return; }
+    qtyEntryInput.value = Math.round(koli * perKoli * 1000) / 1000;
+    qtyEntryInput.focus();
+  }
+  document.getElementById('qtyCalcApply').addEventListener('click', applyQtyCalc);
+  qtyCalcKoliEl.addEventListener('keydown', function(e){ if(e.key === 'Enter'){ e.preventDefault(); qtyCalcPerKoliEl.focus(); } });
+  qtyCalcPerKoliEl.addEventListener('keydown', function(e){ if(e.key === 'Enter'){ e.preventDefault(); applyQtyCalc(); } });
 
   function confirmQtyEntry(){
     if(!pendingScan) return;
