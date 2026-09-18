@@ -4,6 +4,12 @@
  * satır kalmayacak şekilde tamamen silip baştan yapıştırın).
  */
 
+// KOD SÜRÜMÜ — dağıtımın güncel olup olmadığını kontrol etmek için. Yeni
+// bir sürüm dağıttıktan sonra /exec adresini boş açtığında burada yazan
+// numarayı görmelisin; index.html'in üstündeki "build" numarasıyla
+// eşleşecek şekilde ben her ikisini birlikte güncelliyorum.
+var GS_VERSION = 'build57';
+
 function doGet(e) {
   // ?action=katalog ile ürün kataloğunu döndürür.
   // ?action=ilerleme ile ekip genelinde sayım ilerlemesini (%) döndürür.
@@ -63,7 +69,7 @@ function doGet(e) {
     return sayimSil(e.parameter.user, e.parameter.pass, e.parameter.kayitId, e.parameter.callback);
   }
   return ContentService
-    .createTextOutput('Sayım toplama servisi çalışıyor ✅ (' + new Date().toISOString() + ')')
+    .createTextOutput('Sayım toplama servisi çalışıyor ✅ kod sürümü: ' + GS_VERSION + ' (' + new Date().toISOString() + ')')
     .setMimeType(ContentService.MimeType.TEXT);
 }
 

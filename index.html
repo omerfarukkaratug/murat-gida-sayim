@@ -91,6 +91,19 @@
   #qtyEntry{padding:20px 16px; background:var(--panel2);}
   .qtyEntryCard{text-align:center; background:var(--panel); border-radius:var(--r-lg); padding:20px 16px; box-shadow:var(--sh-md);}
   #qtyEntryName{font-size:19px; font-weight:800; margin-bottom:2px;}
+  .barcodeDisplay{font-family:var(--mono); font-size:26px; font-weight:800; letter-spacing:.03em; margin-bottom:8px; word-break:break-all;}
+  .barcodeDisplay .bc-a{color:var(--text);}
+  .barcodeDisplay .bc-b{color:var(--accent);}
+  .duzeltRow{background:var(--panel2); border-radius:10px; padding:8px 10px; margin-bottom:6px; user-select:none; -webkit-user-select:none; touch-action:pan-y;}
+  .duzeltRow.editing{background:rgba(85,70,234,.08); border:1.5px solid var(--accent);}
+  .duzeltMeta{font-size:10px; color:var(--muted); font-family:var(--mono); margin-bottom:3px;}
+  .duzeltMain{display:flex; justify-content:space-between; align-items:center; font-size:12px; gap:8px;}
+  .duzeltAd{font-weight:700; flex:1;}
+  .duzeltAdetDisplay{font-family:var(--mono); font-weight:800; white-space:nowrap;}
+  .duzeltEdit{display:flex; gap:6px; align-items:center; margin-top:8px;}
+  .duzeltEdit .duzeltAdet{flex:1; padding:6px; font-size:12px; font-family:var(--mono);}
+  .duzeltEdit .duzeltKaydet{background:var(--accent); color:#fff; padding:6px 10px; font-size:11px; font-weight:700; border-radius:7px;}
+  .duzeltEdit .duzeltSil{background:transparent; border:none; color:var(--red); font-size:17px; padding:0 4px;}
   #qtyEntryMeta{font-size:12px; color:var(--muted); font-family:var(--mono); margin-bottom:16px;}
   #qtyEntryInput, #newProductQty{width:100%; font-size:30px; font-weight:800; text-align:center; font-family:var(--mono);
     padding:15px; border-radius:var(--r-sm); border:2px solid var(--accent); background:var(--panel2); color:var(--text); margin-bottom:14px;}
@@ -167,7 +180,7 @@
 <div id="setup" class="screen">
   <header style="border:none; padding:0 0 16px; background:transparent;">
     <h1><img src="logo-header.png" alt="Murat Gıda" style="height:30px; width:auto; display:block;"></h1>
-    <div class="sub">Sayım · hızlı barkod • offline • Android • build 57</div>
+    <div class="sub">Sayım · hızlı barkod • offline • Android • build 58</div>
   </header>
 
   <div class="card" id="loginCard">
@@ -311,6 +324,7 @@
     <div id="qtyEntry" class="hidden">
       <div class="qtyEntryCard">
         <div id="qtyEntryName">—</div>
+        <div id="qtyEntryBarcode" class="barcodeDisplay"></div>
         <div id="qtyEntryMeta"></div>
         <input type="number" id="qtyEntryInput" inputmode="numeric" placeholder="Adet gir">
         <div class="qtyCalcRow">
@@ -500,7 +514,11 @@
       </div>
 
       <div id="adminSectionDuzelt" class="hidden" style="border-top:1px solid var(--line); margin:14px 0 12px; padding-top:12px;">
-        <div style="font-weight:800; font-size:13px; margin-bottom:8px;">✏️ Sayım Kayıtlarını Düzelt</div>
+        <div style="display:flex; align-items:center; gap:6px; margin-bottom:8px;">
+          <div style="font-weight:800; font-size:13px;">✏️ Sayım Kayıtlarını Düzelt</div>
+          <button type="button" id="adminDuzeltInfoBtn" title="Nasıl kullanılır?" style="background:var(--panel2); border:1.5px solid var(--line); color:var(--accent); width:20px; height:20px; border-radius:50%; font-size:11px; font-weight:800; padding:0; line-height:1; display:flex; align-items:center; justify-content:center; flex-shrink:0;">ⓘ</button>
+        </div>
+        <div id="adminDuzeltInfo" class="hint hidden" style="margin-bottom:8px;">Aşağıda sayılan ürünlerin canlı tablosu görünür (Saat · Stok Kodu · Barkod · Ürün · Adet). Bir satırın üstüne yaklaşık yarım saniye basılı tut — açılan kutudan adedi değiştir ya da 🗑️ ile sil.</div>
         <input type="text" id="adminDuzeltSearch" placeholder="Ürün, personel, barkod veya stok kodu ara…" style="margin-bottom:8px;">
         <div id="adminDuzeltList"><div class="hint">Ürün adı ya da personel adı yazıp ara, ya da boş bırakıp son kayıtları gör.</div></div>
       </div>
@@ -1311,6 +1329,20 @@
   var qtyCalcOps = ['×', '+', '−'];
   var qtyCalcOpIndex = 0;
 
+  // Barkodu 2'şerli gruplara ayırıp aralarına ayraç koymadan (bitişik)
+  // iki rengi sırayla uygular — böylece göz uzun rakam dizisini daha kolay
+  // takip edip fiziksel üründeki barkodla karşılaştırabilir.
+  function formatBarcodeColored(code){
+    code = String(code || '');
+    var out = '', colorToggle = false;
+    for(var i = 0; i < code.length; i += 2){
+      var grp = code.substr(i, 2);
+      out += '<span class="' + (colorToggle ? 'bc-b' : 'bc-a') + '">' + escapeHtml(grp) + '</span>';
+      colorToggle = !colorToggle;
+    }
+    return out;
+  }
+
   function openQtyEntry(){
     if(!pendingScan) return;
     document.getElementById('scanPlaceholder').classList.add('hidden');
@@ -1320,6 +1352,7 @@
       .reduce(function(sum,s){ return sum + s.qty; }, 0);
     var unit = unitFor(pendingScan.barcode);
     document.getElementById('qtyEntryName').textContent = pendingScan.name;
+    document.getElementById('qtyEntryBarcode').innerHTML = formatBarcodeColored(pendingScan.barcode);
     document.getElementById('qtyEntryMeta').textContent =
       (unit === 'Kg' ? 'Dökme ürün (Kg) · ' : '') +
       (pendingScan.oldStock !== '' ? 'Sistem: ' + pendingScan.oldStock + ' · ' : '') +
@@ -1947,6 +1980,10 @@
     var q = e.target.value;
     duzeltDebounce = setTimeout(function(){ fetchDuzeltSonuclari(q); }, 400);
   });
+  document.getElementById('adminDuzeltInfoBtn').addEventListener('click', function(){
+    document.getElementById('adminDuzeltInfo').classList.toggle('hidden');
+    fetchDuzeltSonuclari(document.getElementById('adminDuzeltSearch').value); // canlı tabloyu tazele
+  });
 
   function fetchDuzeltSonuclari(q){
     var auth = currentAuth();
@@ -1959,43 +1996,72 @@
       if(!data || data.status === 'error'){ listEl3.innerHTML = '<div class="hint" style="color:var(--red);">❌ ' + escapeHtml((data && data.message) || 'hata') + '</div>'; return; }
       if(!data.sonuclar || data.sonuclar.length === 0){ listEl3.innerHTML = '<div class="hint">Sonuç yok.</div>'; return; }
       listEl3.innerHTML = data.sonuclar.map(function(r){
-        return '<div class="duzeltRow" data-kayit-id="' + escAttr(r.kayitId) + '" style="background:var(--panel2); border-radius:10px; padding:8px 10px; margin-bottom:6px;">' +
-          '<div style="font-size:12px; font-weight:700;">' + escapeHtml(r.ad) + '</div>' +
-          '<div style="font-size:10.5px; color:var(--muted); margin-bottom:6px;">' + escapeHtml(r.personel) + ' · ' + escapeHtml(r.tarih) + ' ' + escapeHtml(r.saat) + (r.reyon ? (' · ' + escapeHtml(r.reyon)) : '') + '</div>' +
-          '<div style="display:flex; gap:6px; align-items:center;">' +
-            '<input type="number" class="duzeltAdet" value="' + escAttr(r.adet) + '" style="flex:1; padding:6px; font-size:12px; font-family:var(--mono);">' +
-            '<button type="button" class="duzeltKaydet" style="background:var(--accent); color:#fff; padding:6px 10px; font-size:11px; font-weight:700; border-radius:7px;">Kaydet</button>' +
-            '<button type="button" class="duzeltSil" style="background:transparent; border:none; color:var(--red); font-size:17px; padding:0 4px;">🗑️</button>' +
+        return '<div class="duzeltRow" data-kayit-id="' + escAttr(r.kayitId) + '" data-birim="' + escAttr(r.birim || 'Adet') + '">' +
+          '<div class="duzeltMeta">' + escapeHtml(r.saat) + ' · ' + escapeHtml(r.stokKodu || '—') + ' · ' + escapeHtml(r.barkod || '—') + ' · ' + escapeHtml(r.personel) + (r.reyon ? (' · ' + escapeHtml(r.reyon)) : '') + '</div>' +
+          '<div class="duzeltMain">' +
+            '<span class="duzeltAd">' + escapeHtml(r.ad) + '</span>' +
+            '<span class="duzeltAdetDisplay">' + escapeHtml(r.adet) + ' ' + escapeHtml(r.birim || 'Adet') + '</span>' +
+          '</div>' +
+          '<div class="duzeltEdit hidden">' +
+            '<input type="number" class="duzeltAdet" value="' + escAttr(r.adet) + '">' +
+            '<button type="button" class="duzeltKaydet">Kaydet</button>' +
+            '<button type="button" class="duzeltSil">🗑️</button>' +
           '</div></div>';
       }).join('');
-      listEl3.querySelectorAll('.duzeltKaydet').forEach(function(btn){
-        btn.addEventListener('click', function(){
-          var row = btn.closest('.duzeltRow');
-          var kayitId = row.getAttribute('data-kayit-id');
-          var yeniAdet = row.querySelector('.duzeltAdet').value;
-          var auth2 = currentAuth();
-          btn.textContent = '⏳';
-          jsonpRequestP(state.serverUrl || DEFAULT_SERVER_URL, { action:'sayim_guncelle', user:auth2.user, pass:auth2.pass, kayitId: kayitId, adet: yeniAdet }, function(err2, res2){
-            if(err2 || !res2 || res2.status === 'error'){ warnToast('❌ ' + (err2 || (res2 && res2.message) || 'güncellenemedi')); btn.textContent = 'Kaydet'; return; }
-            successToast('Güncellendi'); btn.textContent = 'Kaydet';
-          }, 20000);
-        });
-      });
-      listEl3.querySelectorAll('.duzeltSil').forEach(function(btn){
-        btn.addEventListener('click', function(){
-          var row = btn.closest('.duzeltRow');
-          var kayitId = row.getAttribute('data-kayit-id');
-          if(!window.confirm('Bu kayıt tamamen silinsin mi?')) return;
-          var auth2 = currentAuth();
-          jsonpRequestP(state.serverUrl || DEFAULT_SERVER_URL, { action:'sayim_sil', user:auth2.user, pass:auth2.pass, kayitId: kayitId }, function(err2, res2){
-            if(err2 || !res2 || res2.status === 'error'){ warnToast('❌ ' + (err2 || (res2 && res2.message) || 'silinemedi')); return; }
-            row.remove();
-            successToast('Silindi');
-          }, 20000);
-        });
-      });
     }, 20000);
   }
+
+  // Basılı tutma (uzun basma) ile satırı düzenleme moduna alma — tek
+  // seferlik "event delegation" ile bağlanır, her yeniden çizimde tekrar
+  // dinleyici eklemeye gerek kalmaz.
+  (function(){
+    var listEl3 = document.getElementById('adminDuzeltList');
+    var pressTimer = null;
+    function clearPress(){ if(pressTimer){ clearTimeout(pressTimer); pressTimer = null; } }
+    listEl3.addEventListener('pointerdown', function(e){
+      var row = e.target.closest('.duzeltRow');
+      if(!row || e.target.closest('.duzeltEdit')) return;
+      pressTimer = setTimeout(function(){
+        row.classList.toggle('editing');
+        row.querySelector('.duzeltEdit').classList.toggle('hidden');
+        if(navigator.vibrate) navigator.vibrate(15);
+        pressTimer = null;
+      }, 500);
+    });
+    ['pointerup','pointercancel','pointerleave','scroll'].forEach(function(ev){
+      listEl3.addEventListener(ev, clearPress, true);
+    });
+    listEl3.addEventListener('click', function(e){
+      var kaydetBtn = e.target.closest('.duzeltKaydet');
+      var silBtn = e.target.closest('.duzeltSil');
+      if(kaydetBtn){
+        var row = kaydetBtn.closest('.duzeltRow');
+        var kayitId = row.getAttribute('data-kayit-id');
+        var birim = row.getAttribute('data-birim') || 'Adet';
+        var yeniAdet = row.querySelector('.duzeltAdet').value;
+        var auth2 = currentAuth();
+        kaydetBtn.textContent = '⏳';
+        jsonpRequestP(state.serverUrl || DEFAULT_SERVER_URL, { action:'sayim_guncelle', user:auth2.user, pass:auth2.pass, kayitId: kayitId, adet: yeniAdet }, function(err2, res2){
+          kaydetBtn.textContent = 'Kaydet';
+          if(err2 || !res2 || res2.status === 'error'){ warnToast('❌ ' + (err2 || (res2 && res2.message) || 'güncellenemedi')); return; }
+          row.querySelector('.duzeltAdetDisplay').textContent = yeniAdet + ' ' + birim;
+          row.classList.remove('editing');
+          row.querySelector('.duzeltEdit').classList.add('hidden');
+          successToast('Güncellendi');
+        }, 20000);
+      } else if(silBtn){
+        var row2 = silBtn.closest('.duzeltRow');
+        var kayitId2 = row2.getAttribute('data-kayit-id');
+        if(!window.confirm('Bu kayıt tamamen silinsin mi?')) return;
+        var auth3 = currentAuth();
+        jsonpRequestP(state.serverUrl || DEFAULT_SERVER_URL, { action:'sayim_sil', user:auth3.user, pass:auth3.pass, kayitId: kayitId2 }, function(err3, res3){
+          if(err3 || !res3 || res3.status === 'error'){ warnToast('❌ ' + (err3 || (res3 && res3.message) || 'silinemedi')); return; }
+          row2.remove();
+          successToast('Silindi');
+        }, 20000);
+      }
+    });
+  })();
 
   // ---------- SON STOK SAYIMINI CSV OLARAK İNDİRME ----------
   document.getElementById('adminExportBtn').addEventListener('click', function(){
