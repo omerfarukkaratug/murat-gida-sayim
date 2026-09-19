@@ -189,7 +189,7 @@
   <header style="border:none; padding:0 0 16px; background:transparent; display:flex; align-items:flex-start; justify-content:space-between;">
     <div>
       <h1><img src="logo-header.png" alt="Murat Gıda" style="height:30px; width:auto; display:block;"></h1>
-      <div class="sub">Sayım · hızlı barkod • offline • Android • build 59</div>
+      <div class="sub">Sayım · hızlı barkod • offline • Android • build 60</div>
     </div>
     <button type="button" id="themeToggleBtn" title="Karanlık / Aydınlık tema" style="background:var(--panel2); border:1.5px solid var(--line); color:var(--text); width:34px; height:34px; border-radius:50%; font-size:15px; padding:0; display:flex; align-items:center; justify-content:center; flex-shrink:0;">🌙</button>
   </header>
@@ -709,7 +709,7 @@
   // ve unutulursa o telefon sessizce eski/ölü adrese takılı kalır), HER
   // SEFERİNDE güncel adrese zorluyoruz. Bu, hangi eski sürümden geliniyor
   // olursa olsun kesin ve kalıcı bir düzeltme sağlar.
-  var DEFAULT_SERVER_URL = 'https://script.google.com/macros/s/AKfycbwJ8GrGDEQczntnz6zA_rCaSPHmOXGV11dvOAebk2HsN86sq5N7xFSbnEgaNWpyWHI/exec';
+  var DEFAULT_SERVER_URL = 'https://script.google.com/macros/s/AKfycbwH0hVGDXIQhdSxg2neDBNUEOxY1SNacJRz4cqf3WaP8xgAhlEnKfRv5xnlENKnh3XuYA/exec';
   if (state.serverUrl !== DEFAULT_SERVER_URL) { state.serverUrl = DEFAULT_SERVER_URL; save(); }
 
   serverInput.value = state.serverUrl || DEFAULT_SERVER_URL;
