@@ -149,6 +149,9 @@
   .qtyBox{display:flex; align-items:center; gap:8px;}
   .itemDelBtn{background:transparent; border:none; color:var(--red); font-size:17px; padding:4px; flex-shrink:0; line-height:1;}
   .syncDot{display:inline-block; width:8px; height:8px; border-radius:50%; margin-right:6px; vertical-align:middle;}
+  .browseTableHead{position:sticky; top:0; z-index:1; display:flex; justify-content:space-between; align-items:center; background:var(--panel2); border-bottom:1.5px solid var(--line); padding:7px 12px; font-size:10.5px; font-weight:800; color:var(--muted); text-transform:uppercase; letter-spacing:.04em; margin:-10px -12px 6px;}
+  .browseItem:nth-child(even){background:var(--panel2);}
+  .browseItem{border-radius:8px; padding:9px 10px;}
   .qtyInput{font-family:var(--mono); font-weight:800; font-size:17px; width:56px; text-align:center;    background:var(--panel2); border:1.5px solid transparent; border-radius:var(--r-sm); color:var(--text); padding:8px 0; transition:border-color .15s;}
   .qtyInput:focus{outline:none; border-color:var(--accent);}
   .qtyInput::-webkit-outer-spin-button, .qtyInput::-webkit-inner-spin-button{-webkit-appearance:none; margin:0;}
@@ -189,7 +192,7 @@
   <header style="border:none; padding:0 0 16px; background:transparent; display:flex; align-items:flex-start; justify-content:space-between;">
     <div>
       <h1><img src="logo-header.png" alt="Murat Gıda" style="height:30px; width:auto; display:block;"></h1>
-      <div class="sub">Sayım · hızlı barkod • offline • Android • build 62</div>
+      <div class="sub">Sayım · hızlı barkod • offline • Android • build 65</div>
     </div>
     <button type="button" id="themeToggleBtn" title="Karanlık / Aydınlık tema" style="background:var(--panel2); border:1.5px solid var(--line); color:var(--text); width:34px; height:34px; border-radius:50%; font-size:15px; padding:0; display:flex; align-items:center; justify-content:center; flex-shrink:0;">🌙</button>
   </header>
@@ -416,9 +419,14 @@
         <div style="font-weight:800; font-size:16px;">Sayılan Ürünler</div>
         <button type="button" id="browseCloseTopBtn" aria-label="Kapat" style="width:34px; height:34px; border-radius:50%; background:var(--panel2); border:1.5px solid var(--line); color:var(--text); font-size:18px; line-height:1; padding:0; display:flex; align-items:center; justify-content:center;">✕</button>
       </div>
-      <div style="position:relative; margin-bottom:10px;">
-        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.3" stroke-linecap="round" style="position:absolute; left:12px; top:50%; transform:translateY(-50%); color:var(--muted); pointer-events:none;"><circle cx="11" cy="11" r="7"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
-        <input type="text" id="browseSearchInput" placeholder="Ürün adı veya barkod ara" style="padding-left:34px;">
+      <div style="position:relative; margin-bottom:10px; display:flex; gap:8px;">
+        <div style="position:relative; flex:1;">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.3" stroke-linecap="round" style="position:absolute; left:12px; top:50%; transform:translateY(-50%); color:var(--muted); pointer-events:none;"><circle cx="11" cy="11" r="7"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+          <input type="text" id="browseSearchInput" placeholder="Ürün adı, barkod veya stok kodu ara" style="padding-left:34px;">
+        </div>
+        <button type="button" id="browseScanBtn" title="Barkod okutarak ara" style="width:44px; flex-shrink:0; background:var(--accent); color:#fff; border:none; border-radius:var(--r-sm); display:flex; align-items:center; justify-content:center; padding:0;">
+          <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2Z"/><circle cx="12" cy="13" r="4"/></svg>
+        </button>
       </div>
       <select id="browseReyonSelect" style="width:100%; margin-bottom:10px; background:var(--panel2); border:1.5px solid var(--line); border-radius:var(--r-sm); padding:11px 12px; font-size:13px; font-weight:700; color:var(--text);">
         <option value="">Tüm Reyonlar</option>
@@ -458,6 +466,16 @@
         <button id="browseEditSave">Kaydet</button>
       </div>
     </div>
+  </div>
+
+  <!-- "Tüm Sayılanlar" ekranından ürün aramak için ayrı, basit bir barkod okuyucu -->
+  <div id="browseScanOverlay" class="hidden" style="position:fixed; inset:0; z-index:49; background:#000; display:flex; align-items:center; justify-content:center;">
+    <video id="browseVideo" playsinline autoplay muted style="width:100%; height:100%; object-fit:cover;"></video>
+    <div style="position:absolute; inset:0; display:flex; flex-direction:column; align-items:center; justify-content:center; pointer-events:none;">
+      <div style="width:74%; max-width:320px; aspect-ratio:5/3; border:3px solid rgba(255,255,255,.85); border-radius:16px;"></div>
+      <div style="color:#fff; font-weight:700; margin-top:16px; text-shadow:0 1px 3px rgba(0,0,0,.6);">Barkodu çerçeveye getir</div>
+    </div>
+    <button type="button" id="browseScanCloseBtn" aria-label="Kapat" style="position:absolute; top:18px; right:18px; width:38px; height:38px; border-radius:50%; background:rgba(0,0,0,.5); border:none; color:#fff; font-size:18px; line-height:1; display:flex; align-items:center; justify-content:center;">✕</button>
   </div>
 
   <!-- Ekip genelinde sayım ilerlemesi (sunucudan çekilir, tüm telefonların toplamı) -->
@@ -1463,18 +1481,19 @@
       }
     }
     var t = nowParts();
-    // Her okutma AYRI bir kayıt olarak eklenir, var olan kayıtla birleştirilmez.
-    // Ürünler ancak Excel/Google Tablo'ya giderken toplanır.
+    // Her okutma AYRI bir kayıt olarak eklenir, var olan kayıtla anlık
+    // birleştirilmez — toplama sadece "Sayımı Bitir ve Rapor Oluştur"
+    // çalıştığında, sunucu tarafında (aynı stok kodu/barkod için) yapılır.
     state.session.scans.push({
       id: makeId(), name: pendingScan.name, barcode: pendingScan.barcode,
       stockCode: pendingScan.stockCode, oldStock: pendingScan.oldStock,
       qty: addQty, unit: unit, date: t.date, time: t.time, ts: t.ts, reyon: state.reyon || ''
     });
+    successToast(pendingScan.name + ': ' + addQty + ' ' + unit + ' eklendi');
     save();
     renderList();
     whoLabel.textContent = state.personnel + " · " + countDistinctProducts() + " kalem";
     beep(880, 70, 0.13); if(navigator.vibrate) navigator.vibrate(35); // eklendi onayı — sesli + titreşimli
-    successToast(pendingScan.name + ': ' + addQty + ' ' + unit + ' eklendi');
     pendingScan = null;
     qtyEntryEl.classList.add('hidden');
     if(autoRescan){ startCamera(); } else { showPlaceholder(); }
@@ -1643,15 +1662,69 @@
     setTimeout(function(){ browseSearchInput.focus(); }, 80);
   });
   document.getElementById('browseCloseBtn').addEventListener('click', function(){
+    stopBrowseScan();
     browseScreenEl.classList.add('hidden');
   });
   document.getElementById('browseCloseTopBtn').addEventListener('click', function(){
+    stopBrowseScan();
     browseScreenEl.classList.add('hidden');
   });
   document.getElementById('browseClearFilterBtn').addEventListener('click', function(){
     browseFromInput.value = ''; browseToInput.value = ''; browseReyonSelect.value = '';
     renderBrowseList();
   });
+
+  // ---------- "Tüm Sayılanlar" için ayrı, basit barkod okuyucu ----------
+  // Ana sayım kamerasından (startCamera/stopCamera) bilerek AYRI tutuldu —
+  // burada amaç yeni bir ürün eklemek değil, zaten sayılmış bir ürünü hızlıca
+  // bulup listede göstermek, o yüzden kendi akışı ve durumu var.
+  var browseCameraStream = null;
+  var browseDetecting = false;
+  var browseLastCode = null, browseLastTime = 0;
+  function startBrowseScan(){
+    if(!('BarcodeDetector' in window)){ errorToast("Bu tarayıcı otomatik taramayı desteklemiyor — barkodu elle yaz"); return; }
+    document.getElementById('browseScanOverlay').classList.remove('hidden');
+    navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } })
+      .then(function(stream){
+        browseCameraStream = stream;
+        document.getElementById('browseVideo').srcObject = stream;
+        var detector = new BarcodeDetector({ formats: ['ean_13','ean_8','upc_a','upc_e','code_128','code_39','codabar','itf','qr_code'] });
+        browseDetecting = true;
+        browseScanLoop(detector);
+      })
+      .catch(function(err){
+        errorToast("Kamera açılamadı — izinleri kontrol edin");
+        stopBrowseScan();
+      });
+  }
+  function stopBrowseScan(){
+    browseDetecting = false;
+    if(browseCameraStream){ browseCameraStream.getTracks().forEach(function(tr){ tr.stop(); }); browseCameraStream = null; }
+    document.getElementById('browseScanOverlay').classList.add('hidden');
+  }
+  function browseScanLoop(detector){
+    if(!browseDetecting) return;
+    var v = document.getElementById('browseVideo');
+    if(v.readyState >= 2){
+      detector.detect(v).then(function(codes){
+        if(codes.length){
+          var val = codes[0].rawValue;
+          var t = Date.now();
+          if(val !== browseLastCode || (t - browseLastTime) > 1500){
+            browseLastCode = val; browseLastTime = t;
+            if(navigator.vibrate) navigator.vibrate(30);
+            stopBrowseScan();
+            browseSearchInput.value = val;
+            renderBrowseList();
+          }
+        }
+      }).catch(function(){});
+    }
+    if(browseDetecting) requestAnimationFrame(function(){ browseScanLoop(detector); });
+  }
+  document.getElementById('browseScanBtn').addEventListener('click', startBrowseScan);
+  document.getElementById('browseScanCloseBtn').addEventListener('click', stopBrowseScan);
+
   browseSearchInput.addEventListener('input', renderBrowseList);
   browseReyonSelect.addEventListener('change', renderBrowseList);
   browseSortSelect.addEventListener('change', renderBrowseList);
@@ -1670,7 +1743,7 @@
     if(term){
       var kelimeler = term.toLocaleLowerCase('tr').split(/\s+/).filter(Boolean);
       items = items.filter(function(it){
-        var hedef = it.name.toLocaleLowerCase('tr') + ' ' + it.barcode.toLowerCase();
+        var hedef = it.name.toLocaleLowerCase('tr') + ' ' + it.barcode.toLowerCase() + ' ' + (it.stockCode||'').toLowerCase();
         return kelimeler.every(function(k){ return hedef.indexOf(k) !== -1; });
       });
     }
@@ -1690,7 +1763,13 @@
       browseResultsEl.innerHTML = '<div class="empty">Eşleşen kayıt yok — arama, reyon veya tarih aralığını kontrol et</div>';
       return;
     }
-    browseResultsEl.innerHTML = items.map(browseItemRowHtml).join('');
+    var toplamAdet = items.reduce(function(s,it){ return s + it.qty; }, 0);
+    browseResultsEl.innerHTML =
+      '<div class="browseTableHead">' +
+        '<span>' + items.length + ' kayıt · ' + toplamAdet + ' adet</span>' +
+        '<span style="display:flex; gap:36px;"><span>ÜRÜN</span><span>ADET</span></span>' +
+      '</div>' +
+      items.map(browseItemRowHtml).join('');
   }
 
   function browseItemRowHtml(it){
@@ -1698,13 +1777,14 @@
     if(it.oldStock !== '' && it.oldStock !== undefined && !isNaN(Number(it.oldStock))){
       oldStockHtml = ' · <span class="oldStock">Sistem: '+escapeHtml(it.oldStock)+'</span>';
     }
+    var stockHtml = it.stockCode ? ' · <span class="oldStock">'+escapeHtml(it.stockCode)+'</span>' : '';
     var reyonHtml = it.reyon ? ' · <span class="oldStock">'+escapeHtml(it.reyon)+'</span>' : '';
     var unit = unitFor(it.barcode);
     var sent = isScanSent(it.id);
     var syncDot = '<span class="syncDot" title="'+(sent?'Dosyaya gönderildi':'Henüz dosyaya gönderilmedi')+'" style="background:'+(sent?'var(--green)':'var(--red)')+';"></span>';
     return '<div class="item browseItem" data-browse-id="'+it.id+'">' +
       '<div class="info"><div class="name">'+syncDot+escapeHtml(it.name)+'</div>' +
-      '<div class="meta">'+escapeHtml(it.barcode)+' · '+it.date+' '+it.time+oldStockHtml+reyonHtml+'</div></div>' +
+      '<div class="meta">'+escapeHtml(it.barcode)+stockHtml+' · '+it.date+' '+it.time+oldStockHtml+reyonHtml+'</div></div>' +
       '<div class="qtyBox" style="font-family:var(--mono); font-weight:800; font-size:16px;">'+it.qty+' '+unit+'</div>' +
     '</div>';
   }

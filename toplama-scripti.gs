@@ -8,7 +8,20 @@
 // bir sürüm dağıttıktan sonra /exec adresini boş açtığında burada yazan
 // numarayı görmelisin; index.html'in üstündeki "build" numarasıyla
 // eşleşecek şekilde ben her ikisini birlikte güncelliyorum.
-var GS_VERSION = 'build62';
+var GS_VERSION = 'build65';
+
+// Sheets'te "Saat" sütunu zaman biçimli olarak algılanırsa, hücre değeri düz
+// metin değil bir Date nesnesi olarak gelir ve String(...) çirkin bir çıktı
+// üretir (örn. "Sat Dec 30 1899..."). Bu yardımcılar hem düz metni hem Date
+// nesnesini düzgün biçimde okunabilir metne çevirir.
+function formatTimeValue(v) {
+  if (v instanceof Date) return Utilities.formatDate(v, Session.getScriptTimeZone() || 'GMT+3', 'HH:mm:ss');
+  return String(v || '');
+}
+function formatDateValue(v) {
+  if (v instanceof Date) return Utilities.formatDate(v, Session.getScriptTimeZone() || 'GMT+3', 'yyyy-MM-dd');
+  return String(v || '');
+}
 
 function doGet(e) {
   // ?action=katalog ile ürün kataloğunu döndürür.
@@ -462,27 +475,59 @@ function handleFinalize(user, pass, callback) {
       });
     }
 
-    var groups = {};
+    // 1. ADIM: Aynı BARKOD birden çok kez okutulmuşsa (koli koli / parça
+    //    parça sayım), hepsini TOPLA — düzeltme ihtiyacı olan yanlış bir
+    //    okutma varsa zaten "Sayım Kayıtlarını Düzelt" ekranından tek tek
+    //    silinip/değiştirilebiliyor, o yüzden burada "son kazanır" değil
+    //    "hepsi toplanır" mantığı doğru olan.
+    var byBarcode = {};
     rows.forEach(function (r) {
       var stockCode = String(r[idx['Stok Kodu']] || '').trim();
       var barcode = String(r[idx['Barkod']] || '').trim();
-      var key = stockCode || ('B:' + barcode);
-      if (key === 'B:' || !key) return;
-      var ts = String(r[idx['Tarih']]) + ' ' + String(r[idx['Saat']]);
-      if (!groups[key]) {
-        groups[key] = {
+      var key = barcode || ('S:' + stockCode);
+      if (!key || key === 'S:') return;
+      var ts = formatDateValue(r[idx['Tarih']]) + ' ' + formatTimeValue(r[idx['Saat']]);
+      if (!byBarcode[key]) {
+        byBarcode[key] = {
           stockCode: stockCode, barcode: barcode, name: String(r[idx['Ürün Adı']] || ''),
           unit: String(r[idx['Birim']] || 'Adet'), oldStock: r[idx['Eski Stok']],
-          finalQty: Number(r[idx['Sayılan Adet']]) || 0, lastPersonnel: String(r[idx['Personel']] || ''),
+          qty: 0, lastPersonnel: String(r[idx['Personel']] || ''),
           lastTs: ts, scanCount: 0
         };
       }
-      groups[key].scanCount++;
-      if (ts >= groups[key].lastTs) {
-        groups[key].lastTs = ts;
-        groups[key].finalQty = Number(r[idx['Sayılan Adet']]) || 0;
-        groups[key].lastPersonnel = String(r[idx['Personel']] || '');
-        if (r[idx['Eski Stok']] !== '' && r[idx['Eski Stok']] !== undefined) groups[key].oldStock = r[idx['Eski Stok']];
+      byBarcode[key].scanCount++;
+      byBarcode[key].qty += Number(r[idx['Sayılan Adet']]) || 0;
+      if (ts >= byBarcode[key].lastTs) {
+        byBarcode[key].lastTs = ts;
+        byBarcode[key].lastPersonnel = String(r[idx['Personel']] || '');
+        if (r[idx['Eski Stok']] !== '' && r[idx['Eski Stok']] !== undefined) byBarcode[key].oldStock = r[idx['Eski Stok']];
+      }
+    });
+
+    // 2. ADIM: Aynı STOK KODU altındaki FARKLI barkodların (1. adımdaki
+    //    final değerlerini) TOPLA — bunlar gerçek anlamda ayrı sayımlardır
+    //    (örn. aynı ürünün 2 farklı barkodu), aynı barkodun tekrarı değil.
+    //    "Eski Stok" toplanmaz — kataloğa aynı stok kodu için hangi barkod
+    //    satırında girildiyse o değer (hepsinde aynı olması beklenir) esas
+    //    alınır.
+    var groups = {};
+    Object.keys(byBarcode).forEach(function (bKey) {
+      var b = byBarcode[bKey];
+      var key = b.stockCode || ('B:' + b.barcode);
+      if (!groups[key]) {
+        groups[key] = {
+          stockCode: b.stockCode, barcodes: [], name: b.name,
+          unit: b.unit, oldStock: b.oldStock, finalQty: 0,
+          lastPersonnel: b.lastPersonnel, lastTs: b.lastTs, scanCount: 0
+        };
+      }
+      groups[key].finalQty += b.qty;
+      groups[key].scanCount += b.scanCount;
+      if (groups[key].barcodes.indexOf(b.barcode) === -1) groups[key].barcodes.push(b.barcode);
+      if (b.lastTs >= groups[key].lastTs) {
+        groups[key].lastTs = b.lastTs;
+        groups[key].lastPersonnel = b.lastPersonnel;
+        if (b.oldStock !== '' && b.oldStock !== undefined) groups[key].oldStock = b.oldStock;
       }
     });
 
@@ -491,7 +536,7 @@ function handleFinalize(user, pass, callback) {
     var anomaliler = [];
     Object.keys(groups).forEach(function (key) {
       var g = groups[key];
-      var canonName = (g.stockCode && canonByStock[g.stockCode]) || canonByBarcode[g.barcode] || g.name;
+      var canonName = (g.stockCode && canonByStock[g.stockCode]) || canonByBarcode[g.barcodes[0]] || g.name;
       var oldStockNum = (g.oldStock !== '' && g.oldStock !== undefined && !isNaN(Number(g.oldStock))) ? Number(g.oldStock) : null;
       var fark = oldStockNum !== null ? (g.finalQty - oldStockNum) : '';
       toplamAdet += g.finalQty;
@@ -502,7 +547,7 @@ function handleFinalize(user, pass, callback) {
           anomaliler.push(canonName + ' (Stok Kodu: ' + (g.stockCode || '-') + '): eski ' + oldStockNum + ', sayılan ' + g.finalQty + ', fark ' + fark);
         }
       }
-      finalRows.push([g.stockCode, canonName, g.barcode, g.unit, oldStockNum === null ? '' : oldStockNum, g.finalQty, fark, g.lastPersonnel, g.lastTs, g.scanCount]);
+      finalRows.push([g.stockCode, canonName, g.barcodes.join(' + '), g.unit, oldStockNum === null ? '' : oldStockNum, g.finalQty, fark, g.lastPersonnel, g.lastTs, g.scanCount]);
     });
 
     var sonSheet = ss.getSheetByName('Son Stok Sayimi');
@@ -513,7 +558,7 @@ function handleFinalize(user, pass, callback) {
     var personelStats = {};
     rows.forEach(function (r) {
       var p = String(r[idx['Personel']] || '—');
-      var ts = String(r[idx['Tarih']]) + ' ' + String(r[idx['Saat']]);
+      var ts = formatDateValue(r[idx['Tarih']]) + ' ' + formatTimeValue(r[idx['Saat']]);
       if (!personelStats[p]) personelStats[p] = { satir: 0, ilkTs: ts, sonTs: ts, urunler: {} };
       personelStats[p].satir++;
       if (ts < personelStats[p].ilkTs) personelStats[p].ilkTs = ts;
@@ -812,7 +857,7 @@ function getCanliDurum(user, pass, callback) {
     var values = sheet.getRange(2, 1, sheet.getLastRow() - 1, HEADERS.length).getValues();
     values.forEach(function (r) {
       var p = String(r[idx['Personel']] || '—');
-      var tsStr = String(r[idx['Tarih']]) + 'T' + String(r[idx['Saat']]);
+      var tsStr = formatDateValue(r[idx['Tarih']]) + 'T' + formatTimeValue(r[idx['Saat']]);
       var ts = new Date(tsStr).getTime();
       if (!stats[p]) stats[p] = { okutma: 0, urunler: {}, sonTs: 0, sonZaman: '', sonUrun: '', sonReyon: '' };
       stats[p].okutma++;
@@ -820,7 +865,7 @@ function getCanliDurum(user, pass, callback) {
       stats[p].urunler[stockKey] = true;
       if (!isNaN(ts) && ts >= stats[p].sonTs) {
         stats[p].sonTs = ts;
-        stats[p].sonZaman = String(r[idx['Tarih']]) + ' ' + String(r[idx['Saat']]);
+        stats[p].sonZaman = formatDateValue(r[idx['Tarih']]) + ' ' + formatTimeValue(r[idx['Saat']]);
         stats[p].sonUrun = String(r[idx['Ürün Adı']] || '');
         stats[p].sonReyon = String(r[idx['Reyon']] || '');
       }
@@ -866,7 +911,7 @@ function sayimAra(user, pass, q, callback) {
         if (!hepsiVar) continue;
       }
       sonuc.push({
-        kayitId: String(r[idx['Kayıt ID']] || ''), tarih: String(r[idx['Tarih']] || ''), saat: String(r[idx['Saat']] || ''),
+        kayitId: String(r[idx['Kayıt ID']] || ''), tarih: formatDateValue(r[idx['Tarih']]), saat: formatTimeValue(r[idx['Saat']]),
         personel: String(r[idx['Personel']] || ''), ad: String(r[idx['Ürün Adı']] || ''), stokKodu: String(r[idx['Stok Kodu']] || ''),
         barkod: String(r[idx['Barkod']] || ''), birim: String(r[idx['Birim']] || 'Adet'), eskiStok: r[idx['Eski Stok']],
         adet: r[idx['Sayılan Adet']], fark: r[idx['Fark']], reyon: String(r[idx['Reyon']] || '')
