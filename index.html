@@ -192,7 +192,7 @@
   <header style="border:none; padding:0 0 16px; background:transparent; display:flex; align-items:flex-start; justify-content:space-between;">
     <div>
       <h1><img src="logo-header.png" alt="Murat Gıda" style="height:30px; width:auto; display:block;"></h1>
-      <div class="sub">Sayım · hızlı barkod • offline • Android • build 65</div>
+      <div class="sub">Sayım · hızlı barkod • offline • Android • build 66</div>
     </div>
     <button type="button" id="themeToggleBtn" title="Karanlık / Aydınlık tema" style="background:var(--panel2); border:1.5px solid var(--line); color:var(--text); width:34px; height:34px; border-radius:50%; font-size:15px; padding:0; display:flex; align-items:center; justify-content:center; flex-shrink:0;">🌙</button>
   </header>
@@ -468,7 +468,45 @@
     </div>
   </div>
 
-  <!-- "Tüm Sayılanlar" ekranından ürün aramak için ayrı, basit bir barkod okuyucu -->
+  <!-- Basılı tutunca açılan "Sayım Kayıtlarını Düzelt" kartı — Tüm
+       Sayılanlar ekranındaki kanıtlanmış aynı yöntemle (contextmenu engelli,
+       tek modal) çalışır, satır içine gömülü küçük butonlar yerine. -->
+  <div id="duzeltEditModal" class="hidden" style="position:fixed; inset:0; background:rgba(10,10,10,.55); z-index:52; display:flex; align-items:center; justify-content:center; padding:22px;">
+    <div class="qtyEntryCard" style="width:100%; max-width:360px;">
+      <div id="duzeltEditName" style="font-size:18px; font-weight:800; margin-bottom:2px;">—</div>
+      <div id="duzeltEditMeta" style="font-size:12px; color:var(--muted); font-family:var(--mono); margin-bottom:16px;"></div>
+      <input type="number" id="duzeltEditQtyInput" inputmode="numeric" style="width:100%; font-size:28px; font-weight:800; text-align:center; font-family:var(--mono); padding:14px; border-radius:var(--r-sm); border:2px solid var(--accent); background:var(--panel2); color:var(--text); margin-bottom:14px;">
+      <div class="qtyEntryBtns">
+        <button id="duzeltEditDelete" style="background:var(--panel); border:1.5px solid var(--red); color:var(--red); flex:0.8;">🗑️ Sil</button>
+        <button id="duzeltEditCancel">Vazgeç</button>
+        <button id="duzeltEditSave">Kaydet</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- "Sayım Kayıtlarını Düzelt" — Yönetici Paneli'nden ayrı, tam sayfa bir
+       ekran olarak açılır (Ürün Arama ekranıyla aynı mantık) çünkü küçük bir
+       modalın içine sıkıştırılınca hem karışık görünüyordu hem de basılı
+       tutma/kaydırma çakışıp arayüz takılı kalabiliyordu. -->
+  <div id="duzeltScreen" class="hidden" style="position:fixed; inset:0; background:var(--bg); z-index:50; display:flex; flex-direction:column;">
+    <div style="padding:16px; border-bottom:1px solid var(--line); background:var(--panel); box-shadow:var(--sh-sm);">
+      <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:10px;">
+        <div style="font-weight:800; font-size:16px;">✏️ Sayım Kayıtlarını Düzelt</div>
+        <button type="button" id="duzeltCloseTopBtn" aria-label="Kapat" style="width:34px; height:34px; border-radius:50%; background:var(--panel2); border:1.5px solid var(--line); color:var(--text); font-size:18px; line-height:1; padding:0; display:flex; align-items:center; justify-content:center;">✕</button>
+      </div>
+      <div style="position:relative; margin-bottom:8px;">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.3" stroke-linecap="round" style="position:absolute; left:12px; top:50%; transform:translateY(-50%); color:var(--muted); pointer-events:none;"><circle cx="11" cy="11" r="7"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+        <input type="text" id="duzeltSearchInput" placeholder="Ürün, personel, barkod veya stok kodu ara…" style="padding-left:34px;">
+      </div>
+      <div class="hint">Boş bırakırsan son 50 kayıt listelenir. Bir satırın üstüne ~yarım saniye basılı tut → adedi değiştir ya da 🗑️ ile sil.</div>
+    </div>
+    <div id="duzeltResults" style="flex:1; overflow-y:auto; padding:10px 12px;"><div class="hint">⏳ Yükleniyor…</div></div>
+    <div class="footer">
+      <button class="fb-export" id="duzeltCloseBtn" style="flex:none; width:100%;">Kapat</button>
+    </div>
+  </div>
+
+
   <div id="browseScanOverlay" class="hidden" style="position:fixed; inset:0; z-index:49; background:#000; display:flex; align-items:center; justify-content:center;">
     <video id="browseVideo" playsinline autoplay muted style="width:100%; height:100%; object-fit:cover;"></video>
     <div style="position:absolute; inset:0; display:flex; flex-direction:column; align-items:center; justify-content:center; pointer-events:none;">
@@ -544,13 +582,9 @@
       </div>
 
       <div id="adminSectionDuzelt" class="hidden" style="border-top:1px solid var(--line); margin:14px 0 12px; padding-top:12px;">
-        <div style="display:flex; align-items:center; gap:6px; margin-bottom:8px;">
-          <div style="font-weight:800; font-size:13px;">✏️ Sayım Kayıtlarını Düzelt</div>
-          <button type="button" id="adminDuzeltInfoBtn" title="Nasıl kullanılır?" style="background:var(--panel2); border:1.5px solid var(--line); color:var(--accent); width:20px; height:20px; border-radius:50%; font-size:11px; font-weight:800; padding:0; line-height:1; display:flex; align-items:center; justify-content:center; flex-shrink:0;">ⓘ</button>
-        </div>
-        <div id="adminDuzeltInfo" class="hint hidden" style="margin-bottom:8px;">Aşağıda sayılan ürünlerin canlı tablosu görünür (Saat · Stok Kodu · Barkod · Ürün · Adet). Bir satırın üstüne yaklaşık yarım saniye basılı tut — açılan kutudan adedi değiştir ya da 🗑️ ile sil.</div>
-        <input type="text" id="adminDuzeltSearch" placeholder="Ürün, personel, barkod veya stok kodu ara…" style="margin-bottom:8px;">
-        <div id="adminDuzeltList"><div class="hint">Ürün adı ya da personel adı yazıp ara, ya da boş bırakıp son kayıtları gör.</div></div>
+        <button type="button" id="adminDuzeltOpenBtn" style="width:100%; background:#fff; border:1.5px solid var(--line); color:var(--text); padding:14px; text-align:left; line-height:1.5;">
+          ✏️ Sayım Kayıtlarını Düzelt<br><span style="font-weight:500; font-size:11px; color:var(--muted);">Kim, ne zaman, ne saymış — ara, düzelt ya da sil, ayrı bir ekranda açılır</span>
+        </button>
       </div>
 
       <div id="adminNoPerm" class="hidden hint" style="text-align:center; padding:10px 0;">Şu an hiçbir yönetici işlemi için yetkin yok.</div>
@@ -1942,7 +1976,8 @@
       }, 15000);
     }
     if(canCanliDurum) fetchCanliDurum();
-    if(canDuzelt) fetchDuzeltSonuclari('');
+    // Not: "Sayım Kayıtlarını Düzelt" artık panel açılınca otomatik veri
+    // çekmiyor — ayrı ekran açıldığında (adminDuzeltOpenBtn) çekiliyor.
   }
   function closeAdminModal(){ adminModalEl.classList.add('hidden'); }
 
@@ -2098,95 +2133,108 @@
   }
   document.getElementById('adminCanliRefreshBtn').addEventListener('click', fetchCanliDurum);
 
-  // ---------- SAYIM KAYITLARINI DÜZELT ----------
+  // ---------- SAYIM KAYITLARINI DÜZELT (ayrı tam sayfa ekran) ----------
+  var duzeltScreenEl = document.getElementById('duzeltScreen');
+  var duzeltSearchInput = document.getElementById('duzeltSearchInput');
+  var duzeltResultsEl = document.getElementById('duzeltResults');
+  var duzeltEditModalEl = document.getElementById('duzeltEditModal');
+  var duzeltEditQtyInput = document.getElementById('duzeltEditQtyInput');
+  var duzeltEditIdVal = null;
+  var duzeltCurrentData = []; // son çekilen sonuçlar — modalda bilgi göstermek için
+
+  document.getElementById('adminDuzeltOpenBtn').addEventListener('click', function(){
+    closeAdminModal();
+    duzeltSearchInput.value = '';
+    duzeltScreenEl.classList.remove('hidden');
+    fetchDuzeltSonuclari('');
+    setTimeout(function(){ duzeltSearchInput.focus(); }, 80);
+  });
+  document.getElementById('duzeltCloseBtn').addEventListener('click', function(){ duzeltScreenEl.classList.add('hidden'); });
+  document.getElementById('duzeltCloseTopBtn').addEventListener('click', function(){ duzeltScreenEl.classList.add('hidden'); });
+
   var duzeltDebounce = null;
-  document.getElementById('adminDuzeltSearch').addEventListener('input', function(e){
+  duzeltSearchInput.addEventListener('input', function(e){
     clearTimeout(duzeltDebounce);
     var q = e.target.value;
     duzeltDebounce = setTimeout(function(){ fetchDuzeltSonuclari(q); }, 400);
   });
-  document.getElementById('adminDuzeltInfoBtn').addEventListener('click', function(){
-    document.getElementById('adminDuzeltInfo').classList.toggle('hidden');
-    fetchDuzeltSonuclari(document.getElementById('adminDuzeltSearch').value); // canlı tabloyu tazele
-  });
 
   function fetchDuzeltSonuclari(q){
     var auth = currentAuth();
-    var listEl3 = document.getElementById('adminDuzeltList');
-    if(!auth || !navigator.onLine){ listEl3.innerHTML = '<div class="hint">İnternet yok</div>'; return; }
-    listEl3.innerHTML = '<div class="hint">⏳ Aranıyor…</div>';
+    if(!auth || !navigator.onLine){ duzeltResultsEl.innerHTML = '<div class="hint">İnternet yok</div>'; return; }
+    duzeltResultsEl.innerHTML = '<div class="hint">⏳ Aranıyor…</div>';
     var url = state.serverUrl || DEFAULT_SERVER_URL;
     jsonpRequestP(url, { action:'sayim_ara', user:auth.user, pass:auth.pass, q: q || '' }, function(err, data){
-      if(err){ listEl3.innerHTML = '<div class="hint" style="color:var(--red);">❌ ' + escapeHtml(err) + '</div>'; return; }
-      if(!data || data.status === 'error'){ listEl3.innerHTML = '<div class="hint" style="color:var(--red);">❌ ' + escapeHtml((data && data.message) || 'hata') + '</div>'; return; }
-      if(!data.sonuclar || data.sonuclar.length === 0){ listEl3.innerHTML = '<div class="hint">Sonuç yok.</div>'; return; }
-      listEl3.innerHTML = data.sonuclar.map(function(r){
-        return '<div class="duzeltRow" data-kayit-id="' + escAttr(r.kayitId) + '" data-birim="' + escAttr(r.birim || 'Adet') + '">' +
+      if(err){ duzeltResultsEl.innerHTML = '<div class="hint" style="color:var(--red);">❌ ' + escapeHtml(err) + '</div>'; return; }
+      if(!data || data.status === 'error'){ duzeltResultsEl.innerHTML = '<div class="hint" style="color:var(--red);">❌ ' + escapeHtml((data && data.message) || 'hata') + '</div>'; return; }
+      duzeltCurrentData = data.sonuclar || [];
+      if(duzeltCurrentData.length === 0){ duzeltResultsEl.innerHTML = '<div class="empty">Sonuç yok.</div>'; return; }
+      duzeltResultsEl.innerHTML = duzeltCurrentData.map(function(r){
+        return '<div class="duzeltRow" data-kayit-id="' + escAttr(r.kayitId) + '">' +
           '<div class="duzeltMeta">' + escapeHtml(r.saat) + ' · ' + escapeHtml(r.stokKodu || '—') + ' · ' + escapeHtml(r.barkod || '—') + ' · ' + escapeHtml(r.personel) + (r.reyon ? (' · ' + escapeHtml(r.reyon)) : '') + '</div>' +
           '<div class="duzeltMain">' +
             '<span class="duzeltAd">' + escapeHtml(r.ad) + '</span>' +
             '<span class="duzeltAdetDisplay">' + escapeHtml(r.adet) + ' ' + escapeHtml(r.birim || 'Adet') + '</span>' +
-          '</div>' +
-          '<div class="duzeltEdit hidden">' +
-            '<input type="number" class="duzeltAdet" value="' + escAttr(r.adet) + '">' +
-            '<button type="button" class="duzeltKaydet">Kaydet</button>' +
-            '<button type="button" class="duzeltSil">🗑️</button>' +
           '</div></div>';
       }).join('');
     }, 20000);
   }
 
-  // Basılı tutma (uzun basma) ile satırı düzenleme moduna alma — tek
-  // seferlik "event delegation" ile bağlanır, her yeniden çizimde tekrar
-  // dinleyici eklemeye gerek kalmaz.
-  (function(){
-    var listEl3 = document.getElementById('adminDuzeltList');
-    var pressTimer = null;
-    function clearPress(){ if(pressTimer){ clearTimeout(pressTimer); pressTimer = null; } }
-    listEl3.addEventListener('pointerdown', function(e){
-      var row = e.target.closest('.duzeltRow');
-      if(!row || e.target.closest('.duzeltEdit')) return;
-      pressTimer = setTimeout(function(){
-        row.classList.toggle('editing');
-        row.querySelector('.duzeltEdit').classList.toggle('hidden');
-        if(navigator.vibrate) navigator.vibrate(15);
-        pressTimer = null;
-      }, 500);
-    });
-    ['pointerup','pointercancel','pointerleave','scroll'].forEach(function(ev){
-      listEl3.addEventListener(ev, clearPress, true);
-    });
-    listEl3.addEventListener('click', function(e){
-      var kaydetBtn = e.target.closest('.duzeltKaydet');
-      var silBtn = e.target.closest('.duzeltSil');
-      if(kaydetBtn){
-        var row = kaydetBtn.closest('.duzeltRow');
-        var kayitId = row.getAttribute('data-kayit-id');
-        var birim = row.getAttribute('data-birim') || 'Adet';
-        var yeniAdet = row.querySelector('.duzeltAdet').value;
-        var auth2 = currentAuth();
-        kaydetBtn.textContent = '⏳';
-        jsonpRequestP(state.serverUrl || DEFAULT_SERVER_URL, { action:'sayim_guncelle', user:auth2.user, pass:auth2.pass, kayitId: kayitId, adet: yeniAdet }, function(err2, res2){
-          kaydetBtn.textContent = 'Kaydet';
-          if(err2 || !res2 || res2.status === 'error'){ warnToast('❌ ' + (err2 || (res2 && res2.message) || 'güncellenemedi')); return; }
-          row.querySelector('.duzeltAdetDisplay').textContent = yeniAdet + ' ' + birim;
-          row.classList.remove('editing');
-          row.querySelector('.duzeltEdit').classList.add('hidden');
-          successToast('Güncellendi');
-        }, 20000);
-      } else if(silBtn){
-        var row2 = silBtn.closest('.duzeltRow');
-        var kayitId2 = row2.getAttribute('data-kayit-id');
-        if(!window.confirm('Bu kayıt tamamen silinsin mi?')) return;
-        var auth3 = currentAuth();
-        jsonpRequestP(state.serverUrl || DEFAULT_SERVER_URL, { action:'sayim_sil', user:auth3.user, pass:auth3.pass, kayitId: kayitId2 }, function(err3, res3){
-          if(err3 || !res3 || res3.status === 'error'){ warnToast('❌ ' + (err3 || (res3 && res3.message) || 'silinemedi')); return; }
-          row2.remove();
-          successToast('Silindi');
-        }, 20000);
-      }
-    });
-  })();
+  // Basılı tutma — "Tüm Sayılanlar" ekranındaki KANITLANMIŞ aynı yöntem:
+  // contextmenu engellenmiş, satır içine gömülü küçük buton yerine tek bir
+  // net modal açılıyor. Eski (satır içi aç/kapa) yöntem Android'de bazen
+  // metin seçme menüsüyle çakışıp arayüzün takılı kalmasına yol açıyordu.
+  var duzeltPressTimer = null;
+  function clearDuzeltPress(){ clearTimeout(duzeltPressTimer); duzeltPressTimer = null; }
+  duzeltResultsEl.addEventListener('pointerdown', function(e){
+    var row = e.target.closest('.duzeltRow'); if(!row) return;
+    duzeltPressTimer = setTimeout(function(){
+      if(navigator.vibrate) navigator.vibrate(25);
+      openDuzeltEditModal(row.getAttribute('data-kayit-id'));
+    }, 480);
+  });
+  ['pointerup','pointercancel','pointerleave'].forEach(function(ev){
+    duzeltResultsEl.addEventListener(ev, clearDuzeltPress);
+  });
+  duzeltResultsEl.addEventListener('contextmenu', function(e){ e.preventDefault(); }); // Android'de uzun basınca metin seçme menüsü çıkmasın
+
+  function openDuzeltEditModal(kayitId){
+    var r = duzeltCurrentData.find(function(x){ return x.kayitId === kayitId; });
+    if(!r) return;
+    duzeltEditIdVal = kayitId;
+    document.getElementById('duzeltEditName').textContent = r.ad;
+    document.getElementById('duzeltEditMeta').textContent = r.saat + ' · ' + (r.stokKodu || '—') + ' · ' + (r.barkod || '—') + ' · ' + r.personel + (r.reyon ? (' · ' + r.reyon) : '');
+    duzeltEditQtyInput.value = r.adet;
+    duzeltEditModalEl.classList.remove('hidden');
+    setTimeout(function(){ duzeltEditQtyInput.focus(); duzeltEditQtyInput.select(); }, 80);
+  }
+  document.getElementById('duzeltEditCancel').addEventListener('click', function(){ duzeltEditModalEl.classList.add('hidden'); });
+  document.getElementById('duzeltEditSave').addEventListener('click', function(){
+    var auth = currentAuth();
+    if(!auth || !navigator.onLine){ warnToast('İnternet yok'); return; }
+    var yeniAdet = duzeltEditQtyInput.value;
+    var btn = document.getElementById('duzeltEditSave');
+    btn.textContent = '⏳';
+    jsonpRequestP(state.serverUrl || DEFAULT_SERVER_URL, { action:'sayim_guncelle', user:auth.user, pass:auth.pass, kayitId: duzeltEditIdVal, adet: yeniAdet }, function(err, res){
+      btn.textContent = 'Kaydet';
+      if(err || !res || res.status === 'error'){ warnToast('❌ ' + (err || (res && res.message) || 'güncellenemedi')); return; }
+      successToast('Güncellendi');
+      duzeltEditModalEl.classList.add('hidden');
+      fetchDuzeltSonuclari(duzeltSearchInput.value);
+    }, 20000);
+  });
+  document.getElementById('duzeltEditDelete').addEventListener('click', function(){
+    if(!window.confirm('Bu kayıt tamamen silinsin mi?')) return;
+    var auth = currentAuth();
+    if(!auth || !navigator.onLine){ warnToast('İnternet yok'); return; }
+    jsonpRequestP(state.serverUrl || DEFAULT_SERVER_URL, { action:'sayim_sil', user:auth.user, pass:auth.pass, kayitId: duzeltEditIdVal }, function(err, res){
+      if(err || !res || res.status === 'error'){ warnToast('❌ ' + (err || (res && res.message) || 'silinemedi')); return; }
+      successToast('Silindi');
+      duzeltEditModalEl.classList.add('hidden');
+      fetchDuzeltSonuclari(duzeltSearchInput.value);
+    }, 20000);
+  });
+
 
   // ---------- SON STOK SAYIMINI CSV OLARAK İNDİRME ----------
   document.getElementById('adminExportBtn').addEventListener('click', function(){
