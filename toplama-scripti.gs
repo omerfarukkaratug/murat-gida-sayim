@@ -8,7 +8,7 @@
 // bir sürüm dağıttıktan sonra /exec adresini boş açtığında burada yazan
 // numarayı görmelisin; index.html'in üstündeki "build" numarasıyla
 // eşleşecek şekilde ben her ikisini birlikte güncelliyorum.
-var GS_VERSION = 'build57';
+var GS_VERSION = 'build62';
 
 function doGet(e) {
   // ?action=katalog ile ürün kataloğunu döndürür.
@@ -527,12 +527,12 @@ function handleFinalize(user, pass, callback) {
     var ortalamaDogruluk = dogrulukSayisi > 0 ? Math.round((dogrulukToplam / dogrulukSayisi) * 1000) / 10 : null;
 
     raporSheet.appendRow(['MURAT GIDA — SAYIM YÖNETİCİ RAPORU', Utilities.formatDate(new Date(), Session.getScriptTimeZone() || 'GMT+3', 'yyyy-MM-dd HH:mm')]);
-    raporSheet.appendRow([]);
+    raporSheet.appendRow(['']);
     raporSheet.appendRow(['Toplam farklı ürün çeşidi', Object.keys(groups).length]);
     raporSheet.appendRow(['Toplam sayılan adet (final, birleştirilmiş)', toplamAdet]);
     raporSheet.appendRow(['Toplam okutma (ham satır) sayısı', rows.length]);
     raporSheet.appendRow(['Ortalama doğruluk (eski stoğa göre)', ortalamaDogruluk !== null ? ('%' + ortalamaDogruluk) : '—']);
-    raporSheet.appendRow([]);
+    raporSheet.appendRow(['']);
     raporSheet.appendRow(['PERSONEL BAZLI']);
     raporSheet.appendRow(['Personel', 'Okutma Sayısı', 'Farklı Ürün', 'İlk Kayıt', 'Son Kayıt', 'Süre (saat)', 'Hız (okutma/saat)']);
     var personelListesi = [];
@@ -543,7 +543,7 @@ function handleFinalize(user, pass, callback) {
       raporSheet.appendRow([p, s.satir, Object.keys(s.urunler).length, s.ilkTs, s.sonTs, Math.round(sureSaat * 10) / 10, hiz]);
       personelListesi.push({ personel: p, okutma: s.satir, farkliUrun: Object.keys(s.urunler).length, hiz: hiz });
     });
-    raporSheet.appendRow([]);
+    raporSheet.appendRow(['']);
     raporSheet.appendRow(['DİKKAT ÇEKEN FARKLAR (eski stoğa göre %30+ sapma)']);
     if (anomaliler.length === 0) raporSheet.appendRow(['(yok)']);
     anomaliler.forEach(function (a) { raporSheet.appendRow([a]); });
@@ -554,7 +554,7 @@ function handleFinalize(user, pass, callback) {
       try {
         aiYorum = getAiYorum(apiKey, anomaliler, Object.keys(groups).length, toplamAdet, ortalamaDogruluk);
         if (aiYorum) {
-          raporSheet.appendRow([]);
+          raporSheet.appendRow(['']);
           raporSheet.appendRow(['YAPAY ZEKA DEĞERLENDİRMESİ']);
           raporSheet.appendRow([aiYorum]);
         }
