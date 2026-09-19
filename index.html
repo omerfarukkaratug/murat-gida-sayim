@@ -18,6 +18,14 @@
     --mono: ui-monospace, "SF Mono", "Cascadia Mono", Consolas, monospace;
     --sans: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
   }
+  body.dark{
+    --bg:#101014; --panel:#1a1a20; --panel2:#232329; --line:#33333c;
+    --text:#f4f4f5; --muted:#9ca3af; --green:#22c55e; --amber:#f59e0b; --red:#f87171;
+    --accent:#7a6bff; --accent2:#9c8fff;
+    --sh-sm: 0 1px 2px rgba(0,0,0,.4), 0 1px 1px rgba(0,0,0,.3);
+    --sh-md: 0 6px 18px rgba(0,0,0,.45);
+    --sh-lg: 0 -6px 24px rgba(0,0,0,.5);
+  }
   *{box-sizing:border-box; -webkit-tap-highlight-color:transparent;}
   body{margin:0; background:var(--bg); color:var(--text); font-family:var(--sans);
        overscroll-behavior:none; height:100dvh; overflow:hidden;}
@@ -56,7 +64,7 @@
   #productCount{font-family:var(--mono); font-weight:700;}
   .tabSwitch{display:flex; background:var(--panel2); border-radius:12px; padding:4px; gap:4px; margin-bottom:16px;}
   .tabBtn{flex:1; background:transparent; color:var(--muted); font-size:11.5px; font-weight:700; padding:9px 2px; border-radius:9px; transition:background .15s, color .15s; white-space:nowrap;}
-  .tabBtn.active{background:#fff; color:var(--text); box-shadow:var(--sh-sm);}
+  .tabBtn.active{background:var(--panel); color:var(--text); box-shadow:var(--sh-sm);}
   .btn-secondary{width:100%; background:var(--panel2); border:1.5px solid var(--line); color:var(--text); padding:14px; border-radius:var(--r-sm); font-size:13.5px; font-weight:700;}
   details > summary{list-style:none;}
   details > summary::-webkit-details-marker{display:none;}
@@ -111,9 +119,9 @@
   #newProductQty::-webkit-outer-spin-button, #newProductQty::-webkit-inner-spin-button{-webkit-appearance:none; margin:0;}
   .qtyEntryBtns{display:flex; gap:10px;}
   .qtyEntryBtns button{flex:1; padding:14px; border-radius:var(--r-sm); font-size:14px; font-weight:700;}
-  #newProductCancel, #newProductAskNo{background:#fff; border:1.5px solid var(--text); color:var(--text);}
+  #newProductCancel, #newProductAskNo{background:var(--panel); border:1.5px solid var(--text); color:var(--text);}
   #newProductConfirm, #newProductAskYes{background:linear-gradient(135deg, var(--accent2), var(--accent)); color:#fff; box-shadow:0 6px 14px rgba(85,70,234,.3);}
-  #qtyEntryCancel{background:#fff; border:1.5px solid var(--text); color:var(--text);}
+  #qtyEntryCancel{background:var(--panel); border:1.5px solid var(--text); color:var(--text);}
   #qtyEntryConfirm{background:linear-gradient(135deg, var(--accent2), var(--accent)); color:#fff; box-shadow:0 6px 14px rgba(85,70,234,.3);}
 
   #confirmBanner{position:absolute; left:0; right:0; bottom:0; padding:14px 16px; text-align:center;
@@ -158,8 +166,8 @@
 
   .footer{display:flex; gap:10px; padding:12px 14px calc(12px + env(safe-area-inset-bottom)); background:var(--panel); box-shadow:var(--sh-lg); position:relative; z-index:2;}
   .footer button{flex:1; padding:13px 6px; font-size:12px; border-radius:var(--r-sm);}
-  .fb-export{background:#fff; color:var(--text); border:1.5px solid var(--text);}
-  .fb-sync{background:#fff; color:var(--text); border:1.5px solid var(--text);}
+  .fb-export{background:var(--panel); color:var(--text); border:1.5px solid var(--text);}
+  .fb-sync{background:var(--panel); color:var(--text); border:1.5px solid var(--text);}
   .fb-new{background:linear-gradient(135deg, var(--red), #a91d1d); color:#fff; box-shadow:0 6px 14px rgba(220,38,38,.28);}
   .badge{background:var(--accent); color:#fff; border-radius:10px; font-size:9.5px; padding:1px 6px; margin-left:5px; font-family:var(--mono);}
 
@@ -178,9 +186,12 @@
 
 
 <div id="setup" class="screen">
-  <header style="border:none; padding:0 0 16px; background:transparent;">
-    <h1><img src="logo-header.png" alt="Murat Gıda" style="height:30px; width:auto; display:block;"></h1>
-    <div class="sub">Sayım · hızlı barkod • offline • Android • build 58</div>
+  <header style="border:none; padding:0 0 16px; background:transparent; display:flex; align-items:flex-start; justify-content:space-between;">
+    <div>
+      <h1><img src="logo-header.png" alt="Murat Gıda" style="height:30px; width:auto; display:block;"></h1>
+      <div class="sub">Sayım · hızlı barkod • offline • Android • build 59</div>
+    </div>
+    <button type="button" id="themeToggleBtn" title="Karanlık / Aydınlık tema" style="background:var(--panel2); border:1.5px solid var(--line); color:var(--text); width:34px; height:34px; border-radius:50%; font-size:15px; padding:0; display:flex; align-items:center; justify-content:center; flex-shrink:0;">🌙</button>
   </header>
 
   <div class="card" id="loginCard">
@@ -269,6 +280,7 @@
     <button type="button" id="mainAdminBtn" title="Yönetici Paneli" class="hidden" style="background:var(--panel2); border:1.5px solid var(--line); color:var(--text); width:34px; height:34px; border-radius:50%; font-size:15px; padding:0; display:flex; align-items:center; justify-content:center; flex-shrink:0;">👑</button>
     <div class="who" id="whoLabel">—</div>
     <button type="button" id="wakeLockToggleBtn" title="Ekran açık kalsın mı?" style="background:var(--panel2); border:1.5px solid var(--line); color:var(--text); width:34px; height:34px; border-radius:50%; font-size:15px; padding:0; display:flex; align-items:center; justify-content:center; flex-shrink:0;">🔆</button>
+    <button type="button" id="themeToggleBtnMain" title="Karanlık / Aydınlık tema" style="background:var(--panel2); border:1.5px solid var(--line); color:var(--text); width:34px; height:34px; border-radius:50%; font-size:15px; padding:0; display:flex; align-items:center; justify-content:center; flex-shrink:0;">🌙</button>
     <div class="status offline" id="statusBadge">Çevrimdışı</div>
   </div>
 
@@ -441,7 +453,7 @@
       <div id="browseEditMeta" style="font-size:12px; color:var(--muted); font-family:var(--mono); margin-bottom:16px;"></div>
       <input type="number" id="browseEditQtyInput" inputmode="numeric" style="width:100%; font-size:28px; font-weight:800; text-align:center; font-family:var(--mono); padding:14px; border-radius:var(--r-sm); border:2px solid var(--accent); background:var(--panel2); color:var(--text); margin-bottom:14px;">
       <div class="qtyEntryBtns">
-        <button id="browseEditDelete" style="background:#fff; border:1.5px solid var(--red); color:var(--red); flex:0.8;">🗑️ Sil</button>
+        <button id="browseEditDelete" style="background:var(--panel); border:1.5px solid var(--red); color:var(--red); flex:0.8;">🗑️ Sil</button>
         <button id="browseEditCancel">Vazgeç</button>
         <button id="browseEditSave">Kaydet</button>
       </div>
@@ -472,7 +484,7 @@
         <button id="adminFinalizeBtn" style="width:100%; margin-bottom:10px; background:linear-gradient(135deg, var(--accent2), var(--accent)); color:#fff; padding:14px; text-align:left; line-height:1.5;">
           📊 Sayımı Bitir ve Rapor Oluştur<br><span style="font-weight:500; font-size:11px; opacity:.85;">Aynı stok kodlarını birleştirir, isimleri düzeltir, son stok listesini ve detaylı raporu oluşturur</span>
         </button>
-        <button id="adminExportBtn" style="width:100%; margin-bottom:10px; background:#fff; border:1.5px solid var(--line); color:var(--text); padding:12px; text-align:left; line-height:1.5;">
+        <button id="adminExportBtn" style="width:100%; margin-bottom:10px; background:var(--panel); border:1.5px solid var(--line); color:var(--text); padding:12px; text-align:left; line-height:1.5;">
           📥 Son Stok Sayımını İndir (CSV)<br><span style="font-weight:500; font-size:11px; color:var(--muted);">"Sayımı Bitir"i en az bir kez çalıştırmış olman gerekir — ERP12'ye aktarmak için</span>
         </button>
       </div>
@@ -485,7 +497,7 @@
       <div id="adminSectionKullanici" class="hidden" style="border-top:1px solid var(--line); margin:14px 0 12px; padding-top:12px;">
         <div style="font-weight:800; font-size:13px; margin-bottom:8px;">👤 Kullanıcı Yönetimi</div>
         <div id="adminUsersList"></div>
-        <button type="button" id="adminAddUserBtn" style="width:100%; background:#fff; border:1.5px dashed var(--line); color:var(--text); padding:11px; margin-bottom:8px;">➕ Kullanıcı Ekle</button>
+        <button type="button" id="adminAddUserBtn" style="width:100%; background:var(--panel); border:1.5px dashed var(--line); color:var(--text); padding:11px; margin-bottom:8px;">➕ Kullanıcı Ekle</button>
         <button id="adminUsersSave" style="width:100%; background:var(--text); color:#fff; padding:11px;">💾 Kullanıcı Listesini Kaydet</button>
       </div>
 
@@ -525,7 +537,7 @@
 
       <div id="adminNoPerm" class="hidden hint" style="text-align:center; padding:10px 0;">Şu an hiçbir yönetici işlemi için yetkin yok.</div>
       <div id="adminResult" style="font-size:12.5px; line-height:1.7; margin-top:10px; white-space:pre-wrap;"></div>
-      <button id="adminCloseBtn" style="width:100%; margin-top:14px; background:#fff; border:1.5px solid var(--text); color:var(--text); padding:12px;">Kapat</button>
+      <button id="adminCloseBtn" style="width:100%; margin-top:14px; background:var(--panel); border:1.5px solid var(--text); color:var(--text); padding:12px;">Kapat</button>
     </div>
   </div>
 
@@ -563,6 +575,28 @@
   if(!state.newProductCounter) state.newProductCounter = 1;
   if(!state.userRoster) state.userRoster = [];
   if(state.idleMinutes === undefined) state.idleMinutes = 0;
+  if(state.darkMode === undefined) state.darkMode = false;
+
+  // ---------- KARANLIK / AYDINLIK TEMA ----------
+  function applyTheme(){
+    document.body.classList.toggle('dark', !!state.darkMode);
+    var icon = state.darkMode ? '☀️' : '🌙';
+    var themeBtn1 = document.getElementById('themeToggleBtn');
+    var themeBtn2 = document.getElementById('themeToggleBtnMain');
+    if(themeBtn1) themeBtn1.textContent = icon;
+    if(themeBtn2) themeBtn2.textContent = icon;
+    var metaTheme = document.querySelector('meta[name="theme-color"]');
+    if(metaTheme) metaTheme.setAttribute('content', state.darkMode ? '#101014' : '#ffffff');
+  }
+  function toggleTheme(){
+    state.darkMode = !state.darkMode;
+    save();
+    applyTheme();
+  }
+  applyTheme(); // sayfa açılır açılmaz kaydedilmiş tercihi uygula
+  document.getElementById('themeToggleBtn').addEventListener('click', toggleTheme);
+  document.getElementById('themeToggleBtnMain').addEventListener('click', toggleTheme);
+
   if(!state.session.deletedIds) state.session.deletedIds = [];
   if(!state.session.sentIds) state.session.sentIds = [];
   if(state.currentUser === undefined) state.currentUser = null;
@@ -1800,6 +1834,7 @@
     var url = state.serverUrl || DEFAULT_SERVER_URL;
     if(!auth || !navigator.onLine) return;
     if(canKullanici){
+      adminUsersLoadFailed = false;
       document.getElementById('adminUsersList').innerHTML = '<div class="hint">⏳ Mevcut liste yükleniyor…</div>';
       jsonpRequestP(url, { action:'kullanicilar_detay', user:auth.user, pass:auth.pass }, function(err, data){
         if(!err && data && data.status === 'ok' && data.users){
@@ -1808,6 +1843,11 @@
           });
         } else {
           adminUsersData = [];
+          adminUsersLoadFailed = true; // mevcut liste hiç çekilemedi — kaydetmeden önce uyarmamız gerek
+          document.getElementById('adminUsersList').innerHTML =
+            '<div class="hint" style="color:var(--red);">❌ Mevcut kullanıcı listesi sunucudan çekilemedi (' + escapeHtml((data && data.message) || err || 'bilinmeyen hata') + ').<br>' +
+            '⚠️ Şu an "Kaydet"e basarsan, sunucudaki TÜM mevcut kullanıcılar silinip sadece burada yazdıkların kalır. Önce ⚙ tekrar açıp listeyi başarıyla yüklemeyi dene.</div>';
+          return;
         }
         renderUsersList();
       }, 15000);
@@ -1833,6 +1873,7 @@
 
   // ---------- Kullanıcı Yönetimi: tik kutulu, kart tabanlı düzenleyici ----------
   var adminUsersData = []; // { name, pass, role: 'yonetici'|'kullanici', perms: {rapor,temizle,kullanici_yonetimi,ayarlar} }
+  var adminUsersLoadFailed = false; // mevcut liste sunucudan hiç çekilemediyse true — bu durumda kaydetmek veri kaybına yol açar
   var PERM_LABELS = [
     { key: 'rapor', label: '📊 Rapor' },
     { key: 'temizle', label: '🧹 Temizle' },
@@ -1912,6 +1953,9 @@
     var auth = currentAuth();
     if(!auth){ warnToast('Önce giriş yap'); return; }
     if(!navigator.onLine){ warnToast('İnternet yok — bu işlem için sunucuya bağlanmak gerekiyor'); return; }
+    if(adminUsersLoadFailed){
+      if(!window.confirm('⚠️ Mevcut liste hiç yüklenemediği için sunucudaki kullanıcılar bu ekranda görünmüyor.\nYine de kaydedersen, sunucudaki TÜM kullanıcılar silinip sadece burada yazdıkların kalır.\nGerçekten devam etmek istiyor musun?')) return;
+    }
     var missing = adminUsersData.some(function(u){ return !u.name.trim() || !u.pass.trim(); });
     if(missing){ warnToast('Her kullanıcının bir ismi ve şifresi olmalı'); return; }
     var data = adminUsersData.map(function(u){
@@ -1927,6 +1971,7 @@
     jsonpRequestP(url, { action: 'kullanicilar_kaydet', user: auth.user, pass: auth.pass, data: data }, function(err, res){
       if(err){ adminResultEl.textContent = '❌ ' + err; return; }
       if(!res || res.status === 'error'){ adminResultEl.textContent = '❌ ' + ((res && res.message) || 'bilinmeyen hata'); return; }
+      adminUsersLoadFailed = false;
       adminResultEl.textContent = '✅ ' + res.saved + ' kullanıcı kaydedildi. Telefonlar bir sonraki açılışta/online olduklarında listeyi otomatik çekecek.';
       fetchUserRoster();
     }, 20000);
