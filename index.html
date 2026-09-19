@@ -189,7 +189,7 @@
   <header style="border:none; padding:0 0 16px; background:transparent; display:flex; align-items:flex-start; justify-content:space-between;">
     <div>
       <h1><img src="logo-header.png" alt="Murat Gıda" style="height:30px; width:auto; display:block;"></h1>
-      <div class="sub">Sayım · hızlı barkod • offline • Android • build 60</div>
+      <div class="sub">Sayım · hızlı barkod • offline • Android • build 61</div>
     </div>
     <button type="button" id="themeToggleBtn" title="Karanlık / Aydınlık tema" style="background:var(--panel2); border:1.5px solid var(--line); color:var(--text); width:34px; height:34px; border-radius:50%; font-size:15px; padding:0; display:flex; align-items:center; justify-content:center; flex-shrink:0;">🌙</button>
   </header>
@@ -2142,13 +2142,23 @@
     var auth = currentAuth();
     if(!auth){ warnToast('Önce giriş yap'); return; }
     if(!navigator.onLine){ warnToast('İnternet yok — bu işlem için sunucuya bağlanmak gerekiyor'); return; }
+    if(!window.confirm(
+      '⚠️ Devam etmeden önce emin ol:\n\n' +
+      'Ekipteki TÜM telefonlarda son okutulan ürünlerin yanındaki nokta 🟢 YEŞİL olmalı (🔴 kırmızı = henüz gönderilmedi). Kırmızı ürün varsa o telefonda "Gönder"e basıp yeşile dönmesini bekleyin, sonra buraya dönün.\n\n' +
+      'Bu telefondaki bekleyenler otomatik gönderilecek, ama diğer telefonlardakini senin buradan görmen mümkün değil.\n\n' +
+      'Devam edilsin mi?'
+    )) return;
     var url = state.serverUrl || DEFAULT_SERVER_URL;
-    adminResultEl.innerHTML = '<div class="hint">⏳ Rapor hazırlanıyor… (büyük sayımlarda 1 dakikaya kadar sürebilir)</div>';
-    jsonpRequestP(url, { action: 'finalize', user: auth.user, pass: auth.pass }, function(err, data){
-      if(err){ adminResultEl.innerHTML = '<div class="hint" style="color:var(--red);">❌ ' + escapeHtml(err) + '</div>'; return; }
-      if(!data || data.status === 'error'){ adminResultEl.innerHTML = '<div class="hint" style="color:var(--red);">❌ ' + escapeHtml((data && data.message) || 'bilinmeyen hata') + '</div>'; return; }
-      adminResultEl.innerHTML = renderReportHtml(data);
-    }, 90000);
+    adminResultEl.innerHTML = '<div class="hint">⏳ Bu telefondaki bekleyen veriler gönderiliyor…</div>';
+    queueCurrentSession();
+    trySync(true, function(){
+      adminResultEl.innerHTML = '<div class="hint">⏳ Rapor hazırlanıyor… (büyük sayımlarda 1 dakikaya kadar sürebilir)</div>';
+      jsonpRequestP(url, { action: 'finalize', user: auth.user, pass: auth.pass }, function(err, data){
+        if(err){ adminResultEl.innerHTML = '<div class="hint" style="color:var(--red);">❌ ' + escapeHtml(err) + '</div>'; return; }
+        if(!data || data.status === 'error'){ adminResultEl.innerHTML = '<div class="hint" style="color:var(--red);">❌ ' + escapeHtml((data && data.message) || 'bilinmeyen hata') + '</div>'; return; }
+        adminResultEl.innerHTML = renderReportHtml(data);
+      }, 90000);
+    });
   });
 
   // Finalize sonucunu düz metin yerine okunaklı bir mini-rapor olarak
@@ -2480,9 +2490,12 @@
   // başarı durumunda sessiz kal (bildirim akışı kesmesin), sadece HATADA uyar.
   // silent=false -> "Gönder" butonuna elle basıldığında; her durumda net bildirim ver.
   var syncInProgress = false;
-  function trySync(silent){
-    if(!navigator.onLine || !state.serverUrl || state.pendingSessions.length === 0) return;
-    if(syncInProgress) return; // aynı anda iki gönderim çakışmasın
+  function trySync(silent, onDone){
+    if(!navigator.onLine || !state.serverUrl || state.pendingSessions.length === 0){
+      if(onDone) onDone();
+      return;
+    }
+    if(syncInProgress){ if(onDone) onDone(); return; } // aynı anda iki gönderim çakışmasın
     syncInProgress = true;
     var remaining = [];
     var anyError = null;
@@ -2499,6 +2512,7 @@
           // veri telefonda güvende ama gönderim başarısız, sessiz geçilmemeli.
           errorToast("Otomatik gönderim başarısız: " + anyError + " — veriniz telefonda güvende, tekrar denenecek");
         }
+        if(onDone) onDone();
         return;
       }
       var payload = state.pendingSessions[i];
