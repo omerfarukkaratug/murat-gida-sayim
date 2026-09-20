@@ -8,7 +8,7 @@
 // bir sürüm dağıttıktan sonra /exec adresini boş açtığında burada yazan
 // numarayı görmelisin; index.html'in üstündeki "build" numarasıyla
 // eşleşecek şekilde ben her ikisini birlikte güncelliyorum.
-var GS_VERSION = 'build65';
+var GS_VERSION = 'build68';
 
 // Sheets'te "Saat" sütunu zaman biçimli olarak algılanırsa, hücre değeri düz
 // metin değil bir Date nesnesi olarak gelir ve String(...) çirkin bir çıktı
@@ -275,7 +275,14 @@ function doPost(e) {
 
     // ---- Normal sayım verisi ----
     var ss = SpreadsheetApp.getActiveSpreadsheet();
-    var sheet = ss.getSheetByName('Sayim') || ss.getActiveSheet();
+    // ⚠️ ESKİDEN: ss.getSheetByName('Sayim') || ss.getActiveSheet() — "Sayim"
+    // sekmesi bulunamazsa, o an kimin tarayıcısında hangi sekme açıksa (ör.
+    // Katalog, Kullanicilar) ORAYA yazılıyordu! Bu, farklı bir sekmeye
+    // bakarken bir telefon veri gönderirse veri karışmasına yol açabilirdi.
+    // Artık "Sayim" sekmesi yoksa GÜVENLE yeni bir tane oluşturuluyor,
+    // asla başka bir sekmeye yazılmıyor.
+    var sheet = ss.getSheetByName('Sayim');
+    if (!sheet) sheet = ss.insertSheet('Sayim');
 
     var HEADERS = ['Tarih', 'Saat', 'Personel', 'Ürün Adı', 'Stok Kodu', 'Barkod', 'Birim', 'Eski Stok', 'Sayılan Adet', 'Fark', 'Oturum ID', 'Kayıt ID', 'Reyon'];
     if (sheet.getLastRow() === 0) {

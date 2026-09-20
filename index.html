@@ -105,7 +105,7 @@
   #scanPlaceholder{padding:18px 16px;}
   .scanBtn{width:100%; padding:19px; background:linear-gradient(135deg, var(--accent2), var(--accent)); color:#fff; font-size:16px; font-weight:800;
     border-radius:var(--r-md); letter-spacing:.02em; box-shadow:0 6px 16px rgba(31,111,214,.32);}
-  #qtyEntry{padding:20px 16px; background:var(--panel2);}
+  #qtyEntry{padding:20px 16px; background:var(--panel2); overflow-y:auto;}
   .qtyEntryCard{text-align:center; background:var(--panel); border-radius:var(--r-lg); padding:20px 16px; box-shadow:var(--sh-md);}
   #qtyEntryName{font-size:19px; font-weight:800; margin-bottom:2px;}
   .barcodeDisplay{font-family:var(--mono); font-size:26px; font-weight:800; letter-spacing:.03em; margin-bottom:8px; word-break:break-all;}
@@ -201,7 +201,7 @@
   <header style="border:none; padding:0 0 16px; background:transparent; display:flex; align-items:flex-start; justify-content:space-between;">
     <div>
       <h1><img src="logo-header.png" alt="Murat Gıda" style="height:30px; width:auto; display:block;"></h1>
-      <div class="sub">Sayım · hızlı barkod • offline • Android • build 67</div>
+      <div class="sub">Sayım · hızlı barkod • offline • Android • build 68</div>
     </div>
     <button type="button" id="themeToggleBtn" title="Karanlık / Aydınlık tema" style="background:var(--panel2); border:1.5px solid var(--line); color:var(--text); width:34px; height:34px; border-radius:50%; font-size:15px; padding:0; display:flex; align-items:center; justify-content:center; flex-shrink:0;">🌙</button>
   </header>
@@ -1474,8 +1474,30 @@
     setTimeout(function(){ qtyEntryInput.focus(); }, 80); // klavye otomatik açılsın
   }
 
+  // Klavye açılınca telefonun görünür alanı küçülür; "Ekle" butonu klavyenin
+  // altında kalıp erişilemez olabiliyordu. Görünür alan her değiştiğinde
+  // (klavye aç/kapa) kartın yüksekliğini o alana sabitleyip kendi içinde
+  // kaydırmalı yapıyoruz, sonra "Ekle" butonunu görünüre kaydırıyoruz.
+  function adjustQtyEntryForKeyboard(){
+    if(!window.visualViewport || qtyEntryEl.classList.contains('hidden')) return;
+    var top = qtyEntryEl.getBoundingClientRect().top;
+    var available = window.visualViewport.height - Math.max(top, 0);
+    qtyEntryEl.style.maxHeight = Math.max(available, 220) + 'px';
+    setTimeout(function(){
+      var confirmBtn = document.getElementById('qtyEntryConfirm');
+      if(confirmBtn) confirmBtn.scrollIntoView({ block: 'end' });
+    }, 60);
+  }
+  if(window.visualViewport){
+    window.visualViewport.addEventListener('resize', adjustQtyEntryForKeyboard);
+  }
+  [qtyEntryInput, qtyCalcAEl, qtyCalcBEl].forEach(function(el){
+    el.addEventListener('focus', function(){ setTimeout(adjustQtyEntryForKeyboard, 250); });
+  });
+
   function closeQtyEntry(){
     qtyEntryEl.classList.add('hidden');
+    qtyEntryEl.style.maxHeight = ''; // sıradaki açılışta sıfırdan hesaplansın
     pendingScan = null;
     qtyEntryInput.blur();
     showPlaceholder();
