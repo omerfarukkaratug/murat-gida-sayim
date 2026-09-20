@@ -8,7 +8,7 @@
 // bir sürüm dağıttıktan sonra /exec adresini boş açtığında burada yazan
 // numarayı görmelisin; index.html'in üstündeki "build" numarasıyla
 // eşleşecek şekilde ben her ikisini birlikte güncelliyorum.
-var GS_VERSION = 'build71';
+var GS_VERSION = 'build74';
 
 // Sheets'te "Saat" sütunu zaman biçimli olarak algılanırsa, hücre değeri düz
 // metin değil bir Date nesnesi olarak gelir ve String(...) çirkin bir çıktı
@@ -31,6 +31,9 @@ function doGet(e) {
   if (e.parameter && e.parameter.action === 'katalog') {
     return getKatalog(e.parameter.callback);
   }
+  if (e.parameter && e.parameter.action === 'cari') {
+    return getCari(e.parameter.callback);
+  }
   if (e.parameter && e.parameter.action === 'ilerleme') {
     return getIlerleme(e.parameter.callback);
   }
@@ -43,7 +46,8 @@ function doGet(e) {
       resetToken: PropertiesService.getScriptProperties().getProperty('RESET_TOKEN') || '',
       defaultWakeLock: PropertiesService.getScriptProperties().getProperty('DEFAULT_WAKE_LOCK') || 'true',
       idleMinutes: PropertiesService.getScriptProperties().getProperty('DEFAULT_IDLE_MINUTES') || '0',
-      katalogVersion: PropertiesService.getScriptProperties().getProperty('KATALOG_VERSION') || ''
+      katalogVersion: PropertiesService.getScriptProperties().getProperty('KATALOG_VERSION') || '',
+      cariVersion: PropertiesService.getScriptProperties().getProperty('CARI_VERSION') || ''
     }, e.parameter.callback);
   }
   if (e.parameter && e.parameter.action === 'temizle') {
@@ -168,16 +172,76 @@ function handleLogin(user, pass, callback) {
   return outJson({ status: 'ok', role: auth.role, permissions: auth.permissions }, callback);
 }
 
+// Cari (tedarikçi/müşteri) listesi — Mal Giriş/Mal Çıkış ekranlarında
+// seçilebilecek cari hesapları. Katalog ile aynı mantık: "Cari" sekiminden
+// okunur, telefonlar otomatik senkronize eder (CARI_VERSION ile).
+function getCari(callback) {
+  var ss = SpreadsheetApp.getActiveSpreadsheet();
+  var sheet = ss.getSheetByName('Cari');
+  var entries = [];
+  if (sheet && sheet.getLastRow() >= 2) {
+    var values = sheet.getRange(2, 1, sheet.getLastRow() - 1, 2).getValues();
+    entries = values
+      .filter(function (r) { return r[0]; })
+      .map(function (r) { return { name: String(r[0]), code: String(r[1] || '') }; });
+  }
+  var json = JSON.stringify({ entries: entries });
+  if (callback) {
+    return ContentService.createTextOutput(callback + '(' + json + ')').setMimeType(ContentService.MimeType.JAVASCRIPT);
+  }
+  return ContentService.createTextOutput(json).setMimeType(ContentService.MimeType.JSON);
+}
+
+function saveCariBulk(entries) {
+  var ss = SpreadsheetApp.getActiveSpreadsheet();
+  var sheet = ss.getSheetByName('Cari');
+  if (!sheet) sheet = ss.insertSheet('Cari');
+  sheet.clear();
+  sheet.appendRow(['Cari Adı', 'Cari Kodu']);
+  if (entries.length > 0) {
+    var rows = entries.map(function (e) { return [e.name || '', e.code || '']; });
+    sheet.getRange(2, 1, rows.length, 2).setValues(rows);
+  }
+  PropertiesService.getScriptProperties().setProperty('CARI_VERSION', new Date().toISOString());
+  return ContentService.createTextOutput(JSON.stringify({ status: 'ok', saved: entries.length })).setMimeType(ContentService.MimeType.JSON);
+}
+
+// Mal Giriş / Mal Çıkış — bir fatura/irsaliye altında okutulan ürünleri
+// "MalHareket" sekmesine toplu olarak yazar. Sayım verisiyle KARIŞMAZ,
+// tamamen ayrı bir sekmede tutulur.
+function saveMalHareket(data) {
+  var ss = SpreadsheetApp.getActiveSpreadsheet();
+  var sheet = ss.getSheetByName('MalHareket');
+  if (!sheet) {
+    sheet = ss.insertSheet('MalHareket');
+    sheet.appendRow(['Tarih', 'Saat', 'Tip', 'Cari', 'Fatura/İrsaliye No', 'Personel', 'Barkod', 'Ürün Adı', 'Stok Kodu', 'Miktar', 'Birim', 'Kayıt ID']);
+  }
+  var rows = (data.rows || []).map(function (r) {
+    return [
+      r.tarih || '', r.saat || '', data.tip === 'cikis' ? 'Çıkış' : 'Giriş',
+      data.cari || '', data.faturaNo || '', data.personel || '',
+      r.barkod || '', r.ad || '', r.stokKodu || '', r.miktar || '', r.birim || 'Adet',
+      r.kayitId || Utilities.getUuid()
+    ];
+  });
+  if (rows.length > 0) {
+    sheet.getRange(sheet.getLastRow() + 1, 1, rows.length, 12).setValues(rows);
+  }
+  return ContentService
+    .createTextOutput(JSON.stringify({ status: 'ok', saved: rows.length }))
+    .setMimeType(ContentService.MimeType.JSON);
+}
+
 function getKatalog(callback) {
   var ss = SpreadsheetApp.getActiveSpreadsheet();
   var sheet = ss.getSheetByName('Katalog');
   var entries = [];
   if (sheet && sheet.getLastRow() >= 2) {
-    var values = sheet.getRange(2, 1, sheet.getLastRow() - 1, 4).getValues();
+    var values = sheet.getRange(2, 1, sheet.getLastRow() - 1, 5).getValues();
     entries = values
       .filter(function (r) { return r[0] && r[1]; })
       .map(function (r) {
-        return { name: String(r[0]), barcode: String(r[1]), stockCode: String(r[2] || ''), oldStock: String(r[3] || '') };
+        return { name: String(r[0]), barcode: String(r[1]), stockCode: String(r[2] || ''), oldStock: String(r[3] || ''), price: String(r[4] || '') };
       });
   }
   var json = JSON.stringify({ entries: entries });
@@ -273,6 +337,12 @@ function doPost(e) {
     if (data.type === 'katalog_item') {
       return saveKatalogItem(data.entry || {});
     }
+    if (data.type === 'cari_bulk') {
+      return saveCariBulk(data.entries || []);
+    }
+    if (data.type === 'mal_hareket') {
+      return saveMalHareket(data);
+    }
 
     // ---- Normal sayım verisi ----
     var ss = SpreadsheetApp.getActiveSpreadsheet();
@@ -362,12 +432,12 @@ function saveKatalogBulk(entries) {
   var sheet = ss.getSheetByName('Katalog');
   if (!sheet) sheet = ss.insertSheet('Katalog');
   sheet.clear();
-  sheet.appendRow(['Ürün Adı', 'Barkod', 'Stok Kodu', 'Eski Stok']);
+  sheet.appendRow(['Ürün Adı', 'Barkod', 'Stok Kodu', 'Eski Stok', 'Fiyat']);
   if (entries.length > 0) {
     var rows = entries.map(function (e) {
-      return [e.name || '', e.barcode || '', e.stockCode || '', e.oldStock || ''];
+      return [e.name || '', e.barcode || '', e.stockCode || '', e.oldStock || '', e.price || ''];
     });
-    sheet.getRange(2, 1, rows.length, 4).setValues(rows);
+    sheet.getRange(2, 1, rows.length, 5).setValues(rows);
   }
   // Katalog her değiştiğinde bir "sürüm" damgası basıyoruz — telefonlar bunu
   // (resetcheck ile) düzenli kontrol edip kendi sürümünden farklıysa
@@ -388,16 +458,16 @@ function saveKatalogItem(entry) {
   var sheet = ss.getSheetByName('Katalog');
   if (!sheet) {
     sheet = ss.insertSheet('Katalog');
-    sheet.appendRow(['Ürün Adı', 'Barkod', 'Stok Kodu', 'Eski Stok']);
+    sheet.appendRow(['Ürün Adı', 'Barkod', 'Stok Kodu', 'Eski Stok', 'Fiyat']);
   }
   var lastRow = sheet.getLastRow();
-  var rowData = [entry.name, entry.barcode, entry.stockCode || '', entry.oldStock || ''];
+  var rowData = [entry.name, entry.barcode, entry.stockCode || '', entry.oldStock || '', entry.price || ''];
   PropertiesService.getScriptProperties().setProperty('KATALOG_VERSION', new Date().toISOString());
   if (lastRow >= 2) {
     var barcodes = sheet.getRange(2, 2, lastRow - 1, 1).getValues();
     for (var i = 0; i < barcodes.length; i++) {
       if (String(barcodes[i][0]) === String(entry.barcode)) {
-        sheet.getRange(i + 2, 1, 1, 4).setValues([rowData]);
+        sheet.getRange(i + 2, 1, 1, 5).setValues([rowData]);
         return ContentService.createTextOutput(JSON.stringify({ status: 'ok', updated: true }))
           .setMimeType(ContentService.MimeType.JSON);
       }

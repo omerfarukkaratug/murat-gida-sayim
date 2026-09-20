@@ -1,6 +1,6 @@
 {
-  "name": "Murat Gıda Sayım",
-  "short_name": "Sayım",
+  "name": "MK ERP",
+  "short_name": "MK ERP",
   "start_url": "./index.html",
   "id": "/index.html",
   "display": "standalone",
