@@ -201,7 +201,7 @@
   <header style="border:none; padding:0 0 16px; background:transparent; display:flex; align-items:flex-start; justify-content:space-between;">
     <div>
       <h1><img src="logo-header.png" alt="Murat Gıda" style="height:30px; width:auto; display:block;"></h1>
-      <div class="sub">Sayım · hızlı barkod • offline • Android • build 68</div>
+      <div class="sub">Sayım · hızlı barkod • offline • Android • build 70</div>
     </div>
     <button type="button" id="themeToggleBtn" title="Karanlık / Aydınlık tema" style="background:var(--panel2); border:1.5px solid var(--line); color:var(--text); width:34px; height:34px; border-radius:50%; font-size:15px; padding:0; display:flex; align-items:center; justify-content:center; flex-shrink:0;">🌙</button>
   </header>
@@ -1047,27 +1047,40 @@
   });
 
   document.getElementById('fetchCatalogBtn').addEventListener('click', function(){
-    var url = serverInput.value.trim() || DEFAULT_SERVER_URL;
-    productCountEl.textContent = "Sunucudan çekiliyor… (büyük listede 1 dakikaya kadar sürebilir)";
+    fetchCatalogFromServer(false);
+  });
+
+  // Sunucudan kataloğu çekip telefona kaydeden ortak fonksiyon — hem
+  // "☁️ Sunucudan Kataloğu Çek" butonuna elle basınca, hem de aşağıdaki
+  // otomatik güncelleme kontrolü tarafından (sessizce) çağrılır.
+  function fetchCatalogFromServer(silent, onDone){
+    var url = state.serverUrl || DEFAULT_SERVER_URL;
+    if(!silent) productCountEl.textContent = "Sunucudan çekiliyor… (büyük listede 1 dakikaya kadar sürebilir)";
     fetchCatalogJsonp(url, function(err, data){
       if(err){
-        updateProductCountLabel();
-        errorToast("Katalog çekilemedi: " + err + " — internet bağlantınızı kontrol edin");
+        if(!silent){ updateProductCountLabel(); errorToast("Katalog çekilemedi: " + err + " — internet bağlantınızı kontrol edin"); }
+        if(onDone) onDone(false);
         return;
       }
       var entries = (data && data.entries) || [];
-      if(entries.length === 0){ warnToast("Sunucuda henüz katalog yok — önce bir telefon yüklemeli"); updateProductCountLabel(); return; }
+      if(entries.length === 0){
+        if(!silent){ warnToast("Sunucuda henüz katalog yok — önce bir telefon yüklemeli"); updateProductCountLabel(); }
+        if(onDone) onDone(false);
+        return;
+      }
       idbBulkReplace(entries).then(function(){
         catalogMap = new Map();
         entries.forEach(function(e){ catalogMap.set(e.barcode, { name: e.name, stockCode: e.stockCode || '', oldStock: e.oldStock || '' }); });
         updateProductCountLabel();
-        successToast(entries.length + " kayıt sunucudan indirildi");
+        if(!silent) successToast(entries.length + " kayıt sunucudan indirildi");
+        else successToast("Ürün listesi otomatik güncellendi (" + entries.length + " kayıt)");
+        if(onDone) onDone(true);
       }).catch(function(err2){
-        updateProductCountLabel();
-        errorToast("İndirilen katalog telefona kaydedilemedi: " + err2);
+        if(!silent){ updateProductCountLabel(); errorToast("İndirilen katalog telefona kaydedilemedi: " + err2); }
+        if(onDone) onDone(false);
       });
     });
-  });
+  }
 
   // JSONP ile sunucudan veri çekme — normal fetch() bazı Apps Script
   // yanıtlarında CORS kısıtlamasına takılabiliyor; <script> etiketiyle
