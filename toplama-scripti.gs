@@ -8,7 +8,7 @@
 // bir sürüm dağıttıktan sonra /exec adresini boş açtığında burada yazan
 // numarayı görmelisin; index.html'in üstündeki "build" numarasıyla
 // eşleşecek şekilde ben her ikisini birlikte güncelliyorum.
-var GS_VERSION = 'build68';
+var GS_VERSION = 'build71';
 
 // Sheets'te "Saat" sütunu zaman biçimli olarak algılanırsa, hücre değeri düz
 // metin değil bir Date nesnesi olarak gelir ve String(...) çirkin bir çıktı
@@ -42,7 +42,8 @@ function doGet(e) {
     return outJson({
       resetToken: PropertiesService.getScriptProperties().getProperty('RESET_TOKEN') || '',
       defaultWakeLock: PropertiesService.getScriptProperties().getProperty('DEFAULT_WAKE_LOCK') || 'true',
-      idleMinutes: PropertiesService.getScriptProperties().getProperty('DEFAULT_IDLE_MINUTES') || '0'
+      idleMinutes: PropertiesService.getScriptProperties().getProperty('DEFAULT_IDLE_MINUTES') || '0',
+      katalogVersion: PropertiesService.getScriptProperties().getProperty('KATALOG_VERSION') || ''
     }, e.parameter.callback);
   }
   if (e.parameter && e.parameter.action === 'temizle') {
@@ -368,6 +369,11 @@ function saveKatalogBulk(entries) {
     });
     sheet.getRange(2, 1, rows.length, 4).setValues(rows);
   }
+  // Katalog her değiştiğinde bir "sürüm" damgası basıyoruz — telefonlar bunu
+  // (resetcheck ile) düzenli kontrol edip kendi sürümünden farklıysa
+  // kataloğu OTOMATİK olarak sunucudan çeker, kimse elle "Sunucudan Çek"e
+  // basmak zorunda kalmaz.
+  PropertiesService.getScriptProperties().setProperty('KATALOG_VERSION', new Date().toISOString());
   return ContentService
     .createTextOutput(JSON.stringify({ status: 'ok', saved: entries.length }))
     .setMimeType(ContentService.MimeType.JSON);
@@ -386,6 +392,7 @@ function saveKatalogItem(entry) {
   }
   var lastRow = sheet.getLastRow();
   var rowData = [entry.name, entry.barcode, entry.stockCode || '', entry.oldStock || ''];
+  PropertiesService.getScriptProperties().setProperty('KATALOG_VERSION', new Date().toISOString());
   if (lastRow >= 2) {
     var barcodes = sheet.getRange(2, 2, lastRow - 1, 1).getValues();
     for (var i = 0; i < barcodes.length; i++) {

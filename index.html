@@ -201,7 +201,7 @@
   <header style="border:none; padding:0 0 16px; background:transparent; display:flex; align-items:flex-start; justify-content:space-between;">
     <div>
       <h1><img src="logo-header.png" alt="Murat Gıda" style="height:30px; width:auto; display:block;"></h1>
-      <div class="sub">Sayım · hızlı barkod • offline • Android • build 70</div>
+      <div class="sub">Sayım · hızlı barkod • offline • Android • build 71</div>
     </div>
     <button type="button" id="themeToggleBtn" title="Karanlık / Aydınlık tema" style="background:var(--panel2); border:1.5px solid var(--line); color:var(--text); width:34px; height:34px; border-radius:50%; font-size:15px; padding:0; display:flex; align-items:center; justify-content:center; flex-shrink:0;">🌙</button>
   </header>
@@ -637,6 +637,7 @@
   if(!state.userRoster) state.userRoster = [];
   if(state.idleMinutes === undefined) state.idleMinutes = 0;
   if(state.theme === undefined) state.theme = state.darkMode ? 'dark' : 'light'; // eski state.darkMode'dan geçiş
+  if(state.catalogVersion === undefined) state.catalogVersion = '';
 
   // ---------- TEMA: Aydınlık / Karanlık / Pembe ----------
   var THEME_ORDER = ['light', 'dark', 'pink'];
@@ -1170,6 +1171,15 @@
         if(!isNaN(mins) && state.idleMinutes !== mins && typeof applyIdleMinutes === 'function'){
           applyIdleMinutes(mins);
         }
+      }
+      // Katalog güncellendi mi? — yönetici yeni bir liste yüklediğinde ya da
+      // tek bir ürün eklediğinde sunucu bir "sürüm" damgası basıyor. Bizim
+      // sürümümüzden farklıysa, kimse "Sunucudan Çek"e basmadan, sessizce
+      // kendimiz güncel kataloğu çekip telefona kaydediyoruz.
+      if(data.katalogVersion && data.katalogVersion !== state.catalogVersion && typeof fetchCatalogFromServer === 'function'){
+        fetchCatalogFromServer(true, function(success){
+          if(success){ state.catalogVersion = data.katalogVersion; save(); }
+        });
       }
     }, 15000);
   }
