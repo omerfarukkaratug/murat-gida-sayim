@@ -85,6 +85,7 @@
   .status{font-size:10.5px; padding:5px 11px; border-radius:20px; font-weight:800; letter-spacing:.05em; text-transform:uppercase;}
   .status.online{background:rgba(47,158,91,.14); color:var(--green);}
   .status.offline{background:rgba(217,127,30,.14); color:var(--amber);}
+  .status.serverdown{background:rgba(220,38,38,.14); color:var(--red);}
 
   #camWrap{position:relative; background:#000; flex:0 0 auto; height:38dvh; overflow:hidden; border-radius:var(--r-lg);}
   #video{width:100%; height:100%; object-fit:cover;}
@@ -201,7 +202,7 @@
   <header style="border:none; padding:0 0 16px; background:transparent; display:flex; align-items:flex-start; justify-content:space-between;">
     <div>
       <h1><img src="logo-header.png" alt="Murat Gıda" style="height:30px; width:auto; display:block;"></h1>
-      <div class="sub">Sayım · hızlı barkod • offline • Android • build 71</div>
+      <div class="sub">Sayım · hızlı barkod • offline • Android • build 72</div>
     </div>
     <button type="button" id="themeToggleBtn" title="Karanlık / Aydınlık tema" style="background:var(--panel2); border:1.5px solid var(--line); color:var(--text); width:34px; height:34px; border-radius:50%; font-size:15px; padding:0; display:flex; align-items:center; justify-content:center; flex-shrink:0;">🌙</button>
   </header>
@@ -241,19 +242,13 @@
     </div>
 
     <div class="tabSwitch" role="tablist">
-      <button type="button" class="tabBtn active" data-tab="server">☁️ Sunucudan Çek</button>
-      <button type="button" class="tabBtn" data-tab="file">📄 Dosya</button>
+      <button type="button" class="tabBtn active" data-tab="file">📄 Dosya</button>
       <button type="button" class="tabBtn" data-tab="paste">✏️ Yapıştır</button>
     </div>
 
-    <div class="tabPanel" data-panel="server">
-      <button type="button" id="fetchCatalogBtn" class="btn-secondary">
-        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-3px; margin-right:5px;"><polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg>Sunucudan Kataloğu Çek
-      </button>
-      <div class="hint" style="text-align:center;">Başka bir telefon listeyi zaten yüklediyse en hızlısı bu — dosya aramana gerek kalmaz.</div>
-    </div>
+    <div class="hint" style="text-align:center; margin-bottom:10px;">Katalog artık otomatik güncelleniyor — ERP'den değişiklik geldiğinde bu telefon kendiliğinden alır, elle çekmene gerek yok.</div>
 
-    <div class="tabPanel hidden" data-panel="file">
+    <div class="tabPanel" data-panel="file">
       <label class="filebtn" id="fileDropZone">
         <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="display:block; margin:0 auto 6px;"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8Z"/><polyline points="14 2 14 8 20 8"/></svg>
         <span>Dosya seçmek için dokun</span>
@@ -381,7 +376,10 @@
       <div class="qtyEntryCard">
         <div style="font-size:13px; font-weight:800; color:var(--amber); margin-bottom:4px;">YENİ ÜRÜN</div>
         <div id="newProductBarcode" style="font-family:var(--mono); color:var(--muted); font-size:12px; margin-bottom:12px;"></div>
-        <input type="text" id="newProductName" placeholder="Ürün adı yaz" style="margin-bottom:10px;">
+        <input type="text" id="newProductName" placeholder="Ürün adı yaz" style="margin-bottom:6px;">
+        <div style="text-align:right; margin-bottom:10px;">
+          <a href="#" id="newProductQuickBtn" style="font-size:11.5px; color:var(--accent); text-decoration:underline;">⚡ İsim yazmadan, sadece barkod + miktar kaydet</a>
+        </div>
         <input type="number" id="newProductQty" inputmode="numeric" placeholder="Adet gir">
         <div class="qtyEntryBtns">
           <button id="newProductCancel">Vazgeç</button>
@@ -1047,9 +1045,9 @@
     });
   });
 
-  document.getElementById('fetchCatalogBtn').addEventListener('click', function(){
-    fetchCatalogFromServer(false);
-  });
+  // 'fetchCatalogBtn' butonu ekrandan kaldırıldı (katalog artık otomatik
+  // senkronize oluyor) ama fonksiyon hâlâ otomatik güncelleme tarafından
+  // kullanılıyor, o yüzden fetchCatalogFromServer() fonksiyonu duruyor.
 
   // Sunucudan kataloğu çekip telefona kaydeden ortak fonksiyon — hem
   // "☁️ Sunucudan Kataloğu Çek" butonuna elle basınca, hem de aşağıdaki
@@ -1091,6 +1089,7 @@
     var cbName = 'sayimCb_' + action + '_' + Date.now();
     var timeoutId = setTimeout(function(){
       cleanup();
+      if(typeof markServerUnreachable === 'function') markServerUnreachable();
       cb('zaman aşımı / bağlantı kurulamadı');
     }, timeoutMs || 60000);
     function cleanup(){
@@ -1100,12 +1099,13 @@
     }
     window[cbName] = function(data){
       cleanup();
+      if(typeof markServerReachable === 'function') markServerReachable();
       cb(null, data);
     };
     var sep = url.indexOf('?') === -1 ? '?' : '&';
     var script = document.createElement('script');
     script.src = url + sep + 'action=' + action + '&callback=' + cbName;
-    script.onerror = function(){ cleanup(); cb('sunucuya ulaşılamadı'); };
+    script.onerror = function(){ cleanup(); if(typeof markServerUnreachable === 'function') markServerUnreachable(); cb('sunucuya ulaşılamadı'); };
     document.body.appendChild(script);
   }
   function fetchCatalogJsonp(url, cb){
@@ -1119,15 +1119,15 @@
   // PIN gibi ek parametreler gönderebilsin diye.
   function jsonpRequestP(url, params, cb, timeoutMs){
     var cbName = 'sayimCb_' + (params.action||'x') + '_' + Date.now();
-    var timeoutId = setTimeout(function(){ cleanup(); cb('zaman aşımı / bağlantı kurulamadı'); }, timeoutMs || 60000);
+    var timeoutId = setTimeout(function(){ cleanup(); if(typeof markServerUnreachable === 'function') markServerUnreachable(); cb('zaman aşımı / bağlantı kurulamadı'); }, timeoutMs || 60000);
     function cleanup(){ clearTimeout(timeoutId); delete window[cbName]; if(script.parentNode) script.parentNode.removeChild(script); }
-    window[cbName] = function(data){ cleanup(); cb(null, data); };
+    window[cbName] = function(data){ cleanup(); if(typeof markServerReachable === 'function') markServerReachable(); cb(null, data); };
     var qs = Object.keys(params).map(function(k){ return encodeURIComponent(k) + '=' + encodeURIComponent(params[k]); }).join('&');
     qs += '&callback=' + cbName;
     var sep = url.indexOf('?') === -1 ? '?' : '&';
     var script = document.createElement('script');
     script.src = url + sep + qs;
-    script.onerror = function(){ cleanup(); cb('sunucuya ulaşılamadı'); };
+    script.onerror = function(){ cleanup(); if(typeof markServerUnreachable === 'function') markServerUnreachable(); cb('sunucuya ulaşılamadı'); };
     document.body.appendChild(script);
   }
 
@@ -1247,12 +1247,34 @@
   var whoLabel = document.getElementById('whoLabel');
   var statusBadge = document.getElementById('statusBadge');
   var pendingBadge = document.getElementById('pendingBadge');
+  var serverUnreachable = false; // internet var ama sunucuya (Apps Script'e) ulaşılamıyor mu?
 
   function updateStatus(){
     var online = navigator.onLine;
-    statusBadge.textContent = online ? "Çevrimiçi" : "Çevrimdışı";
-    statusBadge.className = "status " + (online ? "online" : "offline");
+    if(!online) serverUnreachable = false; // "çevrimdışı" zaten daha öncelikli, karıştırmayalım
+    if(!online){
+      statusBadge.textContent = "Çevrimdışı";
+      statusBadge.className = "status offline";
+    } else if(serverUnreachable){
+      statusBadge.textContent = "Sunucuya Ulaşılamıyor";
+      statusBadge.className = "status serverdown";
+    } else {
+      statusBadge.textContent = "Çevrimiçi";
+      statusBadge.className = "status online";
+    }
     if(online){ trySync(true); checkResetToken(); }
+  }
+  // Senkronizasyon ya da sunucu ile ilgili herhangi bir işlem gerçek bir ağ
+  // hatasıyla karşılaşırsa (internet var görünüyor ama Apps Script'e
+  // ulaşılamıyor — örn. yanlış adres, sunucu dağıtımı bozuk), bu iki
+  // fonksiyonla durumu işaretleyip rozeti güncelliyoruz. "Çevrimdışı"dan
+  // kasıtlı olarak ayrı tutuyoruz çünkü ikisinin çözümü farklı: biri
+  // internet sorunu, öbürü sunucu/dağıtım sorunu.
+  function markServerUnreachable(){
+    if(!serverUnreachable){ serverUnreachable = true; updateStatus(); }
+  }
+  function markServerReachable(){
+    if(serverUnreachable){ serverUnreachable = false; updateStatus(); }
   }
   window.addEventListener('online', updateStatus);
   window.addEventListener('offline', updateStatus);
@@ -1409,6 +1431,15 @@
     newProductEl.classList.add('hidden');
     warnToast("Atlandı: " + newProductBarcodeVal);
     showPlaceholder();
+  });
+
+  document.getElementById('newProductQuickBtn').addEventListener('click', function(e){
+    e.preventDefault();
+    // İsim yazmadan hızlı kayıt: barkodu geçici bir isim olarak kullanıp
+    // direkt miktar girişine geçiyoruz. İsim daha sonra (ERP'den gerçek
+    // adı gelince) "Sayım Kayıtlarını Düzelt" ekranından kolayca düzeltilir.
+    newProductNameInput.value = 'İsimsiz Ürün (' + newProductBarcodeVal + ')';
+    newProductQtyInput.focus();
   });
 
   document.getElementById('newProductConfirm').addEventListener('click', function(){
@@ -2734,6 +2765,7 @@
       })
         .then(function(){
           sentCount++;
+          if(typeof markServerReachable === 'function') markServerReachable();
           // Bu, geçerli (hâlâ açık) oturuma aitse, içindeki kayıtları
           // "gönderildi" (yeşil) olarak işaretle ki listede görünsün.
           if(payload.sessionId === state.session.id){
@@ -2748,6 +2780,7 @@
         .catch(function(err){
           remaining.push(payload); // gönderilemedi — kuyrukta kalsın, veri kaybı yok
           anyError = (err && err.message) ? err.message : 'bağlantı hatası';
+          if(typeof markServerUnreachable === 'function') markServerUnreachable();
         })
         .finally(function(){ sendNext(i+1); });
     };
