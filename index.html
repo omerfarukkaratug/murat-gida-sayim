@@ -11,6 +11,7 @@
     --bg:#ffffff; --panel:#ffffff; --panel2:#f4f4f5; --line:#e4e4e7;
     --text:#0a0a0a; --muted:#6b7280; --green:#16a34a; --amber:#d97706; --red:#dc2626;
     --accent:#5546ea; --accent2:#7a6bff;
+    --ink:#0a0a0a;
     --r-sm:10px; --r-md:14px; --r-lg:20px;
     --sh-sm: 0 1px 2px rgba(0,0,0,.05), 0 1px 1px rgba(0,0,0,.04);
     --sh-md: 0 6px 18px rgba(0,0,0,.09);
@@ -25,6 +26,14 @@
     --sh-sm: 0 1px 2px rgba(0,0,0,.4), 0 1px 1px rgba(0,0,0,.3);
     --sh-md: 0 6px 18px rgba(0,0,0,.45);
     --sh-lg: 0 -6px 24px rgba(0,0,0,.5);
+  }
+  body.pink{
+    --bg:#fff0f6; --panel:#ffffff; --panel2:#ffe1ee; --line:#ffbcda;
+    --text:#4a1030; --muted:#a15a80; --green:#16a34a; --amber:#c2650a; --red:#dc2626;
+    --accent:#e0447f; --accent2:#ff6fa8;
+    --sh-sm: 0 1px 2px rgba(224,68,127,.10), 0 1px 1px rgba(224,68,127,.08);
+    --sh-md: 0 6px 18px rgba(224,68,127,.16);
+    --sh-lg: 0 -6px 24px rgba(224,68,127,.18);
   }
   *{box-sizing:border-box; -webkit-tap-highlight-color:transparent;}
   body{margin:0; background:var(--bg); color:var(--text); font-family:var(--sans);
@@ -137,7 +146,7 @@
 
   .manualBar{display:flex; gap:8px; padding:10px 14px; background:var(--panel);}
   .manualBar input{flex:1;}
-  .manualBar button{background:var(--text); border:1.5px solid var(--text); color:#fff; padding:0 16px; border-radius:var(--r-sm); font-size:13px; font-weight:700;}
+  .manualBar button{background:#fff; border:1.5px solid var(--line); color:#000; padding:0 16px; border-radius:var(--r-sm); font-size:13px; font-weight:700;}
 
   #list{flex:1; overflow-y:auto; padding:10px 12px 4px;}
   .item{display:flex; align-items:center; gap:10px; background:var(--panel);
@@ -174,7 +183,7 @@
   .fb-new{background:linear-gradient(135deg, var(--red), #a91d1d); color:#fff; box-shadow:0 6px 14px rgba(220,38,38,.28);}
   .badge{background:var(--accent); color:#fff; border-radius:10px; font-size:9.5px; padding:1px 6px; margin-left:5px; font-family:var(--mono);}
 
-  #toast{position:fixed; left:16px; right:16px; bottom:84px; background:var(--text); color:#fff;
+  #toast{position:fixed; left:16px; right:16px; bottom:84px; background:var(--ink); color:#fff;
     padding:13px 16px; border-radius:var(--r-md); font-size:13.5px; font-weight:700; text-align:center;
     transform:translateY(140px); transition:transform .25s; z-index:50; box-shadow:var(--sh-md); line-height:1.4;}
   #toast.show{transform:translateY(0);}
@@ -192,7 +201,7 @@
   <header style="border:none; padding:0 0 16px; background:transparent; display:flex; align-items:flex-start; justify-content:space-between;">
     <div>
       <h1><img src="logo-header.png" alt="Murat Gıda" style="height:30px; width:auto; display:block;"></h1>
-      <div class="sub">Sayım · hızlı barkod • offline • Android • build 66</div>
+      <div class="sub">Sayım · hızlı barkod • offline • Android • build 67</div>
     </div>
     <button type="button" id="themeToggleBtn" title="Karanlık / Aydınlık tema" style="background:var(--panel2); border:1.5px solid var(--line); color:var(--text); width:34px; height:34px; border-radius:50%; font-size:15px; padding:0; display:flex; align-items:center; justify-content:center; flex-shrink:0;">🌙</button>
   </header>
@@ -554,7 +563,7 @@
         <div style="font-weight:800; font-size:13px; margin-bottom:8px;">👤 Kullanıcı Yönetimi</div>
         <div id="adminUsersList"></div>
         <button type="button" id="adminAddUserBtn" style="width:100%; background:var(--panel); border:1.5px dashed var(--line); color:var(--text); padding:11px; margin-bottom:8px;">➕ Kullanıcı Ekle</button>
-        <button id="adminUsersSave" style="width:100%; background:var(--text); color:#fff; padding:11px;">💾 Kullanıcı Listesini Kaydet</button>
+        <button id="adminUsersSave" style="width:100%; background:var(--ink); color:#fff; padding:11px;">💾 Kullanıcı Listesini Kaydet</button>
       </div>
 
       <div id="adminSectionAyarlar" class="hidden" style="border-top:1px solid var(--line); margin:14px 0 12px; padding-top:12px;">
@@ -570,7 +579,7 @@
         <div style="font-weight:800; font-size:13px; margin-bottom:6px;">📧 Yedek E-posta</div>
         <div class="hint" style="margin-bottom:8px;">"Sayımı Bitir ve Rapor Oluştur" her çalıştığında, Son Stok Sayımı bu adrese CSV eki olarak otomatik gönderilir. Boş bırakırsan mail gönderilmez.</div>
         <input type="text" id="adminBackupEmail" placeholder="ornek@murat-gida.com" style="margin-bottom:10px;">
-        <button id="adminWakeLockSave" style="width:100%; background:var(--text); color:#fff; padding:11px;">Ayarları Kaydet</button>
+        <button id="adminWakeLockSave" style="width:100%; background:var(--ink); color:#fff; padding:11px;">Ayarları Kaydet</button>
       </div>
 
       <div id="adminSectionCanliDurum" class="hidden" style="border-top:1px solid var(--line); margin:14px 0 12px; padding-top:12px;">
@@ -627,21 +636,26 @@
   if(!state.newProductCounter) state.newProductCounter = 1;
   if(!state.userRoster) state.userRoster = [];
   if(state.idleMinutes === undefined) state.idleMinutes = 0;
-  if(state.darkMode === undefined) state.darkMode = false;
+  if(state.theme === undefined) state.theme = state.darkMode ? 'dark' : 'light'; // eski state.darkMode'dan geçiş
 
-  // ---------- KARANLIK / AYDINLIK TEMA ----------
+  // ---------- TEMA: Aydınlık / Karanlık / Pembe ----------
+  var THEME_ORDER = ['light', 'dark', 'pink'];
+  var THEME_ICON = { light: '🌙', dark: '🌸', pink: '☀️' }; // ikon = "buna dokununca sıradaki tema"
+  var THEME_COLOR = { light: '#ffffff', dark: '#101014', pink: '#fff0f6' };
   function applyTheme(){
-    document.body.classList.toggle('dark', !!state.darkMode);
-    var icon = state.darkMode ? '☀️' : '🌙';
+    document.body.classList.remove('dark', 'pink');
+    if(state.theme === 'dark' || state.theme === 'pink') document.body.classList.add(state.theme);
+    var icon = THEME_ICON[state.theme] || '🌙';
     var themeBtn1 = document.getElementById('themeToggleBtn');
     var themeBtn2 = document.getElementById('themeToggleBtnMain');
     if(themeBtn1) themeBtn1.textContent = icon;
     if(themeBtn2) themeBtn2.textContent = icon;
     var metaTheme = document.querySelector('meta[name="theme-color"]');
-    if(metaTheme) metaTheme.setAttribute('content', state.darkMode ? '#101014' : '#ffffff');
+    if(metaTheme) metaTheme.setAttribute('content', THEME_COLOR[state.theme] || '#ffffff');
   }
   function toggleTheme(){
-    state.darkMode = !state.darkMode;
+    var idx = THEME_ORDER.indexOf(state.theme);
+    state.theme = THEME_ORDER[(idx + 1) % THEME_ORDER.length];
     save();
     applyTheme();
   }
@@ -1480,7 +1494,7 @@
   }
 
   document.getElementById('qtyEntryCancel').addEventListener('click', closeQtyEntry);
-  document.getElementById('qtyEntryConfirm').addEventListener('click', confirmQtyEntry);
+  bindFastTap(document.getElementById('qtyEntryConfirm'), confirmQtyEntry);
   qtyEntryInput.addEventListener('keydown', function(e){ if(e.key === 'Enter') confirmQtyEntry(); });
 
   // Koli×adet, ya da elde kalan fazla/eksikleri toplayıp çıkarmak için basit
@@ -2361,7 +2375,24 @@
     }, 30000);
   });
 
-  document.getElementById('manualAdd').addEventListener('click', function(){
+  // Klavye açıkken bir butona basıldığında, dokunuş anında input'un
+  // odağının kaybolup klavyenin kapanması sayfa düzenini değiştiriyor —
+  // bu da ilk dokunuşun butona değil, kapanan klavyenin eski yerine denk
+  // gelip boşa gitmesine (iki kez basma ihtiyacına) yol açıyor. 'pointerdown'
+  // düzenin değişmesinden ÖNCE, dokunulduğu an tetiklendiği için bunu çözer.
+  function bindFastTap(el, handler){
+    var handledAt = 0;
+    el.addEventListener('pointerdown', function(e){
+      handledAt = Date.now();
+      handler(e);
+    });
+    el.addEventListener('click', function(e){
+      if(Date.now() - handledAt < 600) return; // pointerdown zaten işledi
+      handler(e);
+    });
+  }
+
+  bindFastTap(document.getElementById('manualAdd'), function(){
     var inp = document.getElementById('manualInput');
     if(inp.value.trim()){ handleScanResult(inp.value.trim()); inp.value=''; }
   });
