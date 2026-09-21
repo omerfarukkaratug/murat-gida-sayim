@@ -8,7 +8,7 @@
 // bir sürüm dağıttıktan sonra /exec adresini boş açtığında burada yazan
 // numarayı görmelisin; index.html'in üstündeki "build" numarasıyla
 // eşleşecek şekilde ben her ikisini birlikte güncelliyorum.
-var GS_VERSION = 'build74';
+var GS_VERSION = 'build77';
 
 // Sheets'te "Saat" sütunu zaman biçimli olarak algılanırsa, hücre değeri düz
 // metin değil bir Date nesnesi olarak gelir ve String(...) çirkin bir çıktı
@@ -180,10 +180,10 @@ function getCari(callback) {
   var sheet = ss.getSheetByName('Cari');
   var entries = [];
   if (sheet && sheet.getLastRow() >= 2) {
-    var values = sheet.getRange(2, 1, sheet.getLastRow() - 1, 2).getValues();
+    var values = sheet.getRange(2, 1, sheet.getLastRow() - 1, 3).getValues();
     entries = values
       .filter(function (r) { return r[0]; })
-      .map(function (r) { return { name: String(r[0]), code: String(r[1] || '') }; });
+      .map(function (r) { return { name: String(r[0]), code: String(r[1] || ''), balance: String(r[2] || '') }; });
   }
   var json = JSON.stringify({ entries: entries });
   if (callback) {
@@ -197,10 +197,11 @@ function saveCariBulk(entries) {
   var sheet = ss.getSheetByName('Cari');
   if (!sheet) sheet = ss.insertSheet('Cari');
   sheet.clear();
-  sheet.appendRow(['Cari Adı', 'Cari Kodu']);
+  sheet.appendRow(['Cari Adı', 'Cari Kodu', 'Bakiye']);
   if (entries.length > 0) {
-    var rows = entries.map(function (e) { return [e.name || '', e.code || '']; });
-    sheet.getRange(2, 1, rows.length, 2).setValues(rows);
+    var rows = entries.map(function (e) { return [e.name || '', e.code || '', cleanNum(e.balance)]; });
+    sheet.getRange(2, 1, rows.length, 3).setValues(rows);
+    sheet.getRange(2, 3, rows.length, 1).setNumberFormat('0.00');
   }
   PropertiesService.getScriptProperties().setProperty('CARI_VERSION', new Date().toISOString());
   return ContentService.createTextOutput(JSON.stringify({ status: 'ok', saved: entries.length })).setMimeType(ContentService.MimeType.JSON);
@@ -427,6 +428,18 @@ function doPost(e) {
   }
 }
 
+// Sheets, hücreye yazılan METİN sayıları kendi dil ayarına göre otomatik
+// yorumlamaya çalışır — Türkçe ayarda "nokta" binlik ayraç sayıldığı için,
+// SQL'den gelen "2.00000000" gibi ondalıklı bir metin yanlışlıkla "2 milyar"
+// gibi devasa bir sayıya dönüşebiliyordu. Bunu önlemek için, sayısal
+// alanları (Eski Stok, Fiyat) sheet'e METİN değil GERÇEK SAYI olarak
+// yazıyoruz — bu şekilde Sheets hiçbir yorum yapmadan, olduğu gibi kaydeder.
+function cleanNum(v) {
+  if (v === '' || v === null || v === undefined) return '';
+  var n = Number(v);
+  return isNaN(n) ? '' : n;
+}
+
 function saveKatalogBulk(entries) {
   var ss = SpreadsheetApp.getActiveSpreadsheet();
   var sheet = ss.getSheetByName('Katalog');
@@ -435,9 +448,13 @@ function saveKatalogBulk(entries) {
   sheet.appendRow(['Ürün Adı', 'Barkod', 'Stok Kodu', 'Eski Stok', 'Fiyat']);
   if (entries.length > 0) {
     var rows = entries.map(function (e) {
-      return [e.name || '', e.barcode || '', e.stockCode || '', e.oldStock || '', e.price || ''];
+      return [e.name || '', e.barcode || '', e.stockCode || '', cleanNum(e.oldStock), cleanNum(e.price)];
     });
     sheet.getRange(2, 1, rows.length, 5).setValues(rows);
+    // Fiyat sütununu her zaman 2 ondalık basamakla göster — Sheets'in
+    // "Otomatik" biçimi bazen kuruşu gizleyip tam sayıya yuvarlanmış
+    // GÖRÜNMESİNE yol açabiliyor (asıl değer bozulmuyor ama kafa karıştırıyor).
+    sheet.getRange(2, 5, rows.length, 1).setNumberFormat('0.00');
   }
   // Katalog her değiştiğinde bir "sürüm" damgası basıyoruz — telefonlar bunu
   // (resetcheck ile) düzenli kontrol edip kendi sürümünden farklıysa
@@ -461,19 +478,21 @@ function saveKatalogItem(entry) {
     sheet.appendRow(['Ürün Adı', 'Barkod', 'Stok Kodu', 'Eski Stok', 'Fiyat']);
   }
   var lastRow = sheet.getLastRow();
-  var rowData = [entry.name, entry.barcode, entry.stockCode || '', entry.oldStock || '', entry.price || ''];
+  var rowData = [entry.name, entry.barcode, entry.stockCode || '', cleanNum(entry.oldStock), cleanNum(entry.price)];
   PropertiesService.getScriptProperties().setProperty('KATALOG_VERSION', new Date().toISOString());
   if (lastRow >= 2) {
     var barcodes = sheet.getRange(2, 2, lastRow - 1, 1).getValues();
     for (var i = 0; i < barcodes.length; i++) {
       if (String(barcodes[i][0]) === String(entry.barcode)) {
         sheet.getRange(i + 2, 1, 1, 5).setValues([rowData]);
+        sheet.getRange(i + 2, 5, 1, 1).setNumberFormat('0.00');
         return ContentService.createTextOutput(JSON.stringify({ status: 'ok', updated: true }))
           .setMimeType(ContentService.MimeType.JSON);
       }
     }
   }
   sheet.appendRow(rowData);
+  sheet.getRange(sheet.getLastRow(), 5, 1, 1).setNumberFormat('0.00');
   return ContentService
     .createTextOutput(JSON.stringify({ status: 'ok', added: true }))
     .setMimeType(ContentService.MimeType.JSON);

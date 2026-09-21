@@ -205,7 +205,7 @@
   <header style="border:none; padding:0 0 16px; background:transparent; display:flex; align-items:flex-start; justify-content:space-between;">
     <div>
       <h1><img src="logo-header.png" alt="Murat Gıda" style="height:30px; width:auto; display:block;"></h1>
-      <div class="sub">MK ERP · Murat Gıda • offline • Android • build 74</div>
+      <div class="sub">MK ERP · Murat Gıda • offline • Android • build 77</div>
     </div>
     <button type="button" id="themeToggleBtn" title="Karanlık / Aydınlık tema" style="background:var(--panel2); border:1.5px solid var(--line); color:var(--text); width:34px; height:34px; border-radius:50%; font-size:15px; padding:0; display:flex; align-items:center; justify-content:center; flex-shrink:0;">🌙</button>
   </header>
@@ -578,6 +578,7 @@
         <label>Cari (Tedarikçi/Müşteri)</label>
         <input type="text" id="malHareketCariInput" placeholder="Cari adı yaz ya da seç" list="malHareketCariList">
         <datalist id="malHareketCariList"></datalist>
+        <div id="malHareketCariBakiye" class="hint" style="margin-top:4px;"></div>
       </div>
       <div class="row" style="margin-bottom:14px;">
         <label>Fatura / İrsaliye No</label>
@@ -2056,6 +2057,17 @@
   }
   renderCariDatalist();
   fetchCariList();
+  malHareketCariInput.addEventListener('input', function(){
+    var match = (state.cariList || []).find(function(c){ return c.name === malHareketCariInput.value.trim(); });
+    var bakiyeEl = document.getElementById('malHareketCariBakiye');
+    if(match && match.balance !== '' && !isNaN(Number(match.balance))){
+      var bal = Number(match.balance);
+      bakiyeEl.textContent = 'Bakiye: ' + bal.toLocaleString('tr-TR', {minimumFractionDigits:2, maximumFractionDigits:2}) + ' ₺' + (bal < 0 ? ' (borçlu)' : bal > 0 ? ' (alacaklı)' : '');
+      bakiyeEl.style.color = bal < 0 ? 'var(--red)' : (bal > 0 ? 'var(--green)' : 'var(--muted)');
+    } else {
+      bakiyeEl.textContent = '';
+    }
+  });
 
   function openMalHareketScreen(tip){
     malHareketTip = tip;
