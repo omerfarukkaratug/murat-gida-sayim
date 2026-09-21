@@ -8,7 +8,7 @@
 // bir sürüm dağıttıktan sonra /exec adresini boş açtığında burada yazan
 // numarayı görmelisin; index.html'in üstündeki "build" numarasıyla
 // eşleşecek şekilde ben her ikisini birlikte güncelliyorum.
-var GS_VERSION = 'build77';
+var GS_VERSION = 'build78';
 
 // Sheets'te "Saat" sütunu zaman biçimli olarak algılanırsa, hücre değeri düz
 // metin değil bir Date nesnesi olarak gelir ve String(...) çirkin bir çıktı
@@ -238,11 +238,11 @@ function getKatalog(callback) {
   var sheet = ss.getSheetByName('Katalog');
   var entries = [];
   if (sheet && sheet.getLastRow() >= 2) {
-    var values = sheet.getRange(2, 1, sheet.getLastRow() - 1, 5).getValues();
+    var values = sheet.getRange(2, 1, sheet.getLastRow() - 1, 6).getValues();
     entries = values
       .filter(function (r) { return r[0] && r[1]; })
       .map(function (r) {
-        return { name: String(r[0]), barcode: String(r[1]), stockCode: String(r[2] || ''), oldStock: String(r[3] || ''), price: String(r[4] || '') };
+        return { name: String(r[0]), barcode: String(r[1]), stockCode: String(r[2] || ''), oldStock: String(r[3] || ''), price: String(r[4] || ''), kdv: String(r[5] || '') };
       });
   }
   var json = JSON.stringify({ entries: entries });
@@ -445,16 +445,17 @@ function saveKatalogBulk(entries) {
   var sheet = ss.getSheetByName('Katalog');
   if (!sheet) sheet = ss.insertSheet('Katalog');
   sheet.clear();
-  sheet.appendRow(['Ürün Adı', 'Barkod', 'Stok Kodu', 'Eski Stok', 'Fiyat']);
+  sheet.appendRow(['Ürün Adı', 'Barkod', 'Stok Kodu', 'Eski Stok', 'Fiyat', 'KDV %']);
   if (entries.length > 0) {
     var rows = entries.map(function (e) {
-      return [e.name || '', e.barcode || '', e.stockCode || '', cleanNum(e.oldStock), cleanNum(e.price)];
+      return [e.name || '', e.barcode || '', e.stockCode || '', cleanNum(e.oldStock), cleanNum(e.price), cleanNum(e.kdv)];
     });
-    sheet.getRange(2, 1, rows.length, 5).setValues(rows);
+    sheet.getRange(2, 1, rows.length, 6).setValues(rows);
     // Fiyat sütununu her zaman 2 ondalık basamakla göster — Sheets'in
     // "Otomatik" biçimi bazen kuruşu gizleyip tam sayıya yuvarlanmış
     // GÖRÜNMESİNE yol açabiliyor (asıl değer bozulmuyor ama kafa karıştırıyor).
     sheet.getRange(2, 5, rows.length, 1).setNumberFormat('0.00');
+    sheet.getRange(2, 6, rows.length, 1).setNumberFormat('0.##');
   }
   // Katalog her değiştiğinde bir "sürüm" damgası basıyoruz — telefonlar bunu
   // (resetcheck ile) düzenli kontrol edip kendi sürümünden farklıysa
@@ -475,17 +476,18 @@ function saveKatalogItem(entry) {
   var sheet = ss.getSheetByName('Katalog');
   if (!sheet) {
     sheet = ss.insertSheet('Katalog');
-    sheet.appendRow(['Ürün Adı', 'Barkod', 'Stok Kodu', 'Eski Stok', 'Fiyat']);
+    sheet.appendRow(['Ürün Adı', 'Barkod', 'Stok Kodu', 'Eski Stok', 'Fiyat', 'KDV %']);
   }
   var lastRow = sheet.getLastRow();
-  var rowData = [entry.name, entry.barcode, entry.stockCode || '', cleanNum(entry.oldStock), cleanNum(entry.price)];
+  var rowData = [entry.name, entry.barcode, entry.stockCode || '', cleanNum(entry.oldStock), cleanNum(entry.price), cleanNum(entry.kdv)];
   PropertiesService.getScriptProperties().setProperty('KATALOG_VERSION', new Date().toISOString());
   if (lastRow >= 2) {
     var barcodes = sheet.getRange(2, 2, lastRow - 1, 1).getValues();
     for (var i = 0; i < barcodes.length; i++) {
       if (String(barcodes[i][0]) === String(entry.barcode)) {
-        sheet.getRange(i + 2, 1, 1, 5).setValues([rowData]);
+        sheet.getRange(i + 2, 1, 1, 6).setValues([rowData]);
         sheet.getRange(i + 2, 5, 1, 1).setNumberFormat('0.00');
+        sheet.getRange(i + 2, 6, 1, 1).setNumberFormat('0.##');
         return ContentService.createTextOutput(JSON.stringify({ status: 'ok', updated: true }))
           .setMimeType(ContentService.MimeType.JSON);
       }
@@ -493,6 +495,7 @@ function saveKatalogItem(entry) {
   }
   sheet.appendRow(rowData);
   sheet.getRange(sheet.getLastRow(), 5, 1, 1).setNumberFormat('0.00');
+  sheet.getRange(sheet.getLastRow(), 6, 1, 1).setNumberFormat('0.##');
   return ContentService
     .createTextOutput(JSON.stringify({ status: 'ok', added: true }))
     .setMimeType(ContentService.MimeType.JSON);

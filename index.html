@@ -205,7 +205,7 @@
   <header style="border:none; padding:0 0 16px; background:transparent; display:flex; align-items:flex-start; justify-content:space-between;">
     <div>
       <h1><img src="logo-header.png" alt="Murat Gıda" style="height:30px; width:auto; display:block;"></h1>
-      <div class="sub">MK ERP · Murat Gıda • offline • Android • build 77</div>
+      <div class="sub">MK ERP · Murat Gıda • offline • Android • build 78</div>
     </div>
     <button type="button" id="themeToggleBtn" title="Karanlık / Aydınlık tema" style="background:var(--panel2); border:1.5px solid var(--line); color:var(--text); width:34px; height:34px; border-radius:50%; font-size:15px; padding:0; display:flex; align-items:center; justify-content:center; flex-shrink:0;">🌙</button>
   </header>
@@ -1017,7 +1017,7 @@
   // Sayfa açılışında daha önce yüklenmiş kataloğu belleğe getir (varsa) —
   // her açılışta 50 bin satırı yeniden yüklemene gerek kalmaz.
   idbLoadAll().then(function(rows){
-    rows.forEach(function(r){ catalogMap.set(r.barcode, { name: r.name, stockCode: r.stockCode || '', oldStock: r.oldStock || '', price: r.price || '' }); });
+    rows.forEach(function(r){ catalogMap.set(r.barcode, { name: r.name, stockCode: r.stockCode || '', oldStock: r.oldStock || '', price: r.price || '', kdv: r.kdv || '' }); });
     updateProductCountLabel();
     setSyncStatus();
   }).catch(function(){ productCountEl.textContent = "Henüz ürün yok"; });
@@ -1095,7 +1095,7 @@
     startBtn.disabled = true;
     idbBulkReplace(res.entries).then(function(){
       catalogMap = new Map();
-      res.entries.forEach(function(e){ catalogMap.set(e.barcode, { name: e.name, stockCode: e.stockCode || '', oldStock: e.oldStock || '', price: e.price || '' }); });
+      res.entries.forEach(function(e){ catalogMap.set(e.barcode, { name: e.name, stockCode: e.stockCode || '', oldStock: e.oldStock || '', price: e.price || '', kdv: e.kdv || '' }); });
       updateProductCountLabel();
       startBtn.disabled = false;
       successToast(res.count + " ürün telefona kaydedildi");
@@ -1183,7 +1183,7 @@
       }
       idbBulkReplace(entries).then(function(){
         catalogMap = new Map();
-        entries.forEach(function(e){ catalogMap.set(e.barcode, { name: e.name, stockCode: e.stockCode || '', oldStock: e.oldStock || '', price: e.price || '' }); });
+        entries.forEach(function(e){ catalogMap.set(e.barcode, { name: e.name, stockCode: e.stockCode || '', oldStock: e.oldStock || '', price: e.price || '', kdv: e.kdv || '' }); });
         updateProductCountLabel();
         if(!silent) successToast(entries.length + " kayıt sunucudan indirildi");
         else successToast("Ürün listesi otomatik güncellendi (" + entries.length + " kayıt)");
@@ -2005,7 +2005,7 @@
     catalogMap.forEach(function(v, barcode){
       var hedef = (v.name||'').toLocaleLowerCase('tr') + ' ' + barcode.toLowerCase() + ' ' + (v.stockCode||'').toLowerCase();
       if(kelimeler.every(function(k){ return hedef.indexOf(k) !== -1; })){
-        results.push({ name: v.name, barcode: barcode, stockCode: v.stockCode || '', oldStock: v.oldStock || '', price: v.price || '' });
+        results.push({ name: v.name, barcode: barcode, stockCode: v.stockCode || '', oldStock: v.oldStock || '', price: v.price || '', kdv: v.kdv || '' });
       }
     });
     if(results.length === 0){ priceResultsEl.innerHTML = '<div class="empty">Eşleşen ürün yok.</div>'; return; }
@@ -2015,13 +2015,16 @@
       var fiyatHtml = r.price !== '' && !isNaN(Number(r.price))
         ? '<span style="font-weight:800; color:var(--green); font-family:var(--mono);">' + Number(r.price).toLocaleString('tr-TR', {minimumFractionDigits:2, maximumFractionDigits:2}) + ' ₺</span>'
         : '<span style="color:var(--muted); font-size:11px;">Fiyat yok</span>';
+      var kdvHtml = r.kdv !== '' && !isNaN(Number(r.kdv))
+        ? '<span style="font-size:10.5px; color:var(--muted);">KDV %' + Number(r.kdv) + '</span>'
+        : '';
       var stokHtml = r.oldStock !== '' && !isNaN(Number(r.oldStock))
         ? (Number(r.oldStock) + ' adet stokta')
         : 'Stok bilgisi yok';
       return '<div class="item">' +
         '<div class="info"><div class="name">' + escapeHtml(r.name) + '</div>' +
         '<div class="meta">' + escapeHtml(r.barcode) + (r.stockCode ? (' · ' + escapeHtml(r.stockCode)) : '') + ' · ' + stokHtml + '</div></div>' +
-        '<div style="text-align:right; flex-shrink:0;">' + fiyatHtml + '</div>' +
+        '<div style="text-align:right; flex-shrink:0;">' + fiyatHtml + '<br>' + kdvHtml + '</div>' +
       '</div>';
     }).join('');
   }
