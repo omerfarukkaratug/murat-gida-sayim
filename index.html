@@ -273,7 +273,7 @@
   <header style="border:none; padding:0 0 16px; background:transparent; display:flex; align-items:flex-start; justify-content:space-between;">
     <div>
       <h1><img src="logo-header.png" alt="Murat Gıda" style="height:30px; width:auto; display:block;"></h1>
-      <div class="sub">MK ERP · Murat Gıda • offline • Android • build 79</div>
+      <div class="sub">MK ERP · Murat Gıda • offline • Android • build 80</div>
     </div>
     <button type="button" id="themeToggleBtn" title="Tema seç" style="background:var(--panel2); border:1.5px solid var(--line); color:var(--text); width:34px; height:34px; border-radius:50%; font-size:15px; padding:0; display:flex; align-items:center; justify-content:center; flex-shrink:0;">🎨</button>
   </header>
@@ -757,9 +757,6 @@
         <div style="font-weight:800; font-size:13px; margin-bottom:6px;">📧 Yedek E-posta</div>
         <div class="hint" style="margin-bottom:8px;">"Sayımı Bitir ve Rapor Oluştur" her çalıştığında, Son Stok Sayımı bu adrese CSV eki olarak otomatik gönderilir. Boş bırakırsan mail gönderilmez.</div>
         <input type="text" id="adminBackupEmail" placeholder="ornek@murat-gida.com" style="margin-bottom:10px;">
-        <div style="font-weight:800; font-size:13px; margin-bottom:6px;">📦 Mal Giriş/Çıkış E-postası</div>
-        <div class="hint" style="margin-bottom:8px;">Her mal giriş/çıkış kaydı bitince, o kaydın CSV'si bu adrese otomatik gönderilir. Boş bırakırsan mail gitmez — kayıtlar yine de "MalHareket" sekmesine yazılır.</div>
-        <input type="text" id="adminMalEmail" placeholder="ornek@murat-gida.com" style="margin-bottom:10px;">
         <button id="adminWakeLockSave" style="width:100%; background:var(--ink); color:#fff; padding:11px;">Ayarları Kaydet</button>
       </div>
 
@@ -2791,7 +2788,6 @@
           if(data.defaultWakeLock !== undefined) document.getElementById('adminWakeLockCheck').checked = data.defaultWakeLock !== 'false';
           if(data.idleMinutes !== undefined) document.getElementById('adminIdleMinutes').value = data.idleMinutes;
           document.getElementById('adminBackupEmail').value = data.backupEmail || '';
-          document.getElementById('adminMalEmail').value = data.malEmail || '';
         }
       }, 15000);
     }
@@ -2921,10 +2917,11 @@
     var idleMin = parseInt(document.getElementById('adminIdleMinutes').value, 10);
     if(isNaN(idleMin) || idleMin < 0) idleMin = 0;
     var backupEmail = document.getElementById('adminBackupEmail').value.trim();
-    var malEmail = document.getElementById('adminMalEmail').value.trim();
     var url = state.serverUrl || DEFAULT_SERVER_URL;
     adminResultEl.textContent = '⏳ Ayarlar kaydediliyor…';
-    jsonpRequestP(url, { action: 'ayar_kaydet', user: auth.user, pass: auth.pass, wakelock: wanted ? 'true' : 'false', idleMinutes: idleMin, backupEmail: backupEmail, malEmail: malEmail }, function(err, res){
+    // Mal Giriş/Çıkış e-postası artık panelden değil, sunucu kodunda sabit —
+    // buradan malEmail göndermiyoruz ki telefon yanlışlıkla boşaltıp kaydetmesin.
+    jsonpRequestP(url, { action: 'ayar_kaydet', user: auth.user, pass: auth.pass, wakelock: wanted ? 'true' : 'false', idleMinutes: idleMin, backupEmail: backupEmail }, function(err, res){
       if(err){ adminResultEl.textContent = '❌ ' + err; return; }
       if(!res || res.status === 'error'){ adminResultEl.textContent = '❌ ' + ((res && res.message) || 'bilinmeyen hata'); return; }
       adminResultEl.textContent = '✅ Ayarlar kaydedildi — ekran ayarı sadece elle değiştirilmemiş telefonları etkiler.';
