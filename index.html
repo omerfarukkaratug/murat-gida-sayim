@@ -273,7 +273,7 @@
   <header style="border:none; padding:0 0 16px; background:transparent; display:flex; align-items:flex-start; justify-content:space-between;">
     <div>
       <h1><img src="logo-header.png" alt="Murat Gıda" style="height:30px; width:auto; display:block;"></h1>
-      <div class="sub">MK ERP · Murat Gıda • offline • Android • build 83</div>
+      <div class="sub">MK ERP · Murat Gıda • offline • Android • build 84</div>
     </div>
     <button type="button" id="themeToggleBtn" title="Tema seç" style="background:var(--panel2); border:1.5px solid var(--line); color:var(--text); width:34px; height:34px; border-radius:50%; font-size:15px; padding:0; display:flex; align-items:center; justify-content:center; flex-shrink:0;">🎨</button>
   </header>
@@ -2191,6 +2191,26 @@
     });
     return zxingLoadPromise;
   }
+  // ZXing'e sadece bizim kullandığımız barkod formatlarını arattırıyoruz (gereksiz
+  // format denemeleri hem yavaşlatır hem yanlış eşleşme riskini artırır) ve
+  // TRY_HARDER ile zor/bulanık/eğik barkodlarda daha ısrarlı olmasını istiyoruz —
+  // iPhone'da donanım hızlandırması olmadığı için bu iki ayar okuma başarısını
+  // belirgin şekilde artırıyor.
+  function buildZXingHints(ZXing){
+    var hints = new Map();
+    hints.set(ZXing.DecodeHintType.POSSIBLE_FORMATS, [
+      ZXing.BarcodeFormat.EAN_13, ZXing.BarcodeFormat.EAN_8, ZXing.BarcodeFormat.UPC_A, ZXing.BarcodeFormat.UPC_E,
+      ZXing.BarcodeFormat.CODE_128, ZXing.BarcodeFormat.CODE_39, ZXing.BarcodeFormat.CODABAR, ZXing.BarcodeFormat.ITF,
+      ZXing.BarcodeFormat.QR_CODE
+    ]);
+    hints.set(ZXing.DecodeHintType.TRY_HARDER, true);
+    return hints;
+  }
+  // Kamera isteğinde yüksek çözünürlük tercih ediyoruz — ZXing gerçek pikselden
+  // okuduğu için (donanım motoru gibi optimize edilmiş değil) daha net görüntü
+  // özellikle küçük/yoğun barkodlarda okuma başarısını artırıyor. Telefon/kamera
+  // desteklemezse tarayıcı otomatik olarak en yakınına düşer, hata vermez.
+  var CAMERA_CONSTRAINTS = { video: { facingMode: 'environment', width: { ideal: 1920 }, height: { ideal: 1080 } } };
   var zxingReaderMain = null, zxingReaderQuick = null;
 
   // ---------- Genel amaçlı hızlı barkod tarayıcı ----------
@@ -2206,7 +2226,7 @@
   function startQuickScan(onResult){
     quickScanOnResult = onResult;
     document.getElementById('quickScanOverlay').classList.remove('hidden');
-    navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } })
+    navigator.mediaDevices.getUserMedia(CAMERA_CONSTRAINTS)
       .then(function(stream){
         quickScanStream = stream;
         document.getElementById('quickScanVideo').srcObject = stream;
@@ -2218,7 +2238,7 @@
           quickScanDetecting = true;
           loadZXingLib().then(function(ZXing){
             if(!quickScanDetecting) return; // bu arada kapatılmış olabilir
-            zxingReaderQuick = new ZXing.BrowserMultiFormatReader();
+            zxingReaderQuick = new ZXing.BrowserMultiFormatReader(buildZXingHints(ZXing));
             zxingReaderQuick.decodeFromStream(stream, document.getElementById('quickScanVideo'), function(result){
               if(!result || !quickScanDetecting) return;
               var val = result.getText();
@@ -2460,7 +2480,7 @@
   function malStartCamera(){
     document.getElementById('malScanPlaceholder').classList.add('hidden');
     document.getElementById('malCamLive').classList.remove('hidden');
-    navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } })
+    navigator.mediaDevices.getUserMedia(CAMERA_CONSTRAINTS)
       .then(function(stream){
         malCameraStream = stream;
         malVideo.srcObject = stream;
@@ -2474,7 +2494,7 @@
           malDetecting = true;
           loadZXingLib().then(function(ZXing){
             if(!malDetecting) return; // bu arada kapatılmış olabilir
-            zxingReaderMal = new ZXing.BrowserMultiFormatReader();
+            zxingReaderMal = new ZXing.BrowserMultiFormatReader(buildZXingHints(ZXing));
             zxingReaderMal.decodeFromStream(stream, malVideo, function(result){
               if(!result || !malDetecting) return;
               var val = result.getText();
@@ -3670,7 +3690,7 @@
     document.getElementById('scanPlaceholder').classList.add('hidden');
     document.getElementById('qtyEntry').classList.add('hidden');
     document.getElementById('camLive').classList.remove('hidden');
-    navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } })
+    navigator.mediaDevices.getUserMedia(CAMERA_CONSTRAINTS)
       .then(function(stream){
         cameraStream = stream;
         video.srcObject = stream;
@@ -3684,7 +3704,7 @@
           detecting = true;
           loadZXingLib().then(function(ZXing){
             if(!detecting) return; // bu arada kapatılmış olabilir
-            zxingReaderMain = new ZXing.BrowserMultiFormatReader();
+            zxingReaderMain = new ZXing.BrowserMultiFormatReader(buildZXingHints(ZXing));
             zxingReaderMain.decodeFromStream(stream, video, function(result){
               if(!result || !detecting) return;
               var val = result.getText();
