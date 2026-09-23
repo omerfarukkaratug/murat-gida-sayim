@@ -207,6 +207,8 @@
   .qtyInput::-webkit-outer-spin-button, .qtyInput::-webkit-inner-spin-button{-webkit-appearance:none; margin:0;}
   .qtyInput[type=number]{-moz-appearance:textfield;}
   .qtyCalcRow{display:flex; align-items:center; justify-content:center; gap:6px; margin-top:12px;}
+  .calcToggle{display:block; text-align:center; font-size:12px; font-weight:700; color:var(--accent); margin-top:10px; text-decoration:underline;}
+  .calcBlock{margin-top:2px;}
   .qtyCalcInput{font-family:var(--mono); font-weight:700; font-size:14px; width:64px; text-align:center; background:var(--panel2); border:1.5px solid var(--line); border-radius:8px; padding:8px 4px; color:var(--text);}
   .qtyCalcInput:focus{outline:none; border-color:var(--accent);}
   .qtyCalcInput::-webkit-outer-spin-button, .qtyCalcInput::-webkit-inner-spin-button{-webkit-appearance:none; margin:0;}
@@ -278,7 +280,7 @@
   <header style="border:none; padding:0 0 16px; background:transparent; display:flex; align-items:flex-start; justify-content:space-between;">
     <div>
       <h1><img src="logo-header.png" alt="Murat Gıda" style="height:30px; width:auto; display:block;"></h1>
-      <div class="sub">MK ERP · Murat Gıda • offline • Android • build 87</div>
+      <div class="sub">MK ERP · Murat Gıda • offline • Android • build 88</div>
     </div>
     <button type="button" id="themeToggleBtn" title="Tema seç" style="background:var(--panel2); border:1.5px solid var(--line); color:var(--text); width:34px; height:34px; border-radius:50%; font-size:15px; padding:0; display:flex; align-items:center; justify-content:center; flex-shrink:0;">🎨</button>
   </header>
@@ -436,13 +438,16 @@
         <div id="qtyEntryMeta"></div>
         <div id="qtyEntryKdv" class="hidden"></div>
         <input type="number" id="qtyEntryInput" inputmode="numeric" placeholder="Adet gir">
-        <div class="qtyCalcRow">
-          <input type="number" id="qtyCalcA" inputmode="numeric" placeholder="Sayı 1" class="qtyCalcInput">
-          <button type="button" id="qtyCalcOp" class="qtyCalcOpBtn" title="İşlemi değiştirmek için dokun">×</button>
-          <input type="number" id="qtyCalcB" inputmode="numeric" placeholder="Sayı 2" class="qtyCalcInput">
-          <button type="button" id="qtyCalcApply" class="qtyCalcApplyBtn" title="Hesapla ve adete yaz">=</button>
+        <a href="#" class="calcToggle" id="qtyCalcToggle">🧮 8 koli × 12 adet gibi hesaplayarak yaz</a>
+        <div class="calcBlock hidden" id="qtyCalcBlock">
+          <div class="qtyCalcRow">
+            <input type="number" id="qtyCalcA" inputmode="numeric" placeholder="Sayı 1" class="qtyCalcInput">
+            <button type="button" id="qtyCalcOp" class="qtyCalcOpBtn" title="İşlemi değiştirmek için dokun">×</button>
+            <input type="number" id="qtyCalcB" inputmode="numeric" placeholder="Sayı 2" class="qtyCalcInput">
+            <button type="button" id="qtyCalcApply" class="qtyCalcApplyBtn" title="Hesapla ve adete yaz">=</button>
+          </div>
+          <div class="hint" style="margin-top:2px;">Örn: 8 koli × 12 adet, ya da 45 + 3, ya da 50 − 2. İşlem simgesine dokunarak değiştir.</div>
         </div>
-        <div class="hint" style="margin-top:2px;">Örn: 8 koli × 12 adet, ya da 45 + 3, ya da 50 − 2. İşlem simgesine dokunarak değiştir.</div>
         <div class="qtyEntryBtns">
           <button id="qtyEntryCancel">İptal</button>
           <button id="qtyEntryConfirm">Ekle</button>
@@ -722,13 +727,16 @@
       <div id="malHareketQtyName" style="font-size:18px; font-weight:800; margin-bottom:2px;">—</div>
       <div id="malHareketQtyMeta" style="font-size:12px; color:var(--muted); font-family:var(--mono); margin-bottom:16px; line-height:1.5;"></div>
       <input type="number" id="malHareketQtyInput" inputmode="numeric" placeholder="Miktar gir">
-      <div class="qtyCalcRow">
-        <input type="number" id="malHareketQtyCalcA" inputmode="numeric" placeholder="Sayı 1" class="qtyCalcInput">
-        <button type="button" id="malHareketQtyCalcOp" class="qtyCalcOpBtn" title="İşlemi değiştirmek için dokun">×</button>
-        <input type="number" id="malHareketQtyCalcB" inputmode="numeric" placeholder="Sayı 2" class="qtyCalcInput">
-        <button type="button" id="malHareketQtyCalcApply" class="qtyCalcApplyBtn" title="Hesapla ve miktara yaz">=</button>
+      <a href="#" class="calcToggle" id="malHareketQtyCalcToggle">🧮 8 koli × 12 adet gibi hesaplayarak yaz</a>
+      <div class="calcBlock hidden" id="malHareketQtyCalcBlock">
+        <div class="qtyCalcRow">
+          <input type="number" id="malHareketQtyCalcA" inputmode="numeric" placeholder="Sayı 1" class="qtyCalcInput">
+          <button type="button" id="malHareketQtyCalcOp" class="qtyCalcOpBtn" title="İşlemi değiştirmek için dokun">×</button>
+          <input type="number" id="malHareketQtyCalcB" inputmode="numeric" placeholder="Sayı 2" class="qtyCalcInput">
+          <button type="button" id="malHareketQtyCalcApply" class="qtyCalcApplyBtn" title="Hesapla ve miktara yaz">=</button>
+        </div>
+        <div class="hint" style="margin-top:2px;">Örn: 8 koli × 12 adet, ya da 45 + 3, ya da 50 − 2. İşlem simgesine dokunarak değiştir.</div>
       </div>
-      <div class="hint" style="margin-top:2px;">Örn: 8 koli × 12 adet, ya da 45 + 3, ya da 50 − 2. İşlem simgesine dokunarak değiştir.</div>
       <div class="qtyEntryBtns">
         <button id="malHareketQtyCancel">Vazgeç</button>
         <button id="malHareketQtyConfirm">Ekle</button>
@@ -761,11 +769,14 @@
         <a href="#" id="malNewProductQuickBtn" style="font-size:11.5px; color:var(--accent); text-decoration:underline;">⚡ İsim yazmadan, sadece barkod + miktar kaydet</a>
       </div>
       <input type="number" id="malNewProductQty" inputmode="numeric" placeholder="Miktar gir">
-      <div class="qtyCalcRow">
-        <input type="number" id="malNewQtyCalcA" inputmode="numeric" placeholder="Sayı 1" class="qtyCalcInput">
-        <button type="button" id="malNewQtyCalcOp" class="qtyCalcOpBtn" title="İşlemi değiştirmek için dokun">×</button>
-        <input type="number" id="malNewQtyCalcB" inputmode="numeric" placeholder="Sayı 2" class="qtyCalcInput">
-        <button type="button" id="malNewQtyCalcApply" class="qtyCalcApplyBtn" title="Hesapla ve miktara yaz">=</button>
+      <a href="#" class="calcToggle" id="malNewQtyCalcToggle">🧮 8 koli × 12 adet gibi hesaplayarak yaz</a>
+      <div class="calcBlock hidden" id="malNewQtyCalcBlock">
+        <div class="qtyCalcRow">
+          <input type="number" id="malNewQtyCalcA" inputmode="numeric" placeholder="Sayı 1" class="qtyCalcInput">
+          <button type="button" id="malNewQtyCalcOp" class="qtyCalcOpBtn" title="İşlemi değiştirmek için dokun">×</button>
+          <input type="number" id="malNewQtyCalcB" inputmode="numeric" placeholder="Sayı 2" class="qtyCalcInput">
+          <button type="button" id="malNewQtyCalcApply" class="qtyCalcApplyBtn" title="Hesapla ve miktara yaz">=</button>
+        </div>
       </div>
       <div class="qtyEntryBtns">
         <button id="malNewProductCancel">Vazgeç</button>
@@ -1261,6 +1272,7 @@
     document.getElementById('loggedInName').textContent = state.currentUser.name;
     adminLinkWrapEl.classList.toggle('hidden', !hasAnyAdminPerm());
     document.getElementById('mainAdminBtn').classList.toggle('hidden', !hasAnyAdminPerm());
+    document.getElementById('menuMalCikisBtn').classList.toggle('hidden', !hasPerm('mal_cikis'));
     startBtn.textContent = (state.session.scans && state.session.scans.length > 0) ? '▶ Sayıma Devam Et' : 'Sayıma Başla';
   }
   function showLoginUI(){
@@ -1285,7 +1297,10 @@
   });
   document.getElementById('menuFiyatBtn').addEventListener('click', openPriceScreen);
   document.getElementById('menuMalGirisBtn').addEventListener('click', function(){ openMalHareketScreen('giris'); });
-  document.getElementById('menuMalCikisBtn').addEventListener('click', function(){ openMalHareketScreen('cikis'); });
+  document.getElementById('menuMalCikisBtn').addEventListener('click', function(){
+    if(!hasPerm('mal_cikis')){ warnToast('Mal Çıkış yetkin yok — yöneticinden iste'); return; }
+    openMalHareketScreen('cikis');
+  });
 
   document.getElementById('logoutLink').addEventListener('click', function(e){
     e.preventDefault();
@@ -1968,6 +1983,8 @@
     }
     qtyEntryInput.value = '';
     qtyCalc.reset();
+    document.getElementById('qtyCalcBlock').classList.add('hidden');
+    document.getElementById('qtyCalcToggle').classList.remove('hidden');
     setTimeout(function(){ qtyEntryInput.focus(); }, 80); // klavye otomatik açılsın
   }
 
@@ -2053,6 +2070,14 @@
     };
   }
   var qtyCalc = wireQtyCalculator({ targetInput: qtyEntryInput, aEl: qtyCalcAEl, bEl: qtyCalcBEl, opBtn: qtyCalcOpBtn, applyBtn: document.getElementById('qtyCalcApply') });
+  // Hesap makinesi varsayılan olarak gizli — kart klavyeyle birlikte gereksiz
+  // yere uzayıp ürün adının kaybolmasına yol açmasın diye. İsteyen bir dokunuşla açar.
+  document.getElementById('qtyCalcToggle').addEventListener('click', function(e){
+    e.preventDefault();
+    document.getElementById('qtyCalcBlock').classList.remove('hidden');
+    this.classList.add('hidden');
+    qtyEntryKbd.adjust();
+  });
 
 
   function confirmQtyEntry(){
@@ -2514,11 +2539,17 @@
   // sabitleyip kendi içinde kaydırmalı yapıyoruz, sonra "Ekle" butonunu
   // görünüre kaydırıyoruz.
   var malQtyCardEl = document.querySelector('#malHareketQtyModal .qtyEntryCard');
-  wireKeyboardAwarePanel(malQtyCardEl, [
+  var malQtyKbd = wireKeyboardAwarePanel(malQtyCardEl, [
     document.getElementById('malHareketQtyInput'),
     document.getElementById('malHareketQtyCalcA'),
     document.getElementById('malHareketQtyCalcB')
   ], 'malHareketQtyConfirm');
+  document.getElementById('malHareketQtyCalcToggle').addEventListener('click', function(e){
+    e.preventDefault();
+    document.getElementById('malHareketQtyCalcBlock').classList.remove('hidden');
+    this.classList.add('hidden');
+    malQtyKbd.adjust();
+  });
   var malNewCardEl = document.querySelector('#malHareketNewProductEntry .qtyEntryCard');
   var malNewQtyCalc = wireQtyCalculator({
     targetInput: document.getElementById('malNewProductQty'),
@@ -2527,12 +2558,18 @@
     opBtn: document.getElementById('malNewQtyCalcOp'),
     applyBtn: document.getElementById('malNewQtyCalcApply')
   });
-  wireKeyboardAwarePanel(malNewCardEl, [
+  var malNewKbd = wireKeyboardAwarePanel(malNewCardEl, [
     document.getElementById('malNewProductName'),
     document.getElementById('malNewProductQty'),
     document.getElementById('malNewQtyCalcA'),
     document.getElementById('malNewQtyCalcB')
   ], 'malNewProductConfirm');
+  document.getElementById('malNewQtyCalcToggle').addEventListener('click', function(e){
+    e.preventDefault();
+    document.getElementById('malNewQtyCalcBlock').classList.remove('hidden');
+    this.classList.add('hidden');
+    malNewKbd.adjust();
+  });
 
   // ---------- MAL GİRİŞ/ÇIKIŞ KAMERASI — Sayım ekranıyla BİREBİR aynı motor ----------
   // Ayrı video/akış/algılayıcı kullanır (Sayım'ınkiyle çakışmasın diye), ama aynı
@@ -2880,6 +2917,8 @@
     qtyInput.placeholder = bulk ? 'Kg gir (örn: 1.5)' : 'Adet gir';
     qtyInput.value = '';
     malQtyCalc.reset();
+    document.getElementById('malHareketQtyCalcBlock').classList.add('hidden');
+    document.getElementById('malHareketQtyCalcToggle').classList.remove('hidden');
     document.getElementById('malHareketQtyModal').classList.remove('hidden');
     beep(1046, 90, 0.16);
     setTimeout(function(){ qtyInput.focus(); }, 80);
@@ -2902,6 +2941,8 @@
     qtyInput.setAttribute('step', bulk ? '0.001' : '1');
     qtyInput.placeholder = bulk ? 'Kg gir (örn: 1.5)' : 'Adet gir';
     malNewQtyCalc.reset();
+    document.getElementById('malNewQtyCalcBlock').classList.add('hidden');
+    document.getElementById('malNewQtyCalcToggle').classList.remove('hidden');
     document.getElementById('malHareketNewProductEntry').classList.remove('hidden');
     setTimeout(function(){ document.getElementById('malNewProductName').focus(); }, 80);
   });
@@ -3283,7 +3324,8 @@
     { key: 'kullanici_yonetimi', label: '👤 Kullanıcılar' },
     { key: 'ayarlar', label: '🔆 Ayarlar' },
     { key: 'canli_durum', label: '📡 Canlı Durum' },
-    { key: 'duzelt', label: '✏️ Düzeltme' }
+    { key: 'duzelt', label: '✏️ Düzeltme' },
+    { key: 'mal_cikis', label: '📤 Mal Çıkış' }
   ];
 
   function permsFromString(s){
@@ -3348,7 +3390,7 @@
   }
 
   document.getElementById('adminAddUserBtn').addEventListener('click', function(){
-    adminUsersData.push({ name: '', pass: '', role: 'kullanici', active: true, perms: { rapor: false, temizle: false, kullanici_yonetimi: false, ayarlar: false, canli_durum: false, duzelt: false } });
+    adminUsersData.push({ name: '', pass: '', role: 'kullanici', active: true, perms: { rapor: false, temizle: false, kullanici_yonetimi: false, ayarlar: false, canli_durum: false, duzelt: false, mal_cikis: false } });
     renderUsersList();
   });
 
