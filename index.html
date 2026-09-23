@@ -251,6 +251,11 @@
   .themeSwatch{display:block; position:relative; height:46px; border-radius:10px; overflow:hidden; border:1px solid rgba(128,128,128,.3);}
   .themeSwatch i{position:absolute; left:8px; top:8px; right:40px; bottom:8px; border-radius:6px;}
   .themeSwatch b{position:absolute; right:9px; top:12px; width:22px; height:22px; border-radius:50%;}
+  #customThemeEditor{margin-top:14px; padding-top:14px; border-top:1px solid var(--line);}
+  .customThemeTitle{font-weight:800; font-size:13px; margin-bottom:10px; color:var(--text);}
+  .customColorRow{display:flex; align-items:center; justify-content:space-between; padding:9px 2px; font-size:14px; font-weight:700; color:var(--text);}
+  .customColorRow + .customColorRow{border-top:1px solid var(--line);}
+  .customColorRow input[type="color"]{width:44px; height:32px; padding:0; border:1.5px solid var(--line); border-radius:8px; background:none; flex-shrink:0;}
 
   /* Mal Giriş / Mal Çıkış */
   .segRow{display:flex; background:var(--panel2); border-radius:12px; padding:4px; gap:4px;}
@@ -273,7 +278,7 @@
   <header style="border:none; padding:0 0 16px; background:transparent; display:flex; align-items:flex-start; justify-content:space-between;">
     <div>
       <h1><img src="logo-header.png" alt="Murat Gıda" style="height:30px; width:auto; display:block;"></h1>
-      <div class="sub">MK ERP · Murat Gıda • offline • Android • build 84</div>
+      <div class="sub">MK ERP · Murat Gıda • offline • Android • build 87</div>
     </div>
     <button type="button" id="themeToggleBtn" title="Tema seç" style="background:var(--panel2); border:1.5px solid var(--line); color:var(--text); width:34px; height:34px; border-radius:50%; font-size:15px; padding:0; display:flex; align-items:center; justify-content:center; flex-shrink:0;">🎨</button>
   </header>
@@ -401,7 +406,7 @@
       </div>
       <div class="hint" style="text-align:center; margin:10px 0 6px;">veya barkodu elle gir:</div>
       <div class="manualBar" style="background:transparent; border:none; padding:0;">
-        <input type="text" id="manualInput" placeholder="Barkod yaz" inputmode="numeric">
+        <input type="tel" id="manualInput" placeholder="Barkod yaz" inputmode="numeric">
         <button id="manualAdd">Ekle</button>
         <button id="nameSearchBtn" style="background:var(--panel2); border:1.5px solid var(--line); color:var(--text); width:40px; padding:0; display:flex; align-items:center; justify-content:center;">
           <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.3" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
@@ -679,7 +684,7 @@
           </div>
           <div class="hint" style="text-align:center; margin:10px 0 6px;">veya barkodu elle gir:</div>
           <div class="manualBar" style="background:transparent; border:none; padding:0;">
-            <input type="text" id="malHareketBarcodeInput" placeholder="Barkod yaz, Enter'a bas" inputmode="numeric">
+            <input type="tel" id="malHareketBarcodeInput" placeholder="Barkod yaz, Enter'a bas" inputmode="numeric">
             <button id="malHareketManualAdd">Ekle</button>
             <button type="button" id="malHareketNameSearchBtn" title="Ürün adıyla ara" style="background:var(--panel2); border:1.5px solid var(--line); color:var(--text); width:40px; padding:0; display:flex; align-items:center; justify-content:center;">
               <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.3" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
@@ -877,6 +882,13 @@
   <div class="sheet">
     <div class="sheetTitle">Tema seç</div>
     <div class="themeGrid" id="themeGrid"></div>
+    <div id="customThemeEditor" class="hidden">
+      <div class="customThemeTitle">🎨 Özel renklerini seç</div>
+      <div class="customColorRow"><label for="customBg">Arka plan</label><input type="color" id="customBg"></div>
+      <div class="customColorRow"><label for="customPanel">Kart rengi</label><input type="color" id="customPanel"></div>
+      <div class="customColorRow"><label for="customAccent">Vurgu rengi</label><input type="color" id="customAccent"></div>
+      <div class="customColorRow"><label for="customText">Yazı rengi</label><input type="color" id="customText"></div>
+    </div>
   </div>
 </div>
 
@@ -911,35 +923,110 @@
   delete state.cariList;
   if(!state.malDrafts) state.malDrafts = { giris: null, cikis: null };
 
-  // ---------- TEMA: 6 hazır tema — tema düğmesi (🎨) seçim penceresi açar ----------
+  // ---------- TEMA: 6 hazır tema + kullanıcının kendi renklerini seçtiği "Özel" tema ----------
   var THEMES = [
     { key:'light',  name:'Aydınlık',    bg:'#ffffff', panel:'#f4f4f5', accent:'#5546ea' },
     { key:'dark',   name:'Karanlık',    bg:'#101014', panel:'#232329', accent:'#7a6bff' },
     { key:'pink',   name:'Pembe',       bg:'#fff0f6', panel:'#ffffff', accent:'#e0447f' },
     { key:'manav',  name:'Taze Yeşil',  bg:'#f2f8ec', panel:'#ffffff', accent:'#15803d' },
     { key:'sunset', name:'Gün Batımı',  bg:'#fff3e6', panel:'#ffffff', accent:'#d9480f' },
-    { key:'night',  name:'Gece Mavisi', bg:'#0a1428', panel:'#111f3a', accent:'#3b82f6' }
+    { key:'night',  name:'Gece Mavisi', bg:'#0a1428', panel:'#111f3a', accent:'#3b82f6' },
+    { key:'custom', name:'Özel' } // bg/panel/accent burada sabit değil — kullanıcının kendi seçtiği renkler
   ];
   function themeKnown(k){ return THEMES.some(function(t){ return t.key === k; }); }
+
+  // ---- Basit hex renk matematiği: özel temanın panel2/line/muted/glow gibi
+  // ikincil renklerini, kullanıcının seçtiği 4 ana renkten otomatik türetiyoruz
+  // — herkese tek tek 10 renk sormak yerine sadece 4 tanesini soruyoruz. ----
+  function hexToRgbArr(hex){
+    hex = String(hex || '#000000').replace('#', '');
+    if(hex.length === 3) hex = hex.split('').map(function(c){ return c + c; }).join('');
+    var n = parseInt(hex, 16) || 0;
+    return [(n >> 16) & 255, (n >> 8) & 255, n & 255];
+  }
+  function rgbArrToHex(rgb){
+    return '#' + rgb.map(function(v){
+      v = Math.max(0, Math.min(255, Math.round(v)));
+      var h = v.toString(16);
+      return h.length === 1 ? '0' + h : h;
+    }).join('');
+  }
+  function mixHex(hex1, hex2, t){
+    var a = hexToRgbArr(hex1), b = hexToRgbArr(hex2);
+    return rgbArrToHex([a[0] + (b[0]-a[0])*t, a[1] + (b[1]-a[1])*t, a[2] + (b[2]-a[2])*t]);
+  }
+  function hexToRgba(hex, alpha){
+    var c = hexToRgbArr(hex);
+    return 'rgba(' + c[0] + ',' + c[1] + ',' + c[2] + ',' + alpha + ')';
+  }
+  var CUSTOM_THEME_DEFAULT = { bg:'#12131a', panel:'#1d1f29', accent:'#5546ea', text:'#f2f2f6' };
+  function getCustomTheme(){
+    var c = state.customTheme || {};
+    return {
+      bg: c.bg || CUSTOM_THEME_DEFAULT.bg, panel: c.panel || CUSTOM_THEME_DEFAULT.panel,
+      accent: c.accent || CUSTOM_THEME_DEFAULT.accent, text: c.text || CUSTOM_THEME_DEFAULT.text
+    };
+  }
+  function applyCustomTheme(c){
+    var s = document.body.style;
+    s.setProperty('--bg', c.bg);
+    s.setProperty('--panel', c.panel);
+    s.setProperty('--panel2', mixHex(c.panel, c.accent, 0.08));
+    s.setProperty('--line', mixHex(c.panel, c.text, 0.16));
+    s.setProperty('--text', c.text);
+    s.setProperty('--muted', mixHex(c.text, c.panel, 0.45));
+    s.setProperty('--accent', c.accent);
+    s.setProperty('--accent2', mixHex(c.accent, '#ffffff', 0.22));
+    s.setProperty('--ink', c.text);
+    s.setProperty('--glow', hexToRgba(c.accent, 0.34));
+  }
+  function clearCustomThemeOverrides(){
+    var s = document.body.style;
+    ['--bg','--panel','--panel2','--line','--text','--muted','--accent','--accent2','--ink','--glow'].forEach(function(k){ s.removeProperty(k); });
+  }
+
   function applyTheme(){
     if(!themeKnown(state.theme)) state.theme = 'light';
     THEMES.forEach(function(t){ document.body.classList.remove(t.key); });
-    if(state.theme !== 'light') document.body.classList.add(state.theme);
-    var cur = THEMES.filter(function(t){ return t.key === state.theme; })[0];
+    clearCustomThemeOverrides();
+    var bgForMeta;
+    if(state.theme === 'custom'){
+      var ct = getCustomTheme();
+      applyCustomTheme(ct);
+      bgForMeta = ct.bg;
+    } else {
+      if(state.theme !== 'light') document.body.classList.add(state.theme);
+      bgForMeta = THEMES.filter(function(t){ return t.key === state.theme; })[0].bg;
+    }
     var metaTheme = document.querySelector('meta[name="theme-color"]');
-    if(metaTheme) metaTheme.setAttribute('content', cur.bg);
+    if(metaTheme) metaTheme.setAttribute('content', bgForMeta);
   }
   var themeModalEl = document.getElementById('themeModal');
   var themeGridEl = document.getElementById('themeGrid');
+  var customThemeEditorEl = document.getElementById('customThemeEditor');
   function renderThemeGrid(){
+    var ct = getCustomTheme();
     themeGridEl.innerHTML = THEMES.map(function(t){
       var on = t.key === state.theme;
+      var sw = t.key === 'custom' ? ct : t;
       return '<button type="button" class="themeTile' + (on ? ' active' : '') + '" data-theme="' + t.key + '">' +
-        '<span class="themeSwatch" style="background:' + t.bg + ';"><i style="background:' + t.panel + ';"></i><b style="background:' + t.accent + ';"></b></span>' +
-        '<span>' + t.name + (on ? ' ✓' : '') + '</span></button>';
+        '<span class="themeSwatch" style="background:' + sw.bg + ';"><i style="background:' + sw.panel + ';"></i><b style="background:' + sw.accent + ';"></b></span>' +
+        '<span>' + (t.key === 'custom' ? '🎨 ' : '') + t.name + (on ? ' ✓' : '') + '</span></button>';
     }).join('');
   }
-  function openThemePicker(){ renderThemeGrid(); themeModalEl.classList.remove('hidden'); }
+  function populateCustomThemeInputs(){
+    var ct = getCustomTheme();
+    document.getElementById('customBg').value = ct.bg;
+    document.getElementById('customPanel').value = ct.panel;
+    document.getElementById('customAccent').value = ct.accent;
+    document.getElementById('customText').value = ct.text;
+  }
+  function openThemePicker(){
+    renderThemeGrid();
+    populateCustomThemeInputs();
+    customThemeEditorEl.classList.toggle('hidden', state.theme !== 'custom');
+    themeModalEl.classList.remove('hidden');
+  }
   function closeThemePicker(){ themeModalEl.classList.add('hidden'); }
   themeGridEl.addEventListener('click', function(e){
     var btn = e.target.closest('.themeTile');
@@ -948,7 +1035,22 @@
     save();
     applyTheme();
     renderThemeGrid();
-    setTimeout(closeThemePicker, 180);
+    if(state.theme === 'custom'){
+      customThemeEditorEl.classList.remove('hidden'); // özel renkleri ayarlasın diye pencere kapanmasın
+    } else {
+      customThemeEditorEl.classList.add('hidden');
+      setTimeout(closeThemePicker, 180);
+    }
+  });
+  [['customBg','bg'], ['customPanel','panel'], ['customAccent','accent'], ['customText','text']].forEach(function(pair){
+    document.getElementById(pair[0]).addEventListener('input', function(e){
+      var ct = getCustomTheme();
+      ct[pair[1]] = e.target.value;
+      state.customTheme = ct;
+      save();
+      if(state.theme === 'custom') applyCustomTheme(ct);
+      renderThemeGrid();
+    });
   });
   themeModalEl.addEventListener('click', function(e){ if(e.target === themeModalEl) closeThemePicker(); });
   applyTheme(); // sayfa açılır açılmaz kaydedilmiş tercihi uygula
@@ -2173,45 +2275,45 @@
   });
 
   // ---------- Barkod okuma motoru: Android'de yerleşik (BarcodeDetector, hızlı),
-  // iPhone/Safari ve onu desteklemeyen tarayıcılarda ZXing (JS tabanlı yedek) ----------
+  // iPhone/Safari ve onu desteklemeyen tarayıcılarda WebAssembly tabanlı bir yedek ----------
   // BarcodeDetector Web API'si Safari'de (iPhone'daki HER tarayıcı Safari'nin
   // motorunu kullanır — Chrome/Google uygulaması da dahil) hiç yok. Onsuz kamera
-  // hiç açılmıyordu. ZXing'i sadece ihtiyaç anında (ilk kullanımda) indirip
-  // önbelleğe alıyoruz; Android'de zaten gerekmediği için hiç indirilmez.
-  var zxingLoadPromise = null;
-  function loadZXingLib(){
-    if(window.ZXing) return Promise.resolve(window.ZXing);
-    if(zxingLoadPromise) return zxingLoadPromise;
-    zxingLoadPromise = new Promise(function(resolve, reject){
-      var s = document.createElement('script');
-      s.src = 'https://cdn.jsdelivr.net/npm/@zxing/library@0.20.0/umd/index.min.js';
-      s.onload = function(){ window.ZXing ? resolve(window.ZXing) : reject(new Error('ZXing yüklenemedi')); };
-      s.onerror = function(){ zxingLoadPromise = null; reject(new Error('ZXing indirilemedi')); };
-      document.head.appendChild(s);
+  // hiç açılmıyordu. Saf JavaScript bir yedek (ZXing) denedik ama yazılım tabanlı
+  // olduğu için Android'in donanım hızlandırmalı okumasından belirgin şekilde
+  // zayıf kaldı. Bunun yerine C ile yazılmış, WebAssembly'e derlenmiş ZBar
+  // kütüphanesini kullanıyoruz — neredeyse yerel hız/başarı sağlıyor ve
+  // tarayıcının kendi BarcodeDetector API'siyle AYNI arayüzü taklit ediyor,
+  // yani geri kalan kamera kodumuzun (scanLoop vb.) hiç değişmesine gerek yok.
+  // Sadece ihtiyaç anında (ilk kullanımda) indirilip önbelleğe alınıyor;
+  // Android'de zaten gerekmediği için hiç indirilmez.
+  var bdPolyfillLoadPromise = null;
+  function loadBarcodeDetector(){
+    if('BarcodeDetector' in window) return Promise.resolve(window.BarcodeDetector);
+    if(bdPolyfillLoadPromise) return bdPolyfillLoadPromise;
+    bdPolyfillLoadPromise = new Promise(function(resolve, reject){
+      var s1 = document.createElement('script');
+      s1.src = 'https://cdn.jsdelivr.net/npm/@undecaf/zbar-wasm@0.9.15/dist/index.js';
+      s1.onload = function(){
+        var s2 = document.createElement('script');
+        s2.src = 'https://cdn.jsdelivr.net/npm/@undecaf/barcode-detector-polyfill@0.9.23/dist/index.js';
+        s2.onload = function(){
+          if(window.barcodeDetectorPolyfill && window.barcodeDetectorPolyfill.BarcodeDetectorPolyfill){
+            window.BarcodeDetector = window.barcodeDetectorPolyfill.BarcodeDetectorPolyfill;
+            resolve(window.BarcodeDetector);
+          } else {
+            bdPolyfillLoadPromise = null; reject(new Error('Barkod tarayıcı yüklenemedi'));
+          }
+        };
+        s2.onerror = function(){ bdPolyfillLoadPromise = null; reject(new Error('Barkod tarayıcı indirilemedi')); };
+        document.head.appendChild(s2);
+      };
+      s1.onerror = function(){ bdPolyfillLoadPromise = null; reject(new Error('Barkod motoru indirilemedi')); };
+      document.head.appendChild(s1);
     });
-    return zxingLoadPromise;
+    return bdPolyfillLoadPromise;
   }
-  // ZXing'e sadece bizim kullandığımız barkod formatlarını arattırıyoruz (gereksiz
-  // format denemeleri hem yavaşlatır hem yanlış eşleşme riskini artırır) ve
-  // TRY_HARDER ile zor/bulanık/eğik barkodlarda daha ısrarlı olmasını istiyoruz —
-  // iPhone'da donanım hızlandırması olmadığı için bu iki ayar okuma başarısını
-  // belirgin şekilde artırıyor.
-  function buildZXingHints(ZXing){
-    var hints = new Map();
-    hints.set(ZXing.DecodeHintType.POSSIBLE_FORMATS, [
-      ZXing.BarcodeFormat.EAN_13, ZXing.BarcodeFormat.EAN_8, ZXing.BarcodeFormat.UPC_A, ZXing.BarcodeFormat.UPC_E,
-      ZXing.BarcodeFormat.CODE_128, ZXing.BarcodeFormat.CODE_39, ZXing.BarcodeFormat.CODABAR, ZXing.BarcodeFormat.ITF,
-      ZXing.BarcodeFormat.QR_CODE
-    ]);
-    hints.set(ZXing.DecodeHintType.TRY_HARDER, true);
-    return hints;
-  }
-  // Kamera isteğinde yüksek çözünürlük tercih ediyoruz — ZXing gerçek pikselden
-  // okuduğu için (donanım motoru gibi optimize edilmiş değil) daha net görüntü
-  // özellikle küçük/yoğun barkodlarda okuma başarısını artırıyor. Telefon/kamera
-  // desteklemezse tarayıcı otomatik olarak en yakınına düşer, hata vermez.
-  var CAMERA_CONSTRAINTS = { video: { facingMode: 'environment', width: { ideal: 1920 }, height: { ideal: 1080 } } };
-  var zxingReaderMain = null, zxingReaderQuick = null;
+  var BARCODE_FORMATS = ['ean_13','ean_8','upc_a','upc_e','code_128','code_39','codabar','itf','qr_code'];
+  var CAMERA_CONSTRAINTS = { video: { facingMode: 'environment' } };
 
   // ---------- Genel amaçlı hızlı barkod tarayıcı ----------
   // Ana sayım kamerasından (startCamera/stopCamera) bilerek AYRI tutuldu —
@@ -2230,32 +2332,15 @@
       .then(function(stream){
         quickScanStream = stream;
         document.getElementById('quickScanVideo').srcObject = stream;
-        if('BarcodeDetector' in window){
-          var detector = new BarcodeDetector({ formats: ['ean_13','ean_8','upc_a','upc_e','code_128','code_39','codabar','itf','qr_code'] });
-          quickScanDetecting = true;
+        quickScanDetecting = true;
+        loadBarcodeDetector().then(function(BarcodeDetector){
+          if(!quickScanDetecting) return; // bu arada kapatılmış olabilir
+          var detector = new BarcodeDetector({ formats: BARCODE_FORMATS });
           quickScanLoop(detector);
-        } else {
-          quickScanDetecting = true;
-          loadZXingLib().then(function(ZXing){
-            if(!quickScanDetecting) return; // bu arada kapatılmış olabilir
-            zxingReaderQuick = new ZXing.BrowserMultiFormatReader(buildZXingHints(ZXing));
-            zxingReaderQuick.decodeFromStream(stream, document.getElementById('quickScanVideo'), function(result){
-              if(!result || !quickScanDetecting) return;
-              var val = result.getText();
-              var t = Date.now();
-              if(val !== quickScanLastCode || (t - quickScanLastTime) > 1500){
-                quickScanLastCode = val; quickScanLastTime = t;
-                if(navigator.vibrate) navigator.vibrate(30);
-                var cb = quickScanOnResult;
-                stopQuickScan();
-                if(cb) cb(val);
-              }
-            });
-          }).catch(function(){
-            errorToast("Barkod tarayıcı yüklenemedi — internete bağlanıp tekrar dene, ya da elle yaz");
-            stopQuickScan();
-          });
-        }
+        }).catch(function(){
+          errorToast("Barkod tarayıcı yüklenemedi — internete bağlanıp tekrar dene, ya da elle yaz");
+          stopQuickScan();
+        });
       })
       .catch(function(err){
         errorToast("Kamera açılamadı — izinleri kontrol edin");
@@ -2264,7 +2349,6 @@
   }
   function stopQuickScan(){
     quickScanDetecting = false;
-    if(zxingReaderQuick){ try{ zxingReaderQuick.reset(); }catch(e){} zxingReaderQuick = null; }
     if(quickScanStream){ quickScanStream.getTracks().forEach(function(tr){ tr.stop(); }); quickScanStream = null; }
     document.getElementById('quickScanOverlay').classList.add('hidden');
   }
@@ -2452,14 +2536,13 @@
 
   // ---------- MAL GİRİŞ/ÇIKIŞ KAMERASI — Sayım ekranıyla BİREBİR aynı motor ----------
   // Ayrı video/akış/algılayıcı kullanır (Sayım'ınkiyle çakışmasın diye), ama aynı
-  // native BarcodeDetector → yoksa ZXing yedeği → sürekli tarama → el feneri →
+  // native BarcodeDetector → yoksa WebAssembly (ZBar) yedeği → sürekli tarama → el feneri →
   // "adet girince otomatik yeniden aç" mantığının tamamı burada da var.
   var malVideo = document.getElementById('malVideo');
   var malTorchBtn = document.getElementById('malTorchBtn');
   var malDetecting = false;
   var malLastCode = null, malLastTime = 0;
   var malCameraTrack = null, malTorchOn = false, malCameraStream = null;
-  var zxingReaderMal = null;
   var malAutoRescan = !!state.malAutoRescan;
   var malAutoRescanToggle = document.getElementById('malAutoRescanToggle');
   malAutoRescanToggle.checked = malAutoRescan;
@@ -2486,29 +2569,15 @@
         malVideo.srcObject = stream;
         malCameraTrack = stream.getVideoTracks()[0];
         setupMalTorch();
-        if('BarcodeDetector' in window){
-          var detector = new BarcodeDetector({ formats: ['ean_13','ean_8','upc_a','upc_e','code_128','code_39','codabar','itf','qr_code'] });
-          malDetecting = true;
+        malDetecting = true;
+        loadBarcodeDetector().then(function(BarcodeDetector){
+          if(!malDetecting) return; // bu arada kapatılmış olabilir
+          var detector = new BarcodeDetector({ formats: BARCODE_FORMATS });
           malScanLoop(detector);
-        } else {
-          malDetecting = true;
-          loadZXingLib().then(function(ZXing){
-            if(!malDetecting) return; // bu arada kapatılmış olabilir
-            zxingReaderMal = new ZXing.BrowserMultiFormatReader(buildZXingHints(ZXing));
-            zxingReaderMal.decodeFromStream(stream, malVideo, function(result){
-              if(!result || !malDetecting) return;
-              var val = result.getText();
-              var t = Date.now();
-              if(val !== malLastCode || (t - malLastTime) > 1500){
-                malLastCode = val; malLastTime = t;
-                malHareketHandleBarcode(val);
-              }
-            });
-          }).catch(function(){
-            errorToast("Barkod tarayıcı yüklenemedi — internete bağlanıp tekrar dene, ya da barkodu elle yaz");
-            malStopCamera(); showMalPlaceholder();
-          });
-        }
+        }).catch(function(){
+          errorToast("Barkod tarayıcı yüklenemedi — internete bağlanıp tekrar dene, ya da barkodu elle yaz");
+          malStopCamera(); showMalPlaceholder();
+        });
       })
       .catch(function(err){
         document.getElementById('malCamLive').innerHTML = '<div class="noCam" style="color:var(--red); font-weight:700;">❌ Kameraya erişilemedi<br><span style="color:var(--muted); font-weight:400;">Telefon ayarlarından bu siteye kamera izni verildiğinden emin olun.<br>('+escapeHtml(err.message)+')</span></div>';
@@ -2518,7 +2587,6 @@
 
   function malStopCamera(){
     malDetecting = false;
-    if(zxingReaderMal){ try{ zxingReaderMal.reset(); }catch(e){} zxingReaderMal = null; }
     if(malCameraStream){ malCameraStream.getTracks().forEach(function(tr){ tr.stop(); }); malCameraStream = null; }
     malCameraTrack = null; malTorchOn = false;
     document.getElementById('malCamLive').classList.add('hidden');
@@ -3696,29 +3764,15 @@
         video.srcObject = stream;
         cameraTrack = stream.getVideoTracks()[0];
         setupTorch();
-        if('BarcodeDetector' in window){
-          var detector = new BarcodeDetector({ formats: ['ean_13','ean_8','upc_a','upc_e','code_128','code_39','codabar','itf','qr_code'] });
-          detecting = true;
+        detecting = true;
+        loadBarcodeDetector().then(function(BarcodeDetector){
+          if(!detecting) return; // bu arada kapatılmış olabilir
+          var detector = new BarcodeDetector({ formats: BARCODE_FORMATS });
           scanLoop(detector);
-        } else {
-          detecting = true;
-          loadZXingLib().then(function(ZXing){
-            if(!detecting) return; // bu arada kapatılmış olabilir
-            zxingReaderMain = new ZXing.BrowserMultiFormatReader(buildZXingHints(ZXing));
-            zxingReaderMain.decodeFromStream(stream, video, function(result){
-              if(!result || !detecting) return;
-              var val = result.getText();
-              var t = Date.now();
-              if(val !== lastCode || (t - lastTime) > 1500){
-                lastCode = val; lastTime = t;
-                handleScanResult(val);
-              }
-            });
-          }).catch(function(){
-            errorToast("Barkod tarayıcı yüklenemedi — internete bağlanıp tekrar dene, ya da barkodu elle yaz");
-            stopCamera(); showPlaceholder();
-          });
-        }
+        }).catch(function(){
+          errorToast("Barkod tarayıcı yüklenemedi — internete bağlanıp tekrar dene, ya da barkodu elle yaz");
+          stopCamera(); showPlaceholder();
+        });
       })
       .catch(function(err){
         document.getElementById('camLive').innerHTML = '<div class="noCam" style="color:var(--red); font-weight:700;">❌ Kameraya erişilemedi<br><span style="color:var(--muted); font-weight:400;">Telefon ayarlarından bu siteye kamera izni verildiğinden emin olun.<br>('+escapeHtml(err.message)+')</span></div>';
@@ -3728,7 +3782,6 @@
 
   function stopCamera(){
     detecting = false;
-    if(zxingReaderMain){ try{ zxingReaderMain.reset(); }catch(e){} zxingReaderMain = null; }
     if(cameraStream){ cameraStream.getTracks().forEach(function(tr){ tr.stop(); }); cameraStream = null; }
     cameraTrack = null; torchOn = false;
     document.getElementById('camLive').classList.add('hidden');
