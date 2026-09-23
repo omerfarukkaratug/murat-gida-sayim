@@ -280,7 +280,7 @@
   <header style="border:none; padding:0 0 16px; background:transparent; display:flex; align-items:flex-start; justify-content:space-between;">
     <div>
       <h1><img src="logo-header.png" alt="Murat Gıda" style="height:30px; width:auto; display:block;"></h1>
-      <div class="sub">MK ERP · Murat Gıda • offline • Android • build 88</div>
+      <div class="sub">MK ERP · Murat Gıda • offline • Android • build 89</div>
     </div>
     <button type="button" id="themeToggleBtn" title="Tema seç" style="background:var(--panel2); border:1.5px solid var(--line); color:var(--text); width:34px; height:34px; border-radius:50%; font-size:15px; padding:0; display:flex; align-items:center; justify-content:center; flex-shrink:0;">🎨</button>
   </header>
@@ -2337,8 +2337,80 @@
     });
     return bdPolyfillLoadPromise;
   }
+  // Üçüncü ve son yedek: saf JavaScript (ZXing). WebAssembly bazı ortamlarda
+  // TAMAMEN kapalı olabiliyor — en yaygın örnek iPhone'da "Kilitleme Modu"
+  // (Lockdown Mode) açıkken Safari WebAssembly'yi hiç çalıştırmıyor. Böyle
+  // durumlarda kamera komple çalışmaz hale gelmesin diye bu son katman var;
+  // yavaştır ama en azından barkod okumaya devam edebilir.
+  var zxingLoadPromise = null;
+  function loadZXingLib(){
+    if(window.ZXing) return Promise.resolve(window.ZXing);
+    if(zxingLoadPromise) return zxingLoadPromise;
+    zxingLoadPromise = new Promise(function(resolve, reject){
+      var s = document.createElement('script');
+      s.src = 'https://cdn.jsdelivr.net/npm/@zxing/library@0.20.0/umd/index.min.js';
+      s.onload = function(){ window.ZXing ? resolve(window.ZXing) : reject(new Error('ZXing yüklenemedi')); };
+      s.onerror = function(){ zxingLoadPromise = null; reject(new Error('ZXing indirilemedi')); };
+      document.head.appendChild(s);
+    });
+    return zxingLoadPromise;
+  }
   var BARCODE_FORMATS = ['ean_13','ean_8','upc_a','upc_e','code_128','code_39','codabar','itf','qr_code'];
   var CAMERA_CONSTRAINTS = { video: { facingMode: 'environment' } };
+
+  // Üç kameranın (Sayım, hızlı tarama, Mal Giriş/Çıkış) hepsi bu TEK fonksiyonu
+  // kullanır: sırasıyla native BarcodeDetector → WebAssembly (ZBar) yedeği →
+  // saf JavaScript (ZXing) yedeği dener, hangisi tutarsa onunla sürekli taramaya
+  // başlar. Döndürdüğü nesnenin .stop() metodu taramayı (ve varsa ZXing'i) durdurur.
+  function startBarcodeEngine(stream, videoEl, onBarcode, onFail){
+    var stopped = false;
+    var lastCode = null, lastTime = 0;
+    var zxingReader = null;
+    function emit(val){
+      var t = Date.now();
+      if(val !== lastCode || (t - lastTime) > 1500){
+        lastCode = val; lastTime = t;
+        onBarcode(val);
+      }
+    }
+    function nativeLoop(detector){
+      if(stopped) return;
+      if(videoEl.readyState >= 2){
+        detector.detect(videoEl).then(function(codes){
+          if(codes.length) emit(codes[0].rawValue);
+        }).catch(function(){});
+      }
+      requestAnimationFrame(function(){ nativeLoop(detector); });
+    }
+    loadBarcodeDetector().then(function(BarcodeDetector){
+      if(stopped) return;
+      nativeLoop(new BarcodeDetector({ formats: BARCODE_FORMATS }));
+    }).catch(function(){
+      if(stopped) return;
+      loadZXingLib().then(function(ZXing){
+        if(stopped) return;
+        var hints = new Map();
+        hints.set(ZXing.DecodeHintType.POSSIBLE_FORMATS, [
+          ZXing.BarcodeFormat.EAN_13, ZXing.BarcodeFormat.EAN_8, ZXing.BarcodeFormat.UPC_A, ZXing.BarcodeFormat.UPC_E,
+          ZXing.BarcodeFormat.CODE_128, ZXing.BarcodeFormat.CODE_39, ZXing.BarcodeFormat.CODABAR, ZXing.BarcodeFormat.ITF,
+          ZXing.BarcodeFormat.QR_CODE
+        ]);
+        zxingReader = new ZXing.BrowserMultiFormatReader(hints);
+        zxingReader.decodeFromStream(stream, videoEl, function(result){
+          if(!result || stopped) return;
+          emit(result.getText());
+        });
+      }).catch(function(){
+        if(!stopped) onFail();
+      });
+    });
+    return {
+      stop: function(){
+        stopped = true;
+        if(zxingReader){ try{ zxingReader.reset(); }catch(e){} zxingReader = null; }
+      }
+    };
+  }
 
   // ---------- Genel amaçlı hızlı barkod tarayıcı ----------
   // Ana sayım kamerasından (startCamera/stopCamera) bilerek AYRI tutuldu —
@@ -2347,8 +2419,7 @@
   // "Fiyat & Stok Sorgula" ve "Mal Giriş/Çıkış" ekranları bunu ortak kullanır —
   // her biri kendi callback'ini (bulunca ne yapılacağını) verir.
   var quickScanStream = null;
-  var quickScanDetecting = false;
-  var quickScanLastCode = null, quickScanLastTime = 0;
+  var quickScanEngine = null;
   var quickScanOnResult = null;
   function startQuickScan(onResult){
     quickScanOnResult = onResult;
@@ -2356,13 +2427,14 @@
     navigator.mediaDevices.getUserMedia(CAMERA_CONSTRAINTS)
       .then(function(stream){
         quickScanStream = stream;
-        document.getElementById('quickScanVideo').srcObject = stream;
-        quickScanDetecting = true;
-        loadBarcodeDetector().then(function(BarcodeDetector){
-          if(!quickScanDetecting) return; // bu arada kapatılmış olabilir
-          var detector = new BarcodeDetector({ formats: BARCODE_FORMATS });
-          quickScanLoop(detector);
-        }).catch(function(){
+        var v = document.getElementById('quickScanVideo');
+        v.srcObject = stream;
+        quickScanEngine = startBarcodeEngine(stream, v, function(val){
+          if(navigator.vibrate) navigator.vibrate(30);
+          var cb = quickScanOnResult;
+          stopQuickScan();
+          if(cb) cb(val);
+        }, function(){
           errorToast("Barkod tarayıcı yüklenemedi — internete bağlanıp tekrar dene, ya da elle yaz");
           stopQuickScan();
         });
@@ -2373,29 +2445,9 @@
       });
   }
   function stopQuickScan(){
-    quickScanDetecting = false;
+    if(quickScanEngine){ quickScanEngine.stop(); quickScanEngine = null; }
     if(quickScanStream){ quickScanStream.getTracks().forEach(function(tr){ tr.stop(); }); quickScanStream = null; }
     document.getElementById('quickScanOverlay').classList.add('hidden');
-  }
-  function quickScanLoop(detector){
-    if(!quickScanDetecting) return;
-    var v = document.getElementById('quickScanVideo');
-    if(v.readyState >= 2){
-      detector.detect(v).then(function(codes){
-        if(codes.length){
-          var val = codes[0].rawValue;
-          var t = Date.now();
-          if(val !== quickScanLastCode || (t - quickScanLastTime) > 1500){
-            quickScanLastCode = val; quickScanLastTime = t;
-            if(navigator.vibrate) navigator.vibrate(30);
-            var cb = quickScanOnResult;
-            stopQuickScan();
-            if(cb) cb(val);
-          }
-        }
-      }).catch(function(){});
-    }
-    if(quickScanDetecting) requestAnimationFrame(function(){ quickScanLoop(detector); });
   }
   document.getElementById('browseScanBtn').addEventListener('click', function(){
     startQuickScan(function(val){ browseSearchInput.value = val; renderBrowseList(); });
@@ -2577,8 +2629,7 @@
   // "adet girince otomatik yeniden aç" mantığının tamamı burada da var.
   var malVideo = document.getElementById('malVideo');
   var malTorchBtn = document.getElementById('malTorchBtn');
-  var malDetecting = false;
-  var malLastCode = null, malLastTime = 0;
+  var malEngine = null;
   var malCameraTrack = null, malTorchOn = false, malCameraStream = null;
   var malAutoRescan = !!state.malAutoRescan;
   var malAutoRescanToggle = document.getElementById('malAutoRescanToggle');
@@ -2606,12 +2657,9 @@
         malVideo.srcObject = stream;
         malCameraTrack = stream.getVideoTracks()[0];
         setupMalTorch();
-        malDetecting = true;
-        loadBarcodeDetector().then(function(BarcodeDetector){
-          if(!malDetecting) return; // bu arada kapatılmış olabilir
-          var detector = new BarcodeDetector({ formats: BARCODE_FORMATS });
-          malScanLoop(detector);
-        }).catch(function(){
+        malEngine = startBarcodeEngine(stream, malVideo, function(val){
+          malHareketHandleBarcode(val);
+        }, function(){
           errorToast("Barkod tarayıcı yüklenemedi — internete bağlanıp tekrar dene, ya da barkodu elle yaz");
           malStopCamera(); showMalPlaceholder();
         });
@@ -2623,7 +2671,7 @@
   }
 
   function malStopCamera(){
-    malDetecting = false;
+    if(malEngine){ malEngine.stop(); malEngine = null; }
     if(malCameraStream){ malCameraStream.getTracks().forEach(function(tr){ tr.stop(); }); malCameraStream = null; }
     malCameraTrack = null; malTorchOn = false;
     document.getElementById('malCamLive').classList.add('hidden');
@@ -2643,23 +2691,6 @@
     });
     malTorchBtn.classList.toggle('on', malTorchOn);
   });
-
-  function malScanLoop(detector){
-    if(!malDetecting) return;
-    if(malVideo.readyState >= 2){
-      detector.detect(malVideo).then(function(codes){
-        if(codes.length){
-          var val = codes[0].rawValue;
-          var t = Date.now();
-          if(val !== malLastCode || (t - malLastTime) > 1500){
-            malLastCode = val; malLastTime = t;
-            malHareketHandleBarcode(val);
-          }
-        }
-      }).catch(function(){});
-    }
-    requestAnimationFrame(function(){ malScanLoop(detector); });
-  }
 
   malSebepSelectEl.innerHTML = '<option value="">Sebep seç…</option>' +
     MAL_SEBEPLER.map(function(x){ return '<option value="' + escAttr(x) + '">' + escapeHtml(x) + '</option>'; }).join('');
@@ -3789,8 +3820,7 @@
   // ---------- CAMERA + BARCODE — Android native donanım motoru (en hızlısı), manuel aç/kapa ----------
   var video = document.getElementById('video');
   var torchBtn = document.getElementById('torchBtn');
-  var detecting = false;
-  var lastCode = null, lastTime = 0;
+  var scanEngine = null;
   var cameraTrack = null, torchOn = false, cameraStream = null;
 
   document.getElementById('startScanBtn').addEventListener('click', startCamera);
@@ -3806,12 +3836,9 @@
         video.srcObject = stream;
         cameraTrack = stream.getVideoTracks()[0];
         setupTorch();
-        detecting = true;
-        loadBarcodeDetector().then(function(BarcodeDetector){
-          if(!detecting) return; // bu arada kapatılmış olabilir
-          var detector = new BarcodeDetector({ formats: BARCODE_FORMATS });
-          scanLoop(detector);
-        }).catch(function(){
+        scanEngine = startBarcodeEngine(stream, video, function(val){
+          handleScanResult(val);
+        }, function(){
           errorToast("Barkod tarayıcı yüklenemedi — internete bağlanıp tekrar dene, ya da barkodu elle yaz");
           stopCamera(); showPlaceholder();
         });
@@ -3823,7 +3850,7 @@
   }
 
   function stopCamera(){
-    detecting = false;
+    if(scanEngine){ scanEngine.stop(); scanEngine = null; }
     if(cameraStream){ cameraStream.getTracks().forEach(function(tr){ tr.stop(); }); cameraStream = null; }
     cameraTrack = null; torchOn = false;
     document.getElementById('camLive').classList.add('hidden');
@@ -3930,23 +3957,6 @@
         navigator.sendBeacon(state.serverUrl, new Blob([JSON.stringify(payload)], { type: 'text/plain;charset=utf-8' }));
       }catch(e){ /* sessiz geç — veri kuyrukta kalmaya devam ediyor, kayıp yok */ }
     });
-  }
-
-  function scanLoop(detector){
-    if(!detecting) return;
-    if(video.readyState >= 2){
-      detector.detect(video).then(function(codes){
-        if(codes.length){
-          var val = codes[0].rawValue;
-          var t = Date.now();
-          if(val !== lastCode || (t - lastTime) > 1500){
-            lastCode = val; lastTime = t;
-            handleScanResult(val);
-          }
-        }
-      }).catch(function(){});
-    }
-    requestAnimationFrame(function(){ scanLoop(detector); });
   }
 
   // ---------- EXPORT (CSV — Excel'de doğrudan açılır) — her okutma AYRI satır ----------
