@@ -67,11 +67,12 @@ PIN sistemi kaldırıldı — artık her personel kendi kullanıcı adı ve
 şifresiyle giriş yapıyor, yönetici işlemleri PIN yerine **kişinin kendi
 yetkisine** göre çalışıyor.
 
-**İlk kurulum:** Uygulamayı ilk açtığında kullanıcı listesi boştur.
-Kullanıcı adı **admin**, şifre **admin** ile giriş yap — bu, sana tüm
-yetkileri (rapor, temizleme, kullanıcı yönetimi, ekran ayarı) veren bir
-yönetici hesabıdır. **Giriş yapar yapmaz Yönetici Paneli → Kullanıcı
-Yönetimi'nden admin şifresini değiştir.**
+**İlk kurulum:** Hazır bir "admin/admin" girişi YOKTUR (güvenlik nedeniyle
+kaldırıldı). Google E-Tablo'da **Kullanicilar** adında bir sekme aç, ilk
+satıra başlıkları (`Ad | Şifre | Rol | Yetkiler | Aktif`), ikinci satıra
+kendi yönetici hesabını yaz — örn. `Ayşe Yılmaz | güçlüBirŞifre | yonetici |
+| evet`. Bu hesapla giriş yaptıktan sonra diğer kullanıcıları Yönetici
+Paneli → Kullanıcı Yönetimi'nden ekleyebilirsin.
 
 ⚠️ Şifreler `Kullanicilar` sekmesinde düz metin olarak durur — bu,
 kurumsal bir güvenlik sistemi değil, ekip içi basit bir yetkilendirmedir.
@@ -129,9 +130,9 @@ girilmiş sayım kayıtlarını düzeltme/silme).
 
 **Şifremi unuttum / admin dışarıda kaldı:** Kullanıcı Yönetimi yetkisi
 olan kimse kalmadıysa, Google E-Tablo'yu aç → **Kullanicilar** sekmesi →
-ilgili kişinin **Şifre** hücresini elle değiştir (ya da o satırı tamamen
-silip admin/admin yedek girişinin tekrar çalışmasını sağla — bunun için
-sekmede "admin" adında bir satır kalmamalı).
+ilgili kişinin **Şifre** hücresini elle değiştir. (Eski "admin/admin" yedek
+girişi güvenlik nedeniyle kaldırıldı — sekmede hiç yönetici kalmadıysa
+elle `Ad | Şifre | yonetici | | evet` biçiminde bir satır ekle.)
 
 **Kullanıcı Listesini Kaydet**'e bastığında panel önce mevcut listeyi
 sunucudan çeker ve kutuyu onunla doldurur — üstüne ekleme/çıkarma

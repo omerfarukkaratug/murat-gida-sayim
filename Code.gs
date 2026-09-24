@@ -8,7 +8,7 @@
 // bir sürüm dağıttıktan sonra /exec adresini boş açtığında burada yazan
 // numarayı görmelisin; index.html'in üstündeki "build" numarasıyla
 // eşleşecek şekilde ben her ikisini birlikte güncelliyorum.
-var GS_VERSION = 'build83';
+var GS_VERSION = 'build91';
 
 // Sheets'te "Saat" sütunu zaman biçimli olarak algılanırsa, hücre değeri düz
 // metin değil bir Date nesnesi olarak gelir ve String(...) çirkin bir çıktı
@@ -75,6 +75,12 @@ function doGet(e) {
   if (e.parameter && e.parameter.action === 'mal_kontrol') {
     return malKontrol(e.parameter.batch, e.parameter.callback);
   }
+  // sayim_kontrol: telefon, gönderdiği sayım kayıtlarının sunucuya hangi
+  // SÜRÜMLE yazıldığını sorar. Telefon kuyruğundan sadece burada doğrulanan
+  // kayıtları çıkarır (bkz. sayimKontrol).
+  if (e.parameter && e.parameter.action === 'sayim_kontrol') {
+    return sayimKontrol(e.parameter.session, e.parameter.callback);
+  }
   if (e.parameter && e.parameter.action === 'mal_export') {
     return malExport(e.parameter.user, e.parameter.pass, e.parameter.callback);
   }
@@ -119,11 +125,10 @@ function outJson(obj, callback) {
 // Rol "yonetici" ise TÜM yetkiler otomatik verilir. Rol "kullanici" ise
 // sadece Yetkiler sütununda yazılanlar (virgülle ayrılmış:
 // rapor, temizle, kullanici_yonetimi, ayarlar) geçerlidir.
-// "admin" / "admin", sekmede ADI "admin" olan bir satır TANIMLANMADIĞI
-// SÜRECE her zaman yedek bir giriştir (sadece sekme boşken değil) —
-// böylece daha önce başka isimlerle kullanıcı eklenmiş olsa bile ilk kurulum
-// kilitlenmez. Bir kişi "admin" adıyla kaydedilip farklı bir şifre
-// verildiğinde, o satır geçerli olur ve bu yedek devre dışı kalır. NOT:
+// Yedek "admin/admin" girişi KALDIRILDI: artık sadece 'Kullanicilar'
+// sekmesinde tanımlı kullanıcılar giriş yapabilir. Sekmede hiç yönetici
+// yoksa, tabloyu açıp elle bir satır ekleyin (örn: Ad | Şifre | yonetici |
+// | evet). NOT:
 // Şifreler düz metin olarak saklanır (Apps Script'in sunduğu basit bir
 // koruma) — kurumsal güvenlik seviyesinde değildir, sadece ekip içi
 // yetkilendirme için yeterlidir. Tabloyu düzenleme yetkisi olan herkes
@@ -151,10 +156,6 @@ function authenticate(user, pass) {
       return { ok: true, role: role, permissions: role === 'yonetici' ? ALL_PERMS : yetkiler };
     }
   }
-  // Listede "admin" adında bir satır yok — yedek girişi dene.
-  if (user.toLowerCase() === 'admin' && pass === 'admin') {
-    return { ok: true, role: 'yonetici', permissions: ALL_PERMS, bootstrap: true };
-  }
   return { ok: false, message: 'Kullanıcı bulunamadı' };
 }
 
@@ -168,20 +169,6 @@ function requirePermission(user, pass, perm) {
 function handleLogin(user, pass, callback) {
   var auth = authenticate(user, pass);
   if (!auth.ok) return outJson({ status: 'error', message: auth.message }, callback);
-  // Yedek (bootstrap) admin/admin girişinde kalıcı bir "admin" satırı
-  // oluştur ki Kullanıcı Yönetimi ekranında görünsün ve şifresi
-  // değiştirilebilsin — sheet boş olsun ya da başka kullanıcılar zaten
-  // tanımlanmış olsun fark etmez, authenticate() zaten "admin" adında bir
-  // satır YOKSA bootstrap döndürür.
-  if (auth.bootstrap) {
-    try {
-      var ss = SpreadsheetApp.getActiveSpreadsheet();
-      var sheet = ss.getSheetByName('Kullanicilar');
-      if (!sheet) sheet = ss.insertSheet('Kullanicilar');
-      if (sheet.getLastRow() < 1) sheet.appendRow(['Ad', 'Şifre', 'Rol', 'Yetkiler', 'Aktif']);
-      sheet.appendRow(['admin', 'admin', 'yonetici', '', 'evet']);
-    } catch (e) { /* kritik değil, bir sonraki girişte tekrar denenir */ }
-  }
   return outJson({ status: 'ok', role: auth.role, permissions: auth.permissions }, callback);
 }
 
@@ -552,6 +539,96 @@ function getIlerleme(callback) {
   return ContentService.createTextOutput(json).setMimeType(ContentService.MimeType.JSON);
 }
 
+// ============================================================
+// SAYIM SEKMESİ: SÜRÜM ve SİLİNDİ İŞARETİ
+// 'Sayim' sekmesinin 14. sütunu "Sürüm"dür. Telefon her kaydı bir sürüm
+// numarasıyla gönderir; sunucu daha yeni sürümü asla eskisiyle ezmez.
+// 'SilinenKayitlar' sekmesi silinen kayıtların kimliklerini tutar — bir kayıt
+// silindikten sonra eski bir gönderi onu tabloya geri ekleyemez.
+// ============================================================
+var SAYIM_HEADERS = ['Tarih', 'Saat', 'Personel', 'Ürün Adı', 'Stok Kodu', 'Barkod', 'Birim', 'Eski Stok', 'Sayılan Adet', 'Fark', 'Oturum ID', 'Kayıt ID', 'Reyon', 'Sürüm'];
+var SAYIM_COL = { ADET: 9, FARK: 10, OTURUM: 11, KAYIT_ID: 12, SURUM: 14 };
+var SILINEN_HEADERS = ['Kayıt ID', 'Oturum ID', 'Silinme Zamanı', 'Silen'];
+
+// Başlık satırını ve "Sürüm" sütununu hazırlar. Eski (13 sütunlu) sekmede
+// sadece 14. sütunun başlığı eklenir; mevcut satırlara dokunulmaz — sürümü
+// boş olan eski satırlar 1 kabul edilir.
+function ensureSayimColumns(sheet) {
+  if (sheet.getMaxColumns() < SAYIM_HEADERS.length) {
+    sheet.insertColumnsAfter(sheet.getMaxColumns(), SAYIM_HEADERS.length - sheet.getMaxColumns());
+  }
+  if (sheet.getLastRow() === 0) {
+    sheet.getRange(1, 1, 1, SAYIM_HEADERS.length).setValues([SAYIM_HEADERS]);
+  } else if (String(sheet.getRange(1, SAYIM_COL.SURUM).getValue()) !== 'Sürüm') {
+    sheet.getRange(1, SAYIM_COL.SURUM).setValue('Sürüm');
+  }
+}
+
+function surumOku(v) {
+  var n = parseInt(v, 10);
+  return (isNaN(n) || n < 1) ? 1 : n;
+}
+
+function silinenSheet(olustur) {
+  var ss = SpreadsheetApp.getActiveSpreadsheet();
+  var sheet = ss.getSheetByName('SilinenKayitlar');
+  if (!sheet && olustur) {
+    sheet = ss.insertSheet('SilinenKayitlar');
+    sheet.getRange(1, 1, 1, SILINEN_HEADERS.length).setValues([SILINEN_HEADERS]);
+    sheet.hideSheet(); // günlük kullanımda kafa karıştırmasın
+  }
+  return sheet;
+}
+
+// Silinen kayıtların kimliklerini { kayıtId: oturumId } olarak döndürür.
+function readSilinenler() {
+  var map = {};
+  var sheet = silinenSheet(false);
+  if (!sheet || sheet.getLastRow() < 2) return map;
+  sheet.getRange(2, 1, sheet.getLastRow() - 1, 2).getValues().forEach(function (r) {
+    if (r[0]) map[String(r[0])] = String(r[1] || '');
+  });
+  return map;
+}
+
+function addSilinenler(ids, sessionId, silen) {
+  if (!ids || ids.length === 0) return;
+  var sheet = silinenSheet(true);
+  var zaman = Utilities.formatDate(new Date(), Session.getScriptTimeZone() || 'GMT+3', 'yyyy-MM-dd HH:mm:ss');
+  var rows = ids.map(function (id) { return [String(id), String(sessionId || ''), zaman, String(silen || '')]; });
+  var ilk = sheet.getLastRow() + 1;
+  sheet.getRange(ilk, 1, rows.length, 2).setNumberFormat('@'); // kimlikler metin kalsın
+  sheet.getRange(ilk, 1, rows.length, SILINEN_HEADERS.length).setValues(rows);
+}
+
+// Telefonun gönderim onayı: bir oturumun tablodaki kayıtlarını
+// { kayıtId: [sürüm, adet] } ve o oturumda silinmiş kimlikleri döndürür.
+// Telefon kuyruğundan SADECE burada doğrulanan kayıtları çıkarır:
+//  - tablodaki sürüm >= telefondaki sürüm ise kayıt yazılmış demektir,
+//  - silinen kimlik tabloda yoksa silme işlenmiş demektir.
+// Kilit almadan okur; doPost yazarken okunsa bile en kötü ihtimalle telefon
+// kaydı "henüz yazılmadı" sayıp bir sonraki turda tekrar gönderir.
+function sayimKontrol(sessionId, callback) {
+  var hedef = String(sessionId || '');
+  if (!hedef) return outJson({ status: 'error', message: 'Oturum ID eksik' }, callback);
+  var rows = {};
+  var sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName('Sayim');
+  if (sheet && sheet.getLastRow() >= 2) {
+    var genislik = Math.min(sheet.getMaxColumns(), SAYIM_HEADERS.length);
+    var values = sheet.getRange(2, 1, sheet.getLastRow() - 1, genislik).getValues();
+    for (var i = 0; i < values.length; i++) {
+      if (String(values[i][SAYIM_COL.OTURUM - 1]) !== hedef) continue;
+      var id = values[i][SAYIM_COL.KAYIT_ID - 1];
+      if (!id) continue;
+      var v = genislik >= SAYIM_COL.SURUM ? surumOku(values[i][SAYIM_COL.SURUM - 1]) : 1;
+      rows[String(id)] = [v, values[i][SAYIM_COL.ADET - 1]];
+    }
+  }
+  var silinenler = readSilinenler();
+  var deleted = Object.keys(silinenler).filter(function (id) { return silinenler[id] === hedef; });
+  return outJson({ status: 'ok', rows: rows, deleted: deleted }, callback);
+}
+
 function doPost(e) {
   // 10+ telefon aynı anda veri gönderebildiği için, sayfaya yazma işlemini
   // KİLİTLİYORUZ. Kilit olmadan iki telefonun isteği aynı anda işlenirse,
@@ -597,23 +674,31 @@ function doPost(e) {
     var sheet = ss.getSheetByName('Sayim');
     if (!sheet) sheet = ss.insertSheet('Sayim');
 
-    var HEADERS = ['Tarih', 'Saat', 'Personel', 'Ürün Adı', 'Stok Kodu', 'Barkod', 'Birim', 'Eski Stok', 'Sayılan Adet', 'Fark', 'Oturum ID', 'Kayıt ID', 'Reyon'];
-    if (sheet.getLastRow() === 0) {
-      sheet.appendRow(HEADERS);
-    }
-    var idCol = HEADERS.indexOf('Kayıt ID');
+    ensureSayimColumns(sheet);
+    var HEADERS = SAYIM_HEADERS;
+    var idCol = SAYIM_COL.KAYIT_ID - 1;
+    var surumCol = SAYIM_COL.SURUM - 1;
 
     var personnel = data.personnel || '';
     var sessionId = data.sessionId || '';
     var rows = data.rows || [];
 
+    // Silindi işaretleri: yönetici ya da telefon tarafından silinmiş kayıtlar.
+    // Eski bir gönderi (örn. sendBeacon ile geç ulaşan) bu kayıtları GERİ
+    // GETİREMEZ.
+    var silinenler = readSilinenler();
+
     var lastRow = sheet.getLastRow();
-    var existing = {};
+    var existing = {};   // kayıtId -> satır numarası
+    var existingV = {};  // kayıtId -> tablodaki sürüm
     if (lastRow > 1) {
       var values = sheet.getRange(2, 1, lastRow - 1, HEADERS.length).getValues();
       for (var i = 0; i < values.length; i++) {
         var key = values[i][idCol];
-        if (key) existing[key] = i + 2;
+        if (key) {
+          existing[key] = i + 2;
+          existingV[key] = surumOku(values[i][surumCol]);
+        }
       }
     }
 
@@ -621,15 +706,33 @@ function doPost(e) {
     // Yeni satırları TEK seferde toplu ekliyoruz (appendRow'u döngüde tekrar
     // tekrar çağırmak yerine) — hem çok daha hızlı hem de sayfa büyüdükçe
     // (binlerce satır, 72 saatlik sayım) performansı korur.
+    //
+    // SÜRÜM KONTROLÜ: Her kayıt telefonda bir sürüm numarası (v) taşır; adet
+    // her değiştiğinde artar. Tablodaki sürüm gelen sürümden küçük değilse
+    // satır EZİLMEZ — böylece geç ulaşan eski bir gönderi, yeni düzeltmenin
+    // (telefondan ya da yöneticinin "Düzelt" ekranından) üzerine yazamaz.
+    // Sürümsüz gelen kayıt (eski uygulama sürümü) v=1 sayılır ve sadece
+    // tablodaki satır da hiç düzeltilmemişse (v<=1) üzerine yazılır.
     var newRows = [];
+    var skipped = 0;
     rows.forEach(function (row) {
+      var id = row.id ? String(row.id) : '';
+      if (id && silinenler[id]) { skipped++; return; }
+      var surumVar = row.v !== undefined && row.v !== null && row.v !== '';
+      var v = surumVar ? surumOku(row.v) : 1;
       var oldStock = (row.oldStock !== '' && row.oldStock !== undefined && !isNaN(Number(row.oldStock))) ? Number(row.oldStock) : '';
       var diff = oldStock !== '' ? (row.qty - oldStock) : '';
-      var rowData = [row.date, row.time, personnel, row.name, row.stockCode || '', row.barcode, row.unit || 'Adet', oldStock, row.qty, diff, sessionId, row.id || '', row.reyon || ''];
-      if (row.id && existing[row.id]) {
-        sheet.getRange(existing[row.id], 1, 1, HEADERS.length).setValues([rowData]);
+      var rowData = [row.date, row.time, personnel, row.name, row.stockCode || '', row.barcode, row.unit || 'Adet', oldStock, row.qty, diff, sessionId, row.id || '', row.reyon || '', v];
+      if (id && existing[id] === -1) { skipped++; return; } // aynı istekte zaten eklendi
+      if (id && existing[id]) {
+        var mevcutV = existingV[id];
+        var yaz = surumVar ? (v > mevcutV) : (mevcutV <= 1);
+        if (!yaz) { skipped++; return; }
+        sheet.getRange(existing[id], 1, 1, HEADERS.length).setValues([rowData]);
+        existingV[id] = v;
       } else {
         newRows.push(rowData);
+        if (id) { existing[id] = -1; existingV[id] = v; } // aynı istekte tekrar gelirse çift satır olmasın
       }
     });
     if (newRows.length > 0) {
@@ -639,9 +742,12 @@ function doPost(e) {
     // Telefonda silinmiş kayıtları tablodan da sil. "rows" listesinde
     // artık bulunmaması tek başına yeterli değildir — sunucu bunu "hiç
     // gönderilmedi" ile ayırt edemez, bu yüzden istemci silinen id'leri
-    // ayrıca bildirir (deletedIds).
+    // ayrıca bildirir (deletedIds). Silinen her kayda ayrıca "silindi
+    // işareti" konur ki eski bir gönderi onu geri getirmesin.
     var deletedIds = (data.deletedIds || []).map(String);
     if (deletedIds.length > 0) {
+      var yeniSilinen = deletedIds.filter(function (d) { return !silinenler[d]; });
+      if (yeniSilinen.length > 0) addSilinenler(yeniSilinen, sessionId, personnel || 'telefon');
       var lastRowAfter = sheet.getLastRow();
       if (lastRowAfter > 1) {
         var idColValues = sheet.getRange(2, idCol + 1, lastRowAfter - 1, 1).getValues();
@@ -657,7 +763,7 @@ function doPost(e) {
     }
 
     return ContentService
-      .createTextOutput(JSON.stringify({ status: 'ok', processed: rows.length }))
+      .createTextOutput(JSON.stringify({ status: 'ok', processed: rows.length, skipped: skipped }))
       .setMimeType(ContentService.MimeType.JSON);
 
   } catch (err) {
@@ -1292,9 +1398,10 @@ function sayimGuncelle(user, pass, kayitId, adet, callback) {
   try {
     var ss = SpreadsheetApp.getActiveSpreadsheet();
     var sheet = ss.getSheetByName('Sayim');
-    var HEADERS = ['Tarih', 'Saat', 'Personel', 'Ürün Adı', 'Stok Kodu', 'Barkod', 'Birim', 'Eski Stok', 'Sayılan Adet', 'Fark', 'Oturum ID', 'Kayıt ID', 'Reyon'];
+    var HEADERS = SAYIM_HEADERS;
     var idx = {}; HEADERS.forEach(function (h, i) { idx[h] = i; });
     if (!sheet || sheet.getLastRow() < 2) return outJson({ status: 'error', message: 'Kayıt bulunamadı' }, callback);
+    ensureSayimColumns(sheet);
     var values = sheet.getRange(2, 1, sheet.getLastRow() - 1, HEADERS.length).getValues();
     for (var i = 0; i < values.length; i++) {
       if (String(values[i][idx['Kayıt ID']]) === String(kayitId)) {
@@ -1303,7 +1410,12 @@ function sayimGuncelle(user, pass, kayitId, adet, callback) {
         var fark = (eskiStok !== '' && eskiStok !== undefined && !isNaN(Number(eskiStok))) ? (yeniAdet - Number(eskiStok)) : '';
         sheet.getRange(rowNum, idx['Sayılan Adet'] + 1).setValue(yeniAdet);
         sheet.getRange(rowNum, idx['Fark'] + 1).setValue(fark);
-        return outJson({ status: 'ok' }, callback);
+        // Sürümü artır: telefonda kuyrukta bekleyen (ya da geç ulaşan) ESKİ
+        // sürüm artık bu düzeltmenin üzerine yazamaz. Telefon bir sonraki
+        // onayda yeni adedi ve sürümü kendine alır.
+        var yeniV = surumOku(values[i][idx['Sürüm']]) + 1;
+        sheet.getRange(rowNum, idx['Sürüm'] + 1).setValue(yeniV);
+        return outJson({ status: 'ok', v: yeniV }, callback);
       }
     }
     return outJson({ status: 'error', message: 'Kayıt bulunamadı (silinmiş olabilir)' }, callback);
@@ -1323,12 +1435,17 @@ function sayimSil(user, pass, kayitId, callback) {
   try {
     var ss = SpreadsheetApp.getActiveSpreadsheet();
     var sheet = ss.getSheetByName('Sayim');
-    var HEADERS = ['Tarih', 'Saat', 'Personel', 'Ürün Adı', 'Stok Kodu', 'Barkod', 'Birim', 'Eski Stok', 'Sayılan Adet', 'Fark', 'Oturum ID', 'Kayıt ID', 'Reyon'];
+    var HEADERS = SAYIM_HEADERS;
     var idx = {}; HEADERS.forEach(function (h, i) { idx[h] = i; });
     if (!sheet || sheet.getLastRow() < 2) return outJson({ status: 'error', message: 'Kayıt bulunamadı' }, callback);
+    ensureSayimColumns(sheet);
     var values = sheet.getRange(2, 1, sheet.getLastRow() - 1, HEADERS.length).getValues();
     for (var i = 0; i < values.length; i++) {
       if (String(values[i][idx['Kayıt ID']]) === String(kayitId)) {
+        // Silindi işareti: telefonun kuyruğunda bekleyen eski bir gönderi bu
+        // kaydı tabloya GERİ GETİREMEZ; telefon da bir sonraki onayda kaydı
+        // kendi listesinden kaldırır.
+        addSilinenler([kayitId], values[i][idx['Oturum ID']], String(user || 'yonetici'));
         sheet.deleteRow(i + 2);
         return outJson({ status: 'ok' }, callback);
       }

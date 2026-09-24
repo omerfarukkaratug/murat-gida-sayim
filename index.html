@@ -310,7 +310,7 @@
   <header style="border:none; padding:0 0 16px; background:transparent; display:flex; align-items:flex-start; justify-content:space-between;">
     <div>
       <h1><img src="logo-header.png" alt="Murat Gıda" style="height:30px; width:auto; display:block;"></h1>
-      <div class="sub">MK ERP · Murat Gıda • offline • Android • build 90</div>
+      <div class="sub">MK ERP · Murat Gıda • offline • Android • build 91</div>
     </div>
     <button type="button" id="themeToggleBtn" title="Tema seç" style="background:var(--panel2); border:1.5px solid var(--line); color:var(--text); width:34px; height:34px; border-radius:50%; font-size:15px; padding:0; display:flex; align-items:center; justify-content:center; flex-shrink:0;">🎨</button>
   </header>
@@ -327,7 +327,7 @@
     </div>
     <button class="btn-main" id="loginBtn" style="margin-top:14px;">Giriş Yap</button>
     <div class="hint" id="loginHint" style="text-align:center; margin-top:8px; min-height:14px;"></div>
-    <div class="hint" style="text-align:center; margin-top:10px;">İlk kurulumda yönetici girişi: kullanıcı adı <b>admin</b>, şifre <b>admin</b> — giriş yaptıktan sonra Yönetici Paneli'nden hemen değiştir.</div>
+    <div class="hint" style="text-align:center; margin-top:10px;">Giriş bilgilerini yöneticinden al. Yönetici hesabı Google E-Tablo'daki <b>Kullanicilar</b> sekmesinde tanımlanır.</div>
     <div class="hidden">
       <input type="url" id="serverInput" value="">
     </div>
@@ -949,7 +949,7 @@
 (function(){
   "use strict";
   var STORE_KEY = "sayimApp_meta_v2"; // küçük veri: personel, sunucu, sayım oturumu, kuyruk
-  var state = load() || { personnel:"", serverUrl:"", session:{scans:[], id:null, deletedIds:[], sentIds:[]}, pendingSessions:[], newProductCounter:1 };
+  var state = load() || { personnel:"", serverUrl:"", session:{scans:[], id:null, deletedIds:[], ackedV:{}}, pendingSessions:[], newProductCounter:1 };
   if(!state.session.scans){
     // Eski sürümden geçiş: birleştirilmiş kayıtları ayrı taramalara çevir
     var migrated = [];
@@ -1109,7 +1109,19 @@
   document.getElementById('themeToggleBtnMain').addEventListener('click', openThemePicker);
 
   if(!state.session.deletedIds) state.session.deletedIds = [];
-  if(!state.session.sentIds) state.session.sentIds = [];
+  // Sürüm geçişi: her kayıt artık bir sürüm numarası (v) taşır — adet her
+  // değiştiğinde artar. Sunucu onayladığı sürümü döndürür (ackedV: kayıtId ->
+  // sunucunun onayladığı sürüm). Eski sürümde "gönderildi" (sentIds) olan
+  // kayıtlar v=1 ve onaylı sayılır. Gönderilmemiş olanlar v=2 alır — böylece
+  // eski sürümde yapılmış ama henüz gönderilmemiş bir adet düzeltmesi,
+  // sunucudaki sürümsüz (v=1 sayılan) satırın üzerine yazılabilir.
+  if(!state.session.ackedV) state.session.ackedV = {};
+  var eskiGonderilen = Array.isArray(state.session.sentIds) ? state.session.sentIds : [];
+  eskiGonderilen.forEach(function(id){ state.session.ackedV[id] = 1; });
+  state.session.scans.forEach(function(it){
+    if(!it.v) it.v = eskiGonderilen.indexOf(it.id) !== -1 ? 1 : 2;
+  });
+  delete state.session.sentIds;
   if(state.currentUser === undefined) state.currentUser = null;
   if(state.savedCredentials === undefined) state.savedCredentials = null;
   if(!state.session.id) state.session.id = makeId();
@@ -1634,7 +1646,7 @@
       if(err || !data) return;
       if(data.resetToken){
         if(state.lastResetToken && state.lastResetToken !== data.resetToken){
-          state.session = { scans:[], id: makeId(), deletedIds: [], sentIds: [] };
+          state.session = { scans:[], id: makeId(), deletedIds: [], ackedV: {} };
           state.pendingSessions = [];
           state.lastResetToken = data.resetToken;
           save();
@@ -1962,7 +1974,7 @@
     var t = nowParts();
     state.session.scans.push({
       id: makeId(), name:name, barcode:barcode, stockCode:stockCode, oldStock:'',
-      qty:qty, unit: unit, date:t.date, time:t.time, ts:t.ts, reyon: state.reyon || ''
+      qty:qty, unit: unit, date:t.date, time:t.time, ts:t.ts, reyon: state.reyon || '', v: 1
     });
     save();
     renderList();
@@ -2138,7 +2150,7 @@
     state.session.scans.push({
       id: makeId(), name: pendingScan.name, barcode: pendingScan.barcode,
       stockCode: pendingScan.stockCode, oldStock: pendingScan.oldStock,
-      qty: addQty, unit: unit, date: t.date, time: t.time, ts: t.ts, reyon: state.reyon || ''
+      qty: addQty, unit: unit, date: t.date, time: t.time, ts: t.ts, reyon: state.reyon || '', v: 1
     });
     successToast(pendingScan.name + ': ' + addQty + ' ' + unit + ' eklendi');
     save();
@@ -2185,7 +2197,7 @@
     var unit = unitFor(it.barcode);
     var unitHtml = unit === 'Kg' ? ' · <span class="oldStock">Kg</span>' : '';
     var reyonHtml = it.reyon ? ' · <span class="oldStock">'+escapeHtml(it.reyon)+'</span>' : '';
-    var sent = isScanSent(it.id);
+    var sent = isScanSent(it);
     var syncDot = '<span class="syncDot" title="'+(sent?'Dosyaya gönderildi':'Henüz dosyaya gönderilmedi')+'" style="background:'+(sent?'var(--green)':'var(--red)')+';"></span>';
     return '<div class="item">' +
       '<div class="info"><div class="name">'+syncDot+escapeHtml(it.name)+'</div>' +
@@ -2246,16 +2258,17 @@
     if(!state.session.deletedIds) state.session.deletedIds = [];
     if(state.session.deletedIds.indexOf(id) === -1) state.session.deletedIds.push(id);
   }
-  // Bir kayıt düzenlendiğinde (adedi değiştiğinde), sunucudaki eski hâli
-  // artık güncel değildir — yeniden gönderilip onaylanana kadar "gönderildi"
-  // (yeşil) değil "bekliyor" (kırmızı) göstermek için sentIds'ten çıkarır.
-  function markScanPending(id){
-    if(!state.session.sentIds) return;
-    var i = state.session.sentIds.indexOf(id);
-    if(i !== -1) state.session.sentIds.splice(i, 1);
+  // Bir kayıt düzenlendiğinde (adedi değiştiğinde) sürümü artar; sunucudaki
+  // eski hâl artık güncel değildir. Sunucu yeni sürümü onaylayana kadar kayıt
+  // "gönderildi" (yeşil) değil "bekliyor" (kırmızı) görünür.
+  function bumpScanVersion(it){
+    it.v = (it.v || 1) + 1;
   }
-  function isScanSent(id){
-    return !!(state.session.sentIds && state.session.sentIds.indexOf(id) !== -1);
+  // Kayıt, sunucunun onayladığı sürüm telefondaki sürüme eşit ya da büyükse
+  // gönderilmiş sayılır.
+  function isScanSent(it){
+    var acked = state.session.ackedV && state.session.ackedV[it.id];
+    return acked !== undefined && acked >= (it.v || 1);
   }
 
   function setQty(id, newQty){
@@ -2283,7 +2296,7 @@
       }
     }
     it.qty = newQty;
-    markScanPending(id);
+    bumpScanVersion(it);
     save(); renderList();
     autoQueueAndSync();
   }
@@ -3348,7 +3361,7 @@
     var stockHtml = it.stockCode ? ' · <span class="oldStock">'+escapeHtml(it.stockCode)+'</span>' : '';
     var reyonHtml = it.reyon ? ' · <span class="oldStock">'+escapeHtml(it.reyon)+'</span>' : '';
     var unit = unitFor(it.barcode);
-    var sent = isScanSent(it.id);
+    var sent = isScanSent(it);
     var syncDot = '<span class="syncDot" title="'+(sent?'Dosyaya gönderildi':'Henüz dosyaya gönderilmedi')+'" style="background:'+(sent?'var(--green)':'var(--red)')+';"></span>';
     return '<div class="item browseItem" data-browse-id="'+it.id+'">' +
       '<div class="info"><div class="name">'+syncDot+escapeHtml(it.name)+'</div>' +
@@ -3889,7 +3902,7 @@
       if(err){ adminResultEl.textContent = '❌ ' + err; return; }
       if(!data || data.status === 'error'){ adminResultEl.textContent = '❌ ' + ((data && data.message) || 'bilinmeyen hata'); return; }
       state.lastResetToken = data.resetToken;
-      state.session = { scans: [], id: makeId(), deletedIds: [], sentIds: [] };
+      state.session = { scans: [], id: makeId(), deletedIds: [], ackedV: {} };
       state.pendingSessions = [];
       save();
       if(typeof renderList === 'function') renderList();
@@ -4121,9 +4134,10 @@
   // tarafından arka planda garanti teslim edilmeye çalışılır (kısa istekler
   // için). Başarı/başarısızlığı bildirmediği için kuyruktan SİLMİYORUZ —
   // aynı veriyi normal akış tekrar gönderse bile satır kimliği (id) aynı
-  // olduğundan sunucu bunu üzerine yazma (güncelleme) olarak işler, kopya
-  // satır oluşmaz. Bu sayede "iki kez gönderilse bile veri bozulmaz" garantisi
-  // korunmuş olur.
+  // olduğundan kopya satır oluşmaz. Her satır sürüm numarası (v) taşıdığı
+  // için geç ulaşan eski bir beacon, daha yeni bir düzeltmenin üzerine
+  // yazamaz; silinmiş bir kaydı da geri getiremez (sunucu "silindi" işaretine
+  // bakar).
   function flushPendingWithBeacon(){
     if(!navigator.sendBeacon || !state.serverUrl || state.pendingSessions.length === 0) return;
     state.pendingSessions.forEach(function(payload){
@@ -4159,6 +4173,110 @@
   // başarı durumunda sessiz kal (bildirim akışı kesmesin), sadece HATADA uyar.
   // silent=false -> "Gönder" butonuna elle basıldığında; her durumda net bildirim ver.
   var syncInProgress = false;
+  var SYNC_POST_TIMEOUT_MS = 30000;   // gönderim isteği en fazla bu kadar bekler
+  var SYNC_VERIFY_TIMEOUT_MS = 20000; // sunucu onayı en fazla bu kadar bekler
+
+  // Zaman aşımlı gönderim: istek takılırsa (zayıf sinyal, Google yavaş)
+  // sonsuza kadar beklemez — iptal edilir, kayıtlar kuyrukta kalır ve bir
+  // sonraki turda tekrar denenir.
+  function postWithTimeout(url, body, ms){
+    var ctrl = (typeof AbortController === 'function') ? new AbortController() : null;
+    var timer = null;
+    var timeout = new Promise(function(_, reject){
+      timer = setTimeout(function(){
+        if(ctrl) ctrl.abort();
+        reject(new Error('zaman aşımı'));
+      }, ms);
+    });
+    var req = fetch(url, {
+      method:'POST', mode:'no-cors',
+      headers:{'Content-Type':'text/plain;charset=utf-8'},
+      body: body,
+      signal: ctrl ? ctrl.signal : undefined
+    });
+    return Promise.race([req, timeout]).then(
+      function(r){ clearTimeout(timer); return r; },
+      function(e){ clearTimeout(timer); throw e; }
+    );
+  }
+
+  // Sunucudan bir oturumun onayını ister: tabloya hangi kayıtların hangi
+  // sürümle yazıldığını ve hangilerinin silindiğini döndürür.
+  function fetchSessionAck(url, sessionId){
+    return new Promise(function(resolve, reject){
+      jsonpRequestP(url, { action:'sayim_kontrol', session: sessionId }, function(err, res){
+        if(err) return reject(new Error(err));
+        if(!res || res.status !== 'ok' || !res.rows) return reject(new Error((res && res.message) || 'sunucu onayı alınamadı'));
+        resolve(res);
+      }, SYNC_VERIFY_TIMEOUT_MS);
+    });
+  }
+
+  // Sunucu onayını işler. Kuyruktan SADECE sunucunun doğruladığı kayıtları
+  // çıkarır: tablodaki sürüm >= gönderilen sürüm ise kayıt yazılmıştır;
+  // silinen kimlik sunucuda "silindi" olarak işaretliyse silme işlenmiştir.
+  // Gönderim sürerken eklenen/düzeltilen kayıtlar (daha yüksek sürüm) kuyrukta
+  // kalır. Kuyruğun o ANKİ güncel hâli üzerinde çalışır — gönderim başladığında
+  // alınan eski bir kopya ile üzerine yazılmaz.
+  // Dönen değer: { unconfirmed: doğrulanamayan kayıt sayısı, localChanged:
+  // ekrandaki liste yeniden çizilmeli mi }
+  function applySessionAck(sessionId, res){
+    var srv = res.rows || {};
+    var silinen = {};
+    (res.deleted || []).forEach(function(id){ silinen[String(id)] = true; });
+    var localChanged = false;
+
+    // 1) Açık oturum: telefondaki listeyi sunucuyla eşitle.
+    if(sessionId === state.session.id){
+      var sess = state.session;
+      if(!sess.ackedV) sess.ackedV = {};
+      sess.scans = sess.scans.filter(function(it){
+        if(silinen[it.id]){ // yönetici "Düzelt" ekranından sildi
+          delete sess.ackedV[it.id];
+          localChanged = true;
+          return false;
+        }
+        var r = srv[it.id];
+        if(!r) return true;
+        var sv = Number(r[0]) || 1;
+        if(sv >= (it.v || 1)){
+          // Sunucudaki sürüm aynı ya da daha yeni (örn. yönetici düzeltti):
+          // telefondaki adedi sunucudakiyle eşitle ki ekran tabloyla aynı olsun.
+          var sq = Number(r[1]);
+          if(sv > (it.v || 1) || (!isNaN(sq) && sq !== Number(it.qty))){
+            it.v = sv;
+            if(!isNaN(sq)) it.qty = sq;
+            localChanged = true;
+          }
+          if(sess.ackedV[it.id] !== sv){ sess.ackedV[it.id] = sv; localChanged = true; } // nokta yeşile dönsün
+        }
+        return true;
+      });
+      sess.deletedIds = (sess.deletedIds || []).filter(function(id){ return !silinen[id]; });
+    }
+
+    // 2) Kuyruk: sadece doğrulanan kayıtları çıkar.
+    var idx = state.pendingSessions.findIndex(function(p){ return p.sessionId === sessionId; });
+    if(idx === -1) return { unconfirmed: 0, localChanged: localChanged };
+    var entry = state.pendingSessions[idx];
+    entry.rows = (entry.rows || []).filter(function(r){
+      if(silinen[r.id]) return false;
+      var x = srv[r.id];
+      return !(x && (Number(x[0]) || 1) >= (r.v || 1));
+    });
+    entry.deletedIds = (entry.deletedIds || []).filter(function(id){ return !silinen[id]; });
+    var unconfirmed = entry.rows.length + entry.deletedIds.length;
+    if(unconfirmed === 0) state.pendingSessions.splice(idx, 1);
+    return { unconfirmed: unconfirmed, localChanged: localChanged };
+  }
+
+  // silent=true -> arka planda otomatik gönderim (her okutmadan sonra tetiklenir);
+  // başarı durumunda sessiz kal (bildirim akışı kesmesin), sadece HATADA uyar.
+  // silent=false -> "Gönder" butonuna elle basıldığında; her durumda net bildirim ver.
+  //
+  // Akış (her oturum için): 1) veriyi gönder, 2) sunucudan onay iste,
+  // 3) sadece onaylanan kayıtları kuyruktan çıkar. Onay gelmezse HİÇBİR kayıt
+  // silinmez. Her adımın zaman aşımı olduğu için gönderim asla askıda kalmaz.
   function trySync(silent, onDone){
     if(!navigator.onLine || !state.serverUrl || state.pendingSessions.length === 0){
       if(onDone) onDone();
@@ -4166,57 +4284,63 @@
     }
     if(syncInProgress){ if(onDone) onDone(); return; } // aynı anda iki gönderim çakışmasın
     syncInProgress = true;
-    var remaining = [];
+    var url = state.serverUrl;
+    // Gönderilecek oturumların sadece KİMLİKLERİNİ alıyoruz; her oturumun
+    // içeriği gönderileceği an kuyruğun güncel hâlinden okunur.
+    var sessionIds = state.pendingSessions.map(function(p){ return p.sessionId; });
     var anyError = null;
     var sentCount = 0;
-    var sendNext = function(i){
-      if(i >= state.pendingSessions.length){
-        state.pendingSessions = remaining; save(); updatePendingBadge();
-        syncInProgress = false;
-        if(!silent){
-          if(anyError) errorToast("Bazı kayıtlar gönderilemedi: " + anyError + " — internet gelince otomatik tekrar denenecek");
-          else if(sentCount > 0) successToast("Tüm kayıtlar gönderildi (Google Tablo'dan kontrol edebilirsiniz)");
-        } else if(anyError){
-          // Arka planda bile olsa gerçek bir hata varsa kullanıcıyı bilgilendir —
-          // veri telefonda güvende ama gönderim başarısız, sessiz geçilmemeli.
-          errorToast("Otomatik gönderim başarısız: " + anyError + " — veriniz telefonda güvende, tekrar denenecek");
-        }
-        if(onDone) onDone();
-        return;
+    var localChanged = false;
+
+    var finish = function(){
+      syncInProgress = false;
+      save(); updatePendingBadge();
+      if(localChanged && typeof renderList === 'function') renderList();
+      if(!silent){
+        if(anyError) errorToast("Bazı kayıtlar gönderilemedi: " + anyError + " — internet gelince otomatik tekrar denenecek");
+        else if(sentCount > 0) successToast("Tüm kayıtlar gönderildi ve sunucuda doğrulandı");
+      } else if(anyError){
+        // Arka planda bile olsa gerçek bir hata varsa kullanıcıyı bilgilendir —
+        // veri telefonda güvende ama gönderim başarısız, sessiz geçilmemeli.
+        errorToast("Otomatik gönderim başarısız: " + anyError + " — veriniz telefonda güvende, tekrar denenecek");
       }
-      var payload = state.pendingSessions[i];
+      if(onDone) onDone();
+    };
+
+    var sendNext = function(i){
+      if(i >= sessionIds.length){ finish(); return; }
+      var sid = sessionIds[i];
+      var payload = state.pendingSessions.find(function(p){ return p.sessionId === sid; });
+      if(!payload){ sendNext(i + 1); return; } // bu arada başka yoldan doğrulanmış
+      // Not: eski sürümden kuyrukta kalmış satırlarda "v" yoktur; öyle
+      // gönderilir, sunucu onları eski kurala göre (düzeltilmemiş satırın
+      // üzerine yazarak) işler. Onayda sürümsüz satır v=1 sayılır.
       // Not: mode 'no-cors' kullanıyoruz — Google Apps Script'in tarayıcı CORS
-      // başlıklarını tam desteklememesi yüzünden, isteği yollayıp cevabı OKUMAYA
-      // ÇALIŞMADAN (opak yanıt) gönderiyoruz. İstek sunucuya normal şekilde ulaşır
-      // ve satır eklenir; sadece tarayıcı tarafında "başarılı mı" diye HTTP durum
-      // kodunu kontrol edemiyoruz — sadece AĞ hatalarını (internet yok, zaman aşımı)
-      // yakalayabiliyoruz. Bu yüzden veri telefonda silinmeden, başarı sinyali
-      // gelene kadar (ya da kullanıcı elle onaylayana kadar) kuyrukta tutuluyoruz.
-      fetch(state.serverUrl, {
-        method:'POST', mode:'no-cors',
-        headers:{'Content-Type':'text/plain;charset=utf-8'},
-        body: JSON.stringify(payload)
-      })
+      // başlıklarını tam desteklememesi yüzünden cevabı okuyamıyoruz. Bu yüzden
+      // gönderimden sonra AYRI bir JSONP isteğiyle (sayim_kontrol) sunucudan
+      // hangi kayıtların hangi sürümle yazıldığını soruyoruz.
+      postWithTimeout(url, JSON.stringify(payload), SYNC_POST_TIMEOUT_MS)
         .then(function(){
-          sentCount++;
           if(typeof markServerReachable === 'function') markServerReachable();
-          // Bu, geçerli (hâlâ açık) oturuma aitse, içindeki kayıtları
-          // "gönderildi" (yeşil) olarak işaretle ki listede görünsün.
-          if(payload.sessionId === state.session.id){
-            if(!state.session.sentIds) state.session.sentIds = [];
-            payload.rows.forEach(function(r){
-              if(state.session.sentIds.indexOf(r.id) === -1) state.session.sentIds.push(r.id);
-            });
-            save();
-            if(typeof renderList === 'function') renderList();
+          return fetchSessionAck(url, sid);
+        })
+        .then(function(res){
+          var r = applySessionAck(sid, res);
+          if(r.localChanged) localChanged = true;
+          if(r.unconfirmed > 0){
+            // Sunucu isteği aldı ama bazı kayıtları yazamadı (örn. yoğunlukta
+            // kilit alınamadı) — bu kayıtlar kuyrukta kalır, tekrar denenir.
+            anyError = r.unconfirmed + ' kayıt sunucuda doğrulanamadı';
+          } else {
+            sentCount++;
           }
         })
         .catch(function(err){
-          remaining.push(payload); // gönderilemedi — kuyrukta kalsın, veri kaybı yok
+          // Gönderilemedi ya da onay alınamadı — kuyruğa dokunma, veri kaybı yok.
           anyError = (err && err.message) ? err.message : 'bağlantı hatası';
           if(typeof markServerUnreachable === 'function') markServerUnreachable();
         })
-        .finally(function(){ sendNext(i+1); });
+        .then(function(){ sendNext(i + 1); });
     };
     sendNext(0);
   }
@@ -4234,24 +4358,33 @@
   });
 
   function queueCurrentSession(){
-    var items = state.session.scans;
-    if(items.length === 0 && (!state.session.deletedIds || state.session.deletedIds.length === 0)) return;
+    // Sadece sunucunun henüz onaylamadığı kayıtlar (yeni ya da adedi değişmiş,
+    // yani sürümü onaylanandan yüksek olanlar) kuyruğa girer.
+    var items = state.session.scans.filter(function(it){ return !isScanSent(it); });
+    var deletedIds = (state.session.deletedIds || []).slice();
+    var idx = state.pendingSessions.findIndex(function(p){ return p.sessionId === state.session.id; });
+    if(items.length === 0 && deletedIds.length === 0){
+      // Gönderilecek bir şey kalmadı (hepsi doğrulandı) — varsa boş kuyruk kaydını kaldır.
+      if(idx >= 0){ state.pendingSessions.splice(idx, 1); save(); updatePendingBadge(); }
+      return;
+    }
     var payload = {
       personnel: state.personnel,
       sessionId: state.session.id,
       finishedAt: nowParts(),
       // Her okutma kendi eşsiz kimliğiyle (id) ayrı satır olarak gider —
       // tabloda birleşmez. Aynı id tekrar gönderilirse (düzeltme), o satır
-      // güncellenir, yenisi eklenmez.
-      rows: items.map(function(it){ return { id:it.id, name:it.name, stockCode: it.stockCode||'', barcode:it.barcode, unit: unitFor(it.barcode), oldStock: it.oldStock||'', date:it.date, time:it.time, qty:it.qty, reyon: it.reyon||'' }; }),
+      // güncellenir, yenisi eklenmez. "v" (sürüm) sayesinde sunucu eski bir
+      // gönderinin yeni düzeltmenin üzerine yazmasına izin vermez.
+      rows: items.map(function(it){ return { id:it.id, v: it.v || 1, name:it.name, stockCode: it.stockCode||'', barcode:it.barcode, unit: unitFor(it.barcode), oldStock: it.oldStock||'', date:it.date, time:it.time, qty:it.qty, reyon: it.reyon||'' }; }),
       // Bu telefonda silinmiş kayıtların kimlikleri — sunucu bunları
-      // 'Sayim' tablosundan da siler (yoksa sadece "rows" listesinden eksik
-      // olması sunucuya hiçbir şey ifade etmez, satır tabloda kalırdı).
-      deletedIds: (state.session.deletedIds || []).slice()
+      // 'Sayim' tablosundan siler ve "silindi" olarak işaretler (yoksa sadece
+      // "rows" listesinden eksik olması sunucuya hiçbir şey ifade etmez).
+      deletedIds: deletedIds
     };
     // Aynı oturum kimliği kuyrukta zaten varsa üzerine yaz (kopya oluşmasın),
-    // yoksa kuyruğa ekle. Sunucu tarafı da bunu DÜZELTME olarak işleyecek.
-    var idx = state.pendingSessions.findIndex(function(p){ return p.sessionId === state.session.id; });
+    // yoksa kuyruğa ekle. Gönderim sürerken üzerine yazılsa bile sorun olmaz:
+    // onay geldiğinde sadece doğrulanan sürümler kuyruktan çıkarılır.
     if(idx >= 0) state.pendingSessions[idx] = payload;
     else state.pendingSessions.push(payload);
     save(); updatePendingBadge();
@@ -4304,7 +4437,7 @@
 
   document.getElementById('reviewConfirm').addEventListener('click', function(){
     queueCurrentSession();
-    state.session = { scans:[], id: makeId(), deletedIds: [], sentIds: [] }; // yeni oturum = yeni kimlik
+    state.session = { scans:[], id: makeId(), deletedIds: [], ackedV: {} }; // yeni oturum = yeni kimlik
     save();
     renderList();
     trySync(false);
