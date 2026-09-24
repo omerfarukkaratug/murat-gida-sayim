@@ -310,7 +310,7 @@
   <header style="border:none; padding:0 0 16px; background:transparent; display:flex; align-items:flex-start; justify-content:space-between;">
     <div>
       <h1><img src="logo-header.png" alt="Murat Gıda" style="height:30px; width:auto; display:block;"></h1>
-      <div class="sub">MK ERP · Murat Gıda • offline • Android • build 91</div>
+      <div class="sub">MK ERP · Murat Gıda • offline • Android • build 92</div>
     </div>
     <button type="button" id="themeToggleBtn" title="Tema seç" style="background:var(--panel2); border:1.5px solid var(--line); color:var(--text); width:34px; height:34px; border-radius:50%; font-size:15px; padding:0; display:flex; align-items:center; justify-content:center; flex-shrink:0;">🎨</button>
   </header>
@@ -1147,7 +1147,20 @@
   }
 
   function load(){ try{ return JSON.parse(localStorage.getItem(STORE_KEY)); }catch(e){ return null; } }
-  function save(){ try{ localStorage.setItem(STORE_KEY, JSON.stringify(state)); }catch(e){ errorToast("Kaydedilemedi — telefon hafızası dolu olabilir! Lütfen hemen CSV indirip yer açın."); } }
+  // Telefon hafızasına yazar. Başarılıysa true, yazılamadıysa (hafıza dolu vb.)
+  // false döner — okutma/düzeltme gibi işlemler bu durumda başarı GÖSTERMEZ,
+  // yaptıkları değişikliği geri alıp kullanıcıyı uyarır (storageFailAlert).
+  function save(){
+    try{ localStorage.setItem(STORE_KEY, JSON.stringify(state)); return true; }
+    catch(e){ errorToast("Kaydedilemedi — telefon hafızası dolu olabilir! Lütfen hemen CSV indirip yer açın."); return false; }
+  }
+  // Kritik bir işlem telefona yazılamadığında: toast kolayca gözden kaçabildiği
+  // için ekranı durduran bir uyarı gösterilir ve hata sesi çalınır.
+  function storageFailAlert(what){
+    try{ if(typeof beep === 'function') beep(200, 400, 0.2); }catch(e){}
+    if(navigator.vibrate) navigator.vibrate([200, 100, 200]);
+    window.alert('⚠️ KAYDEDİLEMEDİ!\n\n' + what + ' telefon hafızasına yazılamadı, bu yüzden UYGULANMADI.\n\nTelefon hafızası dolu olabilir. "Excel (CSV)" ile mevcut sayımı indirin, telefonda yer açın ve tekrar deneyin.');
+  }
 
   // Bildirim sistemi: türe göre renk + emoji ile anında ayırt edilebilir.
   // toast()      -> nötr bilgi (koyu gri)
@@ -1637,8 +1650,25 @@
 
   // Yönetici dosyayı temizlediğinde sunucudaki RESET_TOKEN değişir. Her
   // telefon açılışta ve her online olduğunda bunu kontrol eder; token
-  // değiştiyse bu telefonun bekleyen/gönderilmiş eski kuyruğunu sıfırlar —
-  // "temizledim ama eski deneme taramaları geri geldi" sorunu böyle çözülür.
+  // değiştiyse applyServerReset ile yeni sayıma geçer.
+  //
+  // Yeni sayıma geçiş: sunucunun ONAYLADIĞI kayıtlar zaten arşive alındığı
+  // için telefondan kaldırılır. Henüz gönderilmemiş/onaylanmamış kayıtlar ise
+  // SİLİNMEZ — kuyrukta kalır ve eski temizlik damgasıyla gönderilir; sunucu
+  // bunları yeni sayımı kirletmemesi için 'GecGelenKayitlar' sekmesine yazar.
+  // Dönen değer: korunan (gönderilmeyi bekleyen) kayıt sayısı.
+  function applyServerReset(newToken){
+    var eskiToken = state.lastResetToken || '';
+    queueCurrentSession(); // açık oturumun onaylanmamış kayıtları eski damgayla kuyruğa
+    // Eski sürümden kalmış, damgasız kuyruk kayıtları da eski döneme aittir.
+    if(eskiToken) state.pendingSessions.forEach(function(p){ if(!p.resetToken) p.resetToken = eskiToken; });
+    state.session = { scans:[], id: makeId(), deletedIds: [], ackedV: {} };
+    state.lastResetToken = newToken;
+    save();
+    if(typeof renderList === 'function') renderList();
+    if(typeof updatePendingBadge === 'function') updatePendingBadge();
+    return state.pendingSessions.reduce(function(n, p){ return n + (p.rows || []).length; }, 0);
+  }
   function checkResetToken(){
     if(!navigator.onLine) return;
     var url = state.serverUrl || DEFAULT_SERVER_URL;
@@ -1646,13 +1676,13 @@
       if(err || !data) return;
       if(data.resetToken){
         if(state.lastResetToken && state.lastResetToken !== data.resetToken){
-          state.session = { scans:[], id: makeId(), deletedIds: [], ackedV: {} };
-          state.pendingSessions = [];
-          state.lastResetToken = data.resetToken;
-          save();
-          if(typeof renderList === 'function') renderList();
-          if(typeof updatePendingBadge === 'function') updatePendingBadge();
-          warnToast('Yönetici sayım dosyasını temizledi — bu telefondaki eski kayıtlar sıfırlandı');
+          var korunan = applyServerReset(data.resetToken);
+          if(korunan > 0){
+            warnToast('Yönetici sayım dosyasını temizledi — yeni sayım başladı. Bu telefonda gönderilmemiş ' + korunan + ' kayıt SİLİNMEDİ, "Geç Gelen Kayıtlar" sekmesine gönderilecek.');
+            trySync(true);
+          } else {
+            warnToast('Yönetici sayım dosyasını temizledi — bu telefonda yeni sayım başladı');
+          }
         } else if(!state.lastResetToken){
           state.lastResetToken = data.resetToken;
           save();
@@ -1976,7 +2006,11 @@
       id: makeId(), name:name, barcode:barcode, stockCode:stockCode, oldStock:'',
       qty:qty, unit: unit, date:t.date, time:t.time, ts:t.ts, reyon: state.reyon || '', v: 1
     });
-    save();
+    if(!save()){
+      state.session.scans.pop();
+      storageFailAlert('Yeni ürün okutması (' + name + ')');
+      return;
+    }
     renderList();
     whoLabel.textContent = state.personnel + " · " + countDistinctProducts() + " kalem";
     successToast(name + ' (' + stockCode + ') eklendi: +' + qty + ' ' + unit);
@@ -2152,8 +2186,13 @@
       stockCode: pendingScan.stockCode, oldStock: pendingScan.oldStock,
       qty: addQty, unit: unit, date: t.date, time: t.time, ts: t.ts, reyon: state.reyon || '', v: 1
     });
+    if(!save()){
+      // Telefona yazılamadı: okutmayı geri al, başarı gösterme.
+      state.session.scans.pop();
+      storageFailAlert('Bu okutma (' + pendingScan.name + ')');
+      return;
+    }
     successToast(pendingScan.name + ': ' + addQty + ' ' + unit + ' eklendi');
-    save();
     renderList();
     whoLabel.textContent = state.personnel + " · " + countDistinctProducts() + " kalem";
     beep(880, 70, 0.13); if(navigator.vibrate) navigator.vibrate(35); // eklendi onayı — sesli + titreşimli
@@ -2282,9 +2321,17 @@
         renderList(); // vazgeçildi, eski değere geri dön
         return;
       }
+      var delSnap = JSON.stringify(state.session.deletedIds || []);
       state.session.scans.splice(idx, 1);
       markScanDeleted(id);
-      save(); renderList();
+      if(!save()){
+        state.session.scans.splice(idx, 0, it);
+        state.session.deletedIds = JSON.parse(delSnap);
+        renderList();
+        storageFailAlert('Kaydın silinmesi');
+        return;
+      }
+      renderList();
       autoQueueAndSync();
       return;
     }
@@ -2295,9 +2342,16 @@
         return;
       }
     }
+    var eskiQty = it.qty, eskiV = it.v;
     it.qty = newQty;
     bumpScanVersion(it);
-    save(); renderList();
+    if(!save()){
+      it.qty = eskiQty; it.v = eskiV;
+      renderList();
+      storageFailAlert('Adet düzeltmesi');
+      return;
+    }
+    renderList();
     autoQueueAndSync();
   }
 
@@ -2313,9 +2367,17 @@
     if(idx === -1) return;
     var it = state.session.scans[idx];
     if(!confirm('"' + it.name + '" kaydı (' + it.qty + ' ' + unitFor(it.barcode) + ') silinsin mi?')) return;
+    var delSnap = JSON.stringify(state.session.deletedIds || []);
     state.session.scans.splice(idx, 1);
     markScanDeleted(id);
-    save(); renderList();
+    if(!save()){
+      state.session.scans.splice(idx, 0, it);
+      state.session.deletedIds = JSON.parse(delSnap);
+      renderList();
+      storageFailAlert('Kaydın silinmesi');
+      return;
+    }
+    renderList();
     autoQueueAndSync();
   });
   listEl.addEventListener('focusin', function(e){
@@ -2997,8 +3059,21 @@
   // ---- Taslak (yarım kalan kayıt) ----
   function saveMalDraft(){
     state.malDrafts[malTip] = { belgeTuru: malBelge, cari: malCari, faturaNo: malFatura, sebep: malSebep, items: malItems, batchId: malBatchId, updated: Date.now() };
-    save();
+    return save();
   }
+  // Kalem listesindeki bir değişikliği telefona yazar. Yazılamazsa değişikliği
+  // geri alır (önceki listeye döner), kullanıcıyı uyarır ve false döner —
+  // bu durumda çağıran taraf başarı göstermez.
+  function malCommit(onceki, what){
+    if(saveMalDraft()) return true;
+    malItems = JSON.parse(onceki);
+    saveMalDraft();
+    renderMalList();
+    storageFailAlert(what);
+    return false;
+  }
+  // Kalem sürümü: miktar her değiştiğinde artar; sunucu onayında kontrol edilir.
+  function malBump(it){ it.v = (it.v || 1) + 1; }
   function clearMalDraft(){ state.malDrafts[malTip] = null; save(); }
 
   function openMalHareketScreen(tip){
@@ -3017,6 +3092,7 @@
       malFatura = d.faturaNo || '';
       malSebep = d.sebep || '';
       malItems = d.items.slice();
+      malItems.forEach(function(it){ if(!it.v) it.v = 1; }); // eski taslaklar: sürüm 1
       malBatchId = d.batchId || makeId();
       malCariInputEl.value = malCari ? malCari.name : '';
       malFaturaInputEl.value = malFatura;
@@ -3105,16 +3181,20 @@
     if(!it) return;
     var q = parseQtyForBarcode(inp.value, it.barkod);
     if(!q){ inp.value = it.miktar; warnToast("Miktar 0'dan büyük olmalı — silmek için çöp kutusuna dokun"); return; }
+    if(q === it.miktar) return;
+    var onceki = JSON.stringify(malItems);
     it.miktar = q;
-    saveMalDraft();
+    malBump(it);
+    if(!malCommit(onceki, 'Miktar düzeltmesi')) return;
     renderMalMeta();
   });
   malListEl.addEventListener('click', function(e){
     var btn = e.target.closest('.mhDelBtn');
     if(!btn) return;
     var id = btn.getAttribute('data-mh-id');
+    var onceki = JSON.stringify(malItems);
     malItems = malItems.filter(function(it){ return it.id !== id; });
-    saveMalDraft();
+    if(!malCommit(onceki, 'Kalemin silinmesi')) return;
     renderMalList();
   });
 
@@ -3188,18 +3268,20 @@
     if(qty === -1){ warnToast('Adet küsuratlı olamaz — sonucu kontrol et'); return; }
     if(!qty || qty <= 0){ warnToast(isBulkBarcode(barcode) ? 'Geçerli bir kilo gir' : 'Geçerli bir adet gir'); return; }
     var t = nowParts();
+    var onceki = JSON.stringify(malItems);
     var existing = malItems.filter(function(it){ return it.barkod === barcode; })[0];
     if(existing){
       existing.miktar = Math.round((existing.miktar + qty) * 1000) / 1000;
       existing.tarih = t.date; existing.saat = t.time;
-      toast('Toplam: ' + fmtQty(existing.miktar) + ' ' + existing.birim, 'success');
+      malBump(existing);
     } else {
       malItems.push({
         id: makeId(), barkod: barcode, ad: name, stokKodu: '', birim: unitFor(barcode), miktar: qty,
-        kdv: '', fiyat: '', tarih: t.date, saat: t.time, yeni: true, stokAc: malNewStokAc
+        kdv: '', fiyat: '', tarih: t.date, saat: t.time, yeni: true, stokAc: malNewStokAc, v: 1
       });
     }
-    saveMalDraft();
+    if(!malCommit(onceki, 'Bu okutma (' + name + ')')) return;
+    if(existing) toast('Toplam: ' + fmtQty(existing.miktar) + ' ' + existing.birim, 'success');
     document.getElementById('malHareketNewProductEntry').classList.add('hidden');
     renderMalList();
     beep(1046, 90, 0.16); if(navigator.vibrate) navigator.vibrate(40);
@@ -3225,20 +3307,22 @@
     if(qty === -1){ warnToast('Adet küsuratlı olamaz — sonucu kontrol et'); return; }
     if(!qty || qty <= 0){ warnToast(isBulkBarcode(malPendingBarcode) ? 'Geçerli bir miktar gir (örn: 1.5)' : 'Geçerli bir adet gir'); return; }
     var t = nowParts();
+    var onceki = JSON.stringify(malItems);
     var existing = malItems.filter(function(it){ return it.barkod === malPendingBarcode; })[0];
     if(existing){
       existing.miktar = Math.round((existing.miktar + qty) * 1000) / 1000;
       existing.tarih = t.date; existing.saat = t.time;
-      toast('Toplam: ' + fmtQty(existing.miktar) + ' ' + existing.birim, 'success');
+      malBump(existing);
     } else {
       malItems.push({
         id: makeId(), barkod: malPendingBarcode, ad: name,
         stokKodu: entry.stockCode || '', birim: unitFor(malPendingBarcode), miktar: qty,
         kdv: entry.kdv === undefined ? '' : entry.kdv, fiyat: entry.price === undefined ? '' : entry.price,
-        tarih: t.date, saat: t.time
+        tarih: t.date, saat: t.time, v: 1
       });
     }
-    saveMalDraft();
+    if(!malCommit(onceki, 'Bu okutma (' + name + ')')) return;
+    if(existing) toast('Toplam: ' + fmtQty(existing.miktar) + ' ' + existing.birim, 'success');
     document.getElementById('malHareketQtyModal').classList.add('hidden');
     renderMalList();
     beep(1046, 90, 0.16); if(navigator.vibrate) navigator.vibrate(40);
@@ -3269,11 +3353,45 @@
       errorToast(message);
     }
   }
+  // Mal kaydının sunucuda DOĞRU yazıldığını kalem kalem doğrular: her kalem
+  // sunucuda olmalı, sunucudaki sürümü telefondakine eşit/büyük ve miktarı
+  // aynı olmalı; sunucuda bu kayda ait fazladan satır olmamalı.
+  // Dönen değer: null (her şey tamam) ya da sorunun açıklaması.
+  function malBatchFark(expected, res){
+    if(!res || res.status !== 'ok' || !res.rows) return { mesaj: 'sunucu onayı okunamadı' };
+    var srv = res.rows;
+    var kilitli = false;
+    var sorun = null;
+    expected.forEach(function(it){
+      var r = srv[it.id];
+      if(!r){ sorun = sorun || (it.ad + ' sunucuda yok'); return; }
+      var dogru = (Number(r[0]) || 1) >= it.v && Math.abs(Number(r[1]) - Number(it.miktar)) < 0.0005;
+      if(!dogru){
+        sorun = sorun || (it.ad + ': sunucuda ' + r[1] + ', telefonda ' + it.miktar);
+        if(r[2]) kilitli = true;
+      }
+    });
+    var fazla = Object.keys(srv).length - expected.length;
+    if(!sorun && fazla > 0) sorun = 'sunucuda ' + fazla + ' fazla kalem var';
+    if(!sorun) return null;
+    return { mesaj: sorun, kilitli: kilitli || (fazla > 0 && Object.keys(srv).some(function(id){ return srv[id][2]; })) };
+  }
   function verifyMalBatch(url, batchId, expected, attempt){
     jsonpRequestP(url, { action: 'mal_kontrol', batch: batchId }, function(err, res){
-      if(!err && res && res.status === 'ok' && Number(res.count) >= expected){ malSaveDone(true); return; }
+      var fark = err ? { mesaj: err } : malBatchFark(expected, res);
+      if(!fark){
+        // Onay beklerken liste değiştiyse (yeni okutma/düzeltme) taslağı SİLME.
+        var simdiki = JSON.stringify(malItems.map(function(it){ return [it.id, it.v || 1, it.miktar]; }));
+        var gonderilen = JSON.stringify(expected.map(function(it){ return [it.id, it.v, it.miktar]; }));
+        if(simdiki !== gonderilen){ malSaveDone(false, 'Kaydederken listede değişiklik yapıldı — "Kaydet ve Bitir"e tekrar bas.'); return; }
+        malSaveDone(true); return;
+      }
+      if(fark.kilitli){
+        malSaveDone(false, 'Bu kaydın bir kısmı masaüstüne (ERP) aktarılmış, değişiklik sunucuya uygulanamadı (' + fark.mesaj + '). Yöneticiye haber ver — ürünler telefonda duruyor.');
+        return;
+      }
       if(attempt < 4){ setTimeout(function(){ verifyMalBatch(url, batchId, expected, attempt + 1); }, 2500); return; }
-      malSaveDone(false, 'Sunucudan onay alınamadı — ürünler telefonda duruyor. Bağlantıyı kontrol edip "Kaydet ve Bitir"e tekrar bas (çift kayıt oluşmaz).');
+      malSaveDone(false, 'Sunucudan doğru onay alınamadı (' + fark.mesaj + ') — ürünler telefonda duruyor. Bağlantıyı kontrol edip "Kaydet ve Bitir"e tekrar bas (çift kayıt oluşmaz).');
     }, 9000);
   }
   malSaveBtnEl.addEventListener('click', function(){
@@ -3286,13 +3404,14 @@
       cari: malCari.name, cariKodu: malCari.code || '', faturaNo: malFatura, sebep: malSebep,
       personel: state.personnel || (state.currentUser && state.currentUser.name) || '',
       rows: malItems.map(function(it){
-        return { barkod: it.barkod, ad: it.ad, stokKodu: it.stokKodu, miktar: it.miktar, birim: it.birim, kdv: it.kdv, fiyat: it.fiyat, tarih: it.tarih, saat: it.saat, kayitId: it.id,
+        return { barkod: it.barkod, ad: it.ad, stokKodu: it.stokKodu, miktar: it.miktar, birim: it.birim, kdv: it.kdv, fiyat: it.fiyat, tarih: it.tarih, saat: it.saat, kayitId: it.id, v: it.v || 1,
           stokAc: it.stokAc === false ? 'HAYIR' : (it.yeni ? 'EVET' : '') };
       })
     };
     malSaving = true;
     malSaveBtnEl.disabled = true; malSaveBtnEl.textContent = '⏳ Kaydediliyor…';
-    var expected = malItems.length;
+    // Gönderilen hâlin kopyası: onayda kalem kalem bununla karşılaştırılır.
+    var expected = malItems.map(function(it){ return { id: it.id, v: it.v || 1, miktar: it.miktar, ad: it.ad }; });
     fetch(url, {
       method: 'POST', mode: 'no-cors',
       headers: { 'Content-Type': 'text/plain;charset=utf-8' },
@@ -3827,17 +3946,56 @@
       'Devam edilsin mi?'
     )) return;
     var url = state.serverUrl || DEFAULT_SERVER_URL;
+    var hataGoster = function(msg){ adminResultEl.innerHTML = '<div class="hint" style="color:var(--red);">❌ ' + escapeHtml(msg) + '</div>'; };
     adminResultEl.innerHTML = '<div class="hint">⏳ Bu telefondaki bekleyen veriler gönderiliyor…</div>';
     queueCurrentSession();
-    trySync(true, function(){
+    // Rapor, ancak bu telefondaki TÜM kayıtlar sunucuda doğrulandıktan sonra
+    // oluşturulur: gönderim sürüyorsa bitmesi beklenir, hata varsa rapor
+    // oluşturulmaz (eksik veriyle "son stok" yazılmasın).
+    syncThenCheck(function(sonuc){
+      if(!sonuc.ok || state.pendingSessions.length > 0){
+        var bekleyen = state.pendingSessions.reduce(function(n, p){ return n + (p.rows || []).length + (p.deletedIds || []).length; }, 0);
+        hataGoster('Rapor OLUŞTURULMADI: bu telefonda sunucuya gönderilip doğrulanamayan ' + bekleyen + ' kayıt var' +
+          (sonuc.error ? ' (' + sonuc.error + ')' : '') + '. İnterneti kontrol edip tekrar dene.');
+        return;
+      }
+      runFinalize('0');
+    });
+
+    function runFinalize(force){
       adminResultEl.innerHTML = '<div class="hint">⏳ Rapor hazırlanıyor… (büyük sayımlarda 1 dakikaya kadar sürebilir)</div>';
-      jsonpRequestP(url, { action: 'finalize', user: auth.user, pass: auth.pass }, function(err, data){
-        if(err){ adminResultEl.innerHTML = '<div class="hint" style="color:var(--red);">❌ ' + escapeHtml(err) + '</div>'; return; }
-        if(!data || data.status === 'error'){ adminResultEl.innerHTML = '<div class="hint" style="color:var(--red);">❌ ' + escapeHtml((data && data.message) || 'bilinmeyen hata') + '</div>'; return; }
+      var haric = Object.keys(gonderilenOturumlar).concat([state.session.id]).join(',');
+      jsonpRequestP(url, { action: 'finalize', user: auth.user, pass: auth.pass, force: force, haric: haric }, function(err, data){
+        if(err){ hataGoster(err); return; }
+        if(data && data.status === 'busy'){
+          // Diğer telefonlardan çok yakın zamanda veri geldi — gönderim sürüyor olabilir.
+          if(window.confirm('⚠️ ' + data.message + '\n\nDiğer telefonların göndermesi bitmemiş olabilir. Biraz bekleyip tekrar denemen önerilir.\n\nYine de ŞİMDİ rapor oluşturulsun mu?')){
+            runFinalize('1');
+          } else {
+            hataGoster('Rapor oluşturulmadı — telefonların göndermesi bitince tekrar dene.');
+          }
+          return;
+        }
+        if(!data || data.status === 'error'){ hataGoster((data && data.message) || 'bilinmeyen hata'); return; }
         adminResultEl.innerHTML = renderReportHtml(data);
       }, 90000);
-    });
+    }
   });
+
+  // Süren bir gönderim varsa bitmesini bekler, sonra bekleyenleri bir kez daha
+  // gönderip sonucu bildirir: cb({ ok, error }). Gönderimlerin her adımı zaman
+  // aşımlı olduğu için bekleme sonsuza kadar sürmez; yine de 3 dakikada kesilir.
+  function syncThenCheck(cb){
+    var basla = Date.now();
+    (function bekle(){
+      if(syncInProgress){
+        if(Date.now() - basla > 180000){ cb({ ok: false, error: 'gönderim çok uzun sürdü' }); return; }
+        setTimeout(bekle, 300);
+        return;
+      }
+      trySync(true, cb);
+    })();
+  }
 
   // Finalize sonucunu düz metin yerine okunaklı bir mini-rapor olarak
   // gösterir — Sheets'e hiç geçmeden Yönetici Paneli içinde görülebilsin diye.
@@ -3895,19 +4053,16 @@
     var auth = currentAuth();
     if(!auth){ warnToast('Önce giriş yap'); return; }
     if(!navigator.onLine){ warnToast('İnternet yok — bu işlem için sunucuya bağlanmak gerekiyor'); return; }
-    if(!window.confirm('Emin misin? Tüm sayım kayıtları arşivlenip tablo boşaltılacak, tüm telefonların yerel kuyruğu sıfırlanacak.')) return;
+    if(!window.confirm('Emin misin? Tüm sayım kayıtları arşivlenip tablo boşaltılacak, tüm telefonlar yeni sayıma geçecek. (Telefonlarda henüz gönderilmemiş kayıtlar silinmez, "GecGelenKayitlar" sekmesine gönderilir.)')) return;
     var url = state.serverUrl || DEFAULT_SERVER_URL;
     adminResultEl.textContent = '⏳ Temizleniyor…';
     jsonpRequestP(url, { action: 'temizle', user: auth.user, pass: auth.pass }, function(err, data){
       if(err){ adminResultEl.textContent = '❌ ' + err; return; }
       if(!data || data.status === 'error'){ adminResultEl.textContent = '❌ ' + ((data && data.message) || 'bilinmeyen hata'); return; }
-      state.lastResetToken = data.resetToken;
-      state.session = { scans: [], id: makeId(), deletedIds: [], ackedV: {} };
-      state.pendingSessions = [];
-      save();
-      if(typeof renderList === 'function') renderList();
-      if(typeof updatePendingBadge === 'function') updatePendingBadge();
-      adminResultEl.textContent = '✅ Tablo temizlendi (eski veri "' + data.archivedSheet + '" sayfasına arşivlendi). Diğer telefonlar bir sonraki açılışta/online olduklarında otomatik sıfırlanacak.';
+      var korunan = applyServerReset(data.resetToken);
+      adminResultEl.textContent = '✅ Tablo temizlendi (eski veri "' + data.archivedSheet + '" sayfasına arşivlendi). Diğer telefonlar bir sonraki açılışta/online olduklarında yeni sayıma geçecek; gönderilmemiş kayıtları silinmez, "GecGelenKayitlar" sekmesine gelir.' +
+        (korunan > 0 ? ' Bu telefondaki ' + korunan + ' gönderilmemiş kayıt da oraya gönderilecek.' : '');
+      if(korunan > 0) trySync(true);
     }, 30000);
   });
 
@@ -4173,6 +4328,9 @@
   // başarı durumunda sessiz kal (bildirim akışı kesmesin), sadece HATADA uyar.
   // silent=false -> "Gönder" butonuna elle basıldığında; her durumda net bildirim ver.
   var syncInProgress = false;
+  // Bu telefonun bu açılışta gönderdiği oturumlar — rapor isterken sunucuya
+  // "bunlar benim, hâlâ gönderim sürüyor sayma" demek için.
+  var gonderilenOturumlar = {};
   var SYNC_POST_TIMEOUT_MS = 30000;   // gönderim isteği en fazla bu kadar bekler
   var SYNC_VERIFY_TIMEOUT_MS = 20000; // sunucu onayı en fazla bu kadar bekler
 
@@ -4278,11 +4436,10 @@
   // 3) sadece onaylanan kayıtları kuyruktan çıkar. Onay gelmezse HİÇBİR kayıt
   // silinmez. Her adımın zaman aşımı olduğu için gönderim asla askıda kalmaz.
   function trySync(silent, onDone){
-    if(!navigator.onLine || !state.serverUrl || state.pendingSessions.length === 0){
-      if(onDone) onDone();
-      return;
-    }
-    if(syncInProgress){ if(onDone) onDone(); return; } // aynı anda iki gönderim çakışmasın
+    // onDone({ ok, error }) — ok: bu turda hiçbir hata olmadı.
+    if(state.pendingSessions.length === 0){ if(onDone) onDone({ ok: true }); return; }
+    if(!navigator.onLine || !state.serverUrl){ if(onDone) onDone({ ok: false, error: 'internet yok' }); return; }
+    if(syncInProgress){ if(onDone) onDone({ ok: false, error: 'gönderim sürüyor' }); return; } // aynı anda iki gönderim çakışmasın
     syncInProgress = true;
     var url = state.serverUrl;
     // Gönderilecek oturumların sadece KİMLİKLERİNİ alıyoruz; her oturumun
@@ -4304,7 +4461,7 @@
         // veri telefonda güvende ama gönderim başarısız, sessiz geçilmemeli.
         errorToast("Otomatik gönderim başarısız: " + anyError + " — veriniz telefonda güvende, tekrar denenecek");
       }
-      if(onDone) onDone();
+      if(onDone) onDone({ ok: !anyError, error: anyError });
     };
 
     var sendNext = function(i){
@@ -4319,6 +4476,7 @@
       // başlıklarını tam desteklememesi yüzünden cevabı okuyamıyoruz. Bu yüzden
       // gönderimden sonra AYRI bir JSONP isteğiyle (sayim_kontrol) sunucudan
       // hangi kayıtların hangi sürümle yazıldığını soruyoruz.
+      gonderilenOturumlar[sid] = true;
       postWithTimeout(url, JSON.stringify(payload), SYNC_POST_TIMEOUT_MS)
         .then(function(){
           if(typeof markServerReachable === 'function') markServerReachable();
@@ -4376,7 +4534,10 @@
       // tabloda birleşmez. Aynı id tekrar gönderilirse (düzeltme), o satır
       // güncellenir, yenisi eklenmez. "v" (sürüm) sayesinde sunucu eski bir
       // gönderinin yeni düzeltmenin üzerine yazmasına izin vermez.
-      rows: items.map(function(it){ return { id:it.id, v: it.v || 1, name:it.name, stockCode: it.stockCode||'', barcode:it.barcode, unit: unitFor(it.barcode), oldStock: it.oldStock||'', date:it.date, time:it.time, qty:it.qty, reyon: it.reyon||'' }; }),
+      // Bu kayıtların ait olduğu sayım dönemi (son bilinen temizlik damgası).
+      // Temizlikten sonra ulaşan eski kayıtları sunucu ayrı sekmeye yazar.
+      resetToken: state.lastResetToken || '',
+      rows: items.map(function(it){ return { id:it.id, v: it.v || 1, ts: it.ts || '', name:it.name, stockCode: it.stockCode||'', barcode:it.barcode, unit: unitFor(it.barcode), oldStock: it.oldStock||'', date:it.date, time:it.time, qty:it.qty, reyon: it.reyon||'' }; }),
       // Bu telefonda silinmiş kayıtların kimlikleri — sunucu bunları
       // 'Sayim' tablosundan siler ve "silindi" olarak işaretler (yoksa sadece
       // "rows" listesinden eksik olması sunucuya hiçbir şey ifade etmez).
@@ -4436,9 +4597,17 @@
   });
 
   document.getElementById('reviewConfirm').addEventListener('click', function(){
+    var oncekiOturum = state.session;
+    var oncekiKuyruk = JSON.stringify(state.pendingSessions);
     queueCurrentSession();
     state.session = { scans:[], id: makeId(), deletedIds: [], ackedV: {} }; // yeni oturum = yeni kimlik
-    save();
+    if(!save()){
+      state.session = oncekiOturum;
+      state.pendingSessions = JSON.parse(oncekiKuyruk);
+      updatePendingBadge();
+      storageFailAlert('Sayımı bitirme');
+      return;
+    }
     renderList();
     trySync(false);
     document.getElementById('reviewScreen').classList.add('hidden');
