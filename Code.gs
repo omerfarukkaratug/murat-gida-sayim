@@ -8,7 +8,7 @@
 // bir sürüm dağıttıktan sonra /exec adresini boş açtığında burada yazan
 // numarayı görmelisin; index.html'in üstündeki "build" numarasıyla
 // eşleşecek şekilde ben her ikisini birlikte güncelliyorum.
-var GS_VERSION = 'build83';
+var GS_VERSION = 'build92';
 
 // Sheets'te "Saat" sütunu zaman biçimli olarak algılanırsa, hücre değeri düz
 // metin değil bir Date nesnesi olarak gelir ve String(...) çirkin bir çıktı
@@ -54,7 +54,7 @@ function doGet(e) {
     return handleTemizle(e.parameter.user, e.parameter.pass, e.parameter.callback);
   }
   if (e.parameter && e.parameter.action === 'finalize') {
-    return handleFinalize(e.parameter.user, e.parameter.pass, e.parameter.callback);
+    return handleFinalize(e.parameter.user, e.parameter.pass, e.parameter.force, e.parameter.haric, e.parameter.callback);
   }
   if (e.parameter && e.parameter.action === 'kullanicilar') {
     return getKullanicilar(e.parameter.callback);
@@ -74,6 +74,12 @@ function doGet(e) {
   // kayıtları masaüstüne CSV olarak indirir, sonra "indirildi" diye işaretler.
   if (e.parameter && e.parameter.action === 'mal_kontrol') {
     return malKontrol(e.parameter.batch, e.parameter.callback);
+  }
+  // sayim_kontrol: telefon, gönderdiği sayım kayıtlarının sunucuya hangi
+  // SÜRÜMLE yazıldığını sorar. Telefon kuyruğundan sadece burada doğrulanan
+  // kayıtları çıkarır (bkz. sayimKontrol).
+  if (e.parameter && e.parameter.action === 'sayim_kontrol') {
+    return sayimKontrol(e.parameter.session, e.parameter.callback);
   }
   if (e.parameter && e.parameter.action === 'mal_export') {
     return malExport(e.parameter.user, e.parameter.pass, e.parameter.callback);
@@ -119,11 +125,10 @@ function outJson(obj, callback) {
 // Rol "yonetici" ise TÜM yetkiler otomatik verilir. Rol "kullanici" ise
 // sadece Yetkiler sütununda yazılanlar (virgülle ayrılmış:
 // rapor, temizle, kullanici_yonetimi, ayarlar) geçerlidir.
-// "admin" / "admin", sekmede ADI "admin" olan bir satır TANIMLANMADIĞI
-// SÜRECE her zaman yedek bir giriştir (sadece sekme boşken değil) —
-// böylece daha önce başka isimlerle kullanıcı eklenmiş olsa bile ilk kurulum
-// kilitlenmez. Bir kişi "admin" adıyla kaydedilip farklı bir şifre
-// verildiğinde, o satır geçerli olur ve bu yedek devre dışı kalır. NOT:
+// Yedek "admin/admin" girişi KALDIRILDI: artık sadece 'Kullanicilar'
+// sekmesinde tanımlı kullanıcılar giriş yapabilir. Sekmede hiç yönetici
+// yoksa, tabloyu açıp elle bir satır ekleyin (örn: Ad | Şifre | yonetici |
+// | evet). NOT:
 // Şifreler düz metin olarak saklanır (Apps Script'in sunduğu basit bir
 // koruma) — kurumsal güvenlik seviyesinde değildir, sadece ekip içi
 // yetkilendirme için yeterlidir. Tabloyu düzenleme yetkisi olan herkes
@@ -151,10 +156,6 @@ function authenticate(user, pass) {
       return { ok: true, role: role, permissions: role === 'yonetici' ? ALL_PERMS : yetkiler };
     }
   }
-  // Listede "admin" adında bir satır yok — yedek girişi dene.
-  if (user.toLowerCase() === 'admin' && pass === 'admin') {
-    return { ok: true, role: 'yonetici', permissions: ALL_PERMS, bootstrap: true };
-  }
   return { ok: false, message: 'Kullanıcı bulunamadı' };
 }
 
@@ -168,20 +169,6 @@ function requirePermission(user, pass, perm) {
 function handleLogin(user, pass, callback) {
   var auth = authenticate(user, pass);
   if (!auth.ok) return outJson({ status: 'error', message: auth.message }, callback);
-  // Yedek (bootstrap) admin/admin girişinde kalıcı bir "admin" satırı
-  // oluştur ki Kullanıcı Yönetimi ekranında görünsün ve şifresi
-  // değiştirilebilsin — sheet boş olsun ya da başka kullanıcılar zaten
-  // tanımlanmış olsun fark etmez, authenticate() zaten "admin" adında bir
-  // satır YOKSA bootstrap döndürür.
-  if (auth.bootstrap) {
-    try {
-      var ss = SpreadsheetApp.getActiveSpreadsheet();
-      var sheet = ss.getSheetByName('Kullanicilar');
-      if (!sheet) sheet = ss.insertSheet('Kullanicilar');
-      if (sheet.getLastRow() < 1) sheet.appendRow(['Ad', 'Şifre', 'Rol', 'Yetkiler', 'Aktif']);
-      sheet.appendRow(['admin', 'admin', 'yonetici', '', 'evet']);
-    } catch (e) { /* kritik değil, bir sonraki girişte tekrar denenir */ }
-  }
   return outJson({ status: 'ok', role: auth.role, permissions: auth.permissions }, callback);
 }
 
@@ -232,7 +219,10 @@ function saveCariBulk(entries) {
 // ============================================================
 var MAL_HEADERS = ['Tarih', 'Saat', 'Tip', 'Cari', 'Fatura/İrsaliye No', 'Personel', 'Barkod', 'Ürün Adı', 'Stok Kodu', 'Miktar', 'Birim', 'Kayıt ID',
   'Belge Türü', 'Cari Kodu', 'Sebep', 'KDV %', 'Fiyat', 'Batch ID', 'Aktarıldı'];
-var MAL_COL = { KAYIT_ID: 12, BATCH: 18, AKTARILDI: 19 };
+var MAL_COL = { MIKTAR: 10, KAYIT_ID: 12, BATCH: 18, AKTARILDI: 19, SURUM: 20 };
+// 20. sütun "Sürüm": MAL_HEADERS'a EKLENMEDİ — masaüstü aktarımı (malExport)
+// ve mail eki ilk 19 sütunla aynen çalışmaya devam etsin diye ayrı tutulur.
+var MAL_SURUM_BASLIK = 'Sürüm';
 // Mail ekindeki yedek CSV, ERP12'nin resmi mal aktarım şablonuyla aynı sütun sırasında.
 var MAL_CSV_HEADERS = ['BARKOD', 'Stok Kodu', 'Stok İsmi', 'MIKTAR', 'FIYAT', 'Kdv', 'ISKONTO', 'Tutar', 'birim', 'grup', 'SFİYAT'];
 
@@ -240,49 +230,98 @@ function ensureMalSheet() {
   var ss = SpreadsheetApp.getActiveSpreadsheet();
   var sheet = ss.getSheetByName('MalHareket');
   if (!sheet) sheet = ss.insertSheet('MalHareket');
+  if (sheet.getMaxColumns() < MAL_COL.SURUM) {
+    sheet.insertColumnsAfter(sheet.getMaxColumns(), MAL_COL.SURUM - sheet.getMaxColumns());
+  }
   if (sheet.getLastRow() === 0) {
     sheet.getRange(1, 1, 1, MAL_HEADERS.length).setValues([MAL_HEADERS]);
   } else if (sheet.getLastColumn() < MAL_HEADERS.length) {
     // Eski (12 sütunlu) sekme: yeni sütunların başlıklarını sağa ekle, eski satırlara dokunma.
     sheet.getRange(1, 13, 1, MAL_HEADERS.length - 12).setValues([MAL_HEADERS.slice(12)]);
   }
+  if (String(sheet.getRange(1, MAL_COL.SURUM).getValue()) !== MAL_SURUM_BASLIK) {
+    sheet.getRange(1, MAL_COL.SURUM).setValue(MAL_SURUM_BASLIK);
+  }
   return sheet;
 }
 
+// Kayıt (batch) yazma. Telefon her kalemi kimlik (kayitId) ve sürüm (v) ile
+// gönderir; sürüm, kalemin miktarı her değiştiğinde artar.
+//  - Yeni kalem: eklenir.
+//  - Aynı batch'te zaten var, gelen sürüm daha yeni: satır güncellenir
+//    (örn. onay alınamadı, kullanıcı miktarı düzeltip tekrar kaydetti).
+//  - Aynı ya da eski sürüm: atlanır (tekrar gönderim güvenli, çift satır yok).
+//  - Telefondaki listede artık olmayan kalem (tekrar kaydetmeden önce
+//    silinmiş): sekmeden silinir.
+//  - Masaüstüne aktarılmış ("Aktarıldı" dolu) satır DEĞİŞTİRİLMEZ ve
+//    SİLİNMEZ — ERP'ye girmiş veri sessizce değişmesin. Telefon onayda bunu
+//    görür ve kullanıcıyı uyarır.
 function saveMalHareket(data) {
   var sheet = ensureMalSheet();
   var batchId = String(data.batchId || Utilities.getUuid());
   var hareket = data.tip === 'cikis' ? 'Çıkış' : 'Giriş';
+  var W = MAL_COL.SURUM;
 
-  // Aynı Kayıt ID daha önce yazıldıysa atla (tekrar gönderim güvenli olsun).
-  var existing = {};
+  var existing = {}; // kayıtId -> { satir, batch, v, aktarildi }
   var last = sheet.getLastRow();
   if (last >= 2) {
-    sheet.getRange(2, MAL_COL.KAYIT_ID, last - 1, 1).getValues().forEach(function (r) {
-      if (r[0]) existing[String(r[0])] = true;
+    sheet.getRange(2, 1, last - 1, W).getValues().forEach(function (r, i) {
+      var id = r[MAL_COL.KAYIT_ID - 1];
+      if (!id) return;
+      existing[String(id)] = { satir: i + 2, batch: String(r[MAL_COL.BATCH - 1] || ''), v: surumOku(r[W - 1]), aktarildi: !!r[MAL_COL.AKTARILDI - 1] };
     });
   }
 
-  var duplicate = 0;
-  var rows = [];
-  (data.rows || []).forEach(function (r) {
-    var id = String(r.kayitId || Utilities.getUuid());
-    if (existing[id]) { duplicate++; return; }
-    existing[id] = true;
-    rows.push([
+  var satirYap = function (r, id, v) {
+    return [
       r.tarih || '', r.saat || '', hareket,
       data.cari || '', data.faturaNo || '', data.personel || '',
       r.barkod || '', r.ad || '', r.stokKodu || '', cleanNum(r.miktar), r.birim || 'Adet', id,
-      data.belgeTuru || '', data.cariKodu || '', data.sebep || '', cleanNum(r.kdv), cleanNum(r.fiyat), batchId, ''
-    ]);
-  });
-  if (rows.length > 0) {
-    var ilk = sheet.getLastRow() + 1;
+      data.belgeTuru || '', data.cariKodu || '', data.sebep || '', cleanNum(r.kdv), cleanNum(r.fiyat), batchId, '', v
+    ];
+  };
+  var metinSutunlari = function (ilk, adet) {
     // Tarih / Saat / Barkod / Stok Kodu / Cari Kodu METİN olarak yazılsın —
     // yoksa Sheets 13 haneli barkodu 8,69E+12 gibi bilimsel sayıya çevirir,
     // baştaki sıfırlar kaybolur, saat de zaman biçimine dönüşüp kayar.
-    [1, 2, 7, 9, 14].forEach(function (c) { sheet.getRange(ilk, c, rows.length, 1).setNumberFormat('@'); });
-    sheet.getRange(ilk, 1, rows.length, MAL_HEADERS.length).setValues(rows);
+    [1, 2, 7, 9, 14].forEach(function (c) { sheet.getRange(ilk, c, adet, 1).setNumberFormat('@'); });
+  };
+
+  var duplicate = 0, guncellenen = 0, kilitli = 0, silinen = 0;
+  var gelenIdler = {};
+  var rows = [];
+  (data.rows || []).forEach(function (r) {
+    var id = String(r.kayitId || Utilities.getUuid());
+    var v = surumOku(r.v);
+    gelenIdler[id] = true;
+    var ex = existing[id];
+    if (!ex) {
+      existing[id] = { satir: -1, batch: batchId, v: v, aktarildi: false };
+      rows.push(satirYap(r, id, v));
+      return;
+    }
+    if (ex.satir === -1 || ex.batch !== batchId || v <= ex.v) { duplicate++; return; }
+    if (ex.aktarildi) { kilitli++; return; }
+    metinSutunlari(ex.satir, 1);
+    sheet.getRange(ex.satir, 1, 1, W).setValues([satirYap(r, id, v)]);
+    ex.v = v;
+    guncellenen++;
+  });
+
+  // Telefonda silinmiş kalemler: bu batch'te olup gönderilen listede olmayanlar.
+  var silinecek = [];
+  Object.keys(existing).forEach(function (id) {
+    var ex = existing[id];
+    if (ex.batch !== batchId || ex.satir === -1 || gelenIdler[id]) return;
+    if (ex.aktarildi) { kilitli++; return; }
+    silinecek.push(ex.satir);
+  });
+  silinecek.sort(function (a, b) { return b - a; }).forEach(function (n) { sheet.deleteRow(n); silinen++; });
+
+  if (rows.length > 0) {
+    var ilk = sheet.getLastRow() + 1;
+    metinSutunlari(ilk, rows.length);
+    sheet.getRange(ilk, 1, rows.length, W).setValues(rows);
   }
 
   // Mail: sadece bu çağrıda YENİ satır yazıldıysa gider — tekrar gönderimde ikinci mail çıkmaz.
@@ -292,21 +331,31 @@ function saveMalHareket(data) {
   }
 
   return ContentService
-    .createTextOutput(JSON.stringify({ status: 'ok', saved: rows.length, duplicate: duplicate, batchId: batchId, mail: mailGitti }))
+    .createTextOutput(JSON.stringify({ status: 'ok', saved: rows.length, duplicate: duplicate, guncellenen: guncellenen, silinen: silinen, kilitli: kilitli, batchId: batchId, mail: mailGitti }))
     .setMimeType(ContentService.MimeType.JSON);
 }
 
-// Telefon: "bu batch sunucuda kaç satır?" — kayıt gerçekten yazıldı mı doğrulaması.
+// Telefon: "bu batch sunucuda nasıl yazıldı?" — kaydın gerçekten ve DOĞRU
+// yazıldığının doğrulaması. Satır sayısının yanında her kalemin sürümünü,
+// miktarını ve aktarılıp aktarılmadığını döndürür:
+// rows: { kayıtId: [sürüm, miktar, aktarıldı(1/0)] }
 function malKontrol(batch, callback) {
   var sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName('MalHareket');
   var count = 0;
+  var rows = {};
   var hedef = String(batch || '');
   if (hedef && sheet && sheet.getLastRow() >= 2 && sheet.getLastColumn() >= MAL_COL.BATCH) {
-    sheet.getRange(2, MAL_COL.BATCH, sheet.getLastRow() - 1, 1).getValues().forEach(function (r) {
-      if (String(r[0]) === hedef) count++;
+    var genislik = Math.min(sheet.getMaxColumns(), MAL_COL.SURUM);
+    sheet.getRange(2, 1, sheet.getLastRow() - 1, genislik).getValues().forEach(function (r) {
+      if (String(r[MAL_COL.BATCH - 1]) !== hedef) return;
+      count++;
+      var id = r[MAL_COL.KAYIT_ID - 1];
+      if (!id) return;
+      var v = genislik >= MAL_COL.SURUM ? surumOku(r[MAL_COL.SURUM - 1]) : 1;
+      rows[String(id)] = [v, r[MAL_COL.MIKTAR - 1], r[MAL_COL.AKTARILDI - 1] ? 1 : 0];
     });
   }
-  return outJson({ status: 'ok', count: count }, callback);
+  return outJson({ status: 'ok', count: count, rows: rows }, callback);
 }
 
 // ---- CSV yardımcıları (mail ve masaüstü dosyası AYNI çıktıyı kullanır) ----
@@ -552,6 +601,192 @@ function getIlerleme(callback) {
   return ContentService.createTextOutput(json).setMimeType(ContentService.MimeType.JSON);
 }
 
+// ============================================================
+// SAYIM SEKMESİ: SÜRÜM ve SİLİNDİ İŞARETİ
+// 'Sayim' sekmesinin 14. sütunu "Sürüm"dür. Telefon her kaydı bir sürüm
+// numarasıyla gönderir; sunucu daha yeni sürümü asla eskisiyle ezmez.
+// 'SilinenKayitlar' sekmesi silinen kayıtların kimliklerini tutar — bir kayıt
+// silindikten sonra eski bir gönderi onu tabloya geri ekleyemez.
+// ============================================================
+var SAYIM_HEADERS = ['Tarih', 'Saat', 'Personel', 'Ürün Adı', 'Stok Kodu', 'Barkod', 'Birim', 'Eski Stok', 'Sayılan Adet', 'Fark', 'Oturum ID', 'Kayıt ID', 'Reyon', 'Sürüm'];
+var SAYIM_COL = { ADET: 9, FARK: 10, OTURUM: 11, KAYIT_ID: 12, SURUM: 14 };
+var SILINEN_HEADERS = ['Kayıt ID', 'Oturum ID', 'Silinme Zamanı', 'Silen'];
+
+// Başlık satırını ve "Sürüm" sütununu hazırlar. Eski (13 sütunlu) sekmede
+// sadece 14. sütunun başlığı eklenir; mevcut satırlara dokunulmaz — sürümü
+// boş olan eski satırlar 1 kabul edilir.
+function ensureSayimColumns(sheet) {
+  if (sheet.getMaxColumns() < SAYIM_HEADERS.length) {
+    sheet.insertColumnsAfter(sheet.getMaxColumns(), SAYIM_HEADERS.length - sheet.getMaxColumns());
+  }
+  if (sheet.getLastRow() === 0) {
+    sheet.getRange(1, 1, 1, SAYIM_HEADERS.length).setValues([SAYIM_HEADERS]);
+  } else if (String(sheet.getRange(1, SAYIM_COL.SURUM).getValue()) !== 'Sürüm') {
+    sheet.getRange(1, SAYIM_COL.SURUM).setValue('Sürüm');
+  }
+}
+
+function surumOku(v) {
+  var n = parseInt(v, 10);
+  return (isNaN(n) || n < 1) ? 1 : n;
+}
+
+function silinenSheet(olustur) {
+  var ss = SpreadsheetApp.getActiveSpreadsheet();
+  var sheet = ss.getSheetByName('SilinenKayitlar');
+  if (!sheet && olustur) {
+    sheet = ss.insertSheet('SilinenKayitlar');
+    sheet.getRange(1, 1, 1, SILINEN_HEADERS.length).setValues([SILINEN_HEADERS]);
+    sheet.hideSheet(); // günlük kullanımda kafa karıştırmasın
+  }
+  return sheet;
+}
+
+// Silinen kayıtların kimliklerini { kayıtId: oturumId } olarak döndürür.
+function readSilinenler() {
+  var map = {};
+  var sheet = silinenSheet(false);
+  if (!sheet || sheet.getLastRow() < 2) return map;
+  sheet.getRange(2, 1, sheet.getLastRow() - 1, 2).getValues().forEach(function (r) {
+    if (r[0]) map[String(r[0])] = String(r[1] || '');
+  });
+  return map;
+}
+
+function addSilinenler(ids, sessionId, silen) {
+  if (!ids || ids.length === 0) return;
+  var sheet = silinenSheet(true);
+  var zaman = Utilities.formatDate(new Date(), Session.getScriptTimeZone() || 'GMT+3', 'yyyy-MM-dd HH:mm:ss');
+  var rows = ids.map(function (id) { return [String(id), String(sessionId || ''), zaman, String(silen || '')]; });
+  var ilk = sheet.getLastRow() + 1;
+  sheet.getRange(ilk, 1, rows.length, 2).setNumberFormat('@'); // kimlikler metin kalsın
+  sheet.getRange(ilk, 1, rows.length, SILINEN_HEADERS.length).setValues(rows);
+}
+
+// Telefonun gönderim onayı: bir oturumun tablodaki kayıtlarını ('Sayim' ve
+// 'GecGelenKayitlar' sekmelerinden) { kayıtId: [sürüm, adet] } ve o oturumda
+// silinmiş kimlikleri döndürür.
+// Telefon kuyruğundan SADECE burada doğrulanan kayıtları çıkarır:
+//  - tablodaki sürüm >= telefondaki sürüm ise kayıt yazılmış demektir,
+//  - silinen kimlik tabloda yoksa silme işlenmiş demektir.
+// Kilit almadan okur; doPost yazarken okunsa bile en kötü ihtimalle telefon
+// kaydı "henüz yazılmadı" sayıp bir sonraki turda tekrar gönderir.
+function sayimKontrol(sessionId, callback) {
+  var hedef = String(sessionId || '');
+  if (!hedef) return outJson({ status: 'error', message: 'Oturum ID eksik' }, callback);
+  var rows = {};
+  sayimOturumSatirlari(SpreadsheetApp.getActiveSpreadsheet().getSheetByName('Sayim'), hedef, rows);
+  sayimOturumSatirlari(gecGelenSheet(false), hedef, rows); // temizlikten sonra gelen eski kayıtlar
+  var silinenler = readSilinenler();
+  var deleted = Object.keys(silinenler).filter(function (id) { return silinenler[id] === hedef; });
+  return outJson({ status: 'ok', rows: rows, deleted: deleted }, callback);
+}
+
+// Sayım satırlarını verilen sekmeye (Sayim ya da GecGelenKayitlar) sürüm
+// kontrolüyle yazar. Dönen değer: atlanan (yazılmayan) satır sayısı.
+//
+// SÜRÜM KONTROLÜ: Her kayıt telefonda bir sürüm numarası (v) taşır; adet her
+// değiştiğinde artar. Tablodaki sürüm gelen sürümden küçük değilse satır
+// EZİLMEZ — böylece geç ulaşan eski bir gönderi, yeni düzeltmenin (telefondan
+// ya da yöneticinin "Düzelt" ekranından) üzerine yazamaz. Sürümsüz gelen
+// kayıt (eski uygulama sürümü) v=1 sayılır ve sadece tablodaki satır da hiç
+// düzeltilmemişse (v<=1) üzerine yazılır.
+function writeSayimRows(sheet, rows, personnel, sessionId, silinenler) {
+  if (!rows || rows.length === 0) return 0;
+  ensureSayimColumns(sheet);
+  var HEADERS = SAYIM_HEADERS;
+  var idCol = SAYIM_COL.KAYIT_ID - 1;
+  var surumCol = SAYIM_COL.SURUM - 1;
+
+  var lastRow = sheet.getLastRow();
+  var existing = {};   // kayıtId -> satır numarası
+  var existingV = {};  // kayıtId -> tablodaki sürüm
+  if (lastRow > 1) {
+    var values = sheet.getRange(2, 1, lastRow - 1, HEADERS.length).getValues();
+    for (var i = 0; i < values.length; i++) {
+      var key = values[i][idCol];
+      if (key) {
+        existing[key] = i + 2;
+        existingV[key] = surumOku(values[i][surumCol]);
+      }
+    }
+  }
+
+  // Yeni satırları TEK seferde toplu ekliyoruz (appendRow'u döngüde tekrar
+  // tekrar çağırmak yerine) — hem çok daha hızlı hem de sayfa büyüdükçe
+  // (binlerce satır, 72 saatlik sayım) performansı korur.
+  var newRows = [];
+  var skipped = 0;
+  rows.forEach(function (row) {
+    var id = row.id ? String(row.id) : '';
+    if (id && silinenler[id]) { skipped++; return; }
+    var surumVar = row.v !== undefined && row.v !== null && row.v !== '';
+    var v = surumVar ? surumOku(row.v) : 1;
+    var oldStock = (row.oldStock !== '' && row.oldStock !== undefined && !isNaN(Number(row.oldStock))) ? Number(row.oldStock) : '';
+    var diff = oldStock !== '' ? (row.qty - oldStock) : '';
+    var rowData = [row.date, row.time, personnel, row.name, row.stockCode || '', row.barcode, row.unit || 'Adet', oldStock, row.qty, diff, sessionId, row.id || '', row.reyon || '', v];
+    if (id && existing[id] === -1) { skipped++; return; } // aynı istekte zaten eklendi
+    if (id && existing[id]) {
+      var mevcutV = existingV[id];
+      var yaz = surumVar ? (v > mevcutV) : (mevcutV <= 1);
+      if (!yaz) { skipped++; return; }
+      sheet.getRange(existing[id], 1, 1, HEADERS.length).setValues([rowData]);
+      existingV[id] = v;
+    } else {
+      newRows.push(rowData);
+      if (id) { existing[id] = -1; existingV[id] = v; } // aynı istekte tekrar gelirse çift satır olmasın
+    }
+  });
+  if (newRows.length > 0) {
+    sheet.getRange(sheet.getLastRow() + 1, 1, newRows.length, HEADERS.length).setValues(newRows);
+  }
+  return skipped;
+}
+
+// Verilen kimlikleri sekmeden siler (sondan başa, satır numaraları kaymasın).
+function deleteSayimIds(sheet, ids) {
+  var last = sheet.getLastRow();
+  if (!ids || ids.length === 0 || last < 2) return;
+  var set = {};
+  ids.forEach(function (d) { set[String(d)] = true; });
+  var idColValues = sheet.getRange(2, SAYIM_COL.KAYIT_ID, last - 1, 1).getValues();
+  var rowsToDelete = [];
+  for (var j = 0; j < idColValues.length; j++) {
+    var cellId = idColValues[j][0];
+    if (cellId && set[String(cellId)]) rowsToDelete.push(j + 2);
+  }
+  rowsToDelete.sort(function (a, b) { return b - a; });
+  rowsToDelete.forEach(function (rowNum) { sheet.deleteRow(rowNum); });
+}
+
+// Temizlikten önce okutulup temizlikten SONRA gelen kayıtların sekmesi.
+// 'Sayim' ile aynı sütunlara sahiptir; rapora (finalize) dahil edilmez.
+function gecGelenSheet(olustur) {
+  var ss = SpreadsheetApp.getActiveSpreadsheet();
+  var sheet = ss.getSheetByName('GecGelenKayitlar');
+  if (!sheet && olustur) {
+    sheet = ss.insertSheet('GecGelenKayitlar');
+    ensureSayimColumns(sheet);
+  }
+  return sheet;
+}
+
+// Bir sekmedeki, verilen oturuma ait kayıtları { kayıtId: [sürüm, adet] }
+// olarak "rows" nesnesine ekler (aynı kimlik iki sekmede varsa yüksek sürüm kalır).
+function sayimOturumSatirlari(sheet, hedef, rows) {
+  if (!sheet || sheet.getLastRow() < 2) return;
+  var genislik = Math.min(sheet.getMaxColumns(), SAYIM_HEADERS.length);
+  var values = sheet.getRange(2, 1, sheet.getLastRow() - 1, genislik).getValues();
+  for (var i = 0; i < values.length; i++) {
+    if (String(values[i][SAYIM_COL.OTURUM - 1]) !== hedef) continue;
+    var id = values[i][SAYIM_COL.KAYIT_ID - 1];
+    if (!id) continue;
+    var v = genislik >= SAYIM_COL.SURUM ? surumOku(values[i][SAYIM_COL.SURUM - 1]) : 1;
+    var onceki = rows[String(id)];
+    if (!onceki || onceki[0] < v) rows[String(id)] = [v, values[i][SAYIM_COL.ADET - 1]];
+  }
+}
+
 function doPost(e) {
   // 10+ telefon aynı anda veri gönderebildiği için, sayfaya yazma işlemini
   // KİLİTLİYORUZ. Kilit olmadan iki telefonun isteği aynı anda işlenirse,
@@ -596,68 +831,59 @@ function doPost(e) {
     // asla başka bir sekmeye yazılmıyor.
     var sheet = ss.getSheetByName('Sayim');
     if (!sheet) sheet = ss.insertSheet('Sayim');
-
-    var HEADERS = ['Tarih', 'Saat', 'Personel', 'Ürün Adı', 'Stok Kodu', 'Barkod', 'Birim', 'Eski Stok', 'Sayılan Adet', 'Fark', 'Oturum ID', 'Kayıt ID', 'Reyon'];
-    if (sheet.getLastRow() === 0) {
-      sheet.appendRow(HEADERS);
-    }
-    var idCol = HEADERS.indexOf('Kayıt ID');
+    ensureSayimColumns(sheet);
 
     var personnel = data.personnel || '';
     var sessionId = data.sessionId || '';
     var rows = data.rows || [];
 
-    var lastRow = sheet.getLastRow();
-    var existing = {};
-    if (lastRow > 1) {
-      var values = sheet.getRange(2, 1, lastRow - 1, HEADERS.length).getValues();
-      for (var i = 0; i < values.length; i++) {
-        var key = values[i][idCol];
-        if (key) existing[key] = i + 2;
-      }
-    }
+    // Silindi işaretleri: yönetici ya da telefon tarafından silinmiş kayıtlar.
+    // Eski bir gönderi (örn. sendBeacon ile geç ulaşan) bu kayıtları GERİ
+    // GETİREMEZ.
+    var silinenler = readSilinenler();
 
-    // Güncellenecek (mevcut) satırları ve yeni eklenecek satırları ayır.
-    // Yeni satırları TEK seferde toplu ekliyoruz (appendRow'u döngüde tekrar
-    // tekrar çağırmak yerine) — hem çok daha hızlı hem de sayfa büyüdükçe
-    // (binlerce satır, 72 saatlik sayım) performansı korur.
-    var newRows = [];
+    // GEÇ GELEN KAYITLAR: Yönetici dosyayı temizledikten sonra, temizlikten
+    // ÖNCE okutulmuş ama o an gönderilememiş kayıtlar yeni sayımı kirletmesin
+    // diye 'Sayim' yerine 'GecGelenKayitlar' sekmesine yazılır (kaybolmaz).
+    // Telefon her gönderiye bildiği son temizlik damgasını (resetToken)
+    // ekler. Damga eskiyse ve kayıt temizlikten önce okutulduysa (ts) geç
+    // gelmiş sayılır.
+    var aktifToken = PropertiesService.getScriptProperties().getProperty('RESET_TOKEN') || '';
+    var resetZamani = aktifToken ? Date.parse(aktifToken) : NaN;
+    var eskiDonem = !!(data.resetToken && aktifToken && String(data.resetToken) !== aktifToken);
+    var normalRows = [];
+    var gecRows = [];
     rows.forEach(function (row) {
-      var oldStock = (row.oldStock !== '' && row.oldStock !== undefined && !isNaN(Number(row.oldStock))) ? Number(row.oldStock) : '';
-      var diff = oldStock !== '' ? (row.qty - oldStock) : '';
-      var rowData = [row.date, row.time, personnel, row.name, row.stockCode || '', row.barcode, row.unit || 'Adet', oldStock, row.qty, diff, sessionId, row.id || '', row.reyon || ''];
-      if (row.id && existing[row.id]) {
-        sheet.getRange(existing[row.id], 1, 1, HEADERS.length).setValues([rowData]);
-      } else {
-        newRows.push(rowData);
-      }
+      var ts = Number(row.ts);
+      var gec = eskiDonem && (isNaN(resetZamani) || !ts || ts < resetZamani);
+      (gec ? gecRows : normalRows).push(row);
     });
-    if (newRows.length > 0) {
-      sheet.getRange(sheet.getLastRow() + 1, 1, newRows.length, HEADERS.length).setValues(newRows);
+
+    var skipped = writeSayimRows(sheet, normalRows, personnel, sessionId, silinenler);
+    if (gecRows.length > 0) {
+      skipped += writeSayimRows(gecGelenSheet(true), gecRows, personnel, sessionId, silinenler);
     }
 
     // Telefonda silinmiş kayıtları tablodan da sil. "rows" listesinde
     // artık bulunmaması tek başına yeterli değildir — sunucu bunu "hiç
     // gönderilmedi" ile ayırt edemez, bu yüzden istemci silinen id'leri
-    // ayrıca bildirir (deletedIds).
+    // ayrıca bildirir (deletedIds). Silinen her kayda ayrıca "silindi
+    // işareti" konur ki eski bir gönderi onu geri getirmesin.
     var deletedIds = (data.deletedIds || []).map(String);
     if (deletedIds.length > 0) {
-      var lastRowAfter = sheet.getLastRow();
-      if (lastRowAfter > 1) {
-        var idColValues = sheet.getRange(2, idCol + 1, lastRowAfter - 1, 1).getValues();
-        var rowsToDelete = [];
-        for (var j = 0; j < idColValues.length; j++) {
-          var cellId = idColValues[j][0];
-          if (cellId && deletedIds.indexOf(String(cellId)) !== -1) rowsToDelete.push(j + 2);
-        }
-        // Sondan başa doğru sil ki silme sırasında satır numaraları kaymasın.
-        rowsToDelete.sort(function (a, b) { return b - a; });
-        rowsToDelete.forEach(function (rowNum) { sheet.deleteRow(rowNum); });
-      }
+      var yeniSilinen = deletedIds.filter(function (d) { return !silinenler[d]; });
+      if (yeniSilinen.length > 0) addSilinenler(yeniSilinen, sessionId, personnel || 'telefon');
+      deleteSayimIds(sheet, deletedIds);
+      var gs = gecGelenSheet(false);
+      if (gs) deleteSayimIds(gs, deletedIds);
     }
 
+    // Son yazma zamanı (oturum bazında): yönetici rapor oluştururken
+    // "telefonlardan hâlâ veri geliyor mu?" kontrolü için (bkz. handleFinalize).
+    if (rows.length > 0 || deletedIds.length > 0) sonYazmaKaydet(sessionId);
+
     return ContentService
-      .createTextOutput(JSON.stringify({ status: 'ok', processed: rows.length }))
+      .createTextOutput(JSON.stringify({ status: 'ok', processed: rows.length, skipped: skipped, gecGelen: gecRows.length }))
       .setMimeType(ContentService.MimeType.JSON);
 
   } catch (err) {
@@ -793,11 +1019,45 @@ function handleTemizle(user, pass, callback) {
 // - ANTHROPIC_API_KEY script özelliği ayarlıysa, dikkat çeken farklar
 //   için kısa bir yapay zeka değerlendirmesi ister.
 // ============================================================
-function handleFinalize(user, pass, callback) {
+// Telefonlardan son veri bu kadar süre içinde geldiyse rapor hemen
+// oluşturulmaz; yönetici onaylarsa (force=1) yine de oluşturulur.
+var FINALIZE_SESSIZ_MS = 45000;
+
+// { oturumId: son yazma zamanı(ms) } — sadece son 5 dakika tutulur.
+function sonYazmalariOku() {
+  try { return JSON.parse(PropertiesService.getScriptProperties().getProperty('SON_YAZMALAR') || '{}') || {}; }
+  catch (e) { return {}; }
+}
+function sonYazmaKaydet(sessionId) {
+  var son = sonYazmalariOku();
+  var simdi = Date.now();
+  son[String(sessionId || '?')] = simdi;
+  Object.keys(son).forEach(function (k) { if (simdi - Number(son[k]) > 300000) delete son[k]; });
+  PropertiesService.getScriptProperties().setProperty('SON_YAZMALAR', JSON.stringify(son));
+}
+
+// haric: rapor isteyen telefonun kendi oturumları (virgülle) — o telefon
+// rapordan hemen önce kendi verisini gönderdiği için bunlar sayılmaz.
+function handleFinalize(user, pass, force, haric, callback) {
   var auth = requirePermission(user, pass, 'rapor');
   if (!auth.ok) return outJson({ status: 'error', message: auth.message }, callback);
   var lock = LockService.getScriptLock();
   try { lock.waitLock(30000); } catch (e) { return outJson({ status: 'error', message: 'Sunucu meşgul, birazdan tekrar dene' }, callback); }
+  // Gönderim sürerken rapor oluşmasın: telefonlardan çok yakın zamanda veri
+  // geldiyse bazı telefonlar hâlâ gönderiyor olabilir — yöneticiye sor.
+  if (String(force) !== '1') {
+    var haricSet = {};
+    String(haric || '').split(',').forEach(function (x) { x = x.trim(); if (x) haricSet[x] = true; });
+    var son = sonYazmalariOku();
+    var sonYazma = 0;
+    Object.keys(son).forEach(function (k) { if (!haricSet[k]) sonYazma = Math.max(sonYazma, Number(son[k]) || 0); });
+    var gecen = Date.now() - sonYazma;
+    if (sonYazma && gecen < FINALIZE_SESSIZ_MS) {
+      lock.releaseLock();
+      return outJson({ status: 'busy', saniye: Math.round(gecen / 1000),
+        message: 'Telefonlardan ' + Math.round(gecen / 1000) + ' saniye önce veri geldi — gönderim sürüyor olabilir.' }, callback);
+    }
+  }
   try {
     var ss = SpreadsheetApp.getActiveSpreadsheet();
     var HEADERS = ['Tarih', 'Saat', 'Personel', 'Ürün Adı', 'Stok Kodu', 'Barkod', 'Birim', 'Eski Stok', 'Sayılan Adet', 'Fark', 'Oturum ID', 'Kayıt ID', 'Reyon'];
@@ -1292,9 +1552,10 @@ function sayimGuncelle(user, pass, kayitId, adet, callback) {
   try {
     var ss = SpreadsheetApp.getActiveSpreadsheet();
     var sheet = ss.getSheetByName('Sayim');
-    var HEADERS = ['Tarih', 'Saat', 'Personel', 'Ürün Adı', 'Stok Kodu', 'Barkod', 'Birim', 'Eski Stok', 'Sayılan Adet', 'Fark', 'Oturum ID', 'Kayıt ID', 'Reyon'];
+    var HEADERS = SAYIM_HEADERS;
     var idx = {}; HEADERS.forEach(function (h, i) { idx[h] = i; });
     if (!sheet || sheet.getLastRow() < 2) return outJson({ status: 'error', message: 'Kayıt bulunamadı' }, callback);
+    ensureSayimColumns(sheet);
     var values = sheet.getRange(2, 1, sheet.getLastRow() - 1, HEADERS.length).getValues();
     for (var i = 0; i < values.length; i++) {
       if (String(values[i][idx['Kayıt ID']]) === String(kayitId)) {
@@ -1303,7 +1564,12 @@ function sayimGuncelle(user, pass, kayitId, adet, callback) {
         var fark = (eskiStok !== '' && eskiStok !== undefined && !isNaN(Number(eskiStok))) ? (yeniAdet - Number(eskiStok)) : '';
         sheet.getRange(rowNum, idx['Sayılan Adet'] + 1).setValue(yeniAdet);
         sheet.getRange(rowNum, idx['Fark'] + 1).setValue(fark);
-        return outJson({ status: 'ok' }, callback);
+        // Sürümü artır: telefonda kuyrukta bekleyen (ya da geç ulaşan) ESKİ
+        // sürüm artık bu düzeltmenin üzerine yazamaz. Telefon bir sonraki
+        // onayda yeni adedi ve sürümü kendine alır.
+        var yeniV = surumOku(values[i][idx['Sürüm']]) + 1;
+        sheet.getRange(rowNum, idx['Sürüm'] + 1).setValue(yeniV);
+        return outJson({ status: 'ok', v: yeniV }, callback);
       }
     }
     return outJson({ status: 'error', message: 'Kayıt bulunamadı (silinmiş olabilir)' }, callback);
@@ -1323,12 +1589,17 @@ function sayimSil(user, pass, kayitId, callback) {
   try {
     var ss = SpreadsheetApp.getActiveSpreadsheet();
     var sheet = ss.getSheetByName('Sayim');
-    var HEADERS = ['Tarih', 'Saat', 'Personel', 'Ürün Adı', 'Stok Kodu', 'Barkod', 'Birim', 'Eski Stok', 'Sayılan Adet', 'Fark', 'Oturum ID', 'Kayıt ID', 'Reyon'];
+    var HEADERS = SAYIM_HEADERS;
     var idx = {}; HEADERS.forEach(function (h, i) { idx[h] = i; });
     if (!sheet || sheet.getLastRow() < 2) return outJson({ status: 'error', message: 'Kayıt bulunamadı' }, callback);
+    ensureSayimColumns(sheet);
     var values = sheet.getRange(2, 1, sheet.getLastRow() - 1, HEADERS.length).getValues();
     for (var i = 0; i < values.length; i++) {
       if (String(values[i][idx['Kayıt ID']]) === String(kayitId)) {
+        // Silindi işareti: telefonun kuyruğunda bekleyen eski bir gönderi bu
+        // kaydı tabloya GERİ GETİREMEZ; telefon da bir sonraki onayda kaydı
+        // kendi listesinden kaldırır.
+        addSilinenler([kayitId], values[i][idx['Oturum ID']], String(user || 'yonetici'));
         sheet.deleteRow(i + 2);
         return outJson({ status: 'ok' }, callback);
       }
