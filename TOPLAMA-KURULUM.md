@@ -97,6 +97,21 @@ sayfaları göster" ile açabilir. Gerçekten sadece senin görmen gerekiyorsa,
 ya bu sekmeyi ayrı, sadece sana paylaşılmış bir Google E-Tablo'ya taşımanı
 ya da ana tabloyu sadece kendi hesabınla paylaşmanı öneririm.
 
+## Mağaza İçi Kullanım (konum kısıtlaması)
+Yönetici Paneli → **🔆 Ayarlar → 🏪 Mağaza İçi Kullanım**:
+1. Mağazanın içindeyken yarıçapı gir (150–300 m önerilir — bina içinde GPS
+   sapabilir) ve **📍 Şu Anki Konumu Mağaza Olarak Kaydet**'e bas.
+2. Bundan sonra yönetici olmayan ve **🏪 Mağaza Dışı** yetkisi verilmeyen
+   kullanıcılar sadece bu yarıçap içindeyken giriş yapabilir. Giriş yapılmış
+   telefon da açılışta ve birkaç dakikada bir konumu kontrol eder; mağaza
+   dışındaysa ekran kilitlenir. Telefondaki kayıtlar **silinmez**,
+   gönderim arka planda sürer.
+3. Telefonlarda Chrome'a konum izni verilmiş olmalı.
+4. Kapatmak için **Kısıtlamayı Kaldır**.
+
+⚠️ Konum telefonun bildirdiğidir; sahte konum uygulamasıyla aşılabilir.
+Ekip içi bir kısıtlamadır, kesin güvenlik değildir.
+
 ## 7) Kullanıcı Yönetimi ve Yetkilendirme
 Giriş yaptıktan sonra, yetkin varsa "⚙ Yönetici Paneli" bağlantısı
 görünür (yetkisi olmayan personelin ekranında bu bağlantı hiç çıkmaz).

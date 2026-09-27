@@ -8,7 +8,7 @@
 // bir sürüm dağıttıktan sonra /exec adresini boş açtığında burada yazan
 // numarayı görmelisin; index.html'in üstündeki "build" numarasıyla
 // eşleşecek şekilde ben her ikisini birlikte güncelliyorum.
-var GS_VERSION = 'build97';
+var GS_VERSION = 'build98';
 
 // Sheets'te "Saat" sütunu zaman biçimli olarak algılanırsa, hücre değeri düz
 // metin değil bir Date nesnesi olarak gelir ve String(...) çirkin bir çıktı
@@ -39,7 +39,7 @@ function doGet(e) {
   }
   // ---- Giriş / yetkilendirme ----
   if (e.parameter && e.parameter.action === 'login') {
-    return handleLogin(e.parameter.user, e.parameter.pass, e.parameter.callback);
+    return handleLogin(e.parameter.user, e.parameter.pass, e.parameter.lat, e.parameter.lng, e.parameter.acc, e.parameter.callback);
   }
   if (e.parameter && e.parameter.action === 'resetcheck') {
     return outJson({
@@ -47,7 +47,8 @@ function doGet(e) {
       defaultWakeLock: PropertiesService.getScriptProperties().getProperty('DEFAULT_WAKE_LOCK') || 'true',
       idleMinutes: PropertiesService.getScriptProperties().getProperty('DEFAULT_IDLE_MINUTES') || '0',
       katalogVersion: PropertiesService.getScriptProperties().getProperty('KATALOG_VERSION') || '',
-      cariVersion: PropertiesService.getScriptProperties().getProperty('CARI_VERSION') || ''
+      cariVersion: PropertiesService.getScriptProperties().getProperty('CARI_VERSION') || '',
+      magaza: getMagazaKonum()
     }, e.parameter.callback);
   }
   if (e.parameter && e.parameter.action === 'temizle') {
@@ -64,6 +65,9 @@ function doGet(e) {
   }
   if (e.parameter && e.parameter.action === 'kullanicilar_kaydet') {
     return handleKullanicilarKaydet(e.parameter.user, e.parameter.pass, e.parameter.data, e.parameter.callback);
+  }
+  if (e.parameter && e.parameter.action === 'magaza_konum_kaydet') {
+    return handleMagazaKonumKaydet(e.parameter.user, e.parameter.pass, e.parameter.lat, e.parameter.lng, e.parameter.yaricap, e.parameter.callback);
   }
   if (e.parameter && e.parameter.action === 'ayar_kaydet') {
     return handleAyarKaydet(e.parameter.user, e.parameter.pass, e.parameter.wakelock, e.parameter.idleMinutes, e.parameter.backupEmail, e.parameter.malEmail, e.parameter.callback);
@@ -142,7 +146,7 @@ function outJson(obj, callback) {
 // yetkilendirme için yeterlidir. Tabloyu düzenleme yetkisi olan herkes
 // şifreleri görebilir.
 // ============================================================
-var ALL_PERMS = ['rapor', 'temizle', 'kullanici_yonetimi', 'ayarlar', 'canli_durum', 'duzelt'];
+var ALL_PERMS = ['rapor', 'temizle', 'kullanici_yonetimi', 'ayarlar', 'canli_durum', 'duzelt', 'magaza_disi'];
 
 function authenticate(user, pass) {
   user = String(user || '').trim();
@@ -181,13 +185,85 @@ function requirePermission(user, pass, perm) {
   return auth;
 }
 
-function handleLogin(user, pass, callback) {
+function handleLogin(user, pass, lat, lng, acc, callback) {
   var auth = authenticate(user, pass);
   if (!auth.ok) {
     gunlukYaz('yetki', String(user || '(boş)'), 'Uygulamaya giriş reddedildi: ' + auth.message, true);
     return outJson({ status: 'error', message: auth.message }, callback);
   }
+  var konum = magazaKonumKontrol(auth, lat, lng, acc);
+  if (!konum.ok) {
+    gunlukYaz('yetki', String(user || ''), 'Mağaza dışından giriş reddedildi: ' + konum.detay, false);
+    return outJson({ status: 'error', kod: 'magaza_disi', message: konum.message }, callback);
+  }
   return outJson({ status: 'ok', role: auth.role, permissions: auth.permissions }, callback);
+}
+
+// ============================================================
+// MAĞAZA İÇİ KULLANIM (konum kontrolü)
+// Yönetici Paneli → Ayarlar'dan mağazanın konumu ve yarıçapı kaydedilir
+// (MAGAZA_KONUM). Tanımlıysa, yönetici olmayan ve "magaza_disi" yetkisi
+// bulunmayan kullanıcılar sadece bu yarıçap içindeyken giriş yapabilir.
+// Telefon konumu giriş isteğiyle birlikte gönderir. GPS bina içinde
+// sapabildiği için konumun doğruluk payı (en fazla 150 m) lehe sayılır.
+// Not: Konum telefonun bildirdiğidir — sahte konum uygulamasıyla
+// aşılabilir; ekip içi bir kısıtlamadır, kesin güvenlik değildir.
+// ============================================================
+var MAGAZA_DOGRULUK_TOLERANSI = 150; // metre
+
+function getMagazaKonum() {
+  var raw = PropertiesService.getScriptProperties().getProperty('MAGAZA_KONUM');
+  if (!raw) return null;
+  try {
+    var k = JSON.parse(raw);
+    if (isFinite(k.lat) && isFinite(k.lng) && k.r > 0) return { lat: Number(k.lat), lng: Number(k.lng), r: Number(k.r) };
+  } catch (e) { /* bozuk kayıt: tanımsız say */ }
+  return null;
+}
+
+function mesafeMetre(lat1, lng1, lat2, lng2) {
+  var R = 6371000, rad = Math.PI / 180;
+  var dLat = (lat2 - lat1) * rad, dLng = (lng2 - lng1) * rad;
+  var a = Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+    Math.cos(lat1 * rad) * Math.cos(lat2 * rad) * Math.sin(dLng / 2) * Math.sin(dLng / 2);
+  return 2 * R * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+}
+
+function magazaKonumKontrol(auth, lat, lng, acc) {
+  var magaza = getMagazaKonum();
+  if (!magaza || auth.role === 'yonetici' || auth.permissions.indexOf('magaza_disi') !== -1) return { ok: true };
+  lat = parseFloat(lat); lng = parseFloat(lng);
+  if (!isFinite(lat) || !isFinite(lng)) {
+    return { ok: false, detay: 'konum gönderilmedi',
+      message: 'Bu uygulama sadece mağaza içinde kullanılabilir. Telefonun konumu alınamadı — konum iznini ve GPS\'i açıp tekrar dene (uygulama eskiyse kapatıp yeniden aç).' };
+  }
+  var d = mesafeMetre(lat, lng, magaza.lat, magaza.lng);
+  var pay = Math.min(Math.max(parseFloat(acc) || 0, 0), MAGAZA_DOGRULUK_TOLERANSI);
+  if (d - pay > magaza.r) {
+    return { ok: false, detay: Math.round(d) + ' m uzakta (±' + Math.round(parseFloat(acc) || 0) + ' m)',
+      message: 'Bu uygulama sadece mağaza içinde kullanılabilir. Şu an mağazaya yaklaşık ' + Math.round(d) + ' m uzaktasın.' };
+  }
+  return { ok: true };
+}
+
+function handleMagazaKonumKaydet(user, pass, lat, lng, yaricap, callback) {
+  var auth = requirePermission(user, pass, 'ayarlar');
+  if (!auth.ok) return outJson({ status: 'error', message: auth.message }, callback);
+  var props = PropertiesService.getScriptProperties();
+  if (lat === 'kaldir') {
+    props.deleteProperty('MAGAZA_KONUM');
+    gunlukYaz('ayar', String(user), 'Mağaza konum kısıtlaması kaldırıldı', false);
+    return outJson({ status: 'ok', magaza: null }, callback);
+  }
+  lat = parseFloat(lat); lng = parseFloat(lng);
+  var r = parseInt(yaricap, 10);
+  if (!isFinite(lat) || !isFinite(lng) || Math.abs(lat) > 90 || Math.abs(lng) > 180) {
+    return outJson({ status: 'error', message: 'Geçersiz konum' }, callback);
+  }
+  if (isNaN(r) || r < 50 || r > 5000) return outJson({ status: 'error', message: 'Yarıçap 50 ile 5000 metre arasında olmalı' }, callback);
+  props.setProperty('MAGAZA_KONUM', JSON.stringify({ lat: lat, lng: lng, r: r }));
+  gunlukYaz('ayar', String(user), 'Mağaza konumu kaydedildi (' + lat.toFixed(5) + ', ' + lng.toFixed(5) + ', ' + r + ' m)', false);
+  return outJson({ status: 'ok', magaza: getMagazaKonum() }, callback);
 }
 
 // Cari (tedarikçi/müşteri) listesi — Mal Giriş/Mal Çıkış ekranlarında
@@ -1660,6 +1736,7 @@ function getAyarlar(user, pass, callback) {
     defaultWakeLock: props.getProperty('DEFAULT_WAKE_LOCK') || 'true',
     idleMinutes: props.getProperty('DEFAULT_IDLE_MINUTES') || '0',
     backupEmail: props.getProperty('BACKUP_EMAIL') || '',
+    magaza: getMagazaKonum(),
     // Hiç ayarlanmamışsa (null) sabit varsayılanı göster — panelde boş görünmesin,
     // "zaten bir adrese gidiyor" belli olsun. Bilerek boşaltılmışsa boş kalır.
     malEmail: (function () { var v = props.getProperty('MAL_EMAIL'); return v === null ? VARSAYILAN_MAL_EMAIL : v; })()

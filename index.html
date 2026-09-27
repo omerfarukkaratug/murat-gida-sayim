@@ -307,7 +307,7 @@
   <header style="border:none; padding:0 0 16px; background:transparent; display:flex; align-items:flex-start; justify-content:space-between;">
     <div>
       <h1><img src="logo-header.png" alt="Murat Gıda" style="height:30px; width:auto; display:block;"></h1>
-      <div class="sub">MK ERP · Murat Gıda • offline • Android • build 97</div>
+      <div class="sub">MK ERP · Murat Gıda • offline • Android • build 98</div>
     </div>
     <button type="button" id="themeToggleBtn" title="Tema seç" style="background:var(--panel2); border:1.5px solid var(--line); color:var(--text); width:34px; height:34px; border-radius:50%; font-size:15px; padding:0; display:flex; align-items:center; justify-content:center; flex-shrink:0;">🎨</button>
   </header>
@@ -899,6 +899,15 @@
         <div class="hint" style="margin-bottom:8px;">"Sayımı Bitir ve Rapor Oluştur" her çalıştığında, Son Stok Sayımı bu adrese CSV eki olarak otomatik gönderilir. Boş bırakırsan mail gönderilmez.</div>
         <input type="text" id="adminBackupEmail" placeholder="ornek@murat-gida.com" style="margin-bottom:10px;">
         <button id="adminWakeLockSave" style="width:100%; background:var(--ink); color:#fff; padding:11px;">Ayarları Kaydet</button>
+        <div style="font-weight:800; font-size:13px; margin:16px 0 6px;">🏪 Mağaza İçi Kullanım</div>
+        <div class="hint" style="margin-bottom:8px;">Mağaza konumu kaydedilince, yönetici olmayan ve "🏪 Mağaza Dışı" yetkisi verilmeyen kullanıcılar uygulamayı sadece bu yarıçap içinde kullanabilir. Konumu kaydederken mağazanın içinde ol.</div>
+        <div id="adminMagazaDurum" class="hint" style="margin-bottom:8px; font-weight:700;">⏳ Yükleniyor…</div>
+        <div style="display:flex; align-items:center; gap:8px; margin-bottom:10px;">
+          <input type="number" id="adminMagazaYaricap" inputmode="numeric" min="50" max="5000" value="200" style="width:80px; padding:8px; font-size:13px; text-align:center;">
+          <label style="margin:0; text-transform:none; letter-spacing:0; font-size:13px; color:var(--text); font-weight:600; flex:1;" for="adminMagazaYaricap">metre yarıçap (bina içinde GPS sapabildiği için 150–300 m önerilir)</label>
+        </div>
+        <button type="button" id="adminMagazaKaydet" style="width:100%; background:var(--ink); color:#fff; padding:11px; margin-bottom:8px;">📍 Şu Anki Konumu Mağaza Olarak Kaydet</button>
+        <button type="button" id="adminMagazaKaldir" style="width:100%; background:var(--panel); border:1.5px solid var(--line); color:var(--text); padding:11px;">Kısıtlamayı Kaldır (her yerden kullanılsın)</button>
       </div>
 
       <div id="adminSectionCanliDurum" class="hidden" style="border-top:1px solid var(--line); margin:14px 0 12px; padding-top:12px;">
@@ -940,6 +949,17 @@
 <!-- Ürün arama ekranı: hem Sayım'da hem Mal Giriş/Çıkış'ta kullanılır (#main dışında
      durmalı ki Mal Giriş/Çıkış'tan — yani #main gizliyken de — açılabilsin). Hangi
      ekranın açtığını nameSearchMode tutar, sonuca dokununca ona göre davranır. -->
+<div id="magazaDisiOverlay" class="hidden" style="position:fixed; inset:0; background:var(--bg); z-index:70; display:flex; align-items:center; justify-content:center; padding:24px;">
+  <div style="max-width:380px; width:100%; text-align:center;">
+    <div style="font-size:52px; line-height:1; margin-bottom:12px;">🏪</div>
+    <div style="font-weight:800; font-size:18px; margin-bottom:8px;">Sadece mağaza içinde kullanılabilir</div>
+    <div id="magazaDisiMsg" class="hint" style="margin-bottom:16px; font-size:13px;"></div>
+    <div class="hint" style="margin-bottom:16px; font-size:12px;">Telefondaki kayıtların silinmedi — gönderilmemiş olanlar internet olduğunda arka planda gönderilmeye devam eder.</div>
+    <button type="button" id="magazaDisiRetryBtn" style="width:100%; background:var(--ink); color:#fff; padding:13px; margin-bottom:10px;">🔄 Tekrar Kontrol Et</button>
+    <button type="button" id="magazaDisiLogoutBtn" style="width:100%; background:var(--panel); border:1.5px solid var(--line); color:var(--text); padding:11px;">Çıkış Yap</button>
+  </div>
+</div>
+
 <div id="nameSearchScreen" class="hidden" style="position:fixed; inset:0; background:var(--bg); z-index:53; display:flex; flex-direction:column;">
   <div style="padding:16px; border-bottom:1px solid var(--line); background:var(--panel); box-shadow:var(--sh-sm);">
     <div style="font-weight:800; font-size:16px; margin-bottom:10px;">Ürün Ara</div>
@@ -1146,6 +1166,8 @@
   delete state.session.sentIds;
   if(state.currentUser === undefined) state.currentUser = null;
   if(state.savedCredentials === undefined) state.savedCredentials = null;
+  // Mağaza konumu (sunucudan, resetcheck ile): undefined = henüz öğrenilmedi,
+  // null = kısıtlama yok, {lat,lng,r} = sadece bu yarıçap içinde kullanılır.
   if(!state.session.id) state.session.id = makeId();
   var catalogMap = new Map(); // barkod -> {name, stockCode} (RAM'de, 50 bin satır dahi sorunsuz)
 
@@ -1387,6 +1409,84 @@
   // Fiyatı sadece "fiyat", sistemdeki stok miktarını sadece "stok" yetkisi
   // olanlar (ve yöneticiler) görür — uygulamanın TÜM ekranlarında (Sayım,
   // Tüm Sayılanlar, Mal Giriş/Çıkış, Fiyat & Stok Sorgula, CSV).
+  // ---------- MAĞAZA İÇİ KULLANIM (konum) ----------
+  // Yönetici mağaza konumu tanımladıysa, yönetici olmayan ve "magaza_disi"
+  // yetkisi bulunmayan kullanıcı uygulamayı sadece mağaza yarıçapı içinde
+  // kullanabilir. Giriş sunucuda kontrol edilir; giriş yapılmış telefon da
+  // açılışta, öne gelince ve birkaç dakikada bir burada kontrol edilir.
+  // Dışarıdaysa ekran kilitlenir ama veri silinmez, gönderim sürer.
+  var MAGAZA_DOGRULUK_TOLERANSI = 150; // sunucudakiyle aynı (metre)
+  function magazaKisitli(){
+    return !!(state.currentUser && state.magazaKonum && state.currentUser.role !== 'yonetici' && !hasPerm('magaza_disi'));
+  }
+  function magazaDisiAktif(){
+    var el = document.getElementById('magazaDisiOverlay');
+    return !!(el && !el.classList.contains('hidden'));
+  }
+  function mesafeMetre(lat1, lng1, lat2, lng2){
+    var R = 6371000, rad = Math.PI / 180;
+    var dLat = (lat2 - lat1) * rad, dLng = (lng2 - lng1) * rad;
+    var a = Math.sin(dLat/2) * Math.sin(dLat/2) + Math.cos(lat1*rad) * Math.cos(lat2*rad) * Math.sin(dLng/2) * Math.sin(dLng/2);
+    return 2 * R * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+  }
+  // Konum al: önce GPS (hassas), bina içinde alınamazsa Wi-Fi/baz istasyonu
+  // konumuyla bir kez daha dene. cb(hata, {lat,lng,acc}); hata: 'izin' | 'yok' | 'alinamadi'
+  function getKonum(cb){
+    if(!navigator.geolocation){ cb('yok'); return; }
+    function dene(hassas, sonraki){
+      navigator.geolocation.getCurrentPosition(function(p){
+        cb(null, { lat: p.coords.latitude, lng: p.coords.longitude, acc: Math.round(p.coords.accuracy || 0) });
+      }, function(e){
+        if(e && e.code === 1){ cb('izin'); return; }
+        if(sonraki) sonraki(); else cb('alinamadi');
+      }, { enableHighAccuracy: hassas, timeout: hassas ? 12000 : 10000, maximumAge: 60000 });
+    }
+    dene(true, function(){ dene(false); });
+  }
+  function magazaDisiGoster(mesaj){
+    document.getElementById('magazaDisiMsg').textContent = mesaj;
+    var el = document.getElementById('magazaDisiOverlay');
+    if(el.classList.contains('hidden')){
+      el.classList.remove('hidden');
+      try { stopCamera(); } catch(e){}
+      try { stopQuickScan(); } catch(e){}
+    }
+  }
+  function magazaDisiGizle(){ document.getElementById('magazaDisiOverlay').classList.add('hidden'); }
+  function magazaKonumuDegerlendir(konum){
+    if(!magazaKisitli()){ magazaDisiGizle(); return; }
+    var m = state.magazaKonum;
+    var d = mesafeMetre(konum.lat, konum.lng, m.lat, m.lng);
+    var pay = Math.min(Math.max(konum.acc || 0, 0), MAGAZA_DOGRULUK_TOLERANSI);
+    if(d - pay > m.r) magazaDisiGoster('Şu an mağazaya yaklaşık ' + Math.round(d) + ' m uzaktasın. Mağazaya dönünce "Tekrar Kontrol Et"e bas.');
+    else magazaDisiGizle();
+  }
+  var magazaKontrolSuruyor = false;
+  function magazaKontrol(elle){
+    if(!magazaKisitli()){ magazaDisiGizle(); return; }
+    if(magazaKontrolSuruyor) return;
+    magazaKontrolSuruyor = true;
+    if(elle) document.getElementById('magazaDisiMsg').textContent = '📍 Konum kontrol ediliyor…';
+    getKonum(function(err, konum){
+      magazaKontrolSuruyor = false;
+      if(konum){ magazaKonumuDegerlendir(konum); return; }
+      if(err === 'izin' || err === 'yok'){
+        magazaDisiGoster('Konum izni olmadan bu uygulama kullanılamaz. Chrome ayarlarından (adres çubuğundaki kilit simgesi → İzinler) bu siteye konum izni verip "Tekrar Kontrol Et"e bas.');
+        return;
+      }
+      // Bina içinde konum geçici olarak alınamadı: sayımı durdurmayalım —
+      // ekran zaten kilitliyse kilitli kalır, değilse açık kalır.
+      if(elle) document.getElementById('magazaDisiMsg').textContent = '⚠️ Konum alınamadı — GPS\'in açık olduğundan emin olup tekrar dene.';
+    });
+  }
+  document.getElementById('magazaDisiRetryBtn').addEventListener('click', function(){ magazaKontrol(true); });
+  document.getElementById('magazaDisiLogoutBtn').addEventListener('click', function(){
+    magazaDisiGizle();
+    document.getElementById('logoutLink').click();
+  });
+  document.addEventListener('visibilitychange', function(){ if(document.visibilityState === 'visible') magazaKontrol(false); });
+  setInterval(function(){ if(document.visibilityState === 'visible') magazaKontrol(false); }, 3 * 60 * 1000);
+
   function canSeePrice(){ return hasPerm('fiyat'); }
   function canSeeStock(){ return hasPerm('stok'); }
 
@@ -1414,7 +1514,7 @@
     loginPassInput.value = '';
   }
 
-  if(state.currentUser){ showLoggedInUI(); } else { showLoginUI(); }
+  if(state.currentUser){ showLoggedInUI(); magazaKontrol(false); } else { showLoginUI(); }
 
   // ---------- ANA MENÜ (Sayım / Mal Giriş / Mal Çıkış / Fiyat Sorgula) ----------
   document.getElementById('menuSayimBtn').addEventListener('click', function(){
@@ -1437,6 +1537,7 @@
     e.preventDefault();
     state.currentUser = null;
     save();
+    magazaDisiGizle();
     loginUserInput.value = '';
     showLoginUI();
   });
@@ -1448,8 +1549,13 @@
     loginHintEl.textContent = '';
     if(navigator.onLine){
       var url = state.serverUrl || DEFAULT_SERVER_URL;
+      var konumGerekli = state.magazaKonum !== null; // kısıtlama yoksa (null) konum sorma
+      loginHintEl.textContent = konumGerekli ? '📍 Konum alınıyor…' : '⏳ Giriş yapılıyor…';
+      (konumGerekli ? getKonum : function(cb){ cb('gerekmiyor'); })(function(kErr, konum){
+      var params = { action:'login', user:user, pass:pass };
+      if(konum){ params.lat = konum.lat; params.lng = konum.lng; params.acc = konum.acc; }
       loginHintEl.textContent = '⏳ Giriş yapılıyor…';
-      jsonpRequestP(url, { action:'login', user:user, pass:pass }, function(err, data){
+      jsonpRequestP(url, params, function(err, data){
         if(err){
           // Cihaz "online" görünüyor ama Apps Script'e istek başarısız oldu —
           // önce bu telefonda daha önce başarılı giriş yapılmışsa onu dene,
@@ -1459,13 +1565,19 @@
           }
           return;
         }
-        if(!data || data.status === 'error'){ loginHintEl.textContent = '❌ ' + ((data && data.message) || 'giriş başarısız'); return; }
+        if(!data || data.status === 'error'){
+          loginHintEl.textContent = '❌ ' + ((data && data.message) || 'giriş başarısız');
+          if(data && data.kod === 'magaza_disi' && kErr === 'izin') loginHintEl.textContent += ' (Konum izni reddedilmiş — Chrome ayarlarından bu siteye konum izni ver.)';
+          return;
+        }
         state.currentUser = { name: user, role: data.role, permissions: data.permissions || [] };
         state.savedCredentials = { name: user, pass: pass };
         state.personnel = user;
         save();
         showLoggedInUI();
+        if(konum) magazaKonumuDegerlendir(konum); // sunucu kabul etti; yerel durumu da güncelle
       }, 20000);
+      });
     } else {
       if(!tryOfflineLogin(user, pass)){
         loginHintEl.textContent = '❌ İnternet yok — bu telefonda daha önce bu bilgilerle giriş yapılmamış';
@@ -1768,6 +1880,12 @@
           if(typeof updateWakeLockBtn === 'function') updateWakeLockBtn();
         }
       }
+      // Mağaza konum kısıtlaması (yönetici tanımladı / değiştirdi / kaldırdı).
+      if('magaza' in data){
+        var eskiMagaza = JSON.stringify(state.magazaKonum === undefined ? 'yok' : state.magazaKonum);
+        state.magazaKonum = data.magaza || null;
+        if(JSON.stringify(state.magazaKonum) !== eskiMagaza){ save(); if(typeof magazaKontrol === 'function') magazaKontrol(false); }
+      }
       // Boşta kalma süresi de aynı şekilde yöneticiden senkronize edilir.
       if(data.idleMinutes !== undefined){
         var mins = parseInt(data.idleMinutes, 10);
@@ -1967,6 +2085,7 @@
   function handleScanResult(barcode){
     barcode = (barcode||'').trim();
     if(!barcode) return;
+    if(magazaDisiAktif()){ stopCamera(); return; } // mağaza dışında okutma yok
     stopCamera(); // barkod bulunur bulunmaz kamera kapanır
     var entry = catalogMap.get(barcode);
     if(!entry){
@@ -3693,6 +3812,9 @@
           if(data.defaultWakeLock !== undefined) document.getElementById('adminWakeLockCheck').checked = data.defaultWakeLock !== 'false';
           if(data.idleMinutes !== undefined) document.getElementById('adminIdleMinutes').value = data.idleMinutes;
           document.getElementById('adminBackupEmail').value = data.backupEmail || '';
+          adminMagazaDurumYaz(data.magaza || null);
+        } else {
+          document.getElementById('adminMagazaDurum').textContent = '❌ Ayarlar yüklenemedi';
         }
       }, 15000);
     }
@@ -3719,7 +3841,8 @@
     { key: 'duzelt', label: '✏️ Düzeltme' },
     { key: 'mal_cikis', label: '📤 Mal Çıkış' },
     { key: 'fiyat', label: '💰 Fiyat Görme' },
-    { key: 'stok', label: '📦 Stok Görme' }
+    { key: 'stok', label: '📦 Stok Görme' },
+    { key: 'magaza_disi', label: '🏪 Mağaza Dışı' }
   ];
 
   function permsFromString(s){
@@ -3835,6 +3958,51 @@
       adminResultEl.textContent = '✅ Ayarlar kaydedildi — ekran ayarı sadece elle değiştirilmemiş telefonları etkiler.';
       applyIdleMinutes(idleMin); // bu telefona da hemen uygula (elle değiştirilmemişse)
     }, 15000);
+  });
+
+  // ---------- MAĞAZA KONUMU (Ayarlar) ----------
+  function adminMagazaDurumYaz(m){
+    var el = document.getElementById('adminMagazaDurum');
+    if(m){
+      el.innerHTML = '✅ Açık — mağaza konumu: <a href="https://maps.google.com/?q=' + m.lat + ',' + m.lng + '" target="_blank" rel="noopener">haritada gör</a>, yarıçap ' + m.r + ' m';
+      document.getElementById('adminMagazaYaricap').value = m.r;
+    } else {
+      el.textContent = '⚪ Kapalı — herkes her yerden kullanabilir';
+    }
+  }
+  function adminMagazaGonder(params, bekleMesaj){
+    var auth = currentAuth();
+    if(!auth){ warnToast('Önce giriş yap'); return; }
+    if(!navigator.onLine){ warnToast('İnternet yok — bu işlem için sunucuya bağlanmak gerekiyor'); return; }
+    params.action = 'magaza_konum_kaydet'; params.user = auth.user; params.pass = auth.pass;
+    adminResultEl.textContent = bekleMesaj;
+    jsonpRequestP(state.serverUrl || DEFAULT_SERVER_URL, params, function(err, res){
+      if(err){ adminResultEl.textContent = '❌ ' + err; return; }
+      if(!res || res.status === 'error'){ adminResultEl.textContent = '❌ ' + ((res && res.message) || 'bilinmeyen hata'); return; }
+      state.magazaKonum = res.magaza || null;
+      save();
+      adminMagazaDurumYaz(state.magazaKonum);
+      adminResultEl.textContent = state.magazaKonum
+        ? '✅ Mağaza konumu kaydedildi. Yetkisi olmayan kullanıcılar artık sadece mağaza içinde giriş yapabilir (açık telefonlar 1–2 dk içinde kontrol eder).'
+        : '✅ Kısıtlama kaldırıldı — herkes her yerden kullanabilir.';
+    }, 15000);
+  }
+  document.getElementById('adminMagazaKaydet').addEventListener('click', function(){
+    var r = parseInt(document.getElementById('adminMagazaYaricap').value, 10);
+    if(isNaN(r) || r < 50 || r > 5000){ warnToast('Yarıçap 50 ile 5000 metre arasında olmalı'); return; }
+    adminResultEl.textContent = '📍 Konum alınıyor…';
+    getKonum(function(err, konum){
+      if(!konum){
+        adminResultEl.textContent = err === 'izin' ? '❌ Konum izni verilmedi — Chrome ayarlarından bu siteye konum izni ver.' : '❌ Konum alınamadı — GPS\'i açıp tekrar dene.';
+        return;
+      }
+      if(konum.acc > 100 && !window.confirm('Konum doğruluğu düşük (±' + konum.acc + ' m). Kapı/pencere yakınında daha doğru ölçülür.\nYine de bu konumu kaydedeyim mi?')) { adminResultEl.textContent = ''; return; }
+      adminMagazaGonder({ lat: konum.lat, lng: konum.lng, yaricap: r }, '⏳ Mağaza konumu kaydediliyor…');
+    });
+  });
+  document.getElementById('adminMagazaKaldir').addEventListener('click', function(){
+    if(!window.confirm('Mağaza içi kısıtlaması kaldırılsın mı? Herkes uygulamayı her yerden kullanabilecek.')) return;
+    adminMagazaGonder({ lat: 'kaldir' }, '⏳ Kısıtlama kaldırılıyor…');
   });
 
   // ---------- CANLI DURUM ----------
