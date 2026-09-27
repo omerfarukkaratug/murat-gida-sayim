@@ -307,7 +307,7 @@
   <header style="border:none; padding:0 0 16px; background:transparent; display:flex; align-items:flex-start; justify-content:space-between;">
     <div>
       <h1><img src="logo-header.png" alt="Murat Gıda" style="height:30px; width:auto; display:block;"></h1>
-      <div class="sub">MK ERP · Murat Gıda • offline • Android • build 95</div>
+      <div class="sub">MK ERP · Murat Gıda • offline • Android • build 96</div>
     </div>
     <button type="button" id="themeToggleBtn" title="Tema seç" style="background:var(--panel2); border:1.5px solid var(--line); color:var(--text); width:34px; height:34px; border-radius:50%; font-size:15px; padding:0; display:flex; align-items:center; justify-content:center; flex-shrink:0;">🎨</button>
   </header>
@@ -743,6 +743,10 @@
       </div>
 
       <div id="malHareketList" style="flex:1; overflow-y:auto; padding:0 16px 12px;"><div class="hint">Henüz ürün okutulmadı.</div></div>
+      <!-- Fatura/irsaliye altı açıklaması: kayıtla birlikte sunucuya, maile ve masaüstü aktarımına gider. -->
+      <div style="padding:8px 16px 0; background:var(--panel); border-top:1px solid var(--line);">
+        <textarea id="malHareketAciklama" rows="2" maxlength="500" placeholder="📝 Açıklama (isteğe bağlı) — örn. 2 koli hasarlı geldi, fatura sonra gelecek" style="width:100%; resize:none; font-size:13px; padding:8px 10px; border-radius:var(--r-sm); border:1.5px solid var(--line); background:var(--panel2); color:var(--text); font-family:inherit;"></textarea>
+      </div>
       <div class="footer">
         <button class="fb-sync" id="malHareketDiscardBtn" style="flex:none; width:34%;">🗑 Vazgeç</button>
         <button class="fb-export" id="malHareketSaveBtn" style="flex:1;">💾 Kaydet ve Bitir</button>
@@ -1169,8 +1173,31 @@
   // false döner — okutma/düzeltme gibi işlemler bu durumda başarı GÖSTERMEZ,
   // yaptıkları değişikliği geri alıp kullanıcıyı uyarır (storageFailAlert).
   function save(){
-    try{ localStorage.setItem(STORE_KEY, JSON.stringify(state)); return true; }
+    try{
+      var metin = JSON.stringify(state);
+      localStorage.setItem(STORE_KEY, metin);
+      hafizaKontrol(metin.length);
+      return true;
+    }
     catch(e){ errorToast("Kaydedilemedi — telefon hafızası dolu olabilir! Lütfen hemen CSV indirip yer açın."); return false; }
+  }
+  // TELEFON HAFIZASI: Tarayıcı bu uygulamaya ~5 milyon karakter (iPhone'da
+  // yaklaşık yarısı) yer verir; bir okutma ~310 karakter tutar. 72 saatlik
+  // sayımda tek oturumda binlerce okutma birikirse hafıza dolabilir. %60'ı
+  // geçince vardiya sonunda "Bitir / Yeni" önerilir — sunucuda onaylanmış
+  // kayıtlar telefondan temizlenir, veri KAYBOLMAZ.
+  var HAFIZA_KAPASITE = /iPhone|iPad|iPod/.test(navigator.userAgent) ? 2500000 : 5000000;
+  var hafizaOrani = 0;
+  var hafizaSonUyari = 0;
+  function hafizaKontrol(uzunluk){
+    if(!HAFIZA_KAPASITE) return; // sayfa açılışında, değişkenler henüz tanımlanmadan çağrıldıysa
+    hafizaOrani = uzunluk / HAFIZA_KAPASITE;
+    if(hafizaOrani < 0.6 || Date.now() - hafizaSonUyari < 20 * 60000) return;
+    hafizaSonUyari = Date.now();
+    var yuzde = Math.round(hafizaOrani * 100);
+    var mesaj = 'Telefon hafızası %' + yuzde + ' dolu (' + ((state.session && state.session.scans) ? state.session.scans.length : 0) + ' okutma). ' +
+      (hafizaOrani >= 0.85 ? 'HEMEN' : 'Vardiya sonunda') + ' "Bitir / Yeni" ile sayımı bitirip yeni sayım başlatın — veriler sunucuda güvende, kaybolmaz.';
+    setTimeout(function(){ if(hafizaOrani >= 0.85) errorToast(mesaj); else warnToast(mesaj); }, 50);
   }
   // Kritik bir işlem telefona yazılamadığında: toast kolayca gözden kaçabildiği
   // için ekranı durduran bir uyarı gösterilir ve hata sesi çalınır.
@@ -2764,6 +2791,7 @@
   var malBelge = MAL_BELGE.giris[0];
   var malCari = null;        // seçilen cari: { name, code, balance }
   var malFatura = '';
+  var malAciklama = '';
   var malSebep = '';
   var malItems = [];
   var malBatchId = '';
@@ -3067,7 +3095,7 @@
 
   // ---- Taslak (yarım kalan kayıt) ----
   function saveMalDraft(){
-    state.malDrafts[malTip] = { belgeTuru: malBelge, cari: malCari, faturaNo: malFatura, sebep: malSebep, items: malItems, batchId: malBatchId, updated: Date.now() };
+    state.malDrafts[malTip] = { belgeTuru: malBelge, cari: malCari, faturaNo: malFatura, sebep: malSebep, aciklama: malAciklama, items: malItems, batchId: malBatchId, updated: Date.now() };
     return save();
   }
   // Kalem listesindeki bir değişikliği telefona yazar. Yazılamazsa değişikliği
@@ -3099,6 +3127,7 @@
       malBelge = d.belgeTuru || MAL_BELGE[tip][0];
       malCari = d.cari || null;
       malFatura = d.faturaNo || '';
+      malAciklama = d.aciklama || '';
       malSebep = d.sebep || '';
       malItems = d.items.slice();
       malItems.forEach(function(it){ if(!it.v) it.v = 1; }); // eski taslaklar: sürüm 1
@@ -3112,7 +3141,7 @@
       return;
     }
     malBelge = MAL_BELGE[tip][0];
-    malCari = null; malFatura = ''; malSebep = ''; malItems = []; malBatchId = makeId();
+    malCari = null; malFatura = ''; malSebep = ''; malAciklama = ''; malItems = []; malBatchId = makeId();
     malCariInputEl.value = ''; malFaturaInputEl.value = ''; malSebepSelectEl.value = '';
     malCariPickedEl.classList.add('hidden');
     renderBelgeSeg();
@@ -3151,7 +3180,15 @@
     saveMalDraft();
   });
 
+  var malAciklamaEl = document.getElementById('malHareketAciklama');
+  var malAciklamaTimer = null;
+  malAciklamaEl.addEventListener('input', function(){
+    malAciklama = malAciklamaEl.value;
+    clearTimeout(malAciklamaTimer);
+    malAciklamaTimer = setTimeout(saveMalDraft, 600); // taslağa yaz (her tuşta değil)
+  });
   function enterMalScan(){
+    malAciklamaEl.value = malAciklama;
     document.getElementById('malHareketSetup').classList.add('hidden');
     document.getElementById('malHareketScan').classList.remove('hidden');
     renderMalList();
@@ -3419,7 +3456,7 @@
     var url = state.serverUrl || DEFAULT_SERVER_URL;
     var payload = {
       type: 'mal_hareket', batchId: malBatchId, tip: malTip, belgeTuru: malBelge,
-      cari: malCari.name, cariKodu: malCari.code || '', faturaNo: malFatura, sebep: malSebep,
+      cari: malCari.name, cariKodu: malCari.code || '', faturaNo: malFatura, sebep: malSebep, aciklama: malAciklama,
       personel: state.personnel || (state.currentUser && state.currentUser.name) || '',
       rows: malItems.map(function(it){
         return { barkod: it.barkod, ad: it.ad, stokKodu: it.stokKodu, miktar: it.miktar, birim: it.birim, kdv: it.kdv, fiyat: it.fiyat, tarih: it.tarih, saat: it.saat, kayitId: it.id, v: it.v || 1,
@@ -3875,6 +3912,8 @@
     return '<div class="sdCard ' + cls + '"><div class="sdTitle"><span>📱 Bu telefon</span><span class="sdTime">' + escapeHtml(APP_BUILD) + '</span></div>' +
       '<div class="sdDetail">' + (navigator.onLine ? 'İnternet var' : '<b style="color:var(--red);">İnternet yok</b>') +
       ' · gönderilmeyi bekleyen ' + bekleyen + ' kayıt</div>' +
+      '<div class="sdDetail"' + (hafizaOrani >= 0.6 ? ' style="color:var(--amber); font-weight:700;"' : '') + '>Hafıza: %' + Math.round(hafizaOrani * 100) + ' dolu · bu oturumda ' + state.session.scans.length + ' okutma' +
+        (hafizaOrani >= 0.6 ? ' — "Bitir / Yeni" önerilir' : '') + '</div>' +
       (h ? '<div class="sdDetail" style="color:var(--red); font-weight:700;">Son gönderim hatası (' + escapeHtml(h.zaman) + ', ' + h.sayi + ' kez): ' + escapeHtml(h.mesaj) + '</div>' : '') +
     '</div>';
   }
@@ -4493,6 +4532,7 @@
   // Bu telefonun bu açılışta gönderdiği oturumlar — rapor isterken sunucuya
   // "bunlar benim, hâlâ gönderim sürüyor sayma" demek için.
   var gonderilenOturumlar = {};
+  var sonTamKontrol = 0;
   // Sunucu aynı anda tek bir telefonun yazmasına izin verir; diğerleri en
   // fazla 30 sn sırada bekler (LockService). Gönderim sınırı bu bekleme +
   // yazma süresinden uzun olmalı, yoksa yoğunlukta sırada bekleyen telefon
@@ -4582,9 +4622,11 @@
 
   // Sunucudan bir oturumun onayını ister: tabloya hangi kayıtların hangi
   // sürümle yazıldığını ve hangilerinin silindiğini döndürür.
-  function fetchSessionAck(url, sessionId){
+  function fetchSessionAck(url, sessionId, nonce){
     return new Promise(function(resolve, reject){
-      jsonpRequestP(url, { action:'sayim_kontrol', session: sessionId }, function(err, res){
+      var p = { action:'sayim_kontrol', session: sessionId };
+      if(nonce) p.nonce = nonce;
+      jsonpRequestP(url, p, function(err, res){
         if(err) return reject(new Error(err));
         if(!res || res.status !== 'ok' || !res.rows) return reject(new Error((res && res.message) || 'sunucu onayı alınamadı'));
         resolve(res);
@@ -4700,10 +4742,17 @@
       // gönderimden sonra AYRI bir JSONP isteğiyle (sayim_kontrol) sunucudan
       // hangi kayıtların hangi sürümle yazıldığını soruyoruz.
       gonderilenOturumlar[sid] = true;
+      // HIZLI ONAY: her gönderime benzersiz bir işaret (nonce) eklenir; sunucu
+      // bu gönderinin sonucunu önbellekte tutar ve onayı tabloyu taramadan
+      // verir. 10 dakikada bir ise tam kontrol yapılır (nonce'suz) — böylece
+      // yöneticinin bu oturumdaki düzeltme/silmeleri de telefona yansır.
+      payload.nonce = makeId();
+      var tamKontrol = Date.now() - sonTamKontrol > 10 * 60000;
+      if(tamKontrol) sonTamKontrol = Date.now();
       postWithTimeout(url, JSON.stringify(payload), SYNC_POST_TIMEOUT_MS)
         .then(function(){
           if(typeof markServerReachable === 'function') markServerReachable();
-          return fetchSessionAck(url, sid);
+          return fetchSessionAck(url, sid, tamKontrol ? '' : payload.nonce);
         })
         .then(function(res){
           var r = applySessionAck(sid, res);

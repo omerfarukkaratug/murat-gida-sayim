@@ -8,7 +8,7 @@
 // bir sürüm dağıttıktan sonra /exec adresini boş açtığında burada yazan
 // numarayı görmelisin; index.html'in üstündeki "build" numarasıyla
 // eşleşecek şekilde ben her ikisini birlikte güncelliyorum.
-var GS_VERSION = 'build95';
+var GS_VERSION = 'build96';
 
 // Sheets'te "Saat" sütunu zaman biçimli olarak algılanırsa, hücre değeri düz
 // metin değil bir Date nesnesi olarak gelir ve String(...) çirkin bir çıktı
@@ -87,7 +87,7 @@ function doGet(e) {
     return hataBildir(e.parameter, e.parameter.callback);
   }
   if (e.parameter && e.parameter.action === 'sayim_kontrol') {
-    return sayimKontrol(e.parameter.session, e.parameter.callback);
+    return sayimKontrol(e.parameter.session, e.parameter.nonce, e.parameter.callback);
   }
   if (e.parameter && e.parameter.action === 'mal_export') {
     return malExport(e.parameter.user, e.parameter.pass, e.parameter.callback);
@@ -214,6 +214,11 @@ function saveCariBulk(entries) {
   var ss = SpreadsheetApp.getActiveSpreadsheet();
   var sheet = ss.getSheetByName('Cari');
   if (!sheet) sheet = ss.insertSheet('Cari');
+  var props = PropertiesService.getScriptProperties();
+  var ozet = listeOzeti(entries.map(function (e) { return [e.name || '', e.code || '', cleanNum(e.balance)]; }));
+  if (entries.length > 0 && ozet === props.getProperty('CARI_OZET') && sheet.getLastRow() === entries.length + 1) {
+    return ContentService.createTextOutput(JSON.stringify({ status: 'ok', saved: 0, degisiklikYok: true })).setMimeType(ContentService.MimeType.JSON);
+  }
   sheet.clear();
   sheet.appendRow(['Cari Adı', 'Cari Kodu', 'Bakiye']);
   if (entries.length > 0) {
@@ -221,7 +226,8 @@ function saveCariBulk(entries) {
     sheet.getRange(2, 1, rows.length, 3).setValues(rows);
     sheet.getRange(2, 3, rows.length, 1).setNumberFormat('0.00');
   }
-  PropertiesService.getScriptProperties().setProperty('CARI_VERSION', new Date().toISOString());
+  props.setProperty('CARI_VERSION', new Date().toISOString());
+  props.setProperty('CARI_OZET', ozet);
   return ContentService.createTextOutput(JSON.stringify({ status: 'ok', saved: entries.length })).setMimeType(ContentService.MimeType.JSON);
 }
 
@@ -237,10 +243,12 @@ function saveCariBulk(entries) {
 // ============================================================
 var MAL_HEADERS = ['Tarih', 'Saat', 'Tip', 'Cari', 'Fatura/İrsaliye No', 'Personel', 'Barkod', 'Ürün Adı', 'Stok Kodu', 'Miktar', 'Birim', 'Kayıt ID',
   'Belge Türü', 'Cari Kodu', 'Sebep', 'KDV %', 'Fiyat', 'Batch ID', 'Aktarıldı'];
-var MAL_COL = { MIKTAR: 10, KAYIT_ID: 12, BATCH: 18, AKTARILDI: 19, SURUM: 20 };
+var MAL_COL = { MIKTAR: 10, KAYIT_ID: 12, BATCH: 18, AKTARILDI: 19, SURUM: 20, ACIKLAMA: 21 };
 // 20. sütun "Sürüm": MAL_HEADERS'a EKLENMEDİ — masaüstü aktarımı (malExport)
 // ve mail eki ilk 19 sütunla aynen çalışmaya devam etsin diye ayrı tutulur.
 var MAL_SURUM_BASLIK = 'Sürüm';
+// 21. sütun: fatura/irsaliye altına yazılan serbest açıklama (her satırda aynı).
+var MAL_ACIKLAMA_BASLIK = 'Açıklama';
 // Mail ekindeki yedek CSV, ERP12'nin resmi mal aktarım şablonuyla aynı sütun sırasında.
 var MAL_CSV_HEADERS = ['BARKOD', 'Stok Kodu', 'Stok İsmi', 'MIKTAR', 'FIYAT', 'Kdv', 'ISKONTO', 'Tutar', 'birim', 'grup', 'SFİYAT'];
 
@@ -248,8 +256,8 @@ function ensureMalSheet() {
   var ss = SpreadsheetApp.getActiveSpreadsheet();
   var sheet = ss.getSheetByName('MalHareket');
   if (!sheet) sheet = ss.insertSheet('MalHareket');
-  if (sheet.getMaxColumns() < MAL_COL.SURUM) {
-    sheet.insertColumnsAfter(sheet.getMaxColumns(), MAL_COL.SURUM - sheet.getMaxColumns());
+  if (sheet.getMaxColumns() < MAL_COL.ACIKLAMA) {
+    sheet.insertColumnsAfter(sheet.getMaxColumns(), MAL_COL.ACIKLAMA - sheet.getMaxColumns());
   }
   if (sheet.getLastRow() === 0) {
     sheet.getRange(1, 1, 1, MAL_HEADERS.length).setValues([MAL_HEADERS]);
@@ -259,6 +267,9 @@ function ensureMalSheet() {
   }
   if (String(sheet.getRange(1, MAL_COL.SURUM).getValue()) !== MAL_SURUM_BASLIK) {
     sheet.getRange(1, MAL_COL.SURUM).setValue(MAL_SURUM_BASLIK);
+  }
+  if (String(sheet.getRange(1, MAL_COL.ACIKLAMA).getValue()) !== MAL_ACIKLAMA_BASLIK) {
+    sheet.getRange(1, MAL_COL.ACIKLAMA).setValue(MAL_ACIKLAMA_BASLIK);
   }
   return sheet;
 }
@@ -278,7 +289,8 @@ function saveMalHareket(data) {
   var sheet = ensureMalSheet();
   var batchId = String(data.batchId || Utilities.getUuid());
   var hareket = data.tip === 'cikis' ? 'Çıkış' : 'Giriş';
-  var W = MAL_COL.SURUM;
+  var W = MAL_COL.ACIKLAMA; // okunan/yazılan sütun genişliği (1..21)
+  var aciklama = String(data.aciklama || '').substring(0, 500);
 
   var existing = {}; // kayıtId -> { satir, batch, v, aktarildi }
   var last = sheet.getLastRow();
@@ -286,7 +298,7 @@ function saveMalHareket(data) {
     sheet.getRange(2, 1, last - 1, W).getValues().forEach(function (r, i) {
       var id = r[MAL_COL.KAYIT_ID - 1];
       if (!id) return;
-      existing[String(id)] = { satir: i + 2, batch: String(r[MAL_COL.BATCH - 1] || ''), v: surumOku(r[W - 1]), aktarildi: !!r[MAL_COL.AKTARILDI - 1] };
+      existing[String(id)] = { satir: i + 2, batch: String(r[MAL_COL.BATCH - 1] || ''), v: surumOku(r[MAL_COL.SURUM - 1]), aktarildi: !!r[MAL_COL.AKTARILDI - 1] };
     });
   }
 
@@ -295,7 +307,7 @@ function saveMalHareket(data) {
       r.tarih || '', r.saat || '', hareket,
       data.cari || '', data.faturaNo || '', data.personel || '',
       r.barkod || '', r.ad || '', r.stokKodu || '', cleanNum(r.miktar), r.birim || 'Adet', id,
-      data.belgeTuru || '', data.cariKodu || '', data.sebep || '', cleanNum(r.kdv), cleanNum(r.fiyat), batchId, '', v
+      data.belgeTuru || '', data.cariKodu || '', data.sebep || '', cleanNum(r.kdv), cleanNum(r.fiyat), batchId, '', v, aciklama
     ];
   };
   var metinSutunlari = function (ilk, adet) {
@@ -317,6 +329,9 @@ function saveMalHareket(data) {
       existing[id] = { satir: -1, batch: batchId, v: v, aktarildi: false };
       rows.push(satirYap(r, id, v));
       return;
+    }
+    if (ex.satir !== -1 && ex.batch === batchId && v <= ex.v && !ex.aktarildi) {
+      sheet.getRange(ex.satir, MAL_COL.ACIKLAMA).setValue(aciklama); // açıklama sonradan düzeltilmiş olabilir
     }
     if (ex.satir === -1 || ex.batch !== batchId || v <= ex.v) { duplicate++; return; }
     if (ex.aktarildi) { kilitli++; return; }
@@ -418,6 +433,7 @@ function malBatchFromRows(rows) {
     batchId: String(f[17]), hareket: String(f[2]), belgeTuru: String(f[12]), belgeNo: String(f[4]),
     cari: String(f[3]), cariKodu: String(f[13]), sebep: String(f[14]), personel: String(f[5]),
     tarih: formatDateValue(f[0]), saat: formatTimeValue(f[1]), kalemSayisi: rows.length, toplamMiktar: 0,
+    aciklama: String(f[MAL_COL.ACIKLAMA - 1] || ''),
     items: []
   };
   var lines = [MAL_CSV_HEADERS.join(';')];
@@ -469,6 +485,7 @@ function sendMalMail(batch) {
       'Belge: ' + batch.belgeTuru + (batch.belgeNo ? (' · No ' + batch.belgeNo) : '') + '\n' +
       'Cari: ' + batch.cari + (batch.cariKodu ? (' (' + batch.cariKodu + ')') : '') + '\n' +
       (batch.sebep ? ('Sebep: ' + batch.sebep + '\n') : '') +
+      (batch.aciklama ? ('Açıklama: ' + batch.aciklama + '\n') : '') +
       'Kalem sayısı: ' + batch.kalemSayisi + ' · Toplam miktar: ' + trSayi(batch.toplamMiktar) + '\n' +
       'Kaydeden: ' + batch.personel + ' · ' + batch.tarih + ' ' + batch.saat + '\n\n' +
       'Ürün listesi ekte CSV olarak bulunuyor.',
@@ -488,7 +505,8 @@ function malExport(user, pass, callback) {
   try {
     var sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName('MalHareket');
     if (!sheet || sheet.getLastRow() < 2 || sheet.getLastColumn() < MAL_HEADERS.length) return outJson({ status: 'ok', batches: [] }, callback);
-    var values = sheet.getRange(2, 1, sheet.getLastRow() - 1, MAL_HEADERS.length).getValues();
+    // Açıklama (21. sütun) da masaüstü programına gitsin; eski sekmede yoksa 19 sütun okunur.
+    var values = sheet.getRange(2, 1, sheet.getLastRow() - 1, Math.min(sheet.getMaxColumns(), MAL_COL.ACIKLAMA)).getValues();
     var order = [];
     var groups = {};
     values.forEach(function (r) {
@@ -694,9 +712,18 @@ function addSilinenler(ids, sessionId, silen) {
 //  - silinen kimlik tabloda yoksa silme işlenmiş demektir.
 // Kilit almadan okur; doPost yazarken okunsa bile en kötü ihtimalle telefon
 // kaydı "henüz yazılmadı" sayıp bir sonraki turda tekrar gönderir.
-function sayimKontrol(sessionId, callback) {
+function sayimKontrol(sessionId, nonce, callback) {
   var hedef = String(sessionId || '');
   if (!hedef) return outJson({ status: 'error', message: 'Oturum ID eksik' }, callback);
+  if (nonce) {
+    try {
+      var hazir = CacheService.getScriptCache().get('ack_' + hedef + '_' + nonce);
+      if (hazir) {
+        var h = JSON.parse(hazir);
+        return outJson({ status: 'ok', rows: h.rows || {}, deleted: h.deleted || [], kaynak: 'onbellek' }, callback);
+      }
+    } catch (ce) { /* önbellek okunamadı: tablo taranır */ }
+  }
   var rows = {};
   sayimOturumSatirlari(SpreadsheetApp.getActiveSpreadsheet().getSheetByName('Sayim'), hedef, rows);
   sayimOturumSatirlari(gecGelenSheet(false), hedef, rows); // temizlikten sonra gelen eski kayıtlar
@@ -715,22 +742,30 @@ function sayimKontrol(sessionId, callback) {
 // kayıt (eski uygulama sürümü) v=1 sayılır ve sadece tablodaki satır da hiç
 // düzeltilmemişse (v<=1) üzerine yazılır.
 function writeSayimRows(sheet, rows, personnel, sessionId, silinenler) {
-  if (!rows || rows.length === 0) return 0;
+  // ack: { kayıtId: [tablodaki sürüm, tablodaki adet] }; tablo: tüm kayıtların güncel sürüm/adedi
+  var sonuc = { skipped: 0, ack: {}, tablo: { v: {}, q: {} } };
+  if (!rows || rows.length === 0) return sonuc;
   ensureSayimColumns(sheet);
   var HEADERS = SAYIM_HEADERS;
-  var idCol = SAYIM_COL.KAYIT_ID - 1;
-  var surumCol = SAYIM_COL.SURUM - 1;
 
+  // PERFORMANS: 72 saatlik sayımda tablo 80 bin satıra çıkabilir. Her
+  // gönderimde 14 sütunun hepsini okumak yerine SADECE gereken 3 sütunu
+  // (Kayıt ID, Sürüm, Adet) okuyoruz — okunan hücre sayısı ~5 kat azalır.
   var lastRow = sheet.getLastRow();
   var existing = {};   // kayıtId -> satır numarası
   var existingV = {};  // kayıtId -> tablodaki sürüm
+  var existingQ = {};  // kayıtId -> tablodaki adet
   if (lastRow > 1) {
-    var values = sheet.getRange(2, 1, lastRow - 1, HEADERS.length).getValues();
-    for (var i = 0; i < values.length; i++) {
-      var key = values[i][idCol];
+    var n = lastRow - 1;
+    var ids = sheet.getRange(2, SAYIM_COL.KAYIT_ID, n, 1).getValues();
+    var surumler = sheet.getRange(2, SAYIM_COL.SURUM, n, 1).getValues();
+    var adetler = sheet.getRange(2, SAYIM_COL.ADET, n, 1).getValues();
+    for (var i = 0; i < n; i++) {
+      var key = ids[i][0];
       if (key) {
         existing[key] = i + 2;
-        existingV[key] = surumOku(values[i][surumCol]);
+        existingV[key] = surumOku(surumler[i][0]);
+        existingQ[key] = adetler[i][0];
       }
     }
   }
@@ -738,32 +773,40 @@ function writeSayimRows(sheet, rows, personnel, sessionId, silinenler) {
   // Yeni satırları TEK seferde toplu ekliyoruz (appendRow'u döngüde tekrar
   // tekrar çağırmak yerine) — hem çok daha hızlı hem de sayfa büyüdükçe
   // (binlerce satır, 72 saatlik sayım) performansı korur.
+  //
+  // SÜRÜM KONTROLÜ: Her kayıt telefonda bir sürüm numarası (v) taşır; adet her
+  // değiştiğinde artar. Tablodaki sürüm gelen sürümden küçük değilse satır
+  // EZİLMEZ — böylece geç ulaşan eski bir gönderi, yeni düzeltmenin (telefondan
+  // ya da yöneticinin "Düzelt" ekranından) üzerine yazamaz. Sürümsüz gelen
+  // kayıt (eski uygulama sürümü) v=1 sayılır ve sadece tablodaki satır da hiç
+  // düzeltilmemişse (v<=1) üzerine yazılır.
   var newRows = [];
-  var skipped = 0;
   rows.forEach(function (row) {
     var id = row.id ? String(row.id) : '';
-    if (id && silinenler[id]) { skipped++; return; }
+    if (id && silinenler[id]) { sonuc.skipped++; return; }
     var surumVar = row.v !== undefined && row.v !== null && row.v !== '';
     var v = surumVar ? surumOku(row.v) : 1;
     var oldStock = (row.oldStock !== '' && row.oldStock !== undefined && !isNaN(Number(row.oldStock))) ? Number(row.oldStock) : '';
     var diff = oldStock !== '' ? (row.qty - oldStock) : '';
     var rowData = [row.date, row.time, personnel, row.name, row.stockCode || '', row.barcode, row.unit || 'Adet', oldStock, row.qty, diff, sessionId, row.id || '', row.reyon || '', v];
-    if (id && existing[id] === -1) { skipped++; return; } // aynı istekte zaten eklendi
+    if (id && existing[id] === -1) { sonuc.skipped++; return; } // aynı istekte zaten eklendi
     if (id && existing[id]) {
       var mevcutV = existingV[id];
       var yaz = surumVar ? (v > mevcutV) : (mevcutV <= 1);
-      if (!yaz) { skipped++; return; }
+      if (!yaz) { sonuc.skipped++; sonuc.ack[id] = [mevcutV, existingQ[id]]; return; }
       sheet.getRange(existing[id], 1, 1, HEADERS.length).setValues([rowData]);
-      existingV[id] = v;
+      existingV[id] = v; existingQ[id] = row.qty;
+      sonuc.ack[id] = [v, row.qty];
     } else {
       newRows.push(rowData);
-      if (id) { existing[id] = -1; existingV[id] = v; } // aynı istekte tekrar gelirse çift satır olmasın
+      if (id) { existing[id] = -1; existingV[id] = v; existingQ[id] = row.qty; sonuc.ack[id] = [v, row.qty]; } // aynı istekte tekrar gelirse çift satır olmasın
     }
   });
   if (newRows.length > 0) {
     sheet.getRange(sheet.getLastRow() + 1, 1, newRows.length, HEADERS.length).setValues(newRows);
   }
-  return skipped;
+  sonuc.tablo = { v: existingV, q: existingQ };
+  return sonuc;
 }
 
 // Verilen kimlikleri sekmeden siler (sondan başa, satır numaraları kaymasın).
@@ -798,15 +841,18 @@ function gecGelenSheet(olustur) {
 // olarak "rows" nesnesine ekler (aynı kimlik iki sekmede varsa yüksek sürüm kalır).
 function sayimOturumSatirlari(sheet, hedef, rows) {
   if (!sheet || sheet.getLastRow() < 2) return;
-  var genislik = Math.min(sheet.getMaxColumns(), SAYIM_HEADERS.length);
-  var values = sheet.getRange(2, 1, sheet.getLastRow() - 1, genislik).getValues();
+  // Sadece Adet (9) … Sürüm (14) aralığı okunur — ilk 8 sütun gereksiz.
+  var ilkSutun = SAYIM_COL.ADET;
+  var genislik = Math.min(sheet.getMaxColumns(), SAYIM_HEADERS.length) - ilkSutun + 1;
+  var values = sheet.getRange(2, ilkSutun, sheet.getLastRow() - 1, genislik).getValues();
+  var o = function (col) { return col - ilkSutun; };
   for (var i = 0; i < values.length; i++) {
-    if (String(values[i][SAYIM_COL.OTURUM - 1]) !== hedef) continue;
-    var id = values[i][SAYIM_COL.KAYIT_ID - 1];
+    if (String(values[i][o(SAYIM_COL.OTURUM)]) !== hedef) continue;
+    var id = values[i][o(SAYIM_COL.KAYIT_ID)];
     if (!id) continue;
-    var v = genislik >= SAYIM_COL.SURUM ? surumOku(values[i][SAYIM_COL.SURUM - 1]) : 1;
+    var v = genislik > o(SAYIM_COL.SURUM) ? surumOku(values[i][o(SAYIM_COL.SURUM)]) : 1;
     var onceki = rows[String(id)];
-    if (!onceki || onceki[0] < v) rows[String(id)] = [v, values[i][SAYIM_COL.ADET - 1]];
+    if (!onceki || onceki[0] < v) rows[String(id)] = [v, values[i][o(SAYIM_COL.ADET)]];
   }
 }
 
@@ -923,7 +969,8 @@ function doPost(e) {
     var kaynak = data.kaynak ? String(data.kaynak) : 'ERP / dış program';
     if (data.type === 'katalog_bulk') {
       var kOut = saveKatalogBulk(data.entries || []);
-      gunlukYaz('katalog', kaynak, (data.entries || []).length + ' ürün yüklendi (katalog tamamen yenilendi)', false);
+      var kDegismedi = kOut.getContent().indexOf('degisiklikYok') !== -1;
+      gunlukYaz('katalog', kaynak, (data.entries || []).length + ' ürün geldi' + (kDegismedi ? ' — değişiklik yok, tablo aynen kaldı' : ' — katalog güncellendi'), false);
       return kOut;
     }
     if (data.type === 'katalog_item') {
@@ -933,7 +980,8 @@ function doPost(e) {
     }
     if (data.type === 'cari_bulk') {
       var cOut = saveCariBulk(data.entries || []);
-      gunlukYaz('cari', kaynak, (data.entries || []).length + ' cari yüklendi', false);
+      var cDegismedi = cOut.getContent().indexOf('degisiklikYok') !== -1;
+      gunlukYaz('cari', kaynak, (data.entries || []).length + ' cari geldi' + (cDegismedi ? ' — değişiklik yok' : ' — liste güncellendi'), false);
       return cOut;
     }
     if (data.type === 'mal_hareket') {
@@ -985,9 +1033,13 @@ function doPost(e) {
       (gec ? gecRows : normalRows).push(row);
     });
 
-    var skipped = writeSayimRows(sheet, normalRows, personnel, sessionId, silinenler);
+    var yazim = writeSayimRows(sheet, normalRows, personnel, sessionId, silinenler);
+    var skipped = yazim.skipped;
+    var onay = yazim.ack;
     if (gecRows.length > 0) {
-      skipped += writeSayimRows(gecGelenSheet(true), gecRows, personnel, sessionId, silinenler);
+      var gecYazim = writeSayimRows(gecGelenSheet(true), gecRows, personnel, sessionId, silinenler);
+      skipped += gecYazim.skipped;
+      Object.keys(gecYazim.ack).forEach(function (k) { onay[k] = gecYazim.ack[k]; });
     }
 
     // Telefonda silinmiş kayıtları tablodan da sil. "rows" listesinde
@@ -1007,6 +1059,25 @@ function doPost(e) {
     // Son yazma zamanı (oturum bazında): yönetici rapor oluştururken
     // "telefonlardan hâlâ veri geliyor mu?" kontrolü için (bkz. handleFinalize).
     if (rows.length > 0 || deletedIds.length > 0) sonYazmaKaydet(sessionId);
+    // HIZLI ONAY: Bu gönderinin sonucunu (her kaydın tablodaki sürümü/adedi ve
+    // bu oturumda silinenler) kısa süreliğine önbelleğe koy. Telefon hemen
+    // ardından "sayim_kontrol" ile aynı "nonce"u sorunca tablo HİÇ taranmadan
+    // cevap verilir. Önbellekte yoksa (süresi dolduysa) eski yöntemle tablo taranır.
+    if (data.nonce && sessionId) {
+      try {
+        // Yöneticinin bu oturumda "Düzelt" ekranından değiştirdiği kayıtlar da
+        // onaya eklenir — telefon yeni adedi/sürümü hemen kendine alır.
+        var duzeltilen = [];
+        try { duzeltilen = JSON.parse(CacheService.getScriptCache().get('duzelt_' + sessionId) || '[]'); } catch (de) { duzeltilen = []; }
+        duzeltilen.forEach(function (did) {
+          if (!onay[did] && yazim.tablo.v[did] !== undefined) onay[did] = [yazim.tablo.v[did], yazim.tablo.q[did]];
+        });
+        var silinenOturum = deletedIds.slice();
+        Object.keys(silinenler).forEach(function (sid) { if (silinenler[sid] === sessionId && silinenOturum.indexOf(sid) === -1) silinenOturum.push(sid); });
+        var onayJson = JSON.stringify({ rows: onay, deleted: silinenOturum });
+        if (onayJson.length < 90000) CacheService.getScriptCache().put('ack_' + sessionId + '_' + data.nonce, onayJson, 21600);
+      } catch (ce) { /* önbellek olmazsa telefon tablo taramasıyla onay alır */ }
+    }
     if (rows.length > 0 || deletedIds.length > 0) {
       gunlukYaz('sayim', 'telefon: ' + (personnel || '?'), rows.length + ' kayıt' + (deletedIds.length ? ', ' + deletedIds.length + ' silme' : '') +
         (skipped ? ', ' + skipped + ' atlandı (eski sürüm/silinmiş)' : '') + (gecRows.length ? ', ' + gecRows.length + ' geç gelen' : ''), false);
@@ -1038,10 +1109,24 @@ function cleanNum(v) {
   return isNaN(n) ? '' : n;
 }
 
+// Gelen listenin özeti (MD5). ERP programı listeyi 15 dk'da bir gönderiyor;
+// liste DEĞİŞMEDİYSE tablo yeniden yazılmaz ve sürüm damgası değişmez —
+// böylece sunucu kilidi boşuna tutulmaz ve telefonlar aynı kataloğu tekrar
+// tekrar indirmez.
+function listeOzeti(rows) {
+  var d = Utilities.computeDigest(Utilities.DigestAlgorithm.MD5, JSON.stringify(rows), Utilities.Charset.UTF_8);
+  return Utilities.base64Encode(d);
+}
+
 function saveKatalogBulk(entries) {
   var ss = SpreadsheetApp.getActiveSpreadsheet();
   var sheet = ss.getSheetByName('Katalog');
   if (!sheet) sheet = ss.insertSheet('Katalog');
+  var props = PropertiesService.getScriptProperties();
+  var ozet = listeOzeti(entries.map(function (e) { return [e.name || '', e.barcode || '', e.stockCode || '', cleanNum(e.oldStock), cleanNum(e.price), cleanNum(e.kdv)]; }));
+  if (entries.length > 0 && ozet === props.getProperty('KATALOG_OZET') && sheet.getLastRow() === entries.length + 1) {
+    return ContentService.createTextOutput(JSON.stringify({ status: 'ok', saved: 0, degisiklikYok: true })).setMimeType(ContentService.MimeType.JSON);
+  }
   sheet.clear();
   sheet.appendRow(['Ürün Adı', 'Barkod', 'Stok Kodu', 'Eski Stok', 'Fiyat', 'KDV %']);
   if (entries.length > 0) {
@@ -1059,7 +1144,8 @@ function saveKatalogBulk(entries) {
   // (resetcheck ile) düzenli kontrol edip kendi sürümünden farklıysa
   // kataloğu OTOMATİK olarak sunucudan çeker, kimse elle "Sunucudan Çek"e
   // basmak zorunda kalmaz.
-  PropertiesService.getScriptProperties().setProperty('KATALOG_VERSION', new Date().toISOString());
+  props.setProperty('KATALOG_VERSION', new Date().toISOString());
+  props.setProperty('KATALOG_OZET', ozet);
   return ContentService
     .createTextOutput(JSON.stringify({ status: 'ok', saved: entries.length }))
     .setMimeType(ContentService.MimeType.JSON);
@@ -1079,6 +1165,7 @@ function saveKatalogItem(entry) {
   var lastRow = sheet.getLastRow();
   var rowData = [entry.name, entry.barcode, entry.stockCode || '', cleanNum(entry.oldStock), cleanNum(entry.price), cleanNum(entry.kdv)];
   PropertiesService.getScriptProperties().setProperty('KATALOG_VERSION', new Date().toISOString());
+  PropertiesService.getScriptProperties().deleteProperty('KATALOG_OZET'); // bir sonraki ERP listesi tabloyu yeniden yazsın
   if (lastRow >= 2) {
     var barcodes = sheet.getRange(2, 2, lastRow - 1, 1).getValues();
     for (var i = 0; i < barcodes.length; i++) {
@@ -1703,6 +1790,16 @@ function sayimGuncelle(user, pass, kayitId, adet, callback) {
         // onayda yeni adedi ve sürümü kendine alır.
         var yeniV = surumOku(values[i][idx['Sürüm']]) + 1;
         sheet.getRange(rowNum, idx['Sürüm'] + 1).setValue(yeniV);
+        // Telefonun hızlı onayına eklensin diye oturum bazında not al (6 saat).
+        try {
+          var oturum = String(values[i][idx['Oturum ID']] || '');
+          if (oturum) {
+            var c = CacheService.getScriptCache();
+            var liste = JSON.parse(c.get('duzelt_' + oturum) || '[]');
+            if (liste.indexOf(String(kayitId)) === -1) liste.push(String(kayitId));
+            c.put('duzelt_' + oturum, JSON.stringify(liste.slice(-500)), 21600);
+          }
+        } catch (ce) { /* not alınamazsa 10 dk'lık tam kontrol yakalar */ }
         return outJson({ status: 'ok', v: yeniV }, callback);
       }
     }
