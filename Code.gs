@@ -8,7 +8,7 @@
 // bir sürüm dağıttıktan sonra /exec adresini boş açtığında burada yazan
 // numarayı görmelisin; index.html'in üstündeki "build" numarasıyla
 // eşleşecek şekilde ben her ikisini birlikte güncelliyorum.
-var GS_VERSION = 'build96';
+var GS_VERSION = 'build97';
 
 // Sheets'te "Saat" sütunu zaman biçimli olarak algılanırsa, hücre değeri düz
 // metin değil bir Date nesnesi olarak gelir ve String(...) çirkin bir çıktı
@@ -748,7 +748,7 @@ function writeSayimRows(sheet, rows, personnel, sessionId, silinenler) {
   ensureSayimColumns(sheet);
   var HEADERS = SAYIM_HEADERS;
 
-  // PERFORMANS: 72 saatlik sayımda tablo 80 bin satıra çıkabilir. Her
+  // PERFORMANS: büyük sayımda (18 saat) tablo 80 bin satıra çıkabilir. Her
   // gönderimde 14 sütunun hepsini okumak yerine SADECE gereken 3 sütunu
   // (Kayıt ID, Sürüm, Adet) okuyoruz — okunan hücre sayısı ~5 kat azalır.
   var lastRow = sheet.getLastRow();
@@ -772,7 +772,7 @@ function writeSayimRows(sheet, rows, personnel, sessionId, silinenler) {
 
   // Yeni satırları TEK seferde toplu ekliyoruz (appendRow'u döngüde tekrar
   // tekrar çağırmak yerine) — hem çok daha hızlı hem de sayfa büyüdükçe
-  // (binlerce satır, 72 saatlik sayım) performansı korur.
+  // (binlerce satır, büyük sayım) performansı korur.
   //
   // SÜRÜM KONTROLÜ: Her kayıt telefonda bir sürüm numarası (v) taşır; adet her
   // değiştiğinde artar. Tablodaki sürüm gelen sürümden küçük değilse satır
@@ -1079,8 +1079,19 @@ function doPost(e) {
       } catch (ce) { /* önbellek olmazsa telefon tablo taramasıyla onay alır */ }
     }
     if (rows.length > 0 || deletedIds.length > 0) {
-      gunlukYaz('sayim', 'telefon: ' + (personnel || '?'), rows.length + ' kayıt' + (deletedIds.length ? ', ' + deletedIds.length + ' silme' : '') +
-        (skipped ? ', ' + skipped + ' atlandı (eski sürüm/silinmiş)' : '') + (gecRows.length ? ', ' + gecRows.length + ' geç gelen' : ''), false);
+      // Sayım gönderimleri çok sık gelir: "son olay" her seferinde güncellenir
+      // (Sistem Durumu kartı anlık kalır) ama günlük sekmesine en fazla
+      // dakikada bir satır yazılır — sunucu kilidi gereksiz uzamasın.
+      var sayimDetay = rows.length + ' kayıt' + (deletedIds.length ? ', ' + deletedIds.length + ' silme' : '') +
+        (skipped ? ', ' + skipped + ' atlandı (eski sürüm/silinmiş)' : '') + (gecRows.length ? ', ' + gecRows.length + ' geç gelen' : '');
+      var gProps = PropertiesService.getScriptProperties();
+      var sonSatirMs = Number(gProps.getProperty('GUNLUK_SAYIM_MS') || 0);
+      if (Date.now() - sonSatirMs > 60000) {
+        gProps.setProperty('GUNLUK_SAYIM_MS', String(Date.now()));
+        gunlukYaz('sayim', 'telefon: ' + (personnel || '?'), sayimDetay, false);
+      } else {
+        sonKaydet('sayim', 'telefon: ' + (personnel || '?'), sayimDetay, false);
+      }
     }
 
     return ContentService

@@ -1,14 +1,15 @@
 # Büyük Sayım — Hazırlık ve Sayım Günü Kontrol Listesi
 
-Hedef: en az 10 telefon, ~80.000 okutma (depo + reyon), 72 saat, **sıfır veri kaybı**.
+Hedef: en az 10 telefon, ~80.000 okutma (depo + reyon), **18 saat** (dakikada ortalama ~74 okutma), **sıfır veri kaybı**.
 
 ## 1) Sayımdan önce (bir kez)
 
-- [ ] **Sunucu kodu güncel:** `/exec` adresinde en güncel `kod sürümü` görünüyor (şu an `build96`).
+- [ ] **Sunucu kodu güncel:** `/exec` adresinde en güncel `kod sürümü` görünüyor (şu an `build97`).
 - [ ] **Uygulama güncel:** Her telefonda üstte aynı build numarası görünüyor.
 - [ ] **Yük testi yapıldı** (`yuk-testi.html`, sadece TEST KOPYASINDA):
   - [ ] Önce "Tabloyu 80.000 satıra doldur".
-  - [ ] Sonra 10 telefon × 10/dk, 30 dk, ERP taklidi açık → sonuç **✅ BAŞARILI**, gönderim p95 < 20 sn.
+  - [ ] Sonra 10 telefon × 20/dk, 30 dk, ERP taklidi açık → sonuç **✅ BAŞARILI**, gönderim p95 < 20 sn.
+  - [ ] Sınır testi: 10 telefon × 30/dk, 15 dk → yine **✅ BAŞARILI** (geçici hata olabilir, eksik/yanlış kayıt olmamalı).
 - [ ] **Prova sayımı:** 3–5 gerçek telefonla 1 saat okutma → "Sayımı Bitir ve Rapor Oluştur" → rapor doğru.
 - [ ] **ERP bilgisayarı ("server"):**
   - [ ] Görev Zamanlayıcı → "Stok Otomatik Gönderim": tetikleyici **Etkin**, 15 dk'da bir, "30 dakikadan uzun çalışırsa durdur" işaretli, Ayarlar → "Var olan örneği durdur".
@@ -23,7 +24,7 @@ Hedef: en az 10 telefon, ~80.000 okutma (depo + reyon), 72 saat, **sıfır veri 
 - [ ] Yönetici telefonunda **🩺 Sistem Durumu** açık: Katalog kartı son 15 dk içinde güncellenmiş, Hatalar = 0.
 - [ ] Her telefonda bir deneme okutması → nokta 🟢 oluyor.
 
-## 3) Sayım sırasında (72 saat)
+## 3) Sayım sırasında (18 saat)
 
 - [ ] Saatte bir Sistem Durumu'na bakılır: kırmızı hata, sarı kart var mı?
 - [ ] **Vardiya sonunda her telefonda "Bitir / Yeni"** — telefon hafızası boşalır (veri sunucuda güvende). Telefon "%60 dolu" uyarısı verirse vardiya beklenmeden yapılır.

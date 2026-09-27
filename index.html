@@ -307,7 +307,7 @@
   <header style="border:none; padding:0 0 16px; background:transparent; display:flex; align-items:flex-start; justify-content:space-between;">
     <div>
       <h1><img src="logo-header.png" alt="Murat Gıda" style="height:30px; width:auto; display:block;"></h1>
-      <div class="sub">MK ERP · Murat Gıda • offline • Android • build 96</div>
+      <div class="sub">MK ERP · Murat Gıda • offline • Android • build 97</div>
     </div>
     <button type="button" id="themeToggleBtn" title="Tema seç" style="background:var(--panel2); border:1.5px solid var(--line); color:var(--text); width:34px; height:34px; border-radius:50%; font-size:15px; padding:0; display:flex; align-items:center; justify-content:center; flex-shrink:0;">🎨</button>
   </header>
@@ -1182,7 +1182,7 @@
     catch(e){ errorToast("Kaydedilemedi — telefon hafızası dolu olabilir! Lütfen hemen CSV indirip yer açın."); return false; }
   }
   // TELEFON HAFIZASI: Tarayıcı bu uygulamaya ~5 milyon karakter (iPhone'da
-  // yaklaşık yarısı) yer verir; bir okutma ~310 karakter tutar. 72 saatlik
+  // yaklaşık yarısı) yer verir; bir okutma ~310 karakter tutar. Büyük
   // sayımda tek oturumda binlerce okutma birikirse hafıza dolabilir. %60'ı
   // geçince vardiya sonunda "Bitir / Yeni" önerilir — sunucuda onaylanmış
   // kayıtlar telefondan temizlenir, veri KAYBOLMAZ.
@@ -4529,6 +4529,9 @@
   // başarı durumunda sessiz kal (bildirim akışı kesmesin), sadece HATADA uyar.
   // silent=false -> "Gönder" butonuna elle basıldığında; her durumda net bildirim ver.
   var syncInProgress = false;
+  // Otomatik gönderimler arası en kısa süre (bkz. autoQueueAndSync).
+  var AUTO_SYNC_MIN_ARALIK_MS = 20000;
+  var sonGonderimBaslangic = 0;
   // Bu telefonun bu açılışta gönderdiği oturumlar — rapor isterken sunucuya
   // "bunlar benim, hâlâ gönderim sürüyor sayma" demek için.
   var gonderilenOturumlar = {};
@@ -4582,6 +4585,7 @@
   }
   function autoRetrySync(){
     if(Date.now() < syncNextAutoAt) return; // geri çekilme süresi dolmadı
+    if(Date.now() - sonGonderimBaslangic < AUTO_SYNC_MIN_ARALIK_MS) return; // toplu gönderim aralığı dolmadı
     trySync(true);
   }
   function recordSyncResult(anyError){
@@ -4705,6 +4709,7 @@
     if(!navigator.onLine || !state.serverUrl){ if(onDone) onDone({ ok: false, error: 'internet yok' }); return; }
     if(syncInProgress){ if(onDone) onDone({ ok: false, error: 'gönderim sürüyor' }); return; } // aynı anda iki gönderim çakışmasın
     syncInProgress = true;
+    sonGonderimBaslangic = Date.now();
     var url = state.serverUrl;
     // Gönderilecek oturumların sadece KİMLİKLERİNİ alıyoruz; her oturumun
     // içeriği gönderileceği an kuyruğun güncel hâlinden okunur.
@@ -4825,16 +4830,20 @@
 
   // Her ürün eklendiğinde/düzeltildiğinde otomatik olarak kuyruğa al (bu adım
   // ANINDA ve HER ZAMAN çalışır — veri önce telefona yazılır, kaybolmaz).
-  // Ağ gönderimini ise kısa bir süre geciktiriyoruz (debounce): hızlı art arda
-  // 10-15 barkod okutulduğunda her seferinde koca listeyi tekrar tekrar
-  // sunucuya yollamak yerine, tarama bir nefes durunca TEK seferde gönderir.
-  // Bu, 10+ telefonun aynı anda saatlerce kullandığı senaryoda sunucuyu
-  // gereksiz yere boğmaz ve taramayı kesintisiz akıcı tutar.
+  // Ağ gönderimi ise TOPLU yapılır: bir telefon en fazla 20 saniyede bir
+  // otomatik gönderir, arada okutulanların hepsi tek seferde gider.
+  // NEDEN: büyük sayımda 10+ telefon 18 saatte ~80 bin okutma yapar (dakikada
+  // ~74). Her okutma ayrı gönderilirse sunucuya saniyede 1'den fazla istek
+  // gelir; Google Sheets aynı anda tek isteği işlediği için sıra birikir ve
+  // zaman aşımları başlar. Toplu gönderim istek sayısını 5-8 kat azaltır.
+  // Veri her okutmada ANINDA telefona yazıldığı için beklemek risk değildir;
+  // "Gönder" düğmesi yine anında gönderir.
   var syncDebounceTimer = null;
   function autoQueueAndSync(){
     queueCurrentSession(); // localStorage'a anında yazılır — veri kaybı riski yok
-    clearTimeout(syncDebounceTimer);
-    syncDebounceTimer = setTimeout(function(){ trySync(true); }, 2000);
+    if(syncDebounceTimer) return; // zaten planlanmış bir gönderim var; bu okutma da onunla gider
+    var bekle = Math.max(2000, sonGonderimBaslangic + AUTO_SYNC_MIN_ARALIK_MS - Date.now());
+    syncDebounceTimer = setTimeout(function(){ syncDebounceTimer = null; trySync(true); }, bekle);
   }
 
   document.getElementById('newBtn').addEventListener('click', function(){

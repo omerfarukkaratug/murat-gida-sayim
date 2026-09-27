@@ -50,7 +50,7 @@
     <input type="text" id="url" placeholder="https://script.google.com/macros/s/.../exec">
     <div class="grid" style="margin-top:10px;">
       <div><label for="telefon">Telefon sayısı</label><input type="number" id="telefon" value="10" min="1" max="30"></div>
-      <div><label for="hiz">Okutma / dakika / telefon</label><input type="number" id="hiz" value="10" min="1" max="120"></div>
+      <div><label for="hiz">Okutma / dakika / telefon</label><input type="number" id="hiz" value="20" min="1" max="120"></div>
       <div><label for="sure">Süre (dakika)</label><input type="number" id="sure" value="30" min="1" max="720"></div>
       <div><label for="duzelt">Düzeltme oranı (%)</label><input type="number" id="duzelt" value="10" min="0" max="50"></div>
     </div>
@@ -62,7 +62,7 @@
       <button class="ikinci" id="durdur" disabled>■ Durdur</button>
       <button class="ikinci" id="doldur">Tabloyu 80.000 satıra doldur (önce bir kez)</button>
     </div>
-    <div style="color:var(--muted); font-size:12px; margin-top:8px;">Gerçek sayım ortalaması ≈ 80.000 okutma / 72 saat ≈ dakikada 18. Varsayılan ayar (10 telefon × 10/dk = dakikada 100) bunun ~5 katı yük bindirir. "Tabloyu doldur", sayım sonuna doğru tablonun büyüklüğünü taklit eder.</div>
+    <div style="color:var(--muted); font-size:12px; margin-top:8px;">Gerçek sayım ortalaması ≈ 80.000 okutma / 18 saat ≈ dakikada 74 (telefon başına ~7). Varsayılan ayar (10 telefon × 20/dk = dakikada 200) ortalamanın ~2,7 katı — yoğun anları taklit eder. Sınırı görmek için 30/dk ile de deneyin. "Tabloyu doldur", sayım sonuna doğru tablonun büyüklüğünü taklit eder.</div>
   </div>
 
   <div class="kart">
@@ -133,7 +133,7 @@
     this.no = no; this.ad = 'YükTesti-' + no; this.oturum = uuid();
     this.kayitlar = []; this.onayli = {}; this.birikim = 0; this.ucusta = false;
     this.gonderim = 0; this.hata = 0; this.sonGonderim = '—'; this.sonHata = '';
-    this.sonrakiGonderim = Date.now() + Math.random() * 5000;
+    this.sonrakiGonderim = Date.now() + Math.random() * 20000;
   }
   Telefon.prototype.okut = function(adet, duzeltmeOrani){
     for(var i = 0; i < adet; i++){
@@ -236,8 +236,9 @@
         if($('erp').checked && simdi - sonErp >= 15 * 60000){ sonErp = simdi; erpGonder(url); }
       }
       telefonlar.forEach(function(t){
-        // Uygulama gibi: birkaç saniyede bir gönder (rastgele aralık, telefonlar aynı ana yığılmasın)
-        if(simdi >= t.sonrakiGonderim){ t.sonrakiGonderim = simdi + 3000 + Math.random() * 4000; t.gonder(url); }
+        // Uygulama gibi: otomatik gönderim en fazla 20 sn'de bir, toplu (küçük rastgele
+        // sapmayla — telefonlar aynı ana yığılmasın)
+        if(simdi >= t.sonrakiGonderim){ t.sonrakiGonderim = simdi + 20000 + Math.random() * 3000; t.gonder(url); }
       });
       ekran();
       if(simdi >= bitis){
