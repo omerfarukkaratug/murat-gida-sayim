@@ -8,7 +8,7 @@
 // bir sürüm dağıttıktan sonra /exec adresini boş açtığında burada yazan
 // numarayı görmelisin; index.html'in üstündeki "build" numarasıyla
 // eşleşecek şekilde ben her ikisini birlikte güncelliyorum.
-var GS_VERSION = 'build97';
+var GS_VERSION = 'build98';
 
 // Sheets'te "Saat" sütunu zaman biçimli olarak algılanırsa, hücre değeri düz
 // metin değil bir Date nesnesi olarak gelir ve String(...) çirkin bir çıktı
@@ -79,6 +79,17 @@ function doGet(e) {
   // SÜRÜMLE yazıldığını sorar. Telefon kuyruğundan sadece burada doğrulanan
   // kayıtları çıkarır (bkz. sayimKontrol).
   // Sistem Durumu ekranı: son gelen veriler, sayılar, günlük ve hatalar.
+  // Şube konumları: telefonlar girişte konumlarını bunlarla karşılaştırır.
+  if (e.parameter && e.parameter.action === 'subeler') {
+    return outJson({ status: 'ok', subeler: subeleriOku() }, e.parameter.callback);
+  }
+  if (e.parameter && e.parameter.action === 'sube_kaydet') {
+    return subeKaydet(e.parameter.user, e.parameter.pass, e.parameter.data, e.parameter.callback);
+  }
+  // Telefon girişte nerede olduğunu bildirir (Sistem Durumu günlüğüne yazılır).
+  if (e.parameter && e.parameter.action === 'konum_bildir') {
+    return konumBildir(e.parameter, e.parameter.callback);
+  }
   if (e.parameter && e.parameter.action === 'sistem_durumu') {
     return sistemDurumu(e.parameter.user, e.parameter.pass, e.parameter.callback);
   }
@@ -243,12 +254,14 @@ function saveCariBulk(entries) {
 // ============================================================
 var MAL_HEADERS = ['Tarih', 'Saat', 'Tip', 'Cari', 'Fatura/İrsaliye No', 'Personel', 'Barkod', 'Ürün Adı', 'Stok Kodu', 'Miktar', 'Birim', 'Kayıt ID',
   'Belge Türü', 'Cari Kodu', 'Sebep', 'KDV %', 'Fiyat', 'Batch ID', 'Aktarıldı'];
-var MAL_COL = { MIKTAR: 10, KAYIT_ID: 12, BATCH: 18, AKTARILDI: 19, SURUM: 20, ACIKLAMA: 21 };
+var MAL_COL = { MIKTAR: 10, KAYIT_ID: 12, BATCH: 18, AKTARILDI: 19, SURUM: 20, ACIKLAMA: 21, KONUM: 22 };
 // 20. sütun "Sürüm": MAL_HEADERS'a EKLENMEDİ — masaüstü aktarımı (malExport)
 // ve mail eki ilk 19 sütunla aynen çalışmaya devam etsin diye ayrı tutulur.
 var MAL_SURUM_BASLIK = 'Sürüm';
 // 21. sütun: fatura/irsaliye altına yazılan serbest açıklama (her satırda aynı).
 var MAL_ACIKLAMA_BASLIK = 'Açıklama';
+// 22. sütun: kaydın yapıldığı şube (telefonun giriş konumuna göre).
+var MAL_KONUM_BASLIK = 'Konum';
 // Mail ekindeki yedek CSV, ERP12'nin resmi mal aktarım şablonuyla aynı sütun sırasında.
 var MAL_CSV_HEADERS = ['BARKOD', 'Stok Kodu', 'Stok İsmi', 'MIKTAR', 'FIYAT', 'Kdv', 'ISKONTO', 'Tutar', 'birim', 'grup', 'SFİYAT'];
 
@@ -256,8 +269,8 @@ function ensureMalSheet() {
   var ss = SpreadsheetApp.getActiveSpreadsheet();
   var sheet = ss.getSheetByName('MalHareket');
   if (!sheet) sheet = ss.insertSheet('MalHareket');
-  if (sheet.getMaxColumns() < MAL_COL.ACIKLAMA) {
-    sheet.insertColumnsAfter(sheet.getMaxColumns(), MAL_COL.ACIKLAMA - sheet.getMaxColumns());
+  if (sheet.getMaxColumns() < MAL_COL.KONUM) {
+    sheet.insertColumnsAfter(sheet.getMaxColumns(), MAL_COL.KONUM - sheet.getMaxColumns());
   }
   if (sheet.getLastRow() === 0) {
     sheet.getRange(1, 1, 1, MAL_HEADERS.length).setValues([MAL_HEADERS]);
@@ -270,6 +283,9 @@ function ensureMalSheet() {
   }
   if (String(sheet.getRange(1, MAL_COL.ACIKLAMA).getValue()) !== MAL_ACIKLAMA_BASLIK) {
     sheet.getRange(1, MAL_COL.ACIKLAMA).setValue(MAL_ACIKLAMA_BASLIK);
+  }
+  if (String(sheet.getRange(1, MAL_COL.KONUM).getValue()) !== MAL_KONUM_BASLIK) {
+    sheet.getRange(1, MAL_COL.KONUM).setValue(MAL_KONUM_BASLIK);
   }
   return sheet;
 }
@@ -289,7 +305,8 @@ function saveMalHareket(data) {
   var sheet = ensureMalSheet();
   var batchId = String(data.batchId || Utilities.getUuid());
   var hareket = data.tip === 'cikis' ? 'Çıkış' : 'Giriş';
-  var W = MAL_COL.ACIKLAMA; // okunan/yazılan sütun genişliği (1..21)
+  var W = MAL_COL.KONUM; // okunan/yazılan sütun genişliği (1..22)
+  var konum = String(data.konum || '').substring(0, 120);
   var aciklama = String(data.aciklama || '').substring(0, 500);
 
   var existing = {}; // kayıtId -> { satir, batch, v, aktarildi }
@@ -307,7 +324,7 @@ function saveMalHareket(data) {
       r.tarih || '', r.saat || '', hareket,
       data.cari || '', data.faturaNo || '', data.personel || '',
       r.barkod || '', r.ad || '', r.stokKodu || '', cleanNum(r.miktar), r.birim || 'Adet', id,
-      data.belgeTuru || '', data.cariKodu || '', data.sebep || '', cleanNum(r.kdv), cleanNum(r.fiyat), batchId, '', v, aciklama
+      data.belgeTuru || '', data.cariKodu || '', data.sebep || '', cleanNum(r.kdv), cleanNum(r.fiyat), batchId, '', v, aciklama, konum
     ];
   };
   var metinSutunlari = function (ilk, adet) {
@@ -894,6 +911,57 @@ function gunlukYaz(tur, kaynak, detay, hata) {
 
 // Telefonun bildirdiği hata (örn. "3 kez gönderilemedi: zaman aşımı").
 // Kimlik doğrulaması istemez; metin kısaltılır, sadece günlüğe yazılır.
+// ============================================================
+// ŞUBE KONUMLARI
+// 'Subeler' sekmesi: Ad | Enlem | Boylam | Yarıçap (m). Telefon uygulamaya
+// girişte GPS konumunu alır; herhangi bir şubenin yarıçapı içindeyse fiyat ve
+// stok (yetkisi varsa) görünür, dışındaysa gizlenir. Sayım ve mal kaydı her
+// durumda çalışır. Hiç şube tanımlı değilse kısıtlama uygulanmaz.
+// ============================================================
+var SUBE_BASLIK = ['Ad', 'Enlem', 'Boylam', 'Yarıçap (m)'];
+function subeleriOku() {
+  var sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName('Subeler');
+  if (!sheet || sheet.getLastRow() < 2) return [];
+  return sheet.getRange(2, 1, sheet.getLastRow() - 1, SUBE_BASLIK.length).getValues().map(function (r) {
+    return { ad: String(r[0] || '').trim(), enlem: Number(r[1]), boylam: Number(r[2]), yaricap: Number(r[3]) || 300 };
+  }).filter(function (b) { return b.ad && !isNaN(b.enlem) && !isNaN(b.boylam) && b.enlem !== 0 && b.boylam !== 0; });
+}
+function subeKaydet(user, pass, data, callback) {
+  var auth = requirePermission(user, pass, 'ayarlar');
+  if (!auth.ok) return outJson({ status: 'error', message: auth.message }, callback);
+  var liste;
+  try { liste = JSON.parse(data || '[]'); } catch (e) { return outJson({ status: 'error', message: 'Şube listesi okunamadı' }, callback); }
+  if (!Array.isArray(liste)) return outJson({ status: 'error', message: 'Şube listesi okunamadı' }, callback);
+  var satirlar = [];
+  for (var i = 0; i < liste.length; i++) {
+    var b = liste[i] || {};
+    var ad = String(b.ad || '').trim().substring(0, 60);
+    var enlem = Number(b.enlem), boylam = Number(b.boylam), yaricap = Math.round(Number(b.yaricap) || 300);
+    if (!ad || isNaN(enlem) || isNaN(boylam) || Math.abs(enlem) > 90 || Math.abs(boylam) > 180) {
+      return outJson({ status: 'error', message: 'Geçersiz şube: ' + (ad || '(adsız)') }, callback);
+    }
+    satirlar.push([ad, enlem, boylam, Math.max(50, Math.min(yaricap, 5000))]);
+  }
+  var ss = SpreadsheetApp.getActiveSpreadsheet();
+  var sheet = ss.getSheetByName('Subeler');
+  if (!sheet) sheet = ss.insertSheet('Subeler');
+  sheet.clear();
+  sheet.getRange(1, 1, 1, SUBE_BASLIK.length).setValues([SUBE_BASLIK]);
+  if (satirlar.length) sheet.getRange(2, 1, satirlar.length, SUBE_BASLIK.length).setValues(satirlar);
+  gunlukYaz('yonetim', String(user || ''), 'Şube konumları kaydedildi: ' + (satirlar.map(function (r) { return r[0] + ' (' + r[3] + ' m)'; }).join(', ') || 'hiç şube yok'), false);
+  return outJson({ status: 'ok', subeler: subeleriOku() }, callback);
+}
+function konumBildir(p, callback) {
+  var personel = String(p.personel || '?').substring(0, 60);
+  var detay;
+  if (p.durum === 'icerde') detay = 'Giriş: ' + String(p.sube || '').substring(0, 60) + ' içinde';
+  else if (p.durum === 'disarda') detay = 'Giriş: ŞUBE DIŞINDA — en yakın ' + String(p.sube || '').substring(0, 60) + ' ' + String(p.mesafe || '?').substring(0, 12) + ' uzakta (fiyat/stok gizlendi)';
+  else detay = 'Giriş: konum alınamadı — ' + String(p.hata || '').substring(0, 120) + ' (fiyat/stok gizlendi)';
+  if (p.dogruluk) detay += ' · GPS ±' + String(p.dogruluk).substring(0, 8) + ' m';
+  gunlukYaz('konum', 'telefon: ' + personel, detay, false);
+  return outJson({ status: 'ok' }, callback);
+}
+
 function hataBildir(p, callback) {
   var personel = String(p.personel || '?').substring(0, 60);
   var mesaj = String(p.mesaj || '').substring(0, 300);
@@ -906,7 +974,7 @@ function sistemDurumu(user, pass, callback) {
   if (!auth.ok) return outJson({ status: 'error', message: auth.message }, callback);
   var props = PropertiesService.getScriptProperties();
   var son = {};
-  ['katalog', 'katalog_urun', 'cari', 'sayim', 'mal', 'masaustu_kontrol', 'masaustu', 'yetki', 'telefon_hata', 'hata', 'yonetim'].forEach(function (t) {
+  ['katalog', 'katalog_urun', 'cari', 'sayim', 'mal', 'masaustu_kontrol', 'masaustu', 'yetki', 'telefon_hata', 'hata', 'yonetim', 'konum'].forEach(function (t) {
     try { var v = props.getProperty('SON_' + t); if (v) son[t] = JSON.parse(v); } catch (e) { /* bozuk kayıt: atla */ }
   });
   var ss = SpreadsheetApp.getActiveSpreadsheet();

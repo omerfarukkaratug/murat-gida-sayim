@@ -307,7 +307,7 @@
   <header style="border:none; padding:0 0 16px; background:transparent; display:flex; align-items:flex-start; justify-content:space-between;">
     <div>
       <h1><img src="logo-header.png" alt="Murat Gıda" style="height:30px; width:auto; display:block;"></h1>
-      <div class="sub">MK ERP · Murat Gıda • offline • Android • build 97</div>
+      <div class="sub">MK ERP · Murat Gıda • offline • Android • build 98</div>
     </div>
     <button type="button" id="themeToggleBtn" title="Tema seç" style="background:var(--panel2); border:1.5px solid var(--line); color:var(--text); width:34px; height:34px; border-radius:50%; font-size:15px; padding:0; display:flex; align-items:center; justify-content:center; flex-shrink:0;">🎨</button>
   </header>
@@ -338,6 +338,7 @@
   </div>
 
   <div class="card hidden" id="homeMenuScreen">
+    <div id="konumDurumu" class="hint hidden" style="text-align:center; margin:-4px 0 12px;"></div>
     <div style="text-align:center; font-weight:800; font-size:12px; color:var(--muted); text-transform:uppercase; letter-spacing:.06em; margin-bottom:14px;">Ne yapmak istersin?</div>
     <div style="display:flex; flex-direction:column; gap:10px;">
       <button type="button" class="menuBtn" id="menuSayimBtn"><span class="menuIcon">📋</span><span>Sayım<span class="menuSub">Barkod okutarak stok sayımı</span></span></button>
@@ -886,6 +887,15 @@
       </div>
 
       <div id="adminSectionAyarlar" class="hidden" style="border-top:1px solid var(--line); margin:14px 0 12px; padding-top:12px;">
+        <div style="font-weight:800; font-size:13px; margin-bottom:4px;">📍 Şube Konumları</div>
+        <div class="hint" style="margin-bottom:8px;">Personel uygulamaya girerken bu şubelerden birinin içinde değilse fiyat ve stok gizlenir (sayım ve mal kaydı çalışmaya devam eder). Yöneticiler etkilenmez. Hiç şube yoksa kısıtlama yoktur.</div>
+        <div id="adminSubeList" style="margin-bottom:8px;"><div class="hint">⏳ Yükleniyor…</div></div>
+        <div style="display:flex; gap:6px; margin-bottom:6px;">
+          <input type="text" id="adminSubeAd" placeholder="Şube adı (örn. Merkez)" style="flex:1; padding:8px; font-size:13px;">
+          <input type="number" id="adminSubeYaricap" inputmode="numeric" value="300" min="50" max="5000" title="Yarıçap (metre)" style="width:78px; padding:8px; font-size:13px; text-align:center;">
+        </div>
+        <button type="button" id="adminSubeEkleBtn" style="width:100%; background:var(--panel); border:1.5px dashed var(--line); color:var(--text); padding:11px; margin-bottom:8px;">📍 Bulunduğum yeri bu şube olarak ekle</button>
+        <button type="button" id="adminSubeKaydetBtn" style="width:100%; background:var(--ink); color:#fff; padding:11px; margin-bottom:16px;">💾 Şubeleri Kaydet</button>
         <div style="font-weight:800; font-size:13px; margin-bottom:6px;">🔆 Ekran Ayarı</div>
         <div style="display:flex; align-items:center; gap:8px; margin-bottom:10px;">
           <input type="checkbox" id="adminWakeLockCheck" style="width:20px; height:20px; accent-color:var(--accent);">
@@ -1387,8 +1397,107 @@
   // Fiyatı sadece "fiyat", sistemdeki stok miktarını sadece "stok" yetkisi
   // olanlar (ve yöneticiler) görür — uygulamanın TÜM ekranlarında (Sayım,
   // Tüm Sayılanlar, Mal Giriş/Çıkış, Fiyat & Stok Sorgula, CSV).
-  function canSeePrice(){ return hasPerm('fiyat'); }
-  function canSeeStock(){ return hasPerm('stok'); }
+  // KONUM: Fiyat ve stok ayrıca "şube içinde olma" şartına bağlıdır (yöneticiler
+  // hariç). Konum uygulamaya girişte bir kez alınır (bkz. konumKontrol).
+  function canSeePrice(){ return hasPerm('fiyat') && konumIzinli(); }
+  function canSeeStock(){ return hasPerm('stok') && konumIzinli(); }
+
+  // ---------- ŞUBE KONUMU (girişte GPS) ----------
+  // Amaç: personel mağaza/şube dışındayken fiyat ve stok görmesin. Konum
+  // SADECE uygulamaya girişte (açılışta ve giriş yapınca) bir kez alınır.
+  // Şube dışında, konum izni yok ya da GPS alınamadıysa fiyat/stok gizlenir;
+  // sayım ve mal kaydı HER DURUMDA çalışır. Hiç şube tanımlı değilse kısıtlama
+  // yoktur. Kapalı alanda GPS 20-100 m sapabildiği için şube yarıçapı geniş
+  // (varsayılan 300 m) tutulur.
+  var konumSonuc = null;       // { durum: 'icerde'|'disarda'|'hata'|'bekliyor', sube, mesafe, dogruluk, hata }
+  var konumKontrolKullanici = null;
+  function subeListesi(){ return Array.isArray(state.subeler) ? state.subeler : []; }
+  function konumIzinli(){
+    if(!state.currentUser || state.currentUser.role === 'yonetici') return true;
+    if(subeListesi().length === 0) return true; // şube tanımlanmamış: kısıtlama yok
+    return !!(konumSonuc && konumSonuc.durum === 'icerde');
+  }
+  function mesafeMetre(a1, o1, a2, o2){
+    var R = 6371000, rad = Math.PI / 180;
+    var da = (a2 - a1) * rad, dO = (o2 - o1) * rad;
+    var h = Math.sin(da / 2) * Math.sin(da / 2) + Math.cos(a1 * rad) * Math.cos(a2 * rad) * Math.sin(dO / 2) * Math.sin(dO / 2);
+    return 2 * R * Math.asin(Math.sqrt(h));
+  }
+  function mesafeMetni(m){ return m >= 1000 ? (m / 1000).toFixed(1).replace('.', ',') + ' km' : Math.round(m) + ' m'; }
+  function konumMetni(){
+    if(subeListesi().length === 0) return '';
+    if(!konumSonuc) return 'Konum yok';
+    if(konumSonuc.durum === 'icerde') return konumSonuc.sube;
+    if(konumSonuc.durum === 'disarda') return 'Şube dışında (' + konumSonuc.sube + '\'e ' + mesafeMetni(konumSonuc.mesafe) + ')';
+    return 'Konum alınamadı';
+  }
+  function konumGorunumuYenile(){
+    var el = document.getElementById('konumDurumu');
+    if(el){
+      var goster = !!state.currentUser && subeListesi().length > 0;
+      el.classList.toggle('hidden', !goster);
+      if(goster){
+        var yon = state.currentUser.role === 'yonetici';
+        var tekrar = ' <a href="#" id="konumTekrarBtn" style="color:var(--accent); font-weight:700;">Tekrar dene</a>';
+        if(!konumSonuc || konumSonuc.durum === 'bekliyor') el.innerHTML = '📍 Konum kontrol ediliyor…';
+        else if(konumSonuc.durum === 'icerde') el.innerHTML = '<span style="color:var(--green); font-weight:700;">📍 ' + escapeHtml(konumSonuc.sube) + ' içinde</span>';
+        else if(konumSonuc.durum === 'disarda') el.innerHTML = '<span style="color:var(--amber); font-weight:700;">📍 Şube dışında (' + escapeHtml(konumSonuc.sube) + '\'e ' + mesafeMetni(konumSonuc.mesafe) + ')</span>' +
+          (yon ? '' : ' — fiyat ve stok gizli.') + tekrar;
+        else el.innerHTML = '<span style="color:var(--amber); font-weight:700;">📍 Konum alınamadı</span>' + (yon ? '' : ' — fiyat ve stok gizli.') +
+          (konumSonuc.hata ? ' (' + escapeHtml(konumSonuc.hata) + ')' : '') + tekrar;
+      }
+    }
+    // Fiyat/stok gösteren her şeyi yeni duruma göre yeniden çiz.
+    if(state.currentUser && typeof showLoggedInUI === 'function' && !document.getElementById('homeMenuScreen').classList.contains('hidden')){
+      document.getElementById('menuFiyatBtn').classList.toggle('hidden', !canSeePrice() && !canSeeStock());
+    }
+    if(listEl) renderList(); // sayfa açılışında liste henüz hazır değilse atla
+    if(typeof renderPriceSearch === 'function' && !document.getElementById('priceScreen').classList.contains('hidden')) renderPriceSearch();
+    if(typeof renderMalList === 'function' && !document.getElementById('malHareketScreen').classList.contains('hidden')) renderMalList();
+  }
+  function konumSunucuyaBildir(){
+    var url = state.serverUrl || DEFAULT_SERVER_URL;
+    if(!konumSonuc || !navigator.onLine) return;
+    var p = { action: 'konum_bildir', personel: (state.currentUser && state.currentUser.name) || state.personnel || '?', durum: konumSonuc.durum,
+      sube: konumSonuc.sube || '', mesafe: konumSonuc.mesafe ? mesafeMetni(konumSonuc.mesafe) : '', dogruluk: konumSonuc.dogruluk || '', hata: konumSonuc.hata || '' };
+    jsonpRequestP(url, p, function(){}, 20000);
+  }
+  function konumOlc(){
+    var subeler = subeListesi();
+    if(subeler.length === 0){ konumSonuc = null; konumGorunumuYenile(); return; }
+    if(!navigator.geolocation){ konumSonuc = { durum: 'hata', hata: 'bu cihaz konum desteklemiyor' }; konumGorunumuYenile(); konumSunucuyaBildir(); return; }
+    konumSonuc = { durum: 'bekliyor' }; konumGorunumuYenile();
+    navigator.geolocation.getCurrentPosition(function(pos){
+      var c = pos.coords, enYakin = null;
+      subeler.forEach(function(b){
+        var m = mesafeMetre(c.latitude, c.longitude, b.enlem, b.boylam);
+        if(!enYakin || m - b.yaricap < enYakin.m - enYakin.b.yaricap) enYakin = { b: b, m: m };
+      });
+      konumSonuc = { durum: enYakin.m <= enYakin.b.yaricap ? 'icerde' : 'disarda', sube: enYakin.b.ad, mesafe: Math.round(enYakin.m), dogruluk: Math.round(c.accuracy || 0) };
+      konumGorunumuYenile(); konumSunucuyaBildir();
+    }, function(err){
+      var neden = err && err.code === 1 ? 'konum izni verilmedi' : (err && err.code === 3 ? 'zaman aşımı' : 'konum alınamadı');
+      konumSonuc = { durum: 'hata', hata: neden };
+      konumGorunumuYenile(); konumSunucuyaBildir();
+    }, { enableHighAccuracy: true, timeout: 15000, maximumAge: 0 });
+  }
+  // Girişte: önce güncel şube listesini çek (olmazsa telefondaki son listeyle devam), sonra konumu ölç.
+  function konumKontrol(zorla){
+    if(!state.currentUser) return;
+    if(!zorla && konumKontrolKullanici === state.currentUser.name) return; // bu açılışta zaten yapıldı
+    konumKontrolKullanici = state.currentUser.name;
+    konumSonuc = subeListesi().length ? { durum: 'bekliyor' } : null;
+    konumGorunumuYenile();
+    var url = state.serverUrl || DEFAULT_SERVER_URL;
+    if(!navigator.onLine){ konumOlc(); return; }
+    jsonpRequestP(url, { action: 'subeler' }, function(err, data){
+      if(!err && data && data.status === 'ok' && Array.isArray(data.subeler)){ state.subeler = data.subeler; save(); }
+      konumOlc();
+    }, 15000);
+  }
+  document.addEventListener('click', function(e){
+    if(e.target && e.target.id === 'konumTekrarBtn'){ e.preventDefault(); konumKontrol(true); }
+  });
 
   function hasAnyAdminPerm(){
     return hasPerm('rapor') || hasPerm('temizle') || hasPerm('kullanici_yonetimi') || hasPerm('ayarlar') || hasPerm('canli_durum') || hasPerm('duzelt');
@@ -1405,6 +1514,7 @@
     // Fiyat & Stok Sorgula: ikisini de göremeyen için ekranın anlamı yok.
     document.getElementById('menuFiyatBtn').classList.toggle('hidden', !canSeePrice() && !canSeeStock());
     startBtn.textContent = (state.session.scans && state.session.scans.length > 0) ? '▶ Sayıma Devam Et' : 'Sayıma Başla';
+    konumKontrol(); // girişte (açılışta ve giriş yapınca) bir kez
   }
   function showLoginUI(){
     loginCardEl.classList.remove('hidden');
@@ -3456,7 +3566,7 @@
     var url = state.serverUrl || DEFAULT_SERVER_URL;
     var payload = {
       type: 'mal_hareket', batchId: malBatchId, tip: malTip, belgeTuru: malBelge,
-      cari: malCari.name, cariKodu: malCari.code || '', faturaNo: malFatura, sebep: malSebep, aciklama: malAciklama,
+      cari: malCari.name, cariKodu: malCari.code || '', faturaNo: malFatura, sebep: malSebep, aciklama: malAciklama, konum: konumMetni(),
       personel: state.personnel || (state.currentUser && state.currentUser.name) || '',
       rows: malItems.map(function(it){
         return { barkod: it.barkod, ad: it.ad, stokKodu: it.stokKodu, miktar: it.miktar, birim: it.birim, kdv: it.kdv, fiyat: it.fiyat, tarih: it.tarih, saat: it.saat, kayitId: it.id, v: it.v || 1,
@@ -3651,6 +3761,56 @@
     return { user: state.currentUser.name, pass: state.savedCredentials.pass };
   }
 
+  // ---------- Yönetici: Şube Konumları ----------
+  var adminSubeler = [];
+  function renderAdminSubeler(){
+    var el = document.getElementById('adminSubeList');
+    if(!adminSubeler.length){ el.innerHTML = '<div class="hint">Henüz şube yok — kısıtlama uygulanmıyor.</div>'; return; }
+    el.innerHTML = adminSubeler.map(function(b, i){
+      return '<div style="display:flex; align-items:center; gap:8px; background:var(--panel2); border-radius:10px; padding:8px 10px; margin-bottom:6px; font-size:12.5px;">' +
+        '<div style="flex:1;"><b>' + escapeHtml(b.ad) + '</b><div style="color:var(--muted); font-family:var(--mono); font-size:11px;">' +
+        Number(b.enlem).toFixed(5) + ', ' + Number(b.boylam).toFixed(5) + ' · ' + b.yaricap + ' m</div></div>' +
+        '<button type="button" class="adminSubeSil" data-i="' + i + '" style="background:transparent; border:none; font-size:17px; padding:2px 4px;" title="Sil">🗑️</button></div>';
+    }).join('');
+  }
+  document.getElementById('adminSubeList').addEventListener('click', function(e){
+    var b = e.target.closest('.adminSubeSil'); if(!b) return;
+    adminSubeler.splice(Number(b.getAttribute('data-i')), 1); renderAdminSubeler();
+    warnToast('Silindi — kalıcı olması için "Şubeleri Kaydet"e bas');
+  });
+  document.getElementById('adminSubeEkleBtn').addEventListener('click', function(){
+    var ad = document.getElementById('adminSubeAd').value.trim();
+    var yaricap = Math.round(Number(document.getElementById('adminSubeYaricap').value) || 300);
+    if(!ad){ warnToast('Önce şube adını yaz'); return; }
+    if(!navigator.geolocation){ warnToast('Bu cihaz konum desteklemiyor'); return; }
+    var btn = this; btn.disabled = true; btn.textContent = '⏳ Konum alınıyor…';
+    navigator.geolocation.getCurrentPosition(function(pos){
+      btn.disabled = false; btn.textContent = '📍 Bulunduğum yeri bu şube olarak ekle';
+      var c = pos.coords;
+      adminSubeler = adminSubeler.filter(function(b){ return b.ad !== ad; });
+      adminSubeler.push({ ad: ad, enlem: Math.round(c.latitude * 1e6) / 1e6, boylam: Math.round(c.longitude * 1e6) / 1e6, yaricap: Math.max(50, Math.min(yaricap, 5000)) });
+      renderAdminSubeler();
+      document.getElementById('adminSubeAd').value = '';
+      successToast(ad + ' eklendi (GPS ±' + Math.round(c.accuracy || 0) + ' m) — "Şubeleri Kaydet"e bas');
+    }, function(err){
+      btn.disabled = false; btn.textContent = '📍 Bulunduğum yeri bu şube olarak ekle';
+      errorToast(err && err.code === 1 ? 'Konum izni verilmedi — tarayıcı/telefon ayarlarından izin ver' : 'Konum alınamadı, tekrar dene');
+    }, { enableHighAccuracy: true, timeout: 20000, maximumAge: 0 });
+  });
+  document.getElementById('adminSubeKaydetBtn').addEventListener('click', function(){
+    if(document.getElementById('adminSubeEkleBtn').disabled){ warnToast('Konum alınıyor — bitmesini bekle, sonra kaydet'); return; }
+    var auth = currentAuth();
+    if(!auth || !navigator.onLine){ warnToast('İnternet yok'); return; }
+    var btn = this; btn.disabled = true; btn.textContent = '⏳ Kaydediliyor…';
+    jsonpRequestP(state.serverUrl || DEFAULT_SERVER_URL, { action:'sube_kaydet', user:auth.user, pass:auth.pass, data: JSON.stringify(adminSubeler) }, function(err, res){
+      btn.disabled = false; btn.textContent = '💾 Şubeleri Kaydet';
+      if(err || !res || res.status !== 'ok'){ errorToast('Kaydedilemedi: ' + (err || (res && res.message) || 'bilinmeyen hata')); return; }
+      adminSubeler = res.subeler || []; state.subeler = adminSubeler.slice(); save();
+      renderAdminSubeler(); successToast('Şube konumları kaydedildi');
+      konumKontrol(true); // bu telefonun durumunu da yeni listeye göre güncelle
+    }, 20000);
+  });
+
   function openAdminModal(){
     adminResultEl.textContent = '';
     var canRapor = hasPerm('rapor'), canTemizle = hasPerm('temizle'),
@@ -3688,6 +3848,11 @@
       }, 15000);
     }
     if(canAyarlar){
+      adminSubeler = subeListesi().slice();
+      renderAdminSubeler();
+      jsonpRequestP(url, { action:'subeler' }, function(err, data){
+        if(!err && data && data.status === 'ok' && Array.isArray(data.subeler)){ adminSubeler = data.subeler; renderAdminSubeler(); }
+      }, 15000);
       jsonpRequestP(url, { action:'ayar_getir', user:auth.user, pass:auth.pass }, function(err, data){
         if(!err && data && data.status === 'ok'){
           if(data.defaultWakeLock !== undefined) document.getElementById('adminWakeLockCheck').checked = data.defaultWakeLock !== 'false';
@@ -3872,7 +4037,7 @@
   var sistemDamgalar = { katalog: '', cari: '' }; // KATALOG_VERSION / CARI_VERSION (son değişiklik zamanı)
   var SD_TURLER = {
     katalog: '📦 Katalog', katalog_urun: '📦 Tek ürün', cari: '🏢 Cari', sayim: '📋 Sayım', mal: '📥 Mal', masaustu: '🖥️ Masaüstü',
-    masaustu_kontrol: '🖥️ Masaüstü', yetki: '🔑 Giriş', telefon_hata: '📱 Telefon', hata: '⚠️ Sunucu', yonetim: '⚙️ Yönetim'
+    masaustu_kontrol: '🖥️ Masaüstü', yetki: '🔑 Giriş', telefon_hata: '📱 Telefon', hata: '⚠️ Sunucu', yonetim: '⚙️ Yönetim', konum: '📍 Konum'
   };
   function sdOnce(ms, simdiMs){
     if(!ms) return '';
@@ -3950,7 +4115,7 @@
 
     html += '<div class="sdHead" style="display:flex; justify-content:space-between; align-items:center;"><span>Günlük</span>' +
       '<select id="sistemFiltreSel" style="width:auto; padding:4px 8px; font-size:11.5px;">' +
-        [['hepsi','Hepsi'],['hata','Sadece hatalar'],['erp','ERP (katalog/cari/masaüstü)'],['sayim','Sayım'],['mal','Mal'],['yetki','Girişler'],['telefon_hata','Telefon hataları'],['yonetim','Yönetim']]
+        [['hepsi','Hepsi'],['hata','Sadece hatalar'],['erp','ERP (katalog/cari/masaüstü)'],['sayim','Sayım'],['mal','Mal'],['konum','Konum (girişler)'],['yetki','Reddedilen girişler'],['telefon_hata','Telefon hataları'],['yonetim','Yönetim']]
           .map(function(o){ return '<option value="' + o[0] + '"' + (o[0] === sistemFiltre ? ' selected' : '') + '>' + o[1] + '</option>'; }).join('') +
       '</select></div>';
     var liste = (d.gunluk || []).filter(sdFiltreUygun);
