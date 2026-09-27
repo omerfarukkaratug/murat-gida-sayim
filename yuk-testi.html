@@ -1,0 +1,307 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Yük Testi — MK ERP Sayım</title>
+<style>
+  :root{ --bg:#f4f5f7; --panel:#fff; --text:#16181d; --muted:#6b7280; --line:#e2e5ea; --accent:#5546ea; --green:#16a34a; --red:#dc2626; --amber:#d97706; }
+  @media (prefers-color-scheme: dark){ :root{ --bg:#111317; --panel:#1b1e24; --text:#eef0f3; --muted:#9aa1ad; --line:#2c3038; } }
+  *{ box-sizing:border-box; }
+  body{ margin:0; background:var(--bg); color:var(--text); font:14px/1.5 system-ui, -apple-system, "Segoe UI", sans-serif; }
+  main{ max-width:980px; margin:0 auto; padding:20px 16px 60px; }
+  h1{ font-size:20px; margin:0 0 4px; } h2{ font-size:15px; margin:22px 0 8px; }
+  .kart{ background:var(--panel); border:1px solid var(--line); border-radius:12px; padding:14px 16px; margin-bottom:12px; }
+  .uyari{ border-left:4px solid var(--amber); }
+  label{ display:block; font-size:12px; font-weight:700; color:var(--muted); margin-bottom:4px; }
+  input[type=text], input[type=number]{ width:100%; padding:8px 10px; border:1.5px solid var(--line); border-radius:8px; background:var(--bg); color:var(--text); font:inherit; }
+  .grid{ display:grid; grid-template-columns:repeat(auto-fit, minmax(150px, 1fr)); gap:10px; }
+  button{ font:inherit; font-weight:700; border:0; border-radius:8px; padding:10px 16px; cursor:pointer; }
+  .ana{ background:var(--accent); color:#fff; } .ikinci{ background:var(--panel); color:var(--text); border:1.5px solid var(--line); }
+  button:disabled{ opacity:.5; cursor:not-allowed; }
+  .sayilar{ display:grid; grid-template-columns:repeat(auto-fit, minmax(140px, 1fr)); gap:10px; }
+  .sayi{ background:var(--bg); border-radius:10px; padding:10px; } .sayi b{ display:block; font-size:20px; font-family:ui-monospace, monospace; }
+  .sayi span{ font-size:11px; color:var(--muted); text-transform:uppercase; letter-spacing:.04em; }
+  table{ width:100%; border-collapse:collapse; font-size:12.5px; font-family:ui-monospace, monospace; }
+  th, td{ text-align:right; padding:5px 8px; border-bottom:1px solid var(--line); } th:first-child, td:first-child{ text-align:left; }
+  .tablo{ overflow-x:auto; }
+  #gunluk{ max-height:260px; overflow-y:auto; font:12px/1.5 ui-monospace, monospace; background:var(--bg); border-radius:8px; padding:8px 10px; white-space:pre-wrap; }
+  .ok{ color:var(--green); } .err{ color:var(--red); } .warn{ color:var(--amber); }
+  #sonuc{ font-weight:700; font-size:15px; }
+</style>
+</head>
+<body>
+<main>
+  <h1>🧪 Yük Testi</h1>
+  <div style="color:var(--muted); margin-bottom:14px;">Büyük sayım öncesi: 10+ telefonun saatlerce aynı anda gönderdiği yükü <b>test kopyası</b> üzerinde taklit eder, süreleri ve hataları ölçer, sonunda her kaydın sunucuda doğru yazıldığını doğrular.</div>
+
+  <div class="kart uyari">
+    <b>⚠️ Sadece TEST KOPYASINDA çalıştırın — canlı sisteme sahte kayıt yazar.</b>
+    <ol style="margin:8px 0 0; padding-left:20px;">
+      <li>Google Drive'da sayım E-Tablosunu açın → <b>Dosya → Kopya oluştur</b>.</li>
+      <li>Kopyada <b>Uzantılar → Apps Script</b> → <b>Dağıt → Yeni dağıtım</b> → tür: <b>Web uygulaması</b>, "Şu kullanıcı olarak çalıştır: Ben", "Erişimi olanlar: Herkes" → <b>Dağıt</b>.</li>
+      <li>Çıkan <b>/exec</b> adresini aşağıya yapıştırın. Kopyanın <code>Kullanicilar</code> sekmesi aynı kalır.</li>
+    </ol>
+    Canlı sistemin adresi girilirse test başlamaz.
+  </div>
+
+  <div class="kart">
+    <label for="url">Test kopyasının /exec adresi</label>
+    <input type="text" id="url" placeholder="https://script.google.com/macros/s/.../exec">
+    <div class="grid" style="margin-top:10px;">
+      <div><label for="telefon">Telefon sayısı</label><input type="number" id="telefon" value="10" min="1" max="30"></div>
+      <div><label for="hiz">Okutma / dakika / telefon</label><input type="number" id="hiz" value="10" min="1" max="120"></div>
+      <div><label for="sure">Süre (dakika)</label><input type="number" id="sure" value="30" min="1" max="720"></div>
+      <div><label for="duzelt">Düzeltme oranı (%)</label><input type="number" id="duzelt" value="10" min="0" max="50"></div>
+    </div>
+    <div style="margin-top:10px;">
+      <label style="display:flex; gap:8px; align-items:center; color:var(--text); font-size:13px;"><input type="checkbox" id="erp" checked> ERP katalog gönderimini de taklit et (15 dk'da bir, <input type="number" id="erpAdet" value="40000" style="width:90px; display:inline-block; padding:3px 6px;"> ürün — her seferinde 1 fiyat değişir ki tablo gerçekten yazılsın)</label>
+    </div>
+    <div style="display:flex; gap:10px; flex-wrap:wrap; margin-top:14px;">
+      <button class="ana" id="baslat">▶ Testi Başlat</button>
+      <button class="ikinci" id="durdur" disabled>■ Durdur</button>
+      <button class="ikinci" id="doldur">Tabloyu 80.000 satıra doldur (önce bir kez)</button>
+    </div>
+    <div style="color:var(--muted); font-size:12px; margin-top:8px;">Gerçek sayım ortalaması ≈ 80.000 okutma / 72 saat ≈ dakikada 18. Varsayılan ayar (10 telefon × 10/dk = dakikada 100) bunun ~5 katı yük bindirir. "Tabloyu doldur", sayım sonuna doğru tablonun büyüklüğünü taklit eder.</div>
+  </div>
+
+  <div class="kart">
+    <div id="sonuc">Hazır.</div>
+    <div class="sayilar" style="margin-top:10px;">
+      <div class="sayi"><span>Geçen süre</span><b id="sGecen">0:00</b></div>
+      <div class="sayi"><span>Okutma</span><b id="sOkutma">0</b></div>
+      <div class="sayi"><span>Onaylanan</span><b id="sOnay">0</b></div>
+      <div class="sayi"><span>Bekleyen</span><b id="sBekleyen">0</b></div>
+      <div class="sayi"><span>Gönderim hatası</span><b id="sHata">0</b></div>
+      <div class="sayi"><span>Gönderim p50 / p95</span><b id="sPost">—</b></div>
+      <div class="sayi"><span>Onay p50 / p95</span><b id="sAck">—</b></div>
+      <div class="sayi"><span>ERP katalog</span><b id="sErp">—</b></div>
+    </div>
+    <h2>Telefonlar</h2>
+    <div class="tablo"><table><thead><tr><th>Telefon</th><th>Okutma</th><th>Onaylı</th><th>Bekleyen</th><th>Gönderim</th><th>Hata</th><th>Son gönderim</th><th>Son hata</th></tr></thead><tbody id="tel"></tbody></table></div>
+    <h2>Günlük</h2>
+    <div id="gunluk"></div>
+  </div>
+</main>
+
+<script>
+(function(){
+  "use strict";
+  // Canlı sistemin dağıtım kimliği — bu adrese test yükü GÖNDERİLMEZ.
+  var CANLI_KIMLIK = 'AKfycbwH0hVGDXIQhdSxg2neDBNUEOxY1SNacJRz4cqf3WaP8xgAhlEnKfRv5xnlENKnh3XuYA';
+  var POST_ZAMAN_ASIMI = 75000, ONAY_ZAMAN_ASIMI = 30000; // uygulamadakiyle aynı
+  var $ = function(id){ return document.getElementById(id); };
+  var calisiyor = false, baslangic = 0, bitis = 0, zamanlayici = null, telefonlar = [];
+  var postSureleri = [], onaySureleri = [], erpBilgi = '—', erpSayac = 0;
+
+  function uuid(){ return (crypto.randomUUID ? crypto.randomUUID() : 'id-' + Date.now() + '-' + Math.random().toString(16).slice(2)); }
+  function gunluk(msg, cls){
+    var d = new Date(), el = $('gunluk');
+    var satir = document.createElement('div');
+    satir.textContent = d.toLocaleTimeString('tr-TR') + '  ' + msg;
+    if(cls) satir.className = cls;
+    el.insertBefore(satir, el.firstChild);
+    while(el.childNodes.length > 400) el.removeChild(el.lastChild);
+  }
+  function yuzdelik(arr, p){ if(!arr.length) return null; var s = arr.slice().sort(function(a,b){ return a-b; }); return s[Math.min(s.length-1, Math.floor(p * s.length))]; }
+  function sn(ms){ return ms === null ? '—' : (ms / 1000).toFixed(1) + ' sn'; }
+
+  // Uygulamadaki gibi: gönderim no-cors POST, onay JSONP.
+  function gonder(url, govde){
+    var ctrl = new AbortController();
+    var t = setTimeout(function(){ ctrl.abort(); }, POST_ZAMAN_ASIMI);
+    return fetch(url, { method:'POST', mode:'no-cors', headers:{ 'Content-Type':'text/plain;charset=utf-8' }, body: govde, signal: ctrl.signal })
+      .finally(function(){ clearTimeout(t); });
+  }
+  var jsonpSayac = 0;
+  function jsonp(url, params, sure){
+    return new Promise(function(resolve, reject){
+      var ad = 'yt_' + (++jsonpSayac) + '_' + Date.now();
+      var script = document.createElement('script');
+      var t = setTimeout(function(){ temizle(); reject(new Error('zaman aşımı')); }, sure || ONAY_ZAMAN_ASIMI);
+      function temizle(){ clearTimeout(t); delete window[ad]; if(script.parentNode) script.parentNode.removeChild(script); }
+      window[ad] = function(veri){ temizle(); resolve(veri); };
+      var qs = Object.keys(params).map(function(k){ return encodeURIComponent(k) + '=' + encodeURIComponent(params[k]); }).join('&');
+      script.src = url + (url.indexOf('?') === -1 ? '?' : '&') + qs + '&callback=' + ad;
+      script.onerror = function(){ temizle(); reject(new Error('sunucuya ulaşılamadı')); };
+      document.body.appendChild(script);
+    });
+  }
+
+  // ---- Sanal telefon: uygulamanın gönderim mantığının aynısı ----
+  function Telefon(no){
+    this.no = no; this.ad = 'YükTesti-' + no; this.oturum = uuid();
+    this.kayitlar = []; this.onayli = {}; this.birikim = 0; this.ucusta = false;
+    this.gonderim = 0; this.hata = 0; this.sonGonderim = '—'; this.sonHata = '';
+    this.sonrakiGonderim = Date.now() + Math.random() * 5000;
+  }
+  Telefon.prototype.okut = function(adet, duzeltmeOrani){
+    for(var i = 0; i < adet; i++){
+      if(this.kayitlar.length && Math.random() < duzeltmeOrani){
+        var k = this.kayitlar[Math.floor(Math.random() * this.kayitlar.length)];
+        k.v++; k.qty = 1 + Math.floor(Math.random() * 48);
+      } else {
+        var n = this.kayitlar.length;
+        var d = new Date();
+        this.kayitlar.push({ id: uuid(), v: 1, ts: Date.now(), name: 'Test Ürün ' + (n % 40000), stockCode: 'T' + (n % 40000), barcode: '869' + String(100000000 + n % 40000),
+          unit: 'Adet', oldStock: '', date: d.toISOString().slice(0, 10), time: d.toTimeString().slice(0, 8), qty: 1 + Math.floor(Math.random() * 24), reyon: n % 2 ? 'Depo' : 'Reyon' });
+      }
+    }
+  };
+  Telefon.prototype.bekleyen = function(){ var o = this.onayli; return this.kayitlar.filter(function(k){ return !(o[k.id] >= k.v); }); };
+  Telefon.prototype.gonder = function(url){
+    var tel = this;
+    var bekleyen = this.bekleyen();
+    if(this.ucusta || !bekleyen.length) return Promise.resolve();
+    this.ucusta = true;
+    var nonce = uuid();
+    var govde = JSON.stringify({ personnel: this.ad, sessionId: this.oturum, finishedAt: {}, resetToken: '', nonce: nonce, deletedIds: [],
+      rows: bekleyen.map(function(k){ return { id:k.id, v:k.v, ts:k.ts, name:k.name, stockCode:k.stockCode, barcode:k.barcode, unit:k.unit, oldStock:k.oldStock, date:k.date, time:k.time, qty:k.qty, reyon:k.reyon }; }) });
+    var t0 = Date.now(), t1;
+    return gonder(url, govde).then(function(){
+      t1 = Date.now(); postSureleri.push(t1 - t0);
+      return jsonp(url, { action:'sayim_kontrol', session: tel.oturum, nonce: nonce });
+    }).then(function(res){
+      onaySureleri.push(Date.now() - t1);
+      if(!res || res.status !== 'ok' || !res.rows) throw new Error((res && res.message) || 'onay okunamadı');
+      Object.keys(res.rows).forEach(function(id){ tel.onayli[id] = Math.max(tel.onayli[id] || 0, Number(res.rows[id][0]) || 1); });
+      var kalan = tel.bekleyen().filter(function(k){ return bekleyen.some(function(b){ return b.id === k.id && b.v === k.v; }); }).length;
+      tel.gonderim++;
+      tel.sonGonderim = bekleyen.length + ' kayıt, ' + sn(Date.now() - t0) + (res.kaynak === 'onbellek' ? ' ⚡' : '');
+      if(kalan){ tel.hata++; tel.sonHata = kalan + ' kayıt doğrulanamadı'; gunluk(tel.ad + ': ' + kalan + ' kayıt doğrulanamadı', 'warn'); }
+    }).catch(function(e){
+      tel.hata++; tel.sonHata = e.message;
+      gunluk(tel.ad + ': ' + e.message + ' (' + sn(Date.now() - t0) + ')', 'err');
+    }).finally(function(){ tel.ucusta = false; });
+  };
+
+  // ---- ERP katalog gönderimi taklidi ----
+  function erpGonder(url){
+    var adet = Math.max(1, Math.min(60000, Number($('erpAdet').value) || 40000));
+    erpSayac++;
+    var entries = [];
+    for(var i = 0; i < adet; i++){
+      entries.push({ name: 'Test Ürün ' + i, barcode: '869' + String(100000000 + i), stockCode: 'T' + i, oldStock: i % 50,
+        price: (i === erpSayac % adet) ? 99.99 + erpSayac : 10 + (i % 90), kdv: i % 3 ? 1 : 20 });
+    }
+    var t0 = Date.now();
+    erpBilgi = '⏳ gönderiliyor';
+    gunluk('ERP taklidi: ' + adet + ' ürünlük katalog gönderiliyor');
+    return gonder(url, JSON.stringify({ type:'katalog_bulk', entries: entries, kaynak: 'YÜK TESTİ (ERP taklidi)' })).then(function(){
+      erpBilgi = sn(Date.now() - t0); gunluk('ERP taklidi tamam: ' + sn(Date.now() - t0), 'ok');
+    }).catch(function(e){ erpBilgi = '❌ ' + e.message; gunluk('ERP taklidi hata: ' + e.message, 'err'); });
+  }
+
+  function ekran(){
+    var top = 0, onay = 0, bek = 0, hata = 0;
+    $('tel').innerHTML = telefonlar.map(function(t){
+      var b = t.bekleyen().length; top += t.kayitlar.length; bek += b; onay += t.kayitlar.length - b; hata += t.hata;
+      return '<tr><td>' + t.ad + '</td><td>' + t.kayitlar.length + '</td><td>' + (t.kayitlar.length - b) + '</td><td>' + b + '</td><td>' + t.gonderim + '</td><td class="' + (t.hata ? 'err' : '') + '">' + t.hata +
+        '</td><td>' + t.sonGonderim + '</td><td class="err">' + (t.sonHata || '') + '</td></tr>';
+    }).join('');
+    var gecen = Math.floor((Date.now() - baslangic) / 1000);
+    $('sGecen').textContent = Math.floor(gecen / 60) + ':' + String(gecen % 60).padStart(2, '0');
+    $('sOkutma').textContent = top; $('sOnay').textContent = onay; $('sBekleyen').textContent = bek; $('sHata').textContent = hata;
+    $('sPost').textContent = sn(yuzdelik(postSureleri, .5)) + ' / ' + sn(yuzdelik(postSureleri, .95));
+    $('sAck').textContent = sn(yuzdelik(onaySureleri, .5)) + ' / ' + sn(yuzdelik(onaySureleri, .95));
+    $('sErp').textContent = erpBilgi;
+  }
+
+  function adresKontrol(){
+    var url = $('url').value.trim();
+    if(!/^https:\/\/script\.google\.com\/macros\/s\/[^/]+\/exec$/.test(url)){ alert('Geçerli bir Apps Script /exec adresi girin.'); return null; }
+    if(url.indexOf(CANLI_KIMLIK) !== -1){ alert('Bu CANLI sistemin adresi! Yük testi sadece test kopyasında çalıştırılabilir.'); return null; }
+    return url;
+  }
+
+  $('baslat').addEventListener('click', function(){
+    var url = adresKontrol(); if(!url) return;
+    var n = Math.max(1, Math.min(30, Number($('telefon').value) || 10));
+    var hiz = Math.max(1, Number($('hiz').value) || 10) / 60; // saniyede
+    var sure = Math.max(1, Number($('sure').value) || 30) * 60000;
+    var duzelt = Math.max(0, Math.min(.5, (Number($('duzelt').value) || 0) / 100));
+    telefonlar = []; for(var i = 1; i <= n; i++) telefonlar.push(new Telefon(i));
+    postSureleri = []; onaySureleri = []; erpBilgi = '—'; erpSayac = 0;
+    calisiyor = true; baslangic = Date.now(); bitis = baslangic + sure;
+    var sonErp = baslangic - 14.5 * 60000; // ilk ERP gönderimi 30 sn sonra, sonra 15 dk'da bir
+    $('baslat').disabled = true; $('durdur').disabled = false; $('doldur').disabled = true;
+    $('sonuc').textContent = '⏳ Test sürüyor…'; $('sonuc').className = '';
+    gunluk('Test başladı: ' + n + ' telefon × ' + Math.round(hiz * 60) + '/dk, ' + Math.round(sure / 60000) + ' dk');
+    zamanlayici = setInterval(function(){
+      var simdi = Date.now();
+      if(simdi < bitis){
+        telefonlar.forEach(function(t){
+          t.birikim += hiz; var adet = Math.floor(t.birikim); t.birikim -= adet; if(adet) t.okut(adet, duzelt);
+        });
+        if($('erp').checked && simdi - sonErp >= 15 * 60000){ sonErp = simdi; erpGonder(url); }
+      }
+      telefonlar.forEach(function(t){
+        // Uygulama gibi: birkaç saniyede bir gönder (rastgele aralık, telefonlar aynı ana yığılmasın)
+        if(simdi >= t.sonrakiGonderim){ t.sonrakiGonderim = simdi + 3000 + Math.random() * 4000; t.gonder(url); }
+      });
+      ekran();
+      if(simdi >= bitis){
+        var bekleyen = telefonlar.reduce(function(n, t){ return n + t.bekleyen().length + (t.ucusta ? 1 : 0); }, 0);
+        if(bekleyen === 0 || simdi > bitis + 3 * 60000) bitir(url);
+      }
+    }, 1000);
+  });
+  $('durdur').addEventListener('click', function(){ bitis = Date.now(); gunluk('Durduruldu — bekleyenler gönderiliyor (en fazla 3 dk)…', 'warn'); });
+
+  // Son doğrulama: her telefonun oturumu nonce'suz (tam tarama) sorgulanır;
+  // her kaydın sunucuda DOĞRU sürümle bulunması gerekir.
+  function bitir(url){
+    clearInterval(zamanlayici); zamanlayici = null; calisiyor = false;
+    $('sonuc').textContent = '⏳ Son doğrulama: sunucudaki kayıtlar tek tek kontrol ediliyor…';
+    var eksik = 0, yanlis = 0, toplam = 0;
+    var sira = Promise.resolve();
+    telefonlar.forEach(function(t){
+      sira = sira.then(function(){
+        return jsonp(url, { action:'sayim_kontrol', session: t.oturum }, 60000).then(function(res){
+          t.kayitlar.forEach(function(k){
+            toplam++;
+            var r = res.rows && res.rows[k.id];
+            if(!r) eksik++;
+            else if(Number(r[0]) !== k.v || Number(r[1]) !== k.qty) yanlis++;
+          });
+        }).catch(function(e){ gunluk(t.ad + ' doğrulanamadı: ' + e.message, 'err'); eksik += t.kayitlar.length; toplam += t.kayitlar.length; });
+      });
+    });
+    sira.then(function(){
+      ekran();
+      var hata = telefonlar.reduce(function(n, t){ return n + t.hata; }, 0);
+      var p95 = yuzdelik(postSureleri, .95);
+      var basarili = eksik === 0 && yanlis === 0;
+      $('sonuc').className = basarili ? 'ok' : 'err';
+      $('sonuc').textContent = (basarili ? '✅ BAŞARILI' : '❌ SORUN VAR') + ' — ' + toplam + ' kaydın ' + (toplam - eksik - yanlis) + ' tanesi sunucuda doğru. Eksik: ' + eksik +
+        ', yanlış sürüm/adet: ' + yanlis + '. Geçici gönderim hatası: ' + hata + ' (tekrar denenip düzeldiyse sorun değil). Gönderim p95: ' + sn(p95) + '.';
+      gunluk($('sonuc').textContent, basarili ? 'ok' : 'err');
+      $('baslat').disabled = false; $('durdur').disabled = true; $('doldur').disabled = false;
+    });
+  }
+
+  // Tabloyu sayım sonu büyüklüğüne getir: 80 × 1000 satırlık gönderi.
+  $('doldur').addEventListener('click', function(){
+    var url = adresKontrol(); if(!url) return;
+    if(!confirm('Test kopyasının Sayim sekmesine 80.000 sahte satır yazılacak (birkaç dakika sürer). Devam?')) return;
+    var btn = this; btn.disabled = true; $('baslat').disabled = true;
+    var oturum = uuid(), parti = 0, toplamParti = 80;
+    (function sonraki(){
+      if(parti >= toplamParti){ gunluk('Doldurma bitti: 80.000 satır', 'ok'); btn.disabled = false; $('baslat').disabled = false; $('sonuc').textContent = 'Tablo dolduruldu. Şimdi testi başlatabilirsiniz.'; return; }
+      var rows = [];
+      for(var i = 0; i < 1000; i++){
+        var n = parti * 1000 + i;
+        rows.push({ id: 'dolgu-' + oturum.slice(0, 8) + '-' + n, v: 1, ts: Date.now(), name: 'Dolgu Ürün ' + (n % 40000), stockCode: 'D' + (n % 40000), barcode: '868' + String(100000000 + n % 40000),
+          unit: 'Adet', oldStock: '', date: '2026-10-28', time: '12:00:00', qty: 1 + n % 20, reyon: n % 2 ? 'Depo' : 'Reyon' });
+      }
+      var t0 = Date.now();
+      $('sonuc').textContent = '⏳ Tablo dolduruluyor: ' + (parti * 1000) + ' / 80.000';
+      gonder(url, JSON.stringify({ personnel:'Dolgu', sessionId: oturum, resetToken:'', deletedIds: [], rows: rows })).then(function(){
+        gunluk('Dolgu ' + (parti + 1) + '/80: ' + sn(Date.now() - t0)); parti++; sonraki();
+      }).catch(function(e){ gunluk('Dolgu hatası: ' + e.message + ' — tekrar deneniyor', 'err'); setTimeout(sonraki, 3000); });
+    })();
+  });
+})();
+</script>
+</body>
+</html>
