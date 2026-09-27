@@ -310,7 +310,7 @@
   <header style="border:none; padding:0 0 16px; background:transparent; display:flex; align-items:flex-start; justify-content:space-between;">
     <div>
       <h1><img src="logo-header.png" alt="Murat Gıda" style="height:30px; width:auto; display:block;"></h1>
-      <div class="sub">MK ERP · Murat Gıda • offline • Android • build 92</div>
+      <div class="sub">MK ERP · Murat Gıda • offline • Android • build 93</div>
     </div>
     <button type="button" id="themeToggleBtn" title="Tema seç" style="background:var(--panel2); border:1.5px solid var(--line); color:var(--text); width:34px; height:34px; border-radius:50%; font-size:15px; padding:0; display:flex; align-items:center; justify-content:center; flex-shrink:0;">🎨</button>
   </header>
@@ -1669,8 +1669,11 @@
     if(typeof updatePendingBadge === 'function') updatePendingBadge();
     return state.pendingSessions.reduce(function(n, p){ return n + (p.rows || []).length; }, 0);
   }
+  var lastResetCheckAt = 0;
+  var RESET_CHECK_INTERVAL_MS = 60000;
   function checkResetToken(){
     if(!navigator.onLine) return;
+    lastResetCheckAt = Date.now();
     var url = state.serverUrl || DEFAULT_SERVER_URL;
     jsonpRequest(url, 'resetcheck', function(err, data){
       if(err || !data) return;
@@ -1789,7 +1792,7 @@
   var pendingBadge = document.getElementById('pendingBadge');
   var serverUnreachable = false; // internet var ama sunucuya (Apps Script'e) ulaşılamıyor mu?
 
-  function updateStatus(){
+  function updateStatus(e){
     var online = navigator.onLine;
     if(!online) serverUnreachable = false; // "çevrimdışı" zaten daha öncelikli, karıştırmayalım
     if(!online){
@@ -1802,7 +1805,13 @@
       statusBadge.textContent = "Çevrimiçi";
       statusBadge.className = "status online";
     }
-    if(online){ trySync(true); checkResetToken(); }
+    if(online){
+      autoRetrySync();
+      // "Tablo temizlendi mi?" kontrolü: internet yeni geldiyse (online olayı)
+      // hemen, aksi hâlde en fazla dakikada bir — 10 telefonun her 8 saniyede
+      // bir sorması sunucu kotasını gereksiz yere tüketiyordu.
+      if(e || Date.now() - lastResetCheckAt > RESET_CHECK_INTERVAL_MS) checkResetToken();
+    }
   }
   // Senkronizasyon ya da sunucu ile ilgili herhangi bir işlem gerçek bir ağ
   // hatasıyla karşılaşırsa (internet var görünüyor ama Apps Script'e
@@ -4331,8 +4340,36 @@
   // Bu telefonun bu açılışta gönderdiği oturumlar — rapor isterken sunucuya
   // "bunlar benim, hâlâ gönderim sürüyor sayma" demek için.
   var gonderilenOturumlar = {};
-  var SYNC_POST_TIMEOUT_MS = 30000;   // gönderim isteği en fazla bu kadar bekler
-  var SYNC_VERIFY_TIMEOUT_MS = 20000; // sunucu onayı en fazla bu kadar bekler
+  // Sunucu aynı anda tek bir telefonun yazmasına izin verir; diğerleri en
+  // fazla 30 sn sırada bekler (LockService). Gönderim sınırı bu bekleme +
+  // yazma süresinden uzun olmalı, yoksa yoğunlukta sırada bekleyen telefon
+  // gereksiz yere "başarısız" sayılır.
+  var SYNC_POST_TIMEOUT_MS = 75000;   // gönderim isteği en fazla bu kadar bekler
+  var SYNC_VERIFY_TIMEOUT_MS = 30000; // sunucu onayı en fazla bu kadar bekler
+
+  // Hata sonrası geri çekilme: art arda başarısız denemelerde otomatik
+  // deneme aralığı büyür (8 sn → 16 → 32 → en fazla 60 sn). Tek seferlik
+  // hatalarda bildirim gösterilmez; kayıtlar 🔴 ve bekleyen sayacıyla zaten
+  // görünür. Bildirim sadece sorun sürerse (3 hata ya da 2 dk) ve en fazla
+  // dakikada bir gösterilir.
+  var syncFailCount = 0;
+  var syncFirstFailAt = 0;
+  var syncNextAutoAt = 0;
+  var syncLastFailToastAt = 0;
+  function autoRetrySync(){
+    if(Date.now() < syncNextAutoAt) return; // geri çekilme süresi dolmadı
+    trySync(true);
+  }
+  function recordSyncResult(anyError){
+    var now = Date.now();
+    if(!anyError){ syncFailCount = 0; syncFirstFailAt = 0; syncNextAutoAt = 0; return false; }
+    syncFailCount++;
+    if(!syncFirstFailAt) syncFirstFailAt = now;
+    syncNextAutoAt = now + Math.min(60000, 8000 * Math.pow(2, syncFailCount - 1));
+    var surekli = syncFailCount >= 3 || (now - syncFirstFailAt) > 120000;
+    if(surekli && now - syncLastFailToastAt > 60000){ syncLastFailToastAt = now; return true; }
+    return false;
+  }
 
   // Zaman aşımlı gönderim: istek takılırsa (zayıf sinyal, Google yavaş)
   // sonsuza kadar beklemez — iptal edilir, kayıtlar kuyrukta kalır ve bir
@@ -4453,12 +4490,13 @@
       syncInProgress = false;
       save(); updatePendingBadge();
       if(localChanged && typeof renderList === 'function') renderList();
+      var uyar = recordSyncResult(anyError);
       if(!silent){
         if(anyError) errorToast("Bazı kayıtlar gönderilemedi: " + anyError + " — internet gelince otomatik tekrar denenecek");
         else if(sentCount > 0) successToast("Tüm kayıtlar gönderildi ve sunucuda doğrulandı");
-      } else if(anyError){
-        // Arka planda bile olsa gerçek bir hata varsa kullanıcıyı bilgilendir —
-        // veri telefonda güvende ama gönderim başarısız, sessiz geçilmemeli.
+      } else if(uyar){
+        // Sorun sürüyorsa arka planda bile kullanıcıyı bilgilendir — veri
+        // telefonda güvende ama gönderim uzun süredir başarısız.
         errorToast("Otomatik gönderim başarısız: " + anyError + " — veriniz telefonda güvende, tekrar denenecek");
       }
       if(onDone) onDone({ ok: !anyError, error: anyError });
