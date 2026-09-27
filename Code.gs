@@ -8,7 +8,7 @@
 // bir sürüm dağıttıktan sonra /exec adresini boş açtığında burada yazan
 // numarayı görmelisin; index.html'in üstündeki "build" numarasıyla
 // eşleşecek şekilde ben her ikisini birlikte güncelliyorum.
-var GS_VERSION = 'build92';
+var GS_VERSION = 'build95';
 
 // Sheets'te "Saat" sütunu zaman biçimli olarak algılanırsa, hücre değeri düz
 // metin değil bir Date nesnesi olarak gelir ve String(...) çirkin bir çıktı
@@ -78,6 +78,14 @@ function doGet(e) {
   // sayim_kontrol: telefon, gönderdiği sayım kayıtlarının sunucuya hangi
   // SÜRÜMLE yazıldığını sorar. Telefon kuyruğundan sadece burada doğrulanan
   // kayıtları çıkarır (bkz. sayimKontrol).
+  // Sistem Durumu ekranı: son gelen veriler, sayılar, günlük ve hatalar.
+  if (e.parameter && e.parameter.action === 'sistem_durumu') {
+    return sistemDurumu(e.parameter.user, e.parameter.pass, e.parameter.callback);
+  }
+  // Telefon, gönderemediği verinin hatasını bildirir (günlüğe yazılır).
+  if (e.parameter && e.parameter.action === 'hata_bildir') {
+    return hataBildir(e.parameter, e.parameter.callback);
+  }
   if (e.parameter && e.parameter.action === 'sayim_kontrol') {
     return sayimKontrol(e.parameter.session, e.parameter.callback);
   }
@@ -161,14 +169,24 @@ function authenticate(user, pass) {
 
 function requirePermission(user, pass, perm) {
   var auth = authenticate(user, pass);
-  if (!auth.ok) return auth;
-  if (auth.permissions.indexOf(perm) === -1) return { ok: false, message: 'Bu işlem için yetkin yok' };
+  if (!auth.ok) {
+    // Şifre ASLA günlüğe yazılmaz — sadece kullanıcı adı ve sebep.
+    gunlukYaz('yetki', String(user || '(boş)'), 'Giriş reddedildi (' + perm + ' işlemi): ' + auth.message, true);
+    return auth;
+  }
+  if (auth.permissions.indexOf(perm) === -1) {
+    gunlukYaz('yetki', String(user || ''), '"' + perm + '" yetkisi yok, işlem reddedildi', true);
+    return { ok: false, message: 'Bu işlem için yetkin yok' };
+  }
   return auth;
 }
 
 function handleLogin(user, pass, callback) {
   var auth = authenticate(user, pass);
-  if (!auth.ok) return outJson({ status: 'error', message: auth.message }, callback);
+  if (!auth.ok) {
+    gunlukYaz('yetki', String(user || '(boş)'), 'Uygulamaya giriş reddedildi: ' + auth.message, true);
+    return outJson({ status: 'error', message: auth.message }, callback);
+  }
   return outJson({ status: 'ok', role: auth.role, permissions: auth.permissions }, callback);
 }
 
@@ -480,6 +498,10 @@ function malExport(user, pass, callback) {
       groups[b].push(r);
     });
     var batches = order.slice(0, 25).map(function (b) { return malBatchFromRows(groups[b]); });
+    // PowerShell'in son bağlanma zamanı her seferinde, indirilecek kayıt
+    // varsa ayrıca günlüğe yazılır (boş kontroller günlüğü doldurmasın).
+    sonKaydet('masaustu_kontrol', String(user || ''), order.length + ' bekleyen kayıt', false);
+    if (batches.length > 0) gunlukYaz('masaustu', String(user || ''), batches.length + ' mal kaydı masaüstüne gönderildi', false);
     return outJson({ status: 'ok', batches: batches, kalan: Math.max(order.length - batches.length, 0) }, callback);
   } catch (err) {
     return outJson({ status: 'error', message: err.toString() }, callback);
@@ -508,6 +530,7 @@ function malExportOnay(user, pass, ids, callback) {
       });
       if (isaretlenen > 0) sheet.getRange(2, MAL_COL.AKTARILDI, n, 1).setValues(yaz);
     }
+    if (isaretlenen > 0) gunlukYaz('masaustu', String(user || ''), isaretlenen + ' satır "Aktarıldı" olarak işaretlendi', false);
     return outJson({ status: 'ok', isaretlenen: isaretlenen }, callback);
   } catch (err) {
     return outJson({ status: 'error', message: err.toString() }, callback);
@@ -787,6 +810,84 @@ function sayimOturumSatirlari(sheet, hedef, rows) {
   }
 }
 
+// ============================================================
+// SİSTEM GÜNLÜĞÜ ve SİSTEM DURUMU
+// Her önemli olay (ERP'den katalog/cari yüklemesi, sayım ve mal kayıtları,
+// masaüstü aktarımı, reddedilen girişler, sunucu ve telefon hataları) gizli
+// 'SistemGunlugu' sekmesine yazılır. Her türün EN SON olayı ayrıca script
+// özelliklerinde tutulur ("SON_<tür>") — Sistem Durumu ekranı bunları gösterir.
+// Günlüğe yazılamaması asıl işlemi ASLA bozmaz (hatalar yutulur).
+// ============================================================
+var GUNLUK_BASLIK = ['Zaman', 'Tür', 'Kaynak', 'Detay', 'Durum'];
+var GUNLUK_MAX = 2000; // bundan fazlası birikince en eskiler silinir
+
+function simdiMetin() {
+  return Utilities.formatDate(new Date(), Session.getScriptTimeZone() || 'GMT+3', 'yyyy-MM-dd HH:mm:ss');
+}
+function sonKaydet(tur, kaynak, detay, hata) {
+  try {
+    PropertiesService.getScriptProperties().setProperty('SON_' + tur,
+      JSON.stringify({ zaman: simdiMetin(), ms: Date.now(), kaynak: kaynak, detay: String(detay).substring(0, 300), hata: !!hata }));
+  } catch (e) { /* günlük asıl işi bozmasın */ }
+}
+function gunlukYaz(tur, kaynak, detay, hata) {
+  try {
+    sonKaydet(tur, kaynak, detay, hata);
+    if (hata) sonKaydet('hata', kaynak, '[' + tur + '] ' + detay, true);
+    var ss = SpreadsheetApp.getActiveSpreadsheet();
+    var sheet = ss.getSheetByName('SistemGunlugu');
+    if (!sheet) {
+      sheet = ss.insertSheet('SistemGunlugu');
+      sheet.getRange(1, 1, 1, GUNLUK_BASLIK.length).setValues([GUNLUK_BASLIK]);
+      sheet.hideSheet();
+    }
+    sheet.appendRow([simdiMetin(), tur, String(kaynak || ''), String(detay || '').substring(0, 500), hata ? 'HATA' : 'OK']);
+    if (sheet.getLastRow() > GUNLUK_MAX + 500) sheet.deleteRows(2, 500);
+  } catch (e) { /* günlük asıl işi bozmasın */ }
+}
+
+// Telefonun bildirdiği hata (örn. "3 kez gönderilemedi: zaman aşımı").
+// Kimlik doğrulaması istemez; metin kısaltılır, sadece günlüğe yazılır.
+function hataBildir(p, callback) {
+  var personel = String(p.personel || '?').substring(0, 60);
+  var mesaj = String(p.mesaj || '').substring(0, 300);
+  if (mesaj) gunlukYaz('telefon_hata', 'telefon: ' + personel + (p.build ? ' (' + String(p.build).substring(0, 20) + ')' : ''), mesaj, true);
+  return outJson({ status: 'ok' }, callback);
+}
+
+function sistemDurumu(user, pass, callback) {
+  var auth = requirePermission(user, pass, 'canli_durum');
+  if (!auth.ok) return outJson({ status: 'error', message: auth.message }, callback);
+  var props = PropertiesService.getScriptProperties();
+  var son = {};
+  ['katalog', 'katalog_urun', 'cari', 'sayim', 'mal', 'masaustu_kontrol', 'masaustu', 'yetki', 'telefon_hata', 'hata', 'yonetim'].forEach(function (t) {
+    try { var v = props.getProperty('SON_' + t); if (v) son[t] = JSON.parse(v); } catch (e) { /* bozuk kayıt: atla */ }
+  });
+  var ss = SpreadsheetApp.getActiveSpreadsheet();
+  var satir = function (ad) { var sh = ss.getSheetByName(ad); return sh ? Math.max(sh.getLastRow() - 1, 0) : 0; };
+  var malBekleyen = 0;
+  var mal = ss.getSheetByName('MalHareket');
+  if (mal && mal.getLastRow() >= 2 && mal.getLastColumn() >= MAL_COL.AKTARILDI) {
+    mal.getRange(2, MAL_COL.BATCH, mal.getLastRow() - 1, 2).getValues().forEach(function (r) { if (r[0] && !r[1]) malBekleyen++; });
+  }
+  var gunluk = [];
+  var g = ss.getSheetByName('SistemGunlugu');
+  if (g && g.getLastRow() >= 2) {
+    var n = Math.min(150, g.getLastRow() - 1);
+    gunluk = g.getRange(g.getLastRow() - n + 1, 1, n, GUNLUK_BASLIK.length).getValues().reverse().map(function (r) {
+      return { zaman: r[0] instanceof Date ? Utilities.formatDate(r[0], Session.getScriptTimeZone() || 'GMT+3', 'yyyy-MM-dd HH:mm:ss') : String(r[0]),
+        tur: String(r[1]), kaynak: String(r[2]), detay: String(r[3]), hata: String(r[4]) === 'HATA' };
+    });
+  }
+  return outJson({
+    status: 'ok', surum: GS_VERSION, sunucuZamani: simdiMetin(), sunucuMs: Date.now(),
+    son: son,
+    sayilar: { katalog: satir('Katalog'), cari: satir('Cari'), sayim: satir('Sayim'), gecGelen: satir('GecGelenKayitlar'), malBekleyenSatir: malBekleyen },
+    katalogSurumu: props.getProperty('KATALOG_VERSION') || '',
+    gunluk: gunluk
+  }, callback);
+}
+
 function doPost(e) {
   // 10+ telefon aynı anda veri gönderebildiği için, sayfaya yazma işlemini
   // KİLİTLİYORUZ. Kilit olmadan iki telefonun isteği aynı anda işlenirse,
@@ -800,6 +901,15 @@ function doPost(e) {
     // 30 saniyede kilit açılmadıysa (aşırı yoğunluk) hatayı bildir —
     // uygulama tarafı bunu ağ hatası gibi algılayıp veriyi kuyrukta tutar,
     // hiçbir kayıt silinmez, birazdan otomatik tekrar dener.
+    // Reddedilen verinin türünü ve göndereni günlükte göster (örn. ERP'nin katalog gönderimi).
+    var redTur = 'sayım', redKaynak = 'sunucu';
+    try {
+      var redVeri = JSON.parse(e.postData.contents);
+      redTur = redVeri.type || 'sayım';
+      redKaynak = redVeri.kaynak || (redVeri.type === 'katalog_bulk' || redVeri.type === 'cari_bulk' ? 'ERP / dış program' : ('telefon: ' + (redVeri.personnel || redVeri.personel || '?')));
+    } catch (pe) { /* okunamadıysa genel mesaj */ }
+    gunlukYaz('hata', redKaynak, 'Sunucu yoğun: kilit 30 sn içinde alınamadı, gelen ' + redTur + ' verisi REDDEDİLDİ' +
+      (redTur === 'katalog_bulk' || redTur === 'cari_bulk' ? ' — bir sonraki zamanlanmış gönderimde tekrar gelmeli' : ' — telefon tekrar gönderecek'), true);
     return ContentService
       .createTextOutput(JSON.stringify({ status: 'error', message: 'Sunucu yoğun, kilit alınamadı — tekrar denenecek' }))
       .setMimeType(ContentService.MimeType.JSON);
@@ -808,17 +918,33 @@ function doPost(e) {
   try {
     var data = JSON.parse(e.postData.contents);
 
+    // Kaynak: telefon kendini bildirir ("telefon: Ali"); bildirmeyen gönderici
+    // ERP bilgisayarındaki aktarım programıdır.
+    var kaynak = data.kaynak ? String(data.kaynak) : 'ERP / dış program';
     if (data.type === 'katalog_bulk') {
-      return saveKatalogBulk(data.entries || []);
+      var kOut = saveKatalogBulk(data.entries || []);
+      gunlukYaz('katalog', kaynak, (data.entries || []).length + ' ürün yüklendi (katalog tamamen yenilendi)', false);
+      return kOut;
     }
     if (data.type === 'katalog_item') {
-      return saveKatalogItem(data.entry || {});
+      var kiOut = saveKatalogItem(data.entry || {});
+      gunlukYaz('katalog_urun', kaynak, 'Tek ürün: ' + ((data.entry && data.entry.name) || '') + ' (' + ((data.entry && data.entry.barcode) || '') + ')', false);
+      return kiOut;
     }
     if (data.type === 'cari_bulk') {
-      return saveCariBulk(data.entries || []);
+      var cOut = saveCariBulk(data.entries || []);
+      gunlukYaz('cari', kaynak, (data.entries || []).length + ' cari yüklendi', false);
+      return cOut;
     }
     if (data.type === 'mal_hareket') {
-      return saveMalHareket(data);
+      var mOut = saveMalHareket(data);
+      var mr = {};
+      try { mr = JSON.parse(mOut.getContent()); } catch (pe) { /* özet olmadan da günlüğe yaz */ }
+      gunlukYaz('mal', 'telefon: ' + (data.personel || '?'),
+        (data.tip === 'cikis' ? 'Mal Çıkış' : 'Mal Giriş') + ' · ' + (data.cari || '') + (data.faturaNo ? ' · No ' + data.faturaNo : '') +
+        ' · ' + (data.rows || []).length + ' satır (yeni ' + (mr.saved || 0) + ', güncellenen ' + (mr.guncellenen || 0) + ', silinen ' + (mr.silinen || 0) + ')' +
+        (mr.kilitli ? ' · ' + mr.kilitli + ' satır ERP\'ye aktarıldığı için değiştirilemedi' : ''), !!mr.kilitli);
+      return mOut;
     }
 
     // ---- Normal sayım verisi ----
@@ -881,12 +1007,17 @@ function doPost(e) {
     // Son yazma zamanı (oturum bazında): yönetici rapor oluştururken
     // "telefonlardan hâlâ veri geliyor mu?" kontrolü için (bkz. handleFinalize).
     if (rows.length > 0 || deletedIds.length > 0) sonYazmaKaydet(sessionId);
+    if (rows.length > 0 || deletedIds.length > 0) {
+      gunlukYaz('sayim', 'telefon: ' + (personnel || '?'), rows.length + ' kayıt' + (deletedIds.length ? ', ' + deletedIds.length + ' silme' : '') +
+        (skipped ? ', ' + skipped + ' atlandı (eski sürüm/silinmiş)' : '') + (gecRows.length ? ', ' + gecRows.length + ' geç gelen' : ''), false);
+    }
 
     return ContentService
       .createTextOutput(JSON.stringify({ status: 'ok', processed: rows.length, skipped: skipped, gecGelen: gecRows.length }))
       .setMimeType(ContentService.MimeType.JSON);
 
   } catch (err) {
+    gunlukYaz('hata', 'sunucu', 'Gelen veri işlenemedi' + (data && data.type ? ' (' + data.type + ')' : '') + ': ' + err.toString(), true);
     return ContentService
       .createTextOutput(JSON.stringify({ status: 'error', message: err.toString() }))
       .setMimeType(ContentService.MimeType.JSON);
@@ -995,6 +1126,7 @@ function handleTemizle(user, pass, callback) {
     }
     var token = new Date().toISOString();
     PropertiesService.getScriptProperties().setProperty('RESET_TOKEN', token);
+    gunlukYaz('yonetim', String(user || ''), 'Sayım dosyası temizlendi, arşiv: ' + archivedName, false);
     return outJson({ status: 'ok', resetToken: token, archivedSheet: archivedName }, callback);
   } catch (err) {
     return outJson({ status: 'error', message: err.toString() }, callback);
@@ -1251,6 +1383,7 @@ function handleFinalize(user, pass, force, haric, callback) {
       } catch (mailErr) { /* mail gönderilemezse rapor yine de oluşur, sessiz geç */ }
     }
 
+    gunlukYaz('yonetim', String(user || ''), 'Rapor oluşturuldu: ' + Object.keys(groups).length + ' çeşit, ' + toplamAdet + ' adet' + (String(force) === '1' ? ' (veri gelirken zorla)' : ''), false);
     return outJson({
       status: 'ok',
       toplamCesit: Object.keys(groups).length,
@@ -1264,6 +1397,7 @@ function handleFinalize(user, pass, force, haric, callback) {
       backupEmail: emailGonderildi ? backupEmail : ''
     }, callback);
   } catch (err) {
+    gunlukYaz('hata', 'sunucu', 'Rapor oluşturulamadı: ' + err.toString(), true);
     return outJson({ status: 'error', message: err.toString() }, callback);
   } finally {
     lock.releaseLock();
