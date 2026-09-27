@@ -1327,6 +1327,12 @@
     return (state.currentUser.permissions || []).indexOf(perm) !== -1;
   }
 
+  // Fiyatı sadece "fiyat", sistemdeki stok miktarını sadece "stok" yetkisi
+  // olanlar (ve yöneticiler) görür — uygulamanın TÜM ekranlarında (Sayım,
+  // Tüm Sayılanlar, Mal Giriş/Çıkış, Fiyat & Stok Sorgula, CSV).
+  function canSeePrice(){ return hasPerm('fiyat'); }
+  function canSeeStock(){ return hasPerm('stok'); }
+
   function hasAnyAdminPerm(){
     return hasPerm('rapor') || hasPerm('temizle') || hasPerm('kullanici_yonetimi') || hasPerm('ayarlar') || hasPerm('canli_durum') || hasPerm('duzelt');
   }
@@ -1339,6 +1345,8 @@
     adminLinkWrapEl.classList.toggle('hidden', !hasAnyAdminPerm());
     document.getElementById('mainAdminBtn').classList.toggle('hidden', !hasAnyAdminPerm());
     document.getElementById('menuMalCikisBtn').classList.toggle('hidden', !hasPerm('mal_cikis'));
+    // Fiyat & Stok Sorgula: ikisini de göremeyen için ekranın anlamı yok.
+    document.getElementById('menuFiyatBtn').classList.toggle('hidden', !canSeePrice() && !canSeeStock());
     startBtn.textContent = (state.session.scans && state.session.scans.length > 0) ? '▶ Sayıma Devam Et' : 'Sayıma Başla';
   }
   function showLoginUI(){
@@ -2055,7 +2063,7 @@
     document.getElementById('qtyEntryBarcode').innerHTML = formatBarcodeColored(pendingScan.barcode);
     document.getElementById('qtyEntryMeta').textContent =
       (unit === 'Kg' ? 'Dökme ürün (Kg) · ' : '') +
-      (pendingScan.oldStock !== '' ? 'Sistem: ' + pendingScan.oldStock + ' · ' : '') +
+      (canSeeStock() && pendingScan.oldStock !== '' ? 'Sistem: ' + pendingScan.oldStock + ' · ' : '') +
       (existingQty > 0 ? 'Bu oturumda önceden sayılan: ' + existingQty : 'Bu üründen ilk okutma');
     var kdvBoxEl = document.getElementById('qtyEntryKdv');
     var kdvTxt = formatKdv((catalogMap.get(pendingScan.barcode) || {}).kdv);
@@ -2177,7 +2185,7 @@
 
   function itemRowHtml(it){
     var oldStockHtml = '';
-    if(it.oldStock !== '' && it.oldStock !== undefined && !isNaN(Number(it.oldStock))){
+    if(canSeeStock() && it.oldStock !== '' && it.oldStock !== undefined && !isNaN(Number(it.oldStock))){
       oldStockHtml = ' · <span class="oldStock">Sistem: '+escapeHtml(it.oldStock)+'</span>';
     }
     var unit = unitFor(it.barcode);
@@ -2641,14 +2649,16 @@
       else if(stokN === 0){ stokHtml = 'Stokta yok'; stokRenk = 'var(--red)'; }
       else { stokHtml = 'Stok eksi: ' + stokN; stokRenk = 'var(--amber)'; }
     }
+    var fiyatSatiri = canSeePrice() ? '<div style="font-size:38px; font-weight:800; color:var(--green); font-family:var(--mono); margin-bottom:12px;">' + fiyatBuyuk + '</div>' : '';
+    var stokSatiri = canSeeStock() ? '<div style="margin-top:16px; font-size:17px; font-weight:700; color:' + stokRenk + ';">' + stokHtml + '</div>' : '';
     return '<div style="text-align:center; padding:8px 4px 28px;">' +
       '<div style="display:inline-block; font-size:11px; font-weight:800; letter-spacing:.04em; color:var(--accent); background:var(--panel2); border-radius:20px; padding:4px 14px; margin-bottom:16px;">💰 FİYAT & STOK SORGULA</div>' +
       '<div style="background:var(--panel); border-radius:var(--r-lg); box-shadow:var(--sh-md); padding:26px 20px;">' +
         '<div style="font-size:20px; font-weight:800; line-height:1.3; margin-bottom:10px;">' + escapeHtml(r.name) + '</div>' +
         '<div style="font-family:var(--mono); font-size:14px; color:var(--muted); margin-bottom:18px;">' + escapeHtml(r.barcode) + (r.stockCode ? (' · ' + escapeHtml(r.stockCode)) : '') + '</div>' +
-        '<div style="font-size:38px; font-weight:800; color:var(--green); font-family:var(--mono); margin-bottom:12px;">' + fiyatBuyuk + '</div>' +
+        fiyatSatiri +
         kdvHtml +
-        '<div style="margin-top:16px; font-size:17px; font-weight:700; color:' + stokRenk + ';">' + stokHtml + '</div>' +
+        stokSatiri +
       '</div>' +
     '</div>';
   }
@@ -2701,10 +2711,11 @@
         stokHtml = stokN > 0 ? ('<b>' + stokN + birim + '</b> stokta')
           : (stokN === 0 ? '<b style="color:var(--red);">Stokta yok</b>' : '<b style="color:var(--amber);">Stok eksi: ' + stokN + '</b>');
       }
+      if(!canSeePrice()) fiyatHtml = '';
       return '<div class="item">' +
         '<div class="info"><div class="name">' + escapeHtml(r.name) + '</div>' +
-        '<div class="meta">' + escapeHtml(r.barcode) + (r.stockCode ? (' · ' + escapeHtml(r.stockCode)) : '') + ' · ' + stokHtml + '</div></div>' +
-        '<div style="text-align:right; flex-shrink:0;">' + fiyatHtml + '<br>' + kdvHtml + '</div>' +
+        '<div class="meta">' + escapeHtml(r.barcode) + (r.stockCode ? (' · ' + escapeHtml(r.stockCode)) : '') + (canSeeStock() ? ' · ' + stokHtml : '') + '</div></div>' +
+        '<div style="text-align:right; flex-shrink:0;">' + fiyatHtml + (fiyatHtml ? '<br>' : '') + kdvHtml + '</div>' +
       '</div>';
     }).join('');
   }
@@ -3119,8 +3130,6 @@
   }
 
   function fmtQty(n){ return String(Math.round(Number(n) * 1000) / 1000).replace('.', ','); }
-  // Fiyatları sadece "fiyat" yetkisi olanlar (ve yöneticiler) görür.
-  function canSeePrice(){ return hasPerm('fiyat'); }
   function fmtPara(n){
     return Number(n).toLocaleString('tr-TR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + ' ₺';
   }
@@ -3202,7 +3211,7 @@
     var listed = malItems.filter(function(it){ return it.barkod === barcode; });
     document.getElementById('malHareketQtyName').textContent = entry.name;
     var meta = 'Barkod: ' + barcode + (entry.stockCode ? (' · ' + entry.stockCode) : '');
-    if(entry.oldStock !== '' && !isNaN(Number(entry.oldStock))) meta += ' · Sistem: ' + entry.oldStock;
+    if(canSeeStock() && entry.oldStock !== '' && !isNaN(Number(entry.oldStock))) meta += ' · Sistem: ' + entry.oldStock;
     var kdvTxt = formatKdv(entry.kdv);
     if(kdvTxt) meta += ' · ' + kdvTxt;
     if(canSeePrice() && entry.price !== undefined && entry.price !== '' && !isNaN(Number(entry.price))) meta += ' · Fiyat: ' + fmtPara(entry.price);
@@ -3453,7 +3462,7 @@
 
   function browseItemRowHtml(it){
     var oldStockHtml = '';
-    if(it.oldStock !== '' && it.oldStock !== undefined && !isNaN(Number(it.oldStock))){
+    if(canSeeStock() && it.oldStock !== '' && it.oldStock !== undefined && !isNaN(Number(it.oldStock))){
       oldStockHtml = ' · <span class="oldStock">Sistem: '+escapeHtml(it.oldStock)+'</span>';
     }
     var stockHtml = it.stockCode ? ' · <span class="oldStock">'+escapeHtml(it.stockCode)+'</span>' : '';
@@ -3642,7 +3651,8 @@
     { key: 'canli_durum', label: '📡 Canlı Durum' },
     { key: 'duzelt', label: '✏️ Düzeltme' },
     { key: 'mal_cikis', label: '📤 Mal Çıkış' },
-    { key: 'fiyat', label: '💰 Fiyat Görme' }
+    { key: 'fiyat', label: '💰 Fiyat Görme' },
+    { key: 'stok', label: '📦 Stok Görme' }
   ];
 
   function permsFromString(s){
@@ -4286,7 +4296,8 @@
   document.getElementById('exportBtn').addEventListener('click', function(){
     var rows = [['Ürün Adı','Stok Kodu','Barkod','Birim','Eski Stok','Sayılan Adet','Fark','Tarih','Saat','Personel','Reyon']];
     state.session.scans.forEach(function(it){
-      var oldStock = (it.oldStock !== '' && it.oldStock !== undefined && !isNaN(Number(it.oldStock))) ? Number(it.oldStock) : '';
+      // Stok yetkisi yoksa "Eski Stok" ve "Fark" sütunları boş kalır.
+      var oldStock = (canSeeStock() && it.oldStock !== '' && it.oldStock !== undefined && !isNaN(Number(it.oldStock))) ? Number(it.oldStock) : '';
       var diff = oldStock !== '' ? (it.qty - oldStock) : '';
       rows.push([it.name, it.stockCode || '', it.barcode, unitFor(it.barcode), oldStock, it.qty, diff, it.date, it.time, state.personnel, it.reyon || '']);
     });
@@ -4588,7 +4599,7 @@
       distinct + ' farklı ürün · ' + scans.length + ' ayrı okutma · toplam ' + totalQty + ' adet';
     document.getElementById('reviewList').innerHTML = scans.map(function(it){
       var oldStockHtml = '';
-      if(it.oldStock !== '' && it.oldStock !== undefined && !isNaN(Number(it.oldStock))){
+      if(canSeeStock() && it.oldStock !== '' && it.oldStock !== undefined && !isNaN(Number(it.oldStock))){
         oldStockHtml = ' · <span class="oldStock">Sistem: '+escapeHtml(it.oldStock)+'</span>';
       }
       var unit = unitFor(it.barcode);
