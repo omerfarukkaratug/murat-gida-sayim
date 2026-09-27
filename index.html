@@ -3832,6 +3832,7 @@
   var sistemTimer = null;
   var sistemFiltre = 'hepsi';
   var sistemSonVeri = null;
+  var sistemDamgalar = { katalog: '', cari: '' }; // KATALOG_VERSION / CARI_VERSION (son değişiklik zamanı)
   var SD_TURLER = {
     katalog: '📦 Katalog', katalog_urun: '📦 Tek ürün', cari: '🏢 Cari', sayim: '📋 Sayım', mal: '📥 Mal', masaustu: '🖥️ Masaüstü',
     masaustu_kontrol: '🖥️ Masaüstü', yetki: '🔑 Giriş', telefon_hata: '📱 Telefon', hata: '⚠️ Sunucu', yonetim: '⚙️ Yönetim'
@@ -3859,6 +3860,14 @@
       (eski ? '<div class="sdDetail" style="color:var(--amber); font-weight:700;">⚠️ ' + (eskiSaat < 1 ? Math.round(eskiSaat * 60) + ' dakikadan' : eskiSaat + ' saatten') + ' uzun süredir yeni veri gelmedi</div>' : '') +
     '</div>';
   }
+  // Sunucunun "son değişiklik" damgası (ISO zaman): günlük tutulmaya
+  // başlamadan önceki son yüklemeyi de gösterir.
+  function sdDamga(iso, simdiMs){
+    var ms = Date.parse(iso || '');
+    if(isNaN(ms)) return '';
+    var d = new Date(ms);
+    return 'Son değişiklik: ' + d.toLocaleDateString('tr-TR') + ' ' + d.toLocaleTimeString('tr-TR', { hour: '2-digit', minute: '2-digit' }) + ' (' + sdOnce(ms, simdiMs) + ')';
+  }
   function sdTelefonKarti(){
     var bekleyen = state.pendingSessions.reduce(function(n, p){ return n + (p.rows || []).length + (p.deletedIds || []).length; }, 0);
     var h = state.sonGonderimHatasi;
@@ -3883,9 +3892,13 @@
     var html = '';
     html += '<div class="sdHead">Son gelen veriler</div>';
     // ERP'deki aktarım programı katalogu 5 dk'da bir gönderiyor: 15 dk gelmezse uyar.
-    html += sdKart('📦 Katalog (ERP\'den)', son.katalog, t, 'Tabloda ' + say.katalog + ' ürün · ERP programı 5 dk\'da bir göndermeli', 0.25);
+    var katDamga = sdDamga(d.katalogSurumu || sistemDamgalar.katalog, t);
+    var katEski = !son.katalog && Date.parse(d.katalogSurumu || sistemDamgalar.katalog || '') < t - 15 * 60000;
+    html += sdKart('📦 Katalog (ERP\'den)', son.katalog, t, 'Tabloda ' + say.katalog + ' ürün · ERP programı 5 dk\'da bir göndermeli' +
+      (katDamga ? '<br>' + (katEski ? '<b style="color:var(--amber);">⚠️ ' + katDamga + '</b>' : katDamga) : ''), 0.25);
     if(son.katalog_urun) html += sdKart('📦 Son eklenen tek ürün', son.katalog_urun, t);
-    html += sdKart('🏢 Cari listesi (ERP\'den)', son.cari, t, 'Tabloda ' + say.cari + ' cari', 72);
+    var cariDamga = sdDamga(sistemDamgalar.cari, t);
+    html += sdKart('🏢 Cari listesi (ERP\'den)', son.cari, t, 'Tabloda ' + say.cari + ' cari' + (cariDamga ? '<br>' + cariDamga : ''), 72);
     html += sdKart('📋 Sayım', son.sayim, t, 'Sayım tablosunda ' + say.sayim + ' satır' + (say.gecGelen ? ' · Geç gelen: ' + say.gecGelen : ''));
     html += sdKart('📥 Mal Giriş/Çıkış', son.mal, t);
     html += sdKart('🖥️ Masaüstü aktarım programı — son bağlantı', son.masaustu_kontrol, t,
@@ -3926,6 +3939,12 @@
       sistemSonVeri = data;
       renderSistem();
     }, 30000);
+    // Katalog/cari "son değişiklik" damgaları (sunucunun resetcheck cevabında var).
+    jsonpRequestP(state.serverUrl || DEFAULT_SERVER_URL, { action: 'resetcheck' }, function(err, r){
+      if(err || !r) return;
+      sistemDamgalar = { katalog: r.katalogVersion || '', cari: r.cariVersion || '' };
+      if(sistemSonVeri && !sistemScreenEl.classList.contains('hidden')) renderSistem();
+    }, 20000);
   }
   function openSistemScreen(){
     sistemSonVeri = null;
