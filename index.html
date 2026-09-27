@@ -307,7 +307,7 @@
   <header style="border:none; padding:0 0 16px; background:transparent; display:flex; align-items:flex-start; justify-content:space-between;">
     <div>
       <h1><img src="logo-header.png" alt="Murat Gıda" style="height:30px; width:auto; display:block;"></h1>
-      <div class="sub">MK ERP · Murat Gıda • offline • Android • build 98</div>
+      <div class="sub">MK ERP · Murat Gıda • offline • Android • build 99</div>
     </div>
     <button type="button" id="themeToggleBtn" title="Tema seç" style="background:var(--panel2); border:1.5px solid var(--line); color:var(--text); width:34px; height:34px; border-radius:50%; font-size:15px; padding:0; display:flex; align-items:center; justify-content:center; flex-shrink:0;">🎨</button>
   </header>
@@ -1397,8 +1397,9 @@
   // Fiyatı sadece "fiyat", sistemdeki stok miktarını sadece "stok" yetkisi
   // olanlar (ve yöneticiler) görür — uygulamanın TÜM ekranlarında (Sayım,
   // Tüm Sayılanlar, Mal Giriş/Çıkış, Fiyat & Stok Sorgula, CSV).
-  // KONUM: Fiyat ve stok ayrıca "şube içinde olma" şartına bağlıdır (yöneticiler
-  // hariç). Konum uygulamaya girişte bir kez alınır (bkz. konumKontrol).
+  // KONUM: Fiyat ve stok ayrıca "şube içinde olma" şartına bağlıdır. Yöneticiler
+  // ve "konum_serbest" yetkisi verilen kullanıcılar bu şarttan muaftır (örn.
+  // saha satış, bölge sorumlusu). Konum girişte bir kez alınır (bkz. konumKontrol).
   function canSeePrice(){ return hasPerm('fiyat') && konumIzinli(); }
   function canSeeStock(){ return hasPerm('stok') && konumIzinli(); }
 
@@ -1412,8 +1413,10 @@
   var konumSonuc = null;       // { durum: 'icerde'|'disarda'|'hata'|'bekliyor', sube, mesafe, dogruluk, hata }
   var konumKontrolKullanici = null;
   function subeListesi(){ return Array.isArray(state.subeler) ? state.subeler : []; }
+  // Konum kısıtlamasından muaf mı? Yönetici ya da "konum_serbest" yetkisi olan.
+  function konumMuaf(){ return !!state.currentUser && (state.currentUser.role === 'yonetici' || hasPerm('konum_serbest')); }
   function konumIzinli(){
-    if(!state.currentUser || state.currentUser.role === 'yonetici') return true;
+    if(!state.currentUser || konumMuaf()) return true;
     if(subeListesi().length === 0) return true; // şube tanımlanmamış: kısıtlama yok
     return !!(konumSonuc && konumSonuc.durum === 'icerde');
   }
@@ -1437,7 +1440,7 @@
       var goster = !!state.currentUser && subeListesi().length > 0;
       el.classList.toggle('hidden', !goster);
       if(goster){
-        var yon = state.currentUser.role === 'yonetici';
+        var yon = konumMuaf(); // muaf olana "fiyat ve stok gizli" yazma
         var tekrar = ' <a href="#" id="konumTekrarBtn" style="color:var(--accent); font-weight:700;">Tekrar dene</a>';
         if(!konumSonuc || konumSonuc.durum === 'bekliyor') el.innerHTML = '📍 Konum kontrol ediliyor…';
         else if(konumSonuc.durum === 'icerde') el.innerHTML = '<span style="color:var(--green); font-weight:700;">📍 ' + escapeHtml(konumSonuc.sube) + ' içinde</span>';
@@ -3884,7 +3887,9 @@
     { key: 'duzelt', label: '✏️ Düzeltme' },
     { key: 'mal_cikis', label: '📤 Mal Çıkış' },
     { key: 'fiyat', label: '💰 Fiyat Görme' },
-    { key: 'stok', label: '📦 Stok Görme' }
+    { key: 'stok', label: '📦 Stok Görme' },
+    // Şube dışındayken de fiyat/stok görebilir (konum kısıtlamasından muaf).
+    { key: 'konum_serbest', label: '🌍 Şube Dışında da Görür' }
   ];
 
   function permsFromString(s){
