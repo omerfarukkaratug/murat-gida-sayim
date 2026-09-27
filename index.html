@@ -226,6 +226,15 @@
   .choiceBtn.main small{color:rgba(255,255,255,.85);}
   .choiceBtn.skip{text-align:center; background:var(--panel); border:1.5px solid var(--text); margin-bottom:0;}
   .noStokTag{color:var(--amber); font-weight:800;}
+  .sdCard{background:var(--panel); border-radius:12px; box-shadow:var(--sh-sm); padding:10px 12px; margin-bottom:8px; border-left:4px solid var(--green);}
+  .sdCard.warn{border-left-color:var(--amber);} .sdCard.err{border-left-color:var(--red);} .sdCard.none{border-left-color:var(--line);}
+  .sdTitle{font-weight:800; font-size:13px; display:flex; justify-content:space-between; gap:8px;}
+  .sdTime{font-family:var(--mono); font-size:11.5px; color:var(--muted); white-space:nowrap;}
+  .sdDetail{font-size:12px; color:var(--muted); margin-top:3px; line-height:1.45; word-break:break-word;}
+  .sdHead{font-size:11px; letter-spacing:.06em; text-transform:uppercase; color:var(--muted); font-weight:800; margin:14px 2px 6px;}
+  .sdLog{font-size:11.5px; padding:7px 9px; border-radius:8px; background:var(--panel); margin-bottom:4px; line-height:1.4; word-break:break-word;}
+  .sdLog.err{background:rgba(220,38,38,.08); color:var(--text);}
+  .sdLog b{font-family:var(--mono); font-weight:700; color:var(--muted); font-size:10.5px;}
   #priceCamLive .camWrap{height:30dvh; border-radius:0;}
   .priceModeBtn{width:44px; flex-shrink:0; background:var(--panel2); border:1.5px solid var(--line); color:var(--text); border-radius:var(--r-sm);
     display:flex; align-items:center; justify-content:center; padding:0; font-size:13px; font-weight:800;}
@@ -298,7 +307,7 @@
   <header style="border:none; padding:0 0 16px; background:transparent; display:flex; align-items:flex-start; justify-content:space-between;">
     <div>
       <h1><img src="logo-header.png" alt="Murat Gıda" style="height:30px; width:auto; display:block;"></h1>
-      <div class="sub">MK ERP · Murat Gıda • offline • Android • build 94</div>
+      <div class="sub">MK ERP · Murat Gıda • offline • Android • build 95</div>
     </div>
     <button type="button" id="themeToggleBtn" title="Tema seç" style="background:var(--panel2); border:1.5px solid var(--line); color:var(--text); width:34px; height:34px; border-radius:50%; font-size:15px; padding:0; display:flex; align-items:center; justify-content:center; flex-shrink:0;">🎨</button>
   </header>
@@ -563,6 +572,24 @@
        ekran olarak açılır (Ürün Arama ekranıyla aynı mantık) çünkü küçük bir
        modalın içine sıkıştırılınca hem karışık görünüyordu hem de basılı
        tutma/kaydırma çakışıp arayüz takılı kalabiliyordu. -->
+  <!-- Sistem Durumu: son gelen veriler + günlük + hatalar (15 sn'de bir kendini yeniler) -->
+  <div id="sistemScreen" class="hidden" style="position:fixed; inset:0; background:var(--bg); z-index:50; display:flex; flex-direction:column;">
+    <div style="padding:16px; border-bottom:1px solid var(--line); background:var(--panel); box-shadow:var(--sh-sm);">
+      <div style="display:flex; align-items:center; justify-content:space-between;">
+        <div style="font-weight:800; font-size:16px;">🩺 Sistem Durumu</div>
+        <div style="display:flex; gap:8px; align-items:center;">
+          <button type="button" id="sistemRefreshBtn" style="background:transparent; border:none; color:var(--accent); font-size:12px; font-weight:700; padding:2px 4px;">↻ Yenile</button>
+          <button type="button" id="sistemCloseTopBtn" aria-label="Kapat" style="width:34px; height:34px; border-radius:50%; background:var(--panel2); border:1.5px solid var(--line); color:var(--text); font-size:18px; line-height:1; padding:0; display:flex; align-items:center; justify-content:center;">✕</button>
+        </div>
+      </div>
+      <div id="sistemStamp" class="hint" style="margin-top:6px; font-family:var(--mono); font-size:10.5px;"></div>
+    </div>
+    <div id="sistemBody" style="flex:1; overflow-y:auto; padding:10px 12px;"><div class="hint">⏳ Yükleniyor…</div></div>
+    <div class="footer">
+      <button class="fb-export" id="sistemCloseBtn" style="flex:none; width:100%;">Kapat</button>
+    </div>
+  </div>
+
   <div id="duzeltScreen" class="hidden" style="position:fixed; inset:0; background:var(--bg); z-index:50; display:flex; flex-direction:column;">
     <div style="padding:16px; border-bottom:1px solid var(--line); background:var(--panel); box-shadow:var(--sh-sm);">
       <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:10px;">
@@ -876,6 +903,9 @@
           <button type="button" id="adminCanliRefreshBtn" style="background:transparent; border:none; color:var(--accent); font-size:12px; font-weight:700; padding:2px 4px;">↻ Yenile</button>
         </div>
         <div id="adminCanliList"><div class="hint">⏳ Yükleniyor…</div></div>
+        <button type="button" id="adminSistemOpenBtn" style="width:100%; margin-top:8px; background:var(--panel); border:1.5px solid var(--line); color:var(--text); padding:14px; text-align:left; line-height:1.5;">
+          🩺 Sistem Durumu<br><span style="font-weight:500; font-size:11px; color:var(--muted);">ERP'den, telefonlardan en son ne geldi, saat kaçta — ve tüm hatalar, canlı</span>
+        </button>
       </div>
 
       <div id="adminSectionDuzelt" class="hidden" style="border-top:1px solid var(--line); margin:14px 0 12px; padding-top:12px;">
@@ -1525,7 +1555,7 @@
     fetch(url, {
       method:'POST', mode:'no-cors',
       headers:{'Content-Type':'text/plain;charset=utf-8'},
-      body: JSON.stringify({ type:'katalog_bulk', entries: entries })
+      body: JSON.stringify({ type:'katalog_bulk', entries: entries, kaynak: kaynakEtiketi() })
     }).then(function(){
       successToast("Katalog buluta gönderildi — diğer telefonlar artık çekebilir");
       state.catalogSyncedAt = nowParts();
@@ -1555,7 +1585,7 @@
     fetch(url, {
       method:'POST', mode:'no-cors',
       headers:{'Content-Type':'text/plain;charset=utf-8'},
-      body: JSON.stringify({ type:'katalog_item', entry: entry })
+      body: JSON.stringify({ type:'katalog_item', entry: entry, kaynak: kaynakEtiketi() })
     }).catch(function(){ /* sessiz geç, yerel kayıt zaten yapıldı, veri kaybı yok */ });
   }
 
@@ -3792,6 +3822,128 @@
   }
   document.getElementById('adminCanliRefreshBtn').addEventListener('click', fetchCanliDurum);
 
+  // ---------- SİSTEM DURUMU ----------
+  // Sunucudaki 'SistemGunlugu' ve "son olay" kayıtlarını gösterir: ERP'den
+  // katalog/cari en son ne zaman geldi, telefonlardan sayım/mal kayıtları,
+  // masaüstü aktarım programının son bağlantısı ve tüm hatalar. Ekran açıkken
+  // 15 sn'de bir kendini yeniler.
+  var sistemScreenEl = document.getElementById('sistemScreen');
+  var sistemBodyEl = document.getElementById('sistemBody');
+  var sistemTimer = null;
+  var sistemFiltre = 'hepsi';
+  var sistemSonVeri = null;
+  var SD_TURLER = {
+    katalog: '📦 Katalog', katalog_urun: '📦 Tek ürün', cari: '🏢 Cari', sayim: '📋 Sayım', mal: '📥 Mal', masaustu: '🖥️ Masaüstü',
+    masaustu_kontrol: '🖥️ Masaüstü', yetki: '🔑 Giriş', telefon_hata: '📱 Telefon', hata: '⚠️ Sunucu', yonetim: '⚙️ Yönetim'
+  };
+  function sdOnce(ms, simdiMs){
+    if(!ms) return '';
+    var dk = Math.round((simdiMs - ms) / 60000);
+    if(dk < 1) return 'az önce';
+    if(dk < 60) return dk + ' dk önce';
+    var sa = Math.floor(dk / 60);
+    if(sa < 48) return sa + ' saat önce';
+    return Math.floor(sa / 24) + ' gün önce';
+  }
+  function sdKart(baslik, kayit, simdiMs, ekBilgi, eskiSaat){
+    if(!kayit){
+      return '<div class="sdCard none"><div class="sdTitle"><span>' + baslik + '</span><span class="sdTime">hiç kayıt yok</span></div>' +
+        (ekBilgi ? '<div class="sdDetail">' + ekBilgi + '</div>' : '') + '</div>';
+    }
+    var eski = eskiSaat && kayit.ms && (simdiMs - kayit.ms) > eskiSaat * 3600000;
+    var cls = kayit.hata ? 'err' : (eski ? 'warn' : '');
+    return '<div class="sdCard ' + cls + '">' +
+      '<div class="sdTitle"><span>' + baslik + '</span><span class="sdTime">' + escapeHtml(String(kayit.zaman).slice(5, 16).replace('-', '.')) + ' · ' + sdOnce(kayit.ms, simdiMs) + '</span></div>' +
+      '<div class="sdDetail">' + escapeHtml(kayit.detay || '') + (kayit.kaynak ? ' — <i>' + escapeHtml(kayit.kaynak) + '</i>' : '') + '</div>' +
+      (ekBilgi ? '<div class="sdDetail">' + ekBilgi + '</div>' : '') +
+      (eski ? '<div class="sdDetail" style="color:var(--amber); font-weight:700;">⚠️ ' + (eskiSaat < 1 ? Math.round(eskiSaat * 60) + ' dakikadan' : eskiSaat + ' saatten') + ' uzun süredir yeni veri gelmedi</div>' : '') +
+    '</div>';
+  }
+  function sdTelefonKarti(){
+    var bekleyen = state.pendingSessions.reduce(function(n, p){ return n + (p.rows || []).length + (p.deletedIds || []).length; }, 0);
+    var h = state.sonGonderimHatasi;
+    var cls = h ? 'err' : (bekleyen > 0 ? 'warn' : '');
+    return '<div class="sdCard ' + cls + '"><div class="sdTitle"><span>📱 Bu telefon</span><span class="sdTime">' + escapeHtml(APP_BUILD) + '</span></div>' +
+      '<div class="sdDetail">' + (navigator.onLine ? 'İnternet var' : '<b style="color:var(--red);">İnternet yok</b>') +
+      ' · gönderilmeyi bekleyen ' + bekleyen + ' kayıt</div>' +
+      (h ? '<div class="sdDetail" style="color:var(--red); font-weight:700;">Son gönderim hatası (' + escapeHtml(h.zaman) + ', ' + h.sayi + ' kez): ' + escapeHtml(h.mesaj) + '</div>' : '') +
+    '</div>';
+  }
+  function sdFiltreUygun(g){
+    if(sistemFiltre === 'hepsi') return true;
+    if(sistemFiltre === 'hata') return g.hata;
+    if(sistemFiltre === 'erp') return g.tur === 'katalog' || g.tur === 'katalog_urun' || g.tur === 'cari' || g.tur === 'masaustu';
+    return g.tur === sistemFiltre;
+  }
+  function renderSistem(){
+    var d = sistemSonVeri;
+    if(!d) return;
+    var son = d.son || {}, say = d.sayilar || {}, t = d.sunucuMs;
+    var hatalar = (d.gunluk || []).filter(function(g){ return g.hata; });
+    var html = '';
+    html += '<div class="sdHead">Son gelen veriler</div>';
+    // ERP'deki aktarım programı katalogu 5 dk'da bir gönderiyor: 15 dk gelmezse uyar.
+    html += sdKart('📦 Katalog (ERP\'den)', son.katalog, t, 'Tabloda ' + say.katalog + ' ürün · ERP programı 5 dk\'da bir göndermeli', 0.25);
+    if(son.katalog_urun) html += sdKart('📦 Son eklenen tek ürün', son.katalog_urun, t);
+    html += sdKart('🏢 Cari listesi (ERP\'den)', son.cari, t, 'Tabloda ' + say.cari + ' cari', 72);
+    html += sdKart('📋 Sayım', son.sayim, t, 'Sayım tablosunda ' + say.sayim + ' satır' + (say.gecGelen ? ' · Geç gelen: ' + say.gecGelen : ''));
+    html += sdKart('📥 Mal Giriş/Çıkış', son.mal, t);
+    html += sdKart('🖥️ Masaüstü aktarım programı — son bağlantı', son.masaustu_kontrol, t,
+      say.malBekleyenSatir ? '<b style="color:var(--amber);">' + say.malBekleyenSatir + ' mal satırı masaüstüne aktarılmayı bekliyor</b>' : 'Aktarılmayı bekleyen mal kaydı yok', 1);
+    if(son.masaustu) html += sdKart('⬇️ Son masaüstü aktarımı', son.masaustu, t);
+    html += sdTelefonKarti();
+
+    html += '<div class="sdHead">Hatalar (' + hatalar.length + ')</div>';
+    html += hatalar.length ? hatalar.slice(0, 30).map(sdLogSatir).join('') : '<div class="hint">Son kayıtlarda hata yok ✅</div>';
+
+    html += '<div class="sdHead" style="display:flex; justify-content:space-between; align-items:center;"><span>Günlük</span>' +
+      '<select id="sistemFiltreSel" style="width:auto; padding:4px 8px; font-size:11.5px;">' +
+        [['hepsi','Hepsi'],['hata','Sadece hatalar'],['erp','ERP (katalog/cari/masaüstü)'],['sayim','Sayım'],['mal','Mal'],['yetki','Girişler'],['telefon_hata','Telefon hataları'],['yonetim','Yönetim']]
+          .map(function(o){ return '<option value="' + o[0] + '"' + (o[0] === sistemFiltre ? ' selected' : '') + '>' + o[1] + '</option>'; }).join('') +
+      '</select></div>';
+    var liste = (d.gunluk || []).filter(sdFiltreUygun);
+    html += liste.length ? liste.map(sdLogSatir).join('') : '<div class="hint">Bu filtrede kayıt yok.</div>';
+    sistemBodyEl.innerHTML = html;
+    document.getElementById('sistemStamp').textContent = 'Sunucu ' + d.surum + ' · son yenileme ' + new Date().toLocaleTimeString('tr-TR') + ' · 15 sn\'de bir otomatik yenilenir';
+  }
+  function sdLogSatir(g){
+    return '<div class="sdLog' + (g.hata ? ' err' : '') + '"><b>' + escapeHtml(g.zaman.slice(5, 19).replace('-', '.')) + '</b> ' +
+      (SD_TURLER[g.tur] || escapeHtml(g.tur)) + ' · ' + escapeHtml(g.detay) + (g.kaynak ? ' — <i style="color:var(--muted);">' + escapeHtml(g.kaynak) + '</i>' : '') + '</div>';
+  }
+  function fetchSistem(){
+    var auth = currentAuth();
+    if(!auth){ sistemBodyEl.innerHTML = '<div class="hint">Önce giriş yap</div>'; return; }
+    if(!navigator.onLine){ sistemBodyEl.innerHTML = sdTelefonKarti() + '<div class="hint">İnternet yok — sunucu bilgisi alınamadı.</div>'; return; }
+    jsonpRequestP(state.serverUrl || DEFAULT_SERVER_URL, { action: 'sistem_durumu', user: auth.user, pass: auth.pass }, function(err, data){
+      if(sistemScreenEl.classList.contains('hidden')) return;
+      if(err || !data || data.status !== 'ok'){
+        var msg = err || (data && data.message) || 'bilinmeyen hata';
+        if(!sistemSonVeri) sistemBodyEl.innerHTML = sdTelefonKarti() + '<div class="hint" style="color:var(--red);">❌ Sunucudan durum alınamadı: ' + escapeHtml(msg) +
+          (/Unknown|bilinmeyen|çalışıyor/.test(msg) ? '' : '') + '<br>Sunucu kodu (Code.gs) build 95 veya üstü olmalı.</div>';
+        document.getElementById('sistemStamp').textContent = '❌ Son yenileme başarısız (' + new Date().toLocaleTimeString('tr-TR') + '): ' + msg;
+        return;
+      }
+      sistemSonVeri = data;
+      renderSistem();
+    }, 30000);
+  }
+  function openSistemScreen(){
+    sistemSonVeri = null;
+    sistemBodyEl.innerHTML = '<div class="hint">⏳ Yükleniyor…</div>';
+    sistemScreenEl.classList.remove('hidden');
+    fetchSistem();
+    clearInterval(sistemTimer);
+    sistemTimer = setInterval(fetchSistem, 15000);
+  }
+  function closeSistemScreen(){ clearInterval(sistemTimer); sistemTimer = null; sistemScreenEl.classList.add('hidden'); }
+  document.getElementById('adminSistemOpenBtn').addEventListener('click', openSistemScreen);
+  document.getElementById('sistemRefreshBtn').addEventListener('click', fetchSistem);
+  document.getElementById('sistemCloseTopBtn').addEventListener('click', closeSistemScreen);
+  document.getElementById('sistemCloseBtn').addEventListener('click', closeSistemScreen);
+  sistemBodyEl.addEventListener('change', function(e){
+    if(e.target.id === 'sistemFiltreSel'){ sistemFiltre = e.target.value; renderSistem(); }
+  });
+
   // ---------- SAYIM KAYITLARINI DÜZELT (ayrı tam sayfa ekran) ----------
   var duzeltScreenEl = document.getElementById('duzeltScreen');
   var duzeltSearchInput = document.getElementById('duzeltSearchInput');
@@ -4338,11 +4490,43 @@
   var syncFirstFailAt = 0;
   var syncNextAutoAt = 0;
   var syncLastFailToastAt = 0;
+  // Sistem Durumu günlüğünde bu telefonun gönderdiklerini ERP'den gelenlerden ayırmak için.
+  function kaynakEtiketi(){
+    return 'telefon: ' + (state.personnel || (state.currentUser && state.currentUser.name) || '?');
+  }
+  var APP_BUILD = (function(){ var m = /build (\d+)/.exec(document.title + ' ' + (document.querySelector('.sub') ? document.querySelector('.sub').textContent : '')); return m ? 'build ' + m[1] : ''; })();
+
+  // Gönderim hatalarını sunucudaki Sistem Durumu günlüğüne bildirir: sorun
+  // sürerken en fazla 5 dakikada bir, düzelince de bir özet. Sunucuya hiç
+  // ulaşılamıyorsa bildirim de gitmez — o zaman düzeldiğinde özet gider.
+  var syncHataRapor = { sayi: 0, ilk: '', son: '', mesaj: '', sonBildirim: 0 };
+  function saatMetni(){ var d = new Date(); var p = function(n){ return (n < 10 ? '0' : '') + n; }; return p(d.getHours()) + ':' + p(d.getMinutes()); }
+  function hataBildir(mesaj){
+    var url = state.serverUrl || DEFAULT_SERVER_URL;
+    if(!navigator.onLine || !url) return;
+    jsonpRequestP(url, { action: 'hata_bildir', personel: state.personnel || (state.currentUser && state.currentUser.name) || '?', build: APP_BUILD, mesaj: mesaj }, function(){}, 20000);
+  }
+  function syncHataIzle(anyError){
+    var r = syncHataRapor;
+    if(anyError){
+      r.sayi++; if(!r.ilk) r.ilk = saatMetni(); r.son = saatMetni(); r.mesaj = anyError;
+      state.sonGonderimHatasi = { zaman: new Date().toLocaleString('tr-TR'), mesaj: anyError, sayi: r.sayi };
+      if(r.sayi >= 3 && Date.now() - r.sonBildirim > 300000){
+        r.sonBildirim = Date.now();
+        hataBildir(r.sayi + ' kez gönderilemedi (' + r.ilk + '–' + r.son + '), bekleyen ' + state.pendingSessions.length + ' oturum: ' + r.mesaj);
+      }
+    } else if(r.sayi > 0){
+      if(r.sayi >= 2) hataBildir('Gönderim düzeldi. Önce ' + r.sayi + ' kez gönderilemedi (' + r.ilk + '–' + r.son + '): ' + r.mesaj);
+      syncHataRapor = { sayi: 0, ilk: '', son: '', mesaj: '', sonBildirim: 0 };
+      state.sonGonderimHatasi = null;
+    }
+  }
   function autoRetrySync(){
     if(Date.now() < syncNextAutoAt) return; // geri çekilme süresi dolmadı
     trySync(true);
   }
   function recordSyncResult(anyError){
+    syncHataIzle(anyError);
     var now = Date.now();
     if(!anyError){ syncFailCount = 0; syncFirstFailAt = 0; syncNextAutoAt = 0; return false; }
     syncFailCount++;
