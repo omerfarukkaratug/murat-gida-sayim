@@ -146,9 +146,7 @@
   #scanPlaceholder, .scanPlaceholderBlock{padding:18px 16px;}
   .scanBtn{width:100%; padding:19px; background:linear-gradient(135deg, var(--accent2), var(--accent)); color:#fff; font-size:16px; font-weight:800;
     border-radius:var(--r-md); letter-spacing:.02em; box-shadow:0 6px 16px var(--glow);}
-  #qtyEntry{padding:20px 16px; background:var(--panel2); overflow-y:auto;}
   .qtyEntryCard{text-align:center; background:var(--panel); border-radius:var(--r-lg); padding:20px 16px; box-shadow:var(--sh-md);}
-  #qtyEntryName{font-size:19px; font-weight:800; margin-bottom:2px;}
   .barcodeDisplay{font-family:var(--mono); font-size:26px; font-weight:800; letter-spacing:.03em; margin-bottom:8px; word-break:break-all;}
   .barcodeDisplay .bc-a{color:var(--text);}
   .barcodeDisplay .bc-b{color:var(--accent);}
@@ -162,11 +160,6 @@
   .duzeltEdit .duzeltAdet{flex:1; padding:6px; font-size:12px; font-family:var(--mono);}
   .duzeltEdit .duzeltKaydet{background:var(--accent); color:#fff; padding:6px 10px; font-size:11px; font-weight:700; border-radius:7px;}
   .duzeltEdit .duzeltSil{background:transparent; border:none; color:var(--red); font-size:17px; padding:0 4px;}
-  #qtyEntryMeta{font-size:12px; color:var(--muted); font-family:var(--mono); margin-bottom:16px;}
-  #qtyEntryInput, #newProductQty{width:100%; font-size:30px; font-weight:800; text-align:center; font-family:var(--mono);
-    padding:15px; border-radius:var(--r-sm); border:2px solid var(--accent); background:var(--panel2); color:var(--text); margin-bottom:14px;}
-  #qtyEntryInput::-webkit-outer-spin-button, #qtyEntryInput::-webkit-inner-spin-button,
-  #newProductQty::-webkit-outer-spin-button, #newProductQty::-webkit-inner-spin-button{-webkit-appearance:none; margin:0;}
   .qtyEntryBtns{display:flex; gap:10px;}
   .qtyEntryBtns button{flex:1; padding:14px; border-radius:var(--r-sm); font-size:14px; font-weight:700;}
   #newProductCancel, #newProductAskNo{background:var(--panel); border:1.5px solid var(--text); color:var(--text);}
@@ -206,13 +199,6 @@
   .qtyInput:focus{outline:none; border-color:var(--accent);}
   .qtyInput::-webkit-outer-spin-button, .qtyInput::-webkit-inner-spin-button{-webkit-appearance:none; margin:0;}
   .qtyInput[type=number]{-moz-appearance:textfield;}
-  .qtyCalcRow{display:flex; align-items:center; justify-content:center; gap:6px; margin-top:12px;}
-  .calcToggle{display:block; text-align:center; font-size:12px; font-weight:700; color:var(--accent); margin-top:10px; text-decoration:underline;}
-  .calcBlock{margin-top:2px;}
-  .qtyCalcInput{font-family:var(--mono); font-weight:700; font-size:14px; width:64px; text-align:center; background:var(--panel2); border:1.5px solid var(--line); border-radius:8px; padding:8px 4px; color:var(--text);}
-  .qtyCalcInput:focus{outline:none; border-color:var(--accent);}
-  .qtyCalcInput::-webkit-outer-spin-button, .qtyCalcInput::-webkit-inner-spin-button{-webkit-appearance:none; margin:0;}
-  .qtyCalcInput[type=number]{-moz-appearance:textfield;}
   /* Build 90: alttan açılan kart (bottom sheet) + uygulama içi hesap makinesi tuş takımı */
   .sheetOverlay{position:fixed; inset:0; background:rgba(10,10,10,.55); z-index:52; display:flex; align-items:flex-end; justify-content:center;}
   .sheetCard{width:100%; max-width:520px; background:var(--panel); border-radius:22px 22px 0 0; box-shadow:0 -8px 30px rgba(0,0,0,.25);
@@ -243,8 +229,6 @@
   #priceCamLive .camWrap{height:30dvh; border-radius:0;}
   .priceModeBtn{width:44px; flex-shrink:0; background:var(--panel2); border:1.5px solid var(--line); color:var(--text); border-radius:var(--r-sm);
     display:flex; align-items:center; justify-content:center; padding:0; font-size:13px; font-weight:800;}
-  .qtyCalcOpBtn{background:var(--panel2); border:1.5px solid var(--line); color:var(--accent); width:36px; height:38px; border-radius:8px; font-weight:800; font-size:15px; padding:0; flex-shrink:0;}
-  .qtyCalcApplyBtn{background:var(--accent); color:#fff; width:38px; height:38px; border-radius:9px; font-size:17px; font-weight:800; padding:0; flex-shrink:0;}
   .empty{text-align:center; color:var(--muted); font-size:12.5px; padding:44px 20px; font-family:var(--mono); line-height:1.8;}
   .browseItem{user-select:none; -webkit-user-select:none; -webkit-touch-callout:none; touch-action:pan-y;}
   .browseItem:active{background:var(--panel2);}
@@ -258,8 +242,11 @@
 
   #toast{position:fixed; left:16px; right:16px; bottom:84px; background:var(--ink); color:#fff;
     padding:13px 16px; border-radius:var(--r-md); font-size:13.5px; font-weight:700; text-align:center;
-    transform:translateY(140px); transition:transform .25s; z-index:50; box-shadow:var(--sh-md); line-height:1.4;}
+    transform:translateY(140px); transition:transform .25s; z-index:70; box-shadow:var(--sh-md); line-height:1.4;}
   #toast.show{transform:translateY(0);}
+  /* Alttan açılan kart (hesap makinesi) açıkken uyarı kartın ÜSTÜNDE görünsün. */
+  body.sheetOpen #toast{bottom:auto; top:16px; transform:translateY(-160px);}
+  body.sheetOpen #toast.show{transform:translateY(0);}
   #toast.error{background:var(--red); box-shadow:0 8px 22px rgba(220,38,38,.4);}
   #toast.warn{background:var(--amber); color:#241a02; box-shadow:0 8px 22px rgba(217,127,30,.35);}
   #toast.success{background:var(--green); box-shadow:0 8px 22px rgba(22,163,74,.35);}
@@ -271,7 +258,8 @@
   /* KDV etiketi (sayım listesi + fiyat sorgu) */
   .item .meta .kdvTag{color:var(--accent); font-weight:800;}
   .kdvChip{display:inline-block; font-family:var(--mono); font-size:11px; font-weight:800; padding:2px 8px; border-radius:20px; background:var(--panel2); color:var(--accent); border:1px solid var(--line);}
-  #qtyEntryKdv{margin:-8px 0 14px;}
+  #qtyEntryKdv{margin:-4px 0 10px;}
+  #qtyEntry .barcodeDisplay{font-size:22px; margin-bottom:4px;}
 
   /* Tema seçici */
   #themeModal{position:fixed; inset:0; background:rgba(10,10,10,.55); z-index:60; display:flex; align-items:flex-end; justify-content:center;}
@@ -310,7 +298,7 @@
   <header style="border:none; padding:0 0 16px; background:transparent; display:flex; align-items:flex-start; justify-content:space-between;">
     <div>
       <h1><img src="logo-header.png" alt="Murat Gıda" style="height:30px; width:auto; display:block;"></h1>
-      <div class="sub">MK ERP · Murat Gıda • offline • Android • build 93</div>
+      <div class="sub">MK ERP · Murat Gıda • offline • Android • build 94</div>
     </div>
     <button type="button" id="themeToggleBtn" title="Tema seç" style="background:var(--panel2); border:1.5px solid var(--line); color:var(--text); width:34px; height:34px; border-radius:50%; font-size:15px; padding:0; display:flex; align-items:center; justify-content:center; flex-shrink:0;">🎨</button>
   </header>
@@ -461,30 +449,6 @@
       </div>
     </div>
 
-    <div id="qtyEntry" class="hidden">
-      <div class="qtyEntryCard">
-        <div id="qtyEntryName">—</div>
-        <div id="qtyEntryBarcode" class="barcodeDisplay"></div>
-        <div id="qtyEntryMeta"></div>
-        <div id="qtyEntryKdv" class="hidden"></div>
-        <input type="number" id="qtyEntryInput" inputmode="numeric" placeholder="Adet gir">
-        <a href="#" class="calcToggle" id="qtyCalcToggle">🧮 8 koli × 12 adet gibi hesaplayarak yaz</a>
-        <div class="calcBlock hidden" id="qtyCalcBlock">
-          <div class="qtyCalcRow">
-            <input type="number" id="qtyCalcA" inputmode="numeric" placeholder="Sayı 1" class="qtyCalcInput">
-            <button type="button" id="qtyCalcOp" class="qtyCalcOpBtn" title="İşlemi değiştirmek için dokun">×</button>
-            <input type="number" id="qtyCalcB" inputmode="numeric" placeholder="Sayı 2" class="qtyCalcInput">
-            <button type="button" id="qtyCalcApply" class="qtyCalcApplyBtn" title="Hesapla ve adete yaz">=</button>
-          </div>
-          <div class="hint" style="margin-top:2px;">Örn: 8 koli × 12 adet, ya da 45 + 3, ya da 50 − 2. İşlem simgesine dokunarak değiştir.</div>
-        </div>
-        <div class="qtyEntryBtns">
-          <button id="qtyEntryCancel">İptal</button>
-          <button id="qtyEntryConfirm">Ekle</button>
-        </div>
-      </div>
-    </div>
-
     <div id="newProductAsk" class="hidden">
       <div class="qtyEntryCard">
         <div style="font-size:13px; font-weight:800; color:var(--amber); margin-bottom:4px;">BARKOD LİSTEDE YOK</div>
@@ -497,21 +461,6 @@
       </div>
     </div>
 
-    <div id="newProductEntry" class="hidden">
-      <div class="qtyEntryCard">
-        <div style="font-size:13px; font-weight:800; color:var(--amber); margin-bottom:4px;">YENİ ÜRÜN</div>
-        <div id="newProductBarcode" style="font-family:var(--mono); color:var(--muted); font-size:12px; margin-bottom:12px;"></div>
-        <input type="text" id="newProductName" placeholder="Ürün adı yaz" style="margin-bottom:6px;">
-        <div style="text-align:right; margin-bottom:10px;">
-          <a href="#" id="newProductQuickBtn" style="font-size:11.5px; color:var(--accent); text-decoration:underline;">⚡ İsim yazmadan, sadece barkod + miktar kaydet</a>
-        </div>
-        <input type="number" id="newProductQty" inputmode="numeric" placeholder="Adet gir">
-        <div class="qtyEntryBtns">
-          <button id="newProductCancel">Vazgeç</button>
-          <button id="newProductConfirm">Ürünü Ekle ve Say</button>
-        </div>
-      </div>
-    </div>
   </div>
 
   <div style="padding:8px 14px; background:var(--panel); display:flex; align-items:center; gap:10px;">
@@ -770,6 +719,45 @@
       <div class="footer">
         <button class="fb-sync" id="malHareketDiscardBtn" style="flex:none; width:34%;">🗑 Vazgeç</button>
         <button class="fb-export" id="malHareketSaveBtn" style="flex:1;">💾 Kaydet ve Bitir</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Build 94: Sayım'ın adet kartı ve yeni ürün kartı da Mal Giriş/Çıkış ile
+       AYNI alttan açılan kartı ve AYNI hesap makinesi tuş takımını kullanır —
+       uygulamanın her yerinde tek tip miktar girişi. -->
+  <div id="qtyEntry" class="sheetOverlay hidden">
+    <div class="sheetCard">
+      <div class="sheetGrip"></div>
+      <div id="qtyEntryName" class="sheetTitle">—</div>
+      <div id="qtyEntryBarcode" class="barcodeDisplay"></div>
+      <div id="qtyEntryMeta" class="sheetMeta"></div>
+      <div id="qtyEntryKdv" class="hidden"></div>
+      <div id="qtyDisplay" class="calcDisplay calcEmpty">Adet gir</div>
+      <div id="qtyPreview" class="calcPreview"></div>
+      <div id="qtyPad" class="calcPad"></div>
+      <div class="sheetBtns">
+        <button type="button" id="qtyEntryCancel" class="btnGhost">İptal</button>
+        <button type="button" id="qtyEntryConfirm" class="btnMain">Ekle</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="newProductEntry" class="sheetOverlay hidden">
+    <div class="sheetCard">
+      <div class="sheetGrip"></div>
+      <div style="font-size:13px; font-weight:800; color:var(--amber); margin-bottom:2px;">YENİ ÜRÜN</div>
+      <div id="newProductBarcode" class="sheetMeta" style="margin-bottom:8px;"></div>
+      <input type="text" id="newProductName" placeholder="Ürün adı yaz" autocomplete="off" style="margin-bottom:4px;">
+      <div style="text-align:right; margin-bottom:8px;">
+        <a href="#" id="newProductQuickBtn" style="font-size:11.5px; color:var(--accent); text-decoration:underline;">⚡ İsim yazmadan, sadece barkod + miktar kaydet</a>
+      </div>
+      <div id="newProductQtyDisplay" class="calcDisplay calcEmpty">Adet gir</div>
+      <div id="newProductQtyPreview" class="calcPreview"></div>
+      <div id="newProductQtyPad" class="calcPad"></div>
+      <div class="sheetBtns">
+        <button type="button" id="newProductCancel" class="btnGhost">Vazgeç</button>
+        <button type="button" id="newProductConfirm" class="btnMain">Ürünü Ekle ve Say</button>
       </div>
     </div>
   </div>
@@ -1176,6 +1164,19 @@
     clearTimeout(toast._t);
     toast._t = setTimeout(function(){ t.classList.remove('show'); }, duration || (type === 'error' ? 3600 : (type === 'warn' ? 2600 : 1800)));
   }
+  // Alttan açılan bir kart (hesap makinesi) açıkken uyarılar ekranın ÜSTÜNDE
+  // gösterilir; yoksa kartın arkasında kalıp okunmuyordu.
+  function syncSheetOpen(){
+    var acik = Array.prototype.some.call(document.querySelectorAll('.sheetOverlay'), function(el){ return !el.classList.contains('hidden'); });
+    document.body.classList.toggle('sheetOpen', acik);
+  }
+  // Kartlar açılıp kapandıkça (class "hidden" değiştikçe) otomatik güncellenir.
+  if(window.MutationObserver){
+    var sheetObserver = new MutationObserver(syncSheetOpen);
+    Array.prototype.forEach.call(document.querySelectorAll('.sheetOverlay'), function(el){
+      sheetObserver.observe(el, { attributes: true, attributeFilter: ['class'] });
+    });
+  }
   function successToast(msg){ toast('✅ ' + msg, 'success'); }
   function warnToast(msg){ toast('⚠️ ' + msg, 'warn'); }
   function errorToast(msg){ toast('❌ ' + msg, 'error'); }
@@ -1326,6 +1327,12 @@
     return (state.currentUser.permissions || []).indexOf(perm) !== -1;
   }
 
+  // Fiyatı sadece "fiyat", sistemdeki stok miktarını sadece "stok" yetkisi
+  // olanlar (ve yöneticiler) görür — uygulamanın TÜM ekranlarında (Sayım,
+  // Tüm Sayılanlar, Mal Giriş/Çıkış, Fiyat & Stok Sorgula, CSV).
+  function canSeePrice(){ return hasPerm('fiyat'); }
+  function canSeeStock(){ return hasPerm('stok'); }
+
   function hasAnyAdminPerm(){
     return hasPerm('rapor') || hasPerm('temizle') || hasPerm('kullanici_yonetimi') || hasPerm('ayarlar') || hasPerm('canli_durum') || hasPerm('duzelt');
   }
@@ -1338,6 +1345,8 @@
     adminLinkWrapEl.classList.toggle('hidden', !hasAnyAdminPerm());
     document.getElementById('mainAdminBtn').classList.toggle('hidden', !hasAnyAdminPerm());
     document.getElementById('menuMalCikisBtn').classList.toggle('hidden', !hasPerm('mal_cikis'));
+    // Fiyat & Stok Sorgula: ikisini de göremeyen için ekranın anlamı yok.
+    document.getElementById('menuFiyatBtn').classList.toggle('hidden', !canSeePrice() && !canSeeStock());
     startBtn.textContent = (state.session.scans && state.session.scans.length > 0) ? '▶ Sayıma Devam Et' : 'Sayıma Başla';
   }
   function showLoginUI(){
@@ -1942,9 +1951,12 @@
   // ---------- YENİ ÜRÜN KARTI (ad + adet gir) ----------
   var newProductEl = document.getElementById('newProductEntry');
   var newProductNameInput = document.getElementById('newProductName');
-  var newProductQtyInput = document.getElementById('newProductQty');
   var newProductBarcodeVal = null;
-  wireKeyboardAwarePanel(newProductEl, [newProductNameInput, newProductQtyInput], 'newProductConfirm');
+  var newProductPad = createCalcPad(document.getElementById('newProductQtyDisplay'), document.getElementById('newProductQtyPreview'),
+    document.getElementById('newProductQtyPad'), function(){ document.getElementById('newProductConfirm').click(); });
+  newProductNameInput.addEventListener('keydown', function(e){
+    if(e.key === 'Enter'){ e.preventDefault(); this.blur(); } // klavye kapansın, tuş takımı görünsün
+  });
 
   function nextNewProductStockCode(){
     if(!state.newProductCounter) state.newProductCounter = 1;
@@ -1963,16 +1975,7 @@
     var unit = unitFor(barcode);
     document.getElementById('newProductBarcode').textContent = 'Barkod: ' + barcode + ' — listede kayıtlı değil' + (unit === 'Kg' ? ' · Dökme ürün (Kg)' : '');
     newProductNameInput.value = '';
-    newProductQtyInput.value = '';
-    if(unit === 'Kg'){
-      newProductQtyInput.setAttribute('inputmode', 'decimal');
-      newProductQtyInput.setAttribute('step', '0.001');
-      newProductQtyInput.placeholder = 'Kg gir (örn: 1.5)';
-    } else {
-      newProductQtyInput.setAttribute('inputmode', 'numeric');
-      newProductQtyInput.setAttribute('step', '1');
-      newProductQtyInput.placeholder = 'Adet gir';
-    }
+    newProductPad.reset(unit === 'Kg');
     newProductEl.classList.remove('hidden');
     setTimeout(function(){ newProductNameInput.focus(); }, 80);
   }
@@ -1989,7 +1992,7 @@
     // direkt miktar girişine geçiyoruz. İsim daha sonra (ERP'den gerçek
     // adı gelince) "Sayım Kayıtlarını Düzelt" ekranından kolayca düzeltilir.
     newProductNameInput.value = 'İsimsiz Ürün (' + newProductBarcodeVal + ')';
-    newProductQtyInput.focus();
+    newProductNameInput.blur(); // klavye kapansın, tuş takımı görünsün
   });
 
   document.getElementById('newProductConfirm').addEventListener('click', function(){
@@ -1997,13 +2000,12 @@
     if(!name){ warnToast("Ürün adı gir"); newProductNameInput.focus(); return; }
     var barcode = newProductBarcodeVal;
     var unit = unitFor(barcode);
-    var qty = parseQtyForBarcode(newProductQtyInput.value, barcode);
-    if(!qty || qty <= 0){ warnToast(unit === 'Kg' ? "Geçerli bir kilo gir" : "Geçerli bir adet gir"); newProductQtyInput.focus(); return; }
+    var qty = padQty(newProductPad, barcode);
+    if(qty === -1){ warnToast('Adet küsuratlı olamaz — sonucu kontrol et'); return; }
+    if(!qty || qty <= 0){ warnToast(unit === 'Kg' ? "Geçerli bir kilo gir" : "Geçerli bir adet gir"); return; }
     var abnormalLimit = unit === 'Kg' ? 50 : ABNORMAL_QTY;
     if(qty > abnormalLimit){
-      if(!confirm(name + ' için ' + qty + ' ' + unit + ' girdin — bu çok yüksek görünüyor.\nBu doğru mu?')){
-        newProductQtyInput.focus(); return;
-      }
+      if(!confirm(name + ' için ' + qty + ' ' + unit + ' girdin — bu çok yüksek görünüyor.\nBu doğru mu?')) return;
     }
     var stockCode = nextNewProductStockCode();
     catalogMap.set(barcode, { name: name, stockCode: stockCode, oldStock: '' });
@@ -2022,18 +2024,18 @@
     }
     renderList();
     whoLabel.textContent = state.personnel + " · " + countDistinctProducts() + " kalem";
-    successToast(name + ' (' + stockCode + ') eklendi: +' + qty + ' ' + unit);
     newProductEl.classList.add('hidden');
+    successToast(name + ' (' + stockCode + ') eklendi: +' + qty + ' ' + unit);
     if(autoRescan){ startCamera(); } else { showPlaceholder(); }
     autoQueueAndSync();
   });
 
   // ---------- ADET GİRİŞ KARTI ----------
   var qtyEntryEl = document.getElementById('qtyEntry');
-  var qtyEntryInput = document.getElementById('qtyEntryInput');
-  var qtyCalcAEl = document.getElementById('qtyCalcA');
-  var qtyCalcBEl = document.getElementById('qtyCalcB');
-  var qtyCalcOpBtn = document.getElementById('qtyCalcOp');
+  // Miktar, Mal Giriş/Çıkış ile AYNI uygulama içi hesap makinesiyle girilir
+  // (telefon klavyesi açılmaz; "8 × 12" doğrudan yazılır).
+  var qtyPad = createCalcPad(document.getElementById('qtyDisplay'), document.getElementById('qtyPreview'),
+    document.getElementById('qtyPad'), function(){ confirmQtyEntry(); });
 
   // Barkodu 2'şerli gruplara ayırıp aralarına ayraç koymadan (bitişik)
   // iki rengi sırayla uygular — böylece göz uzun rakam dizisini daha kolay
@@ -2061,26 +2063,15 @@
     document.getElementById('qtyEntryBarcode').innerHTML = formatBarcodeColored(pendingScan.barcode);
     document.getElementById('qtyEntryMeta').textContent =
       (unit === 'Kg' ? 'Dökme ürün (Kg) · ' : '') +
-      (pendingScan.oldStock !== '' ? 'Sistem: ' + pendingScan.oldStock + ' · ' : '') +
+      (canSeeStock() && pendingScan.oldStock !== '' ? 'Sistem: ' + pendingScan.oldStock + ' · ' : '') +
       (existingQty > 0 ? 'Bu oturumda önceden sayılan: ' + existingQty : 'Bu üründen ilk okutma');
     var kdvBoxEl = document.getElementById('qtyEntryKdv');
     var kdvTxt = formatKdv((catalogMap.get(pendingScan.barcode) || {}).kdv);
     if(kdvTxt){ kdvBoxEl.innerHTML = '<span class="kdvChip">' + kdvTxt + '</span>'; kdvBoxEl.classList.remove('hidden'); }
     else { kdvBoxEl.classList.add('hidden'); }
-    if(unit === 'Kg'){
-      qtyEntryInput.setAttribute('inputmode', 'decimal');
-      qtyEntryInput.setAttribute('step', '0.001');
-      qtyEntryInput.placeholder = 'Kg gir (örn: 1.5)';
-    } else {
-      qtyEntryInput.setAttribute('inputmode', 'numeric');
-      qtyEntryInput.setAttribute('step', '1');
-      qtyEntryInput.placeholder = 'Adet gir';
-    }
-    qtyEntryInput.value = '';
-    qtyCalc.reset();
-    document.getElementById('qtyCalcBlock').classList.add('hidden');
-    document.getElementById('qtyCalcToggle').classList.remove('hidden');
-    setTimeout(function(){ qtyEntryInput.focus(); }, 80); // klavye otomatik açılsın
+    qtyPad.reset(unit === 'Kg');
+    // Açık bir telefon klavyesi varsa (örn. elle barkod yazıldıysa) kapansın.
+    if(document.activeElement && document.activeElement.blur) document.activeElement.blur();
   }
 
   // Klavye açılınca telefonun görünür alanı küçülür; "Ekle" butonu klavyenin
@@ -2109,13 +2100,10 @@
     inputEls.forEach(function(el){ el.addEventListener('focus', function(){ setTimeout(adjust, 250); }); });
     return { adjust: adjust, reset: function(){ panelEl.style.maxHeight = ''; } };
   }
-  var qtyEntryKbd = wireKeyboardAwarePanel(qtyEntryEl, [qtyEntryInput, qtyCalcAEl, qtyCalcBEl], 'qtyEntryConfirm');
 
   function closeQtyEntry(){
     qtyEntryEl.classList.add('hidden');
-    qtyEntryEl.style.maxHeight = ''; // sıradaki açılışta sıfırdan hesaplansın
     pendingScan = null;
-    qtyEntryInput.blur();
     showPlaceholder();
   }
 
@@ -2133,58 +2121,16 @@
 
   document.getElementById('qtyEntryCancel').addEventListener('click', closeQtyEntry);
   bindFastTap(document.getElementById('qtyEntryConfirm'), confirmQtyEntry);
-  qtyEntryInput.addEventListener('keydown', function(e){ if(e.key === 'Enter') confirmQtyEntry(); });
-
-  // Koli×adet, ya da elde kalan fazla/eksikleri toplayıp çıkarmak için basit
-  // hesap makinesi — sonucu ilgili "Adet/Miktar gir" kutusuna yazar. Sayım ve
-  // Mal Giriş/Çıkış aynı bileşeni kullandığı için tek fonksiyonda tanımlı;
-  // hangi giriş/buton takımına bağlanacağı parametre olarak verilir.
-  function wireQtyCalculator(opts){
-    var targetInput = opts.targetInput, aEl = opts.aEl, bEl = opts.bEl, opBtn = opts.opBtn, applyBtn = opts.applyBtn;
-    var ops = ['×', '+', '−'];
-    var opIndex = 0;
-    function apply(){
-      var a = parseFloat(aEl.value);
-      var b = parseFloat(bEl.value);
-      if(isNaN(a) || isNaN(b)){ warnToast('İki sayıyı da gir'); return; }
-      var op = ops[opIndex];
-      var result = op === '×' ? (a * b) : op === '+' ? (a + b) : (a - b);
-      if(result < 0) result = 0;
-      targetInput.value = Math.round(result * 1000) / 1000;
-      targetInput.focus();
-    }
-    opBtn.addEventListener('click', function(){
-      opIndex = (opIndex + 1) % ops.length;
-      opBtn.textContent = ops[opIndex];
-    });
-    applyBtn.addEventListener('click', apply);
-    aEl.addEventListener('keydown', function(e){ if(e.key === 'Enter'){ e.preventDefault(); bEl.focus(); } });
-    bEl.addEventListener('keydown', function(e){ if(e.key === 'Enter'){ e.preventDefault(); apply(); } });
-    return {
-      reset: function(){ aEl.value = ''; bEl.value = ''; opIndex = 0; opBtn.textContent = ops[0]; }
-    };
-  }
-  var qtyCalc = wireQtyCalculator({ targetInput: qtyEntryInput, aEl: qtyCalcAEl, bEl: qtyCalcBEl, opBtn: qtyCalcOpBtn, applyBtn: document.getElementById('qtyCalcApply') });
-  // Hesap makinesi varsayılan olarak gizli — kart klavyeyle birlikte gereksiz
-  // yere uzayıp ürün adının kaybolmasına yol açmasın diye. İsteyen bir dokunuşla açar.
-  document.getElementById('qtyCalcToggle').addEventListener('click', function(e){
-    e.preventDefault();
-    document.getElementById('qtyCalcBlock').classList.remove('hidden');
-    this.classList.add('hidden');
-    qtyEntryKbd.adjust();
-  });
-
 
   function confirmQtyEntry(){
     if(!pendingScan) return;
     var unit = unitFor(pendingScan.barcode);
-    var addQty = parseQtyForBarcode(qtyEntryInput.value, pendingScan.barcode);
-    if(!addQty || addQty <= 0){ warnToast(unit === 'Kg' ? "Geçerli bir kilo gir" : "Geçerli bir adet gir"); qtyEntryInput.focus(); return; }
+    var addQty = padQty(qtyPad, pendingScan.barcode);
+    if(addQty === -1){ warnToast('Adet küsuratlı olamaz — sonucu kontrol et'); return; }
+    if(!addQty || addQty <= 0){ warnToast(unit === 'Kg' ? "Geçerli bir kilo gir" : "Geçerli bir adet gir"); return; }
     var abnormalLimit = unit === 'Kg' ? 50 : ABNORMAL_QTY;
     if(addQty > abnormalLimit){
-      if(!confirm(pendingScan.name + ' için ' + addQty + ' ' + unit + ' girdin — bu çok yüksek görünüyor.\nBu doğru mu?')){
-        qtyEntryInput.focus(); return;
-      }
+      if(!confirm(pendingScan.name + ' için ' + addQty + ' ' + unit + ' girdin — bu çok yüksek görünüyor.\nBu doğru mu?')) return;
     }
     var t = nowParts();
     // Her okutma AYRI bir kayıt olarak eklenir, var olan kayıtla anlık
@@ -2239,7 +2185,7 @@
 
   function itemRowHtml(it){
     var oldStockHtml = '';
-    if(it.oldStock !== '' && it.oldStock !== undefined && !isNaN(Number(it.oldStock))){
+    if(canSeeStock() && it.oldStock !== '' && it.oldStock !== undefined && !isNaN(Number(it.oldStock))){
       oldStockHtml = ' · <span class="oldStock">Sistem: '+escapeHtml(it.oldStock)+'</span>';
     }
     var unit = unitFor(it.barcode);
@@ -2703,14 +2649,16 @@
       else if(stokN === 0){ stokHtml = 'Stokta yok'; stokRenk = 'var(--red)'; }
       else { stokHtml = 'Stok eksi: ' + stokN; stokRenk = 'var(--amber)'; }
     }
+    var fiyatSatiri = canSeePrice() ? '<div style="font-size:38px; font-weight:800; color:var(--green); font-family:var(--mono); margin-bottom:12px;">' + fiyatBuyuk + '</div>' : '';
+    var stokSatiri = canSeeStock() ? '<div style="margin-top:16px; font-size:17px; font-weight:700; color:' + stokRenk + ';">' + stokHtml + '</div>' : '';
     return '<div style="text-align:center; padding:8px 4px 28px;">' +
       '<div style="display:inline-block; font-size:11px; font-weight:800; letter-spacing:.04em; color:var(--accent); background:var(--panel2); border-radius:20px; padding:4px 14px; margin-bottom:16px;">💰 FİYAT & STOK SORGULA</div>' +
       '<div style="background:var(--panel); border-radius:var(--r-lg); box-shadow:var(--sh-md); padding:26px 20px;">' +
         '<div style="font-size:20px; font-weight:800; line-height:1.3; margin-bottom:10px;">' + escapeHtml(r.name) + '</div>' +
         '<div style="font-family:var(--mono); font-size:14px; color:var(--muted); margin-bottom:18px;">' + escapeHtml(r.barcode) + (r.stockCode ? (' · ' + escapeHtml(r.stockCode)) : '') + '</div>' +
-        '<div style="font-size:38px; font-weight:800; color:var(--green); font-family:var(--mono); margin-bottom:12px;">' + fiyatBuyuk + '</div>' +
+        fiyatSatiri +
         kdvHtml +
-        '<div style="margin-top:16px; font-size:17px; font-weight:700; color:' + stokRenk + ';">' + stokHtml + '</div>' +
+        stokSatiri +
       '</div>' +
     '</div>';
   }
@@ -2763,10 +2711,11 @@
         stokHtml = stokN > 0 ? ('<b>' + stokN + birim + '</b> stokta')
           : (stokN === 0 ? '<b style="color:var(--red);">Stokta yok</b>' : '<b style="color:var(--amber);">Stok eksi: ' + stokN + '</b>');
       }
+      if(!canSeePrice()) fiyatHtml = '';
       return '<div class="item">' +
         '<div class="info"><div class="name">' + escapeHtml(r.name) + '</div>' +
-        '<div class="meta">' + escapeHtml(r.barcode) + (r.stockCode ? (' · ' + escapeHtml(r.stockCode)) : '') + ' · ' + stokHtml + '</div></div>' +
-        '<div style="text-align:right; flex-shrink:0;">' + fiyatHtml + '<br>' + kdvHtml + '</div>' +
+        '<div class="meta">' + escapeHtml(r.barcode) + (r.stockCode ? (' · ' + escapeHtml(r.stockCode)) : '') + (canSeeStock() ? ' · ' + stokHtml : '') + '</div></div>' +
+        '<div style="text-align:right; flex-shrink:0;">' + fiyatHtml + (fiyatHtml ? '<br>' : '') + kdvHtml + '</div>' +
       '</div>';
     }).join('');
   }
@@ -2803,7 +2752,11 @@
   // Telefonun klavyesi hiç açılmaz: rakamlar, ×, +, − ve ⌫ doğrudan kartın
   // içinde. "8 × 12" yazınca altta "= 96" görünür, Ekle'ye basınca 96 eklenir.
   // Dökme (Kg) ürünlerde "00" tuşunun yerine "," gelir.
-  function createCalcPad(displayEl, previewEl, padEl){
+  // Uygulamanın TEK hesap makinesi: Sayım (adet kartı, yeni ürün) ve Mal
+  // Giriş/Çıkış (miktar kartı, yeni ürün) hepsi bunu kullanır.
+  // onEnter: Enter tuşuna basılınca çağrılır (örn. "Ekle").
+  // Bilgisayar/harici klavye de çalışır: rakamlar, * x + - , . ⌫ ve Enter.
+  function createCalcPad(displayEl, previewEl, padEl, onEnter){
     var expr = '', bulk = false;
     var OPS = '×+−';
     function lastNum(){ var parts = expr.split(/[×+−]/); return parts[parts.length - 1]; }
@@ -2874,6 +2827,22 @@
     });
     // Ekrana dokununca açık bir telefon klavyesi varsa kapansın (örn. ürün adı yazdıktan sonra)
     displayEl.addEventListener('click', function(){ if(document.activeElement && document.activeElement.blur) document.activeElement.blur(); });
+    // Fiziksel klavye: sadece bu tuş takımı ekranda görünürken ve bir yazı
+    // kutusuna (örn. ürün adı) yazılmıyorken çalışır.
+    var KEYMAP = { '*':'×', 'x':'×', 'X':'×', '+':'+', '-':'−', ',':',', '.':',', 'Backspace':'⌫', 'Delete':'C' };
+    document.addEventListener('keydown', function(e){
+      if(padEl.offsetParent === null) return; // görünmüyor
+      // Tuş bir yazı kutusundan geldiyse (örn. ürün adında Enter) tuş takımına
+      // karışma — kutunun kendi işleyicisi zaten odağı bırakmış olabilir, bu
+      // yüzden hem olayın kaynağına hem de odaktaki öğeye bakılır.
+      var yaziKutusu = function(el){ return el && (el.tagName === 'INPUT' || el.tagName === 'TEXTAREA' || el.tagName === 'SELECT'); };
+      if(yaziKutusu(e.target) || yaziKutusu(document.activeElement)) return;
+      var k = /^[0-9]$/.test(e.key) ? e.key : KEYMAP[e.key];
+      if(e.key === 'Enter'){ e.preventDefault(); if(onEnter) onEnter(); return; }
+      if(!k) return;
+      e.preventDefault();
+      press(k);
+    });
     return {
       reset: function(isBulk){ bulk = !!isBulk; expr = ''; build(); render(); },
       value: evaluate,
@@ -2882,13 +2851,14 @@
   }
 
   var malQtyPad = createCalcPad(document.getElementById('malQtyDisplay'), document.getElementById('malQtyPreview'),
-    document.getElementById('malQtyPad'));
+    document.getElementById('malQtyPad'), function(){ document.getElementById('malHareketQtyConfirm').click(); });
   var malNewQtyPad = createCalcPad(document.getElementById('malNewQtyDisplay'), document.getElementById('malNewQtyPreview'),
-    document.getElementById('malNewQtyPad'));
+    document.getElementById('malNewQtyPad'), function(){ document.getElementById('malNewProductConfirm').click(); });
   var malNewStokAc = true;   // "Yeni ürün olarak ekle" = true, "Stok açmadan ekle" = false
 
-  // Tuş takımından gelen değeri birime göre doğrular (Adet: tam sayı, Kg: 3 ondalık)
-  function malPadQty(pad, barcode){
+  // Tuş takımından gelen değeri birime göre doğrular (Adet: tam sayı, Kg: 3 ondalık).
+  // Dönen değer: miktar, 0 (geçersiz/boş) ya da -1 (adet küsuratlı).
+  function padQty(pad, barcode){
     var v = pad.value();
     if(v === null || v <= 0) return 0;
     if(!isBulkBarcode(barcode) && Math.floor(v) !== v){ return -1; }
@@ -3160,22 +3130,39 @@
   }
 
   function fmtQty(n){ return String(Math.round(Number(n) * 1000) / 1000).replace('.', ','); }
+  function fmtPara(n){
+    return Number(n).toLocaleString('tr-TR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + ' ₺';
+  }
+  function malFiyat(it){ return (it.fiyat === '' || it.fiyat === null || it.fiyat === undefined || isNaN(Number(it.fiyat))) ? null : Number(it.fiyat); }
   function renderMalMeta(){
     var toplam = malItems.reduce(function(sum, it){ return sum + it.miktar; }, 0);
+    var fiyatHtml = '';
+    if(canSeePrice() && malItems.length){
+      var tutar = 0, fiyatsiz = 0;
+      malItems.forEach(function(it){ var f = malFiyat(it); if(f === null) fiyatsiz++; else tutar += f * it.miktar; });
+      fiyatHtml = '<div style="font-family:var(--mono); font-weight:800; font-size:14px; margin-top:2px;">Toplam tutar: ' + fmtPara(tutar) +
+        (fiyatsiz ? ' <span style="color:var(--amber); font-size:11px; font-weight:700;">(' + fiyatsiz + ' satırda fiyat yok)</span>' : '') + '</div>';
+    }
     document.getElementById('malHareketMeta').innerHTML =
       '<div style="font-weight:800; font-size:13px;">' + escapeHtml(malBelge) + (malFatura ? ' · No ' + escapeHtml(malFatura) : '') + '</div>' +
       '<div style="color:var(--muted);">' + escapeHtml(malCari ? malCari.name : '') + (malCari && malCari.code ? ' · ' + escapeHtml(malCari.code) : '') + '</div>' +
       (malSebep ? '<div style="color:var(--muted);">Sebep: ' + escapeHtml(malSebep) + '</div>' : '') +
-      '<div style="font-family:var(--mono); color:var(--muted);">' + malItems.length + ' kalem · toplam ' + fmtQty(toplam) + '</div>';
+      '<div style="font-family:var(--mono); color:var(--muted);">' + malItems.length + ' satır · toplam ' + fmtQty(toplam) + '</div>' + fiyatHtml;
   }
   function renderMalList(){
     renderMalMeta();
     if(malItems.length === 0){ malListEl.innerHTML = '<div class="hint">Henüz ürün okutulmadı.</div>'; return; }
     malListEl.innerHTML = malItems.slice().reverse().map(function(it){
       var kdvTxt = formatKdv(it.kdv);
+      var fiyatSatir = '';
+      if(canSeePrice()){
+        var f = malFiyat(it);
+        fiyatSatir = '<div class="meta" style="font-weight:700; color:var(--text);">' +
+          (f === null ? '<span style="color:var(--amber);">Fiyat yok</span>' : fmtPara(f) + ' × ' + fmtQty(it.miktar) + ' = ' + fmtPara(f * it.miktar)) + '</div>';
+      }
       return '<div class="item">' +
         '<div class="info"><div class="name">' + escapeHtml(it.ad) + '</div>' +
-        '<div class="meta">' + escapeHtml(it.barkod) + (it.stokKodu ? (' · ' + escapeHtml(it.stokKodu)) : '') + (kdvTxt ? ' · <span class="kdvTag">' + kdvTxt + '</span>' : '') + (it.birim === 'Kg' ? ' · <span class="oldStock">Kg</span>' : '') + (it.stokAc === false ? ' · <span class="noStokTag">STOK AÇILMAYACAK</span>' : (it.yeni ? ' · <span class="noStokTag">YENİ STOK</span>' : '')) + '</div></div>' +
+        '<div class="meta">' + escapeHtml(it.barkod) + (it.stokKodu ? (' · ' + escapeHtml(it.stokKodu)) : '') + (kdvTxt ? ' · <span class="kdvTag">' + kdvTxt + '</span>' : '') + (it.birim === 'Kg' ? ' · <span class="oldStock">Kg</span>' : '') + (it.stokAc === false ? ' · <span class="noStokTag">STOK AÇILMAYACAK</span>' : (it.yeni ? ' · <span class="noStokTag">YENİ STOK</span>' : '')) + '</div>' + fiyatSatir + '</div>' +
         '<div class="qtyBox">' +
           '<input class="qtyInput mhQty" type="number" inputmode="' + (it.birim === 'Kg' ? 'decimal' : 'numeric') + '" step="' + (it.birim === 'Kg' ? '0.001' : '1') + '" value="' + it.miktar + '" data-mh-id="' + escAttr(it.id) + '">' +
           '<button type="button" class="itemDelBtn mhDelBtn" data-mh-id="' + escAttr(it.id) + '" title="Bu satırı sil">🗑️</button>' +
@@ -3195,7 +3182,7 @@
     it.miktar = q;
     malBump(it);
     if(!malCommit(onceki, 'Miktar düzeltmesi')) return;
-    renderMalMeta();
+    renderMalList(); // satır tutarı ve toplamlar güncellensin
   });
   malListEl.addEventListener('click', function(e){
     var btn = e.target.closest('.mhDelBtn');
@@ -3221,13 +3208,17 @@
       beep(220, 320, 0.16);
       return;
     }
-    var listed = malItems.filter(function(it){ return it.barkod === barcode; })[0];
+    var listed = malItems.filter(function(it){ return it.barkod === barcode; });
     document.getElementById('malHareketQtyName').textContent = entry.name;
     var meta = 'Barkod: ' + barcode + (entry.stockCode ? (' · ' + entry.stockCode) : '');
-    if(entry.oldStock !== '' && !isNaN(Number(entry.oldStock))) meta += ' · Sistem: ' + entry.oldStock;
+    if(canSeeStock() && entry.oldStock !== '' && !isNaN(Number(entry.oldStock))) meta += ' · Sistem: ' + entry.oldStock;
     var kdvTxt = formatKdv(entry.kdv);
     if(kdvTxt) meta += ' · ' + kdvTxt;
-    if(listed) meta += '\nListede zaten ' + fmtQty(listed.miktar) + ' ' + listed.birim + ' var — girdiğin miktar üstüne eklenir';
+    if(canSeePrice() && entry.price !== undefined && entry.price !== '' && !isNaN(Number(entry.price))) meta += ' · Fiyat: ' + fmtPara(entry.price);
+    if(listed.length){
+      var listedToplam = listed.reduce(function(n, it){ return n + it.miktar; }, 0);
+      meta += '\nListede bu üründen ' + listed.length + ' satır var (toplam ' + fmtQty(listedToplam) + ' ' + listed[0].birim + ') — yeni satır olarak eklenir';
+    }
     document.getElementById('malHareketQtyMeta').textContent = meta;
     var bulk = isBulkBarcode(barcode);
     malQtyPad.reset(bulk);
@@ -3273,24 +3264,18 @@
     var barcode = malPendingBarcode;
     var name = malNewStokAc ? document.getElementById('malNewProductName').value.trim() : '';
     if(!name) name = 'İsimsiz Ürün (' + barcode + ')';
-    var qty = malPadQty(malNewQtyPad, barcode);
+    var qty = padQty(malNewQtyPad, barcode);
     if(qty === -1){ warnToast('Adet küsuratlı olamaz — sonucu kontrol et'); return; }
     if(!qty || qty <= 0){ warnToast(isBulkBarcode(barcode) ? 'Geçerli bir kilo gir' : 'Geçerli bir adet gir'); return; }
     var t = nowParts();
     var onceki = JSON.stringify(malItems);
-    var existing = malItems.filter(function(it){ return it.barkod === barcode; })[0];
-    if(existing){
-      existing.miktar = Math.round((existing.miktar + qty) * 1000) / 1000;
-      existing.tarih = t.date; existing.saat = t.time;
-      malBump(existing);
-    } else {
-      malItems.push({
-        id: makeId(), barkod: barcode, ad: name, stokKodu: '', birim: unitFor(barcode), miktar: qty,
-        kdv: '', fiyat: '', tarih: t.date, saat: t.time, yeni: true, stokAc: malNewStokAc, v: 1
-      });
-    }
+    // Her okutma AYRI bir satırdır — aynı ürün tekrar okutulursa miktarlar
+    // toplanmaz, yeni satır eklenir (irsaliyedeki satırlarla birebir karşılaştırılabilsin).
+    malItems.push({
+      id: makeId(), barkod: barcode, ad: name, stokKodu: '', birim: unitFor(barcode), miktar: qty,
+      kdv: '', fiyat: '', tarih: t.date, saat: t.time, yeni: true, stokAc: malNewStokAc, v: 1
+    });
     if(!malCommit(onceki, 'Bu okutma (' + name + ')')) return;
-    if(existing) toast('Toplam: ' + fmtQty(existing.miktar) + ' ' + existing.birim, 'success');
     document.getElementById('malHareketNewProductEntry').classList.add('hidden');
     renderMalList();
     beep(1046, 90, 0.16); if(navigator.vibrate) navigator.vibrate(40);
@@ -3312,26 +3297,20 @@
     var entry = catalogMap.get(malPendingBarcode);
     if(!entry) return; // bu modal artık sadece bilinen ürünler için açılır
     var name = entry.name;
-    var qty = malPadQty(malQtyPad, malPendingBarcode);
+    var qty = padQty(malQtyPad, malPendingBarcode);
     if(qty === -1){ warnToast('Adet küsuratlı olamaz — sonucu kontrol et'); return; }
     if(!qty || qty <= 0){ warnToast(isBulkBarcode(malPendingBarcode) ? 'Geçerli bir miktar gir (örn: 1.5)' : 'Geçerli bir adet gir'); return; }
     var t = nowParts();
     var onceki = JSON.stringify(malItems);
-    var existing = malItems.filter(function(it){ return it.barkod === malPendingBarcode; })[0];
-    if(existing){
-      existing.miktar = Math.round((existing.miktar + qty) * 1000) / 1000;
-      existing.tarih = t.date; existing.saat = t.time;
-      malBump(existing);
-    } else {
-      malItems.push({
-        id: makeId(), barkod: malPendingBarcode, ad: name,
-        stokKodu: entry.stockCode || '', birim: unitFor(malPendingBarcode), miktar: qty,
-        kdv: entry.kdv === undefined ? '' : entry.kdv, fiyat: entry.price === undefined ? '' : entry.price,
-        tarih: t.date, saat: t.time, v: 1
-      });
-    }
+    // Her okutma AYRI bir satırdır — aynı ürün tekrar okutulursa miktarlar
+    // toplanmaz, yeni satır eklenir (irsaliyedeki satırlarla birebir karşılaştırılabilsin).
+    malItems.push({
+      id: makeId(), barkod: malPendingBarcode, ad: name,
+      stokKodu: entry.stockCode || '', birim: unitFor(malPendingBarcode), miktar: qty,
+      kdv: entry.kdv === undefined ? '' : entry.kdv, fiyat: entry.price === undefined ? '' : entry.price,
+      tarih: t.date, saat: t.time, v: 1
+    });
     if(!malCommit(onceki, 'Bu okutma (' + name + ')')) return;
-    if(existing) toast('Toplam: ' + fmtQty(existing.miktar) + ' ' + existing.birim, 'success');
     document.getElementById('malHareketQtyModal').classList.add('hidden');
     renderMalList();
     beep(1046, 90, 0.16); if(navigator.vibrate) navigator.vibrate(40);
@@ -3483,7 +3462,7 @@
 
   function browseItemRowHtml(it){
     var oldStockHtml = '';
-    if(it.oldStock !== '' && it.oldStock !== undefined && !isNaN(Number(it.oldStock))){
+    if(canSeeStock() && it.oldStock !== '' && it.oldStock !== undefined && !isNaN(Number(it.oldStock))){
       oldStockHtml = ' · <span class="oldStock">Sistem: '+escapeHtml(it.oldStock)+'</span>';
     }
     var stockHtml = it.stockCode ? ' · <span class="oldStock">'+escapeHtml(it.stockCode)+'</span>' : '';
@@ -3671,7 +3650,9 @@
     { key: 'ayarlar', label: '🔆 Ayarlar' },
     { key: 'canli_durum', label: '📡 Canlı Durum' },
     { key: 'duzelt', label: '✏️ Düzeltme' },
-    { key: 'mal_cikis', label: '📤 Mal Çıkış' }
+    { key: 'mal_cikis', label: '📤 Mal Çıkış' },
+    { key: 'fiyat', label: '💰 Fiyat Görme' },
+    { key: 'stok', label: '📦 Stok Görme' }
   ];
 
   function permsFromString(s){
@@ -4315,7 +4296,8 @@
   document.getElementById('exportBtn').addEventListener('click', function(){
     var rows = [['Ürün Adı','Stok Kodu','Barkod','Birim','Eski Stok','Sayılan Adet','Fark','Tarih','Saat','Personel','Reyon']];
     state.session.scans.forEach(function(it){
-      var oldStock = (it.oldStock !== '' && it.oldStock !== undefined && !isNaN(Number(it.oldStock))) ? Number(it.oldStock) : '';
+      // Stok yetkisi yoksa "Eski Stok" ve "Fark" sütunları boş kalır.
+      var oldStock = (canSeeStock() && it.oldStock !== '' && it.oldStock !== undefined && !isNaN(Number(it.oldStock))) ? Number(it.oldStock) : '';
       var diff = oldStock !== '' ? (it.qty - oldStock) : '';
       rows.push([it.name, it.stockCode || '', it.barcode, unitFor(it.barcode), oldStock, it.qty, diff, it.date, it.time, state.personnel, it.reyon || '']);
     });
@@ -4617,7 +4599,7 @@
       distinct + ' farklı ürün · ' + scans.length + ' ayrı okutma · toplam ' + totalQty + ' adet';
     document.getElementById('reviewList').innerHTML = scans.map(function(it){
       var oldStockHtml = '';
-      if(it.oldStock !== '' && it.oldStock !== undefined && !isNaN(Number(it.oldStock))){
+      if(canSeeStock() && it.oldStock !== '' && it.oldStock !== undefined && !isNaN(Number(it.oldStock))){
         oldStockHtml = ' · <span class="oldStock">Sistem: '+escapeHtml(it.oldStock)+'</span>';
       }
       var unit = unitFor(it.barcode);
