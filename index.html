@@ -307,7 +307,7 @@
   <header style="border:none; padding:0 0 16px; background:transparent; display:flex; align-items:flex-start; justify-content:space-between;">
     <div>
       <h1><img src="logo-header.png" alt="Murat Gıda" style="height:30px; width:auto; display:block;"></h1>
-      <div class="sub">MK ERP · Murat Gıda • offline • Android • build 98</div>
+      <div class="sub">MK ERP · Murat Gıda • offline • Android • build 99</div>
     </div>
     <button type="button" id="themeToggleBtn" title="Tema seç" style="background:var(--panel2); border:1.5px solid var(--line); color:var(--text); width:34px; height:34px; border-radius:50%; font-size:15px; padding:0; display:flex; align-items:center; justify-content:center; flex-shrink:0;">🎨</button>
   </header>
@@ -981,6 +981,13 @@
 (function(){
   "use strict";
   var STORE_KEY = "sayimApp_meta_v2"; // küçük veri: personel, sunucu, sayım oturumu, kuyruk
+  // PERFORMANS: Oturumdaki okutmalar 500'lük PARÇALAR halinde ayrı anahtarlarda
+  // saklanır. Eskiden her okutmada TÜM oturum (8 bin okutmada ~2,5 MB) baştan
+  // yazılıyordu ve orta seviye telefonda her "Ekle" ~1 sn donuyordu. Artık
+  // sadece değişen parça (genelde son parça) yazılır.
+  var SCAN_PARCA = 500;
+  var scanParcaImza = [];    // her parçanın son yazılan imzası (değişti mi?)
+  var scanParcaUzunluk = []; // her parçanın yazılan metin uzunluğu (hafıza hesabı)
   var state = load() || { personnel:"", serverUrl:"", session:{scans:[], id:null, deletedIds:[], ackedV:{}}, pendingSessions:[], newProductCounter:1 };
   if(!state.session.scans){
     // Eski sürümden geçiş: birleştirilmiş kayıtları ayrı taramalara çevir
@@ -1154,6 +1161,13 @@
     if(!it.v) it.v = eskiGonderilen.indexOf(it.id) !== -1 ? 1 : 2;
   });
   delete state.session.sentIds;
+  // Onaylı sürüm artık her okutmanın kendi üzerinde tutulur (it.a) — ayrı
+  // büyük bir liste (ackedV) her kayıtta baştan yazılmasın diye.
+  state.session.scans.forEach(function(it){
+    var av = state.session.ackedV[it.id];
+    if(av !== undefined && (it.a === undefined || it.a < av)) it.a = av;
+  });
+  state.session.ackedV = {};
   if(state.currentUser === undefined) state.currentUser = null;
   if(state.savedCredentials === undefined) state.savedCredentials = null;
   if(!state.session.id) state.session.id = makeId();
@@ -1178,18 +1192,73 @@
     return Math.max(0, Math.floor(Number(value) || 0));
   }
 
-  function load(){ try{ return JSON.parse(localStorage.getItem(STORE_KEY)); }catch(e){ return null; } }
+  function parcaAnahtar(i){ return STORE_KEY + '_okutma_' + i; }
+  // Bir parçada değişebilecek her şeyin kısa özeti: kimlik, adet, sürüm, onaylı sürüm, reyon.
+  function parcaImza(parca){
+    var s = '';
+    for(var i = 0; i < parca.length; i++){ var x = parca[i]; s += x.id + ':' + x.qty + ':' + (x.v || 1) + ':' + (x.a || 0) + ':' + (x.reyon || '') + ';'; }
+    return s;
+  }
+  function load(){
+    var st;
+    try{ st = JSON.parse(localStorage.getItem(STORE_KEY)); }catch(e){ return null; }
+    if(st && st.session && st.session.okutmaParca){
+      var scans = [];
+      for(var i = 0; i < st.session.okutmaParca; i++){
+        var m = null, parca = [];
+        try{ m = localStorage.getItem(parcaAnahtar(i)); parca = m ? JSON.parse(m) : []; }catch(e){ parca = []; }
+        if(!Array.isArray(parca)) parca = [];
+        scans = scans.concat(parca);
+        scanParcaImza[i] = parcaImza(parca); scanParcaUzunluk[i] = m ? m.length : 0;
+      }
+      st.session.scans = scans;
+      // Artık kullanılmayan eski parçalar varsa temizle (yer kaplamasın).
+      try{ for(var j = st.session.okutmaParca; j < st.session.okutmaParca + 200 && localStorage.getItem(parcaAnahtar(j)) !== null; j++) localStorage.removeItem(parcaAnahtar(j)); }catch(e){}
+    }
+    return st;
+  }
   // Telefon hafızasına yazar. Başarılıysa true, yazılamadıysa (hafıza dolu vb.)
   // false döner — okutma/düzeltme gibi işlemler bu durumda başarı GÖSTERMEZ,
   // yaptıkları değişikliği geri alıp kullanıcıyı uyarır (storageFailAlert).
   function save(){
+    var sc = state.session && state.session.scans;
+    var yazilan = []; // yazılamazsa geri almak için: [parça no, eski metin, eski imza, eski uzunluk]
     try{
-      var metin = JSON.stringify(state);
+      var n = sc ? Math.ceil(sc.length / SCAN_PARCA) : 0;
+      var toplam = 0;
+      for(var i = 0; i < n; i++){
+        var parca = sc.slice(i * SCAN_PARCA, (i + 1) * SCAN_PARCA);
+        var imza = parcaImza(parca);
+        if(imza !== scanParcaImza[i]){
+          var metinP = JSON.stringify(parca);
+          var eski = localStorage.getItem(parcaAnahtar(i));
+          localStorage.setItem(parcaAnahtar(i), metinP);
+          yazilan.push([i, eski, scanParcaImza[i], scanParcaUzunluk[i]]);
+          scanParcaImza[i] = imza; scanParcaUzunluk[i] = metinP.length;
+        }
+        toplam += scanParcaUzunluk[i] || 0;
+      }
+      // Ana kayıt okutmalar OLMADAN yazılır (onlar parçalarda).
+      var metin;
+      if(sc){ state.session.scans = []; state.session.okutmaParca = n; }
+      try{ metin = JSON.stringify(state); } finally { if(sc) state.session.scans = sc; }
       localStorage.setItem(STORE_KEY, metin);
-      hafizaKontrol(metin.length);
+      for(var j = n; j < scanParcaImza.length; j++){ try{ localStorage.removeItem(parcaAnahtar(j)); }catch(e3){} }
+      scanParcaImza.length = n; scanParcaUzunluk.length = n;
+      hafizaKontrol(metin.length + toplam);
       return true;
     }
-    catch(e){ errorToast("Kaydedilemedi — telefon hafızası dolu olabilir! Lütfen hemen CSV indirip yer açın."); return false; }
+    catch(e){
+      // Yarım kalan parça yazımlarını geri al — telefondaki kayıt tutarlı kalsın.
+      for(var k = yazilan.length - 1; k >= 0; k--){
+        var y = yazilan[k];
+        try{ if(y[1] === null) localStorage.removeItem(parcaAnahtar(y[0])); else localStorage.setItem(parcaAnahtar(y[0]), y[1]); }catch(e2){}
+        scanParcaImza[y[0]] = y[2]; scanParcaUzunluk[y[0]] = y[3];
+      }
+      if(sc) state.session.scans = sc;
+      errorToast("Kaydedilemedi — telefon hafızası dolu olabilir! Lütfen hemen CSV indirip yer açın.");
+      return false;
+    }
   }
   // TELEFON HAFIZASI: Tarayıcı bu uygulamaya ~5 milyon karakter (iPhone'da
   // yaklaşık yarısı) yer verir; bir okutma ~310 karakter tutar. Büyük
@@ -1262,16 +1331,33 @@
     req.onerror = function(e){ reject(e.target.error); };
   });
 
-  function idbBulkReplace(entries){ // entries: [{barcode,name}]
+  function idbBulkReplace(entries){ // entries: [{barcode,name}] — kataloğu baştan yazar (parça parça)
+    return idbParcaYaz('catalog', entries.map(function(e){ return function(st){ st.put(e); }; }), true);
+  }
+
+  // Büyük yazmaları 1000'lik parçalara böler; her parçadan sonra telefona
+  // nefes aldırır (setTimeout) — 40 bin ürünü tek hamlede yazmak orta seviye
+  // telefonda ~5 sn donmaya yol açıyordu.
+  function idbParcaYaz(storeAdi, islemler, temizle){
+    var PARCA = 1000;
     return dbPromise.then(function(db){
-      return new Promise(function(resolve, reject){
-        var tx = db.transaction('catalog', 'readwrite');
-        var store = tx.objectStore('catalog');
-        store.clear();
-        entries.forEach(function(e){ store.put(e); });
-        tx.oncomplete = resolve;
-        tx.onerror = function(){ reject(tx.error); };
-      });
+      function tx(fn){
+        return new Promise(function(resolve, reject){
+          var t = db.transaction(storeAdi, 'readwrite');
+          fn(t.objectStore(storeAdi));
+          t.oncomplete = resolve;
+          t.onerror = function(){ reject(t.error); };
+          t.onabort = function(){ reject(t.error || new Error('iptal')); };
+        });
+      }
+      var bekle = function(){ return new Promise(function(r){ setTimeout(r, 0); }); };
+      var zincir = temizle ? tx(function(st){ st.clear(); }) : Promise.resolve();
+      for(var i = 0; i < islemler.length; i += PARCA){
+        (function(parca){
+          zincir = zincir.then(bekle).then(function(){ return tx(function(st){ parca.forEach(function(f){ f(st); }); }); });
+        })(islemler.slice(i, i + PARCA));
+      }
+      return zincir;
     });
   }
 
@@ -1299,16 +1385,9 @@
 
   // Cari listesi: aynı veritabanında ayrı bir depo (katalogla karışmaz)
   function idbCariReplace(entries){
-    return dbPromise.then(function(db){
-      return new Promise(function(resolve, reject){
-        var tx = db.transaction('cari', 'readwrite');
-        var store = tx.objectStore('cari');
-        store.clear();
-        entries.forEach(function(e){ store.put({ name: e.name || '', code: e.code || '', balance: e.balance === undefined ? '' : e.balance }); });
-        tx.oncomplete = resolve;
-        tx.onerror = function(){ reject(tx.error); };
-      });
-    });
+    return idbParcaYaz('cari', entries.map(function(e){
+      return function(st){ st.put({ name: e.name || '', code: e.code || '', balance: e.balance === undefined ? '' : e.balance }); };
+    }), true);
   }
   function idbCariLoad(){
     return dbPromise.then(function(db){
@@ -1760,12 +1839,27 @@
         if(onDone) onDone(false);
         return;
       }
-      idbBulkReplace(entries).then(function(){
-        catalogMap = new Map();
-        entries.forEach(function(e){ catalogMap.set(e.barcode, { name: e.name, stockCode: e.stockCode || '', oldStock: e.oldStock || '', price: e.price || '', kdv: e.kdv || '' }); });
-        updateProductCountLabel();
+      // Sadece DEĞİŞEN ürünler telefonun veritabanına yazılır (ERP'den gelen
+      // güncellemede genelde birkaç stok/fiyat değişir); telefonda hiç ürün
+      // yoksa tamamı parça parça yazılır. Bellekteki liste hemen güncellenir.
+      var tamYukleme = catalogMap.size === 0;
+      var yeni = new Map(), islemler = [];
+      entries.forEach(function(e){
+        var v = { name: e.name, stockCode: e.stockCode || '', oldStock: e.oldStock || '', price: e.price || '', kdv: e.kdv || '' };
+        yeni.set(e.barcode, v);
+        var o = catalogMap.get(e.barcode);
+        if(tamYukleme || !o || o.name !== v.name || String(o.stockCode) !== String(v.stockCode) || String(o.oldStock) !== String(v.oldStock) ||
+           String(o.price) !== String(v.price) || String(o.kdv) !== String(v.kdv)){
+          islemler.push(function(st){ st.put(e); });
+        }
+      });
+      if(!tamYukleme) catalogMap.forEach(function(v, k){ if(!yeni.has(k)) islemler.push(function(st){ st.delete(k); }); });
+      catalogMap = yeni;
+      updateProductCountLabel();
+      idbParcaYaz('catalog', islemler, tamYukleme).then(function(){
         if(!silent) successToast(entries.length + " kayıt sunucudan indirildi");
-        else successToast("Ürün listesi otomatik güncellendi (" + entries.length + " kayıt)");
+        // Otomatik güncellemede bildirim gösterilmez — sayımın ortasında dikkat dağıtmasın
+        // (Sistem Durumu'nda katalogun ne zaman güncellendiği görünür).
         if(onDone) onDone(true);
       }).catch(function(err2){
         if(!silent){ updateProductCountLabel(); errorToast("İndirilen katalog telefona kaydedilemedi: " + err2); }
@@ -1846,6 +1940,8 @@
     return state.pendingSessions.reduce(function(n, p){ return n + (p.rows || []).length; }, 0);
   }
   var lastResetCheckAt = 0;
+  var sonOkutmaZamani = 0;        // son okutma/düzeltme (Sayım ya da Mal) — katalog güncellemesi ertelemesi için
+  var katalogIndiriliyor = false; // aynı anda iki katalog indirmesi başlamasın
   var RESET_CHECK_INTERVAL_MS = 60000;
   function checkResetToken(){
     if(!navigator.onLine) return;
@@ -1889,14 +1985,20 @@
       // tek bir ürün eklediğinde sunucu bir "sürüm" damgası basıyor. Bizim
       // sürümümüzden farklıysa, kimse "Sunucudan Çek"e basmadan, sessizce
       // kendimiz güncel kataloğu çekip telefona kaydediyoruz.
-      if(data.katalogVersion && data.katalogVersion !== state.catalogVersion && typeof fetchCatalogFromServer === 'function'){
+      // Aktif okutma sırasında (son 1 dk içinde okutma/düzeltme yapıldıysa)
+      // katalog/cari güncellemesi bir sonraki sessiz ana ertelenir: indirme ve
+      // işleme telefonu birkaç yüz ms meşgul eder, okutmanın arasına girmesin.
+      var okutmaSuruyor = Date.now() - sonOkutmaZamani < 60000;
+      if(data.katalogVersion && data.katalogVersion !== state.catalogVersion && typeof fetchCatalogFromServer === 'function' && !okutmaSuruyor && !katalogIndiriliyor){
+        katalogIndiriliyor = true;
         fetchCatalogFromServer(true, function(success){
+          katalogIndiriliyor = false;
           if(success){ state.catalogVersion = data.katalogVersion; save(); }
         });
       }
       // Cari listesi de aynı mantıkla otomatik güncellenir (Mal Giriş/Çıkış
       // ekranlarındaki cari seçim listesi için).
-      if(data.cariVersion && data.cariVersion !== state.cariVersion && typeof fetchCariList === 'function'){
+      if(data.cariVersion && data.cariVersion !== state.cariVersion && typeof fetchCariList === 'function' && !okutmaSuruyor){
         // Sürüm damgası, liste GERÇEKTEN indikten sonra işlenir — indirme başarısız olursa bir sonraki kontrolde tekrar denenir.
         fetchCariList(function(ok){ if(ok){ state.cariVersion = data.cariVersion; save(); } });
       }
@@ -2428,8 +2530,7 @@
   // Kayıt, sunucunun onayladığı sürüm telefondaki sürüme eşit ya da büyükse
   // gönderilmiş sayılır.
   function isScanSent(it){
-    var acked = state.session.ackedV && state.session.ackedV[it.id];
-    return acked !== undefined && acked >= (it.v || 1);
+    return it.a !== undefined && it.a >= (it.v || 1);
   }
 
   function setQty(id, newQty){
@@ -3118,9 +3219,9 @@
     jsonpRequest(url, 'cari', function(err, data){
       if(err || !data || !data.entries){ if(cb) cb(false); return; }
       cariList = data.entries;
-      idbCariReplace(cariList).catch(function(){});
       refreshCariHint();
-      if(cb) cb(true);
+      // Sürüm damgası ancak telefona yazma bitince işlensin (yarıda kalırsa tekrar indirilir).
+      idbCariReplace(cariList).then(function(){ if(cb) cb(true); }).catch(function(){ if(cb) cb(false); });
     }, 60000);
   }
   idbCariLoad().then(function(rows){
@@ -3212,6 +3313,7 @@
   // geri alır (önceki listeye döner), kullanıcıyı uyarır ve false döner —
   // bu durumda çağıran taraf başarı göstermez.
   function malCommit(onceki, what){
+    sonOkutmaZamani = Date.now();
     if(saveMalDraft()) return true;
     malItems = JSON.parse(onceki);
     saveMalDraft();
@@ -4820,10 +4922,8 @@
     // 1) Açık oturum: telefondaki listeyi sunucuyla eşitle.
     if(sessionId === state.session.id){
       var sess = state.session;
-      if(!sess.ackedV) sess.ackedV = {};
       sess.scans = sess.scans.filter(function(it){
         if(silinen[it.id]){ // yönetici "Düzelt" ekranından sildi
-          delete sess.ackedV[it.id];
           localChanged = true;
           return false;
         }
@@ -4839,7 +4939,7 @@
             if(!isNaN(sq)) it.qty = sq;
             localChanged = true;
           }
-          if(sess.ackedV[it.id] !== sv){ sess.ackedV[it.id] = sv; localChanged = true; } // nokta yeşile dönsün
+          if(it.a !== sv){ it.a = sv; localChanged = true; } // nokta yeşile dönsün
         }
         return true;
       });
@@ -5005,6 +5105,7 @@
   // "Gönder" düğmesi yine anında gönderir.
   var syncDebounceTimer = null;
   function autoQueueAndSync(){
+    sonOkutmaZamani = Date.now();
     queueCurrentSession(); // localStorage'a anında yazılır — veri kaybı riski yok
     if(syncDebounceTimer) return; // zaten planlanmış bir gönderim var; bu okutma da onunla gider
     var bekle = Math.max(2000, sonGonderimBaslangic + AUTO_SYNC_MIN_ARALIK_MS - Date.now());
