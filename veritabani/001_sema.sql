@@ -371,3 +371,37 @@ begin
     values ('katalog', coalesce(p_kaynak, ''), jsonb_array_length(p_urunler) || ' ürün geldi — ' || v_degisen || ' değişen/yeni, ' || v_silinen || ' kaldırılan');
   return jsonb_build_object('status', 'ok', 'degisen', v_degisen, 'silinen', v_silinen);
 end $$;
+
+-- ------------------------------------------------------------
+-- YETKİLER: Telefonlar (Supabase "anon" anahtarı) tablolara DOĞRUDAN
+-- erişemez; sadece aşağıda izin verilen fonksiyonları çağırabilir.
+-- Fonksiyonlar kendi yetkisiyle (security definer) çalışır, böylece
+-- güvenlik kuralları atlanamaz. Katalog yükleme, dönem açma, düzeltme
+-- ve silme sadece gizli (service) anahtarla — ERP ve yönetici tarafı.
+-- ------------------------------------------------------------
+do $$
+declare t text;
+begin
+  foreach t in array array['subeler','kullanicilar','urunler','cariler','sayim_donemleri','sayim_kayitlari',
+                           'silinen_kayitlar','mal_hareketleri','sistem_gunlugu'] loop
+    execute format('alter table %I enable row level security', t);
+  end loop;
+end $$;
+
+alter function aktif_donem()                         security definer set search_path = public, extensions;
+alter function yeni_donem(text)                      security definer set search_path = public, extensions;
+alter function sayim_yaz(jsonb)                      security definer set search_path = public, extensions;
+alter function sayim_kontrol(text)                   security definer set search_path = public, extensions;
+alter function sayim_guncelle(text, numeric, text)   security definer set search_path = public, extensions;
+alter function sayim_sil(text, text)                 security definer set search_path = public, extensions;
+alter function mal_yaz(jsonb)                        security definer set search_path = public, extensions;
+alter function katalog_yukle(jsonb, text)            security definer set search_path = public, extensions;
+
+revoke execute on all functions in schema public from public;
+do $$
+begin
+  if exists (select 1 from pg_roles where rolname = 'anon') then
+    execute 'revoke all on all tables in schema public from anon, authenticated';
+    execute 'grant execute on function sayim_yaz(jsonb), sayim_kontrol(text), mal_yaz(jsonb) to anon, authenticated';
+  end if;
+end $$;
