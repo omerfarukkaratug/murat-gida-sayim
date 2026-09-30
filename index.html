@@ -2,7 +2,7 @@
 <html lang="tr">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, viewport-fit=cover">
 <title>MK ERP — Murat Gıda</title>
 <link rel="manifest" href="manifest.json">
 <meta name="theme-color" content="#ffffff">
@@ -86,10 +86,14 @@
   #setup{padding:18px 16px 28px; overflow-y:auto; background:var(--bg);}
   #setup .card{background:var(--panel); border-radius:var(--r-lg); padding:18px; margin-bottom:16px; box-shadow:var(--sh-sm);}
   label{display:block; font-size:11px; letter-spacing:.08em; text-transform:uppercase; color:var(--muted); margin-bottom:7px; font-weight:700;}
-  input[type=text], input[type=url], input[type=password], textarea{
+  /* EKRAN KAYMASI: iPhone, yazı boyutu 16px'ten küçük bir kutuya dokununca
+     ekranı otomatik YAKINLAŞTIRIR ve sayfa yana kayar. Bu yüzden yazı kutuları
+     en az 16px (ayrıca viewport'ta maximum-scale=1). */
+  input[type=text], input[type=url], input[type=password], input[type=tel], textarea{
     width:100%; background:var(--panel2); border:1.5px solid transparent; color:var(--text);
-    padding:12px 13px; border-radius:var(--r-sm); font-size:15px; font-family:var(--sans); transition:border-color .15s;}
-  input[type=text]:focus, input[type=url]:focus, input[type=password]:focus, textarea:focus{outline:none; border-color:var(--accent); background:var(--panel);}
+    padding:12px 13px; border-radius:var(--r-sm); font-size:16px; font-family:var(--sans); transition:border-color .15s;}
+  input[type=tel]{font-family:var(--mono); font-weight:700;}
+  input[type=text]:focus, input[type=url]:focus, input[type=password]:focus, input[type=tel]:focus, textarea:focus{outline:none; border-color:var(--accent); background:var(--panel);}
   textarea{font-family:var(--mono); font-size:12px; min-height:110px; resize:vertical;}
   .row{margin-bottom:14px;}
   .hint{font-size:11.5px; color:var(--muted); margin-top:6px; line-height:1.55;}
@@ -179,6 +183,8 @@
   .summaryBar b{color:var(--text); font-size:14px; display:block;}
 
   .manualBar{display:flex; gap:8px; padding:10px 14px; background:var(--panel);}
+  .satirNo{flex-shrink:0; min-width:26px; height:26px; padding:0 6px; border-radius:13px; background:var(--panel2); border:1.5px solid var(--line);
+    color:var(--muted); font-family:var(--mono); font-size:12px; font-weight:800; display:flex; align-items:center; justify-content:center; align-self:center;}
   .manualBar input{flex:1;}
   .manualBar button{background:var(--panel); border:1.5px solid var(--line); color:var(--text); padding:0 16px; border-radius:var(--r-sm); font-size:13px; font-weight:700;}
 
@@ -307,7 +313,7 @@
   <header style="border:none; padding:0 0 16px; background:transparent; display:flex; align-items:flex-start; justify-content:space-between;">
     <div>
       <h1><img src="logo-header.png" alt="Murat Gıda" style="height:30px; width:auto; display:block;"></h1>
-      <div class="sub">MK ERP · Murat Gıda • offline • Android • build 99</div>
+      <div class="sub">MK ERP · Murat Gıda • offline • Android • build 100</div>
     </div>
     <button type="button" id="themeToggleBtn" title="Tema seç" style="background:var(--panel2); border:1.5px solid var(--line); color:var(--text); width:34px; height:34px; border-radius:50%; font-size:15px; padding:0; display:flex; align-items:center; justify-content:center; flex-shrink:0;">🎨</button>
   </header>
@@ -719,7 +725,7 @@
           </div>
           <div class="hint" style="text-align:center; margin:10px 0 6px;">veya barkodu elle gir:</div>
           <div class="manualBar" style="background:transparent; border:none; padding:0;">
-            <input type="tel" id="malHareketBarcodeInput" placeholder="Barkod yaz, Enter'a bas" inputmode="numeric">
+            <input type="tel" id="malHareketBarcodeInput" placeholder="Barkod yaz, ✓ ya da Ekle" inputmode="numeric">
             <button id="malHareketManualAdd">Ekle</button>
             <button type="button" id="malHareketNameSearchBtn" title="Ürün adıyla ara" style="background:var(--panel2); border:1.5px solid var(--line); color:var(--text); width:40px; padding:0; display:flex; align-items:center; justify-content:center;">
               <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.3" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
@@ -3429,12 +3435,21 @@
       '<div style="font-weight:800; font-size:13px;">' + escapeHtml(malBelge) + (malFatura ? ' · No ' + escapeHtml(malFatura) : '') + '</div>' +
       '<div style="color:var(--muted);">' + escapeHtml(malCari ? malCari.name : '') + (malCari && malCari.code ? ' · ' + escapeHtml(malCari.code) : '') + '</div>' +
       (malSebep ? '<div style="color:var(--muted);">Sebep: ' + escapeHtml(malSebep) + '</div>' : '') +
-      '<div style="font-family:var(--mono); color:var(--muted);">' + malItems.length + ' satır · toplam ' + fmtQty(toplam) + '</div>' + fiyatHtml;
+      '<div style="font-family:var(--mono); color:var(--muted);"><b style="color:var(--text);">' + malKalemSayisi() + ' kalem</b> · ' + malItems.length + ' satır · toplam ' + fmtQty(toplam) + '</div>' + fiyatHtml;
+  }
+  // Faturayla karşılaştırma için: farklı ürün (barkod) sayısı = faturadaki kalem sayısı.
+  // Aynı ürün art arda okutulunca ayrı satır olur ama tek kalem sayılır.
+  function malKalemSayisi(){
+    var g = {};
+    malItems.forEach(function(it){ g[it.barkod] = true; });
+    return Object.keys(g).length;
   }
   function renderMalList(){
     renderMalMeta();
     if(malItems.length === 0){ malListEl.innerHTML = '<div class="hint">Henüz ürün okutulmadı.</div>'; return; }
-    malListEl.innerHTML = malItems.slice().reverse().map(function(it){
+    var toplamSatir = malItems.length;
+    malListEl.innerHTML = malItems.slice().reverse().map(function(it, i){
+      var sira = toplamSatir - i; // okutma sırası: ilk okutulan 1 (liste en yeniden eskiye)
       var kdvTxt = formatKdv(it.kdv);
       var fiyatSatir = '';
       if(canSeePrice()){
@@ -3443,6 +3458,7 @@
           (f === null ? '<span style="color:var(--amber);">Fiyat yok</span>' : fmtPara(f) + ' × ' + fmtQty(it.miktar) + ' = ' + fmtPara(f * it.miktar)) + '</div>';
       }
       return '<div class="item">' +
+        '<div class="satirNo">' + sira + '</div>' +
         '<div class="info"><div class="name">' + escapeHtml(it.ad) + '</div>' +
         '<div class="meta">' + escapeHtml(it.barkod) + (it.stokKodu ? (' · ' + escapeHtml(it.stokKodu)) : '') + (kdvTxt ? ' · <span class="kdvTag">' + kdvTxt + '</span>' : '') + (it.birim === 'Kg' ? ' · <span class="oldStock">Kg</span>' : '') + (it.stokAc === false ? ' · <span class="noStokTag">STOK AÇILMAYACAK</span>' : (it.yeni ? ' · <span class="noStokTag">YENİ STOK</span>' : '')) + '</div>' + fiyatSatir + '</div>' +
         '<div class="qtyBox">' +
@@ -3566,6 +3582,10 @@
 
   malBarcodeInputEl.addEventListener('keydown', function(e){
     if(e.key === 'Enter'){ document.getElementById('malHareketManualAdd').click(); }
+  });
+  klavyeKapaninca(malBarcodeInputEl, function(v){ // bkz. Sayım: ✓ ile ekle
+    malBarcodeInputEl.value = '';
+    malHareketHandleBarcode(v);
   });
   document.getElementById('malHareketManualAdd').addEventListener('click', function(){
     if(malBarcodeInputEl.value.trim()){ malHareketHandleBarcode(malBarcodeInputEl.value.trim()); malBarcodeInputEl.value = ''; }
@@ -4562,6 +4582,26 @@
   document.getElementById('manualInput').addEventListener('keydown', function(e){
     if(e.key === 'Enter'){ document.getElementById('manualAdd').click(); }
   });
+  // KLAVYEDE "TAMAM": iPhone'un rakam klavyesinde Enter tuşu YOK; üstteki ✓
+  // (Bitti) tuşu sadece klavyeyi kapatır. Barkod yazılıp klavye kapatılınca
+  // ürün otomatik eklenir (Ekle'ye basmaya gerek kalmaz). Uygulama arka plana
+  // atıldığı için klavye kapandıysa EKLENMEZ. Ekle'ye basılmışsa kutu zaten
+  // boşalmış olur, ikinci kez eklenmez.
+  function klavyeKapaninca(inp, ekle){
+    inp.setAttribute('enterkeyhint', 'done');
+    inp.addEventListener('blur', function(){
+      setTimeout(function(){
+        if(document.activeElement === inp) return;
+        if(document.visibilityState !== 'visible' || (document.hasFocus && !document.hasFocus())) return;
+        var v = inp.value.trim();
+        if(v.length >= 4) ekle(v);
+      }, 200);
+    });
+  }
+  klavyeKapaninca(document.getElementById('manualInput'), function(v){
+    document.getElementById('manualInput').value = '';
+    handleScanResult(v);
+  });
 
   // ---------- ÜRÜN ADIYLA ARAMA (katalogdan, barkod olmadan bulmak için) ----------
   // Hem Sayım hem Mal Giriş/Çıkış aynı ekranı kullanır — nameSearchMode hangisinin
@@ -5169,6 +5209,35 @@
   updatePendingBadge();
   setInterval(updateStatus, 8000);
 
+  // ---------- DİKEY KULLANIM ----------
+  // Android'de ana ekrana eklenmiş uygulama manifest ("orientation":"portrait")
+  // ile zaten dönmez; ayrıca kilitlemeyi deniyoruz. iPhone kilitlemeye izin
+  // vermez: telefon yan çevrilince üstte "dik tutun" perdesi çıkar (arkadaki
+  // uygulama ve veriler aynen kalır, telefon düzelince perde kalkar).
+  // Not: klavye açılınca ekran yüksekliği küçülür; bu yüzden ekran oranına
+  // değil telefonun GERÇEK yönüne bakılır. Tabletlerde (kısa kenar ≥ 600) çıkmaz.
+  (function(){
+    try { if(screen.orientation && screen.orientation.lock) screen.orientation.lock('portrait').catch(function(){}); } catch(e){}
+    function yatayMi(){
+      // Sadece dokunmatik TELEFONLAR: bilgisayar/tablet ekranında perde asla çıkmaz.
+      var dokunmatik = (window.matchMedia && window.matchMedia('(pointer: coarse)').matches) || navigator.maxTouchPoints > 0;
+      if(!dokunmatik) return false;
+      if(Math.min(screen.width || 0, screen.height || 0) >= 600) return false;
+      if(screen.orientation && typeof screen.orientation.type === 'string') return screen.orientation.type.indexOf('landscape') === 0;
+      if(typeof window.orientation === 'number') return Math.abs(window.orientation) === 90;
+      return false;
+    }
+    function guncelle(){
+      var perde = document.getElementById('yatayPerde'); // perde bu betikten SONRA tanımlı; her seferinde bul
+      if(perde) perde.classList.toggle('hidden', !yatayMi());
+    }
+    window.addEventListener('orientationchange', function(){ setTimeout(guncelle, 50); });
+    if(screen.orientation && screen.orientation.addEventListener) screen.orientation.addEventListener('change', guncelle);
+    window.addEventListener('resize', guncelle);
+    guncelle();
+    document.addEventListener('DOMContentLoaded', guncelle);
+  })();
+
   if('serviceWorker' in navigator){
     navigator.serviceWorker.register('sw.js').catch(function(){});
     var reloaded = false;
@@ -5179,5 +5248,10 @@
   }
 })();
 </script>
+<div id="yatayPerde" class="hidden" style="position:fixed; inset:0; z-index:10000; background:var(--bg, #f3f7ef); color:var(--text, #1d2b1f); display:flex; flex-direction:column; align-items:center; justify-content:center; gap:14px; text-align:center; padding:24px;">
+  <div style="font-size:54px; line-height:1;">📱</div>
+  <div style="font-size:18px; font-weight:800;">Telefonu dik tutun</div>
+  <div style="font-size:14px; opacity:.75; max-width:320px;">Uygulama dikey kullanım içindir. Verileriniz güvende — telefonu düzeltince kaldığınız yerden devam edersiniz.</div>
+</div>
 </body>
 </html>
