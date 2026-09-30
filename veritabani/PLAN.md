@@ -12,9 +12,13 @@ Gerçek veri tabanı (PostgreSQL) aynı anda çok telefonun yazmasını, sorguyu
 
 ## Aşamalar
 1. **Şema + testler** — ✅ (`001_sema.sql`, `002_testler.sql`, yerel PostgreSQL'de tüm testler geçti).
-2. **Firma hesabıyla bulut hesabı** açılır (kişisel gmail değil), şema yüklenir.
-3. **Gölge mod:** Telefonlar Sheets'e yazmaya DEVAM eder; sunucu her kaydı ayrıca veri tabanına da kopyalar.
-   Sayımda Sheets asıl, veri tabanı ikinci yedek olur. İki taraf karşılaştırılır.
+2. **Bulut hesabı** — ✅ Supabase, Frankfurt, şema yüklendi.
+3. **Gölge mod** (Code.gs build99): Telefonlar Sheets'e yazmaya DEVAM eder, uygulama değişmedi. Sunucu Sheets'e
+   yazdığı her sayım/mal/düzeltme/silme/temizlemeyi gizli `DbKuyruk` sekmesine not eder ve veri tabanına gönderir
+   (telefon isteklerinden sonra en fazla dakikada bir + 5 dakikalık zamanlayıcı). Veri tabanına ulaşılamazsa kuyrukta bekler.
+   - Açma: Apps Script → Proje Ayarları → Komut dosyası özellikleri: `DB_URL`, `DB_ANAHTAR` (secret key) → `dbKur` çalıştır.
+   - Eski kayıtlar: `dbMevcutSayimiAktar` (bir kez). Karşılaştırma: `dbKarsilastir` (sonuç Sistem Durumu günlüğünde).
+   - Acil kapatma: `DB_KAPALI = 1`.
 4. Sayım sonrası: telefonlar doğrudan veri tabanına geçer, Sheets sadece rapor/yedek kalır.
 5. Kişisel kullanıcılar (şifreler bcrypt ile), fiyatların sunucu tarafında gizlenmesi, firma alan adı.
 

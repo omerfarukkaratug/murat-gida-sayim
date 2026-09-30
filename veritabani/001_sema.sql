@@ -148,16 +148,25 @@ create index if not exists sistem_gunlugu_zaman on sistem_gunlugu (zaman desc);
 -- Aktif sayım dönemi (en son "Dosyayı Temizle").
 create or replace function aktif_donem() returns sayim_donemleri
 language sql stable as $$
-  select * from sayim_donemleri order by baslangic desc, id desc limit 1
+  select * from sayim_donemleri order by id desc limit 1  -- en son açılan dönem
 $$;
 
 -- Yönetici: "Dosyayı Temizle" — yeni dönem açar. Eski kayıtlar SİLİNMEZ,
 -- önceki dönemde kalır (Sheets'teki arşiv sekmesinin karşılığı).
-create or replace function yeni_donem(p_aciklama text default '') returns text
+-- p_token: Sheets tarafındaki RESET_TOKEN ile AYNI damga verilir (gölge mod),
+-- böylece telefonun gönderdiği resetToken iki tarafta da aynı anlama gelir.
+-- Aynı damga ikinci kez gelirse yeni dönem açılmaz (tekrar gönderim güvenli).
+drop function if exists yeni_donem(text);
+create or replace function yeni_donem(p_aciklama text default '', p_token text default null) returns text
 language plpgsql as $$
-declare v_token text := to_char(clock_timestamp() at time zone 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"');
+declare v_token text := coalesce(nullif(p_token, ''), to_char(clock_timestamp() at time zone 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"'));
+        v_baslangic timestamptz;
 begin
-  insert into sayim_donemleri (token, aciklama) values (v_token, coalesce(p_aciklama, ''));
+  if exists (select 1 from sayim_donemleri where token = v_token) then return v_token; end if;
+  -- Başlangıç = damganın kendisi (Sheets'teki temizleme anı). Gölge kopya
+  -- birkaç dakika gecikse bile "geç gelen" kararı iki tarafta aynı çıkar.
+  begin v_baslangic := v_token::timestamptz; exception when others then v_baslangic := now(); end;
+  insert into sayim_donemleri (token, aciklama, baslangic) values (v_token, coalesce(p_aciklama, ''), v_baslangic);
   insert into sistem_gunlugu (tur, kaynak, detay) values ('yonetim', '', 'Yeni sayım dönemi: ' || v_token);
   return v_token;
 end $$;
@@ -389,7 +398,7 @@ begin
 end $$;
 
 alter function aktif_donem()                         security definer set search_path = public, extensions;
-alter function yeni_donem(text)                      security definer set search_path = public, extensions;
+alter function yeni_donem(text, text)                security definer set search_path = public, extensions;
 alter function sayim_yaz(jsonb)                      security definer set search_path = public, extensions;
 alter function sayim_kontrol(text)                   security definer set search_path = public, extensions;
 alter function sayim_guncelle(text, numeric, text)   security definer set search_path = public, extensions;
