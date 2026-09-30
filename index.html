@@ -317,7 +317,7 @@
   <header style="border:none; padding:0 0 16px; background:transparent; display:flex; align-items:flex-start; justify-content:space-between;">
     <div>
       <h1><img src="logo-header.png" alt="Murat Gıda" style="height:30px; width:auto; display:block;"></h1>
-      <div class="sub">MK ERP · Murat Gıda • offline • Android • build 101</div>
+      <div class="sub">MK ERP · Murat Gıda • offline • Android • build 102</div>
     </div>
     <button type="button" id="themeToggleBtn" title="Tema seç" style="background:var(--panel2); border:1.5px solid var(--line); color:var(--text); width:34px; height:34px; border-radius:50%; font-size:15px; padding:0; display:flex; align-items:center; justify-content:center; flex-shrink:0;">🎨</button>
   </header>
@@ -1694,6 +1694,7 @@
   }).catch(function(){ productCountEl.textContent = "Henüz ürün yok"; });
 
   function updateProductCountLabel(){
+    katalogAramaOnHazirla(); // katalog her yüklendiğinde/değiştiğinde çağrılıyor
     var names = new Set();
     catalogMap.forEach(function(v){ names.add(v.name); });
     var empty = catalogMap.size === 0;
@@ -2490,6 +2491,42 @@
     return String(s == null ? '' : s).replace(/İ/g, 'i').replace(/I/g, 'i').replace(/ı/g, 'i')
       .toLowerCase().replace(/ç/g, 'c').replace(/ğ/g, 'g').replace(/ö/g, 'o').replace(/ş/g, 's').replace(/ü/g, 'u');
   }
+  // HIZLI KATALOG ARAMASI (40 bin ürün): ürünün aranabilir metni (ad + barkod +
+  // stok kodu, Türkçe harfler sadeleştirilmiş) İLK aramada bir kez hesaplanıp
+  // ürünün üzerinde saklanır. Katalog yenilenince ürünler yeni nesne olduğu için
+  // kendiliğinden yeniden hesaplanır. Eskiden HER HARFTE 40 bin ad yeniden
+  // dönüştürülüyor ve yavaş Türkçe sıralama yapılıyordu: orta seviye telefonda
+  // harf başına ~1 sn donma.
+  function aramaMetniHazirla(v, barcode){
+    if(v._ara === undefined){ v._n = normTr(v.name); v._ara = v._n + ' ' + String(barcode).toLowerCase() + ' ' + normTr(v.stockCode); }
+  }
+  // Katalog yüklenince aranabilir metinler ARKA PLANDA, küçük parçalar hâlinde
+  // (1500 ürün / parça) önceden hazırlanır — ilk aramada da bekleme olmaz,
+  // okutma sırasında da ekran takılmaz.
+  var onHazirlaZamanlayici = null;
+  function katalogAramaOnHazirla(){
+    clearTimeout(onHazirlaZamanlayici);
+    var it = catalogMap.entries();
+    function parca(){
+      var n = 0, r;
+      while(n < 1500 && !(r = it.next()).done){ aramaMetniHazirla(r.value[1], r.value[0]); n++; }
+      if(n === 1500) onHazirlaZamanlayici = setTimeout(parca, 40);
+    }
+    onHazirlaZamanlayici = setTimeout(parca, 3000);
+  }
+  function katalogAra(kelimeler, limit){
+    var sonuc = [];
+    catalogMap.forEach(function(v, barcode){
+      aramaMetniHazirla(v, barcode);
+      for(var i = 0; i < kelimeler.length; i++){ if(v._ara.indexOf(kelimeler[i]) === -1) return; }
+      sonuc.push({ v: v, barcode: barcode });
+    });
+    var toplam = sonuc.length;
+    // Sadeleştirilmiş ada göre sırala (ç→c, ş→s …): Türkçe sıralamaya çok yakın, kat kat hızlı.
+    sonuc.sort(function(a, b){ return a.v._n < b.v._n ? -1 : (a.v._n > b.v._n ? 1 : 0); });
+    if(limit && sonuc.length > limit) sonuc = sonuc.slice(0, limit);
+    return { liste: sonuc, toplam: toplam };
+  }
   // KDV oranı etiketi — katalogdaki değere göre; oran yoksa boş döner.
   function formatKdv(v){ return (v !== '' && v !== null && v !== undefined && !isNaN(Number(v))) ? ('KDV %' + Number(v)) : ''; }
   function kdvTagFor(barcode){
@@ -3032,21 +3069,16 @@
       return;
     }
     var kelimeler = term.split(/\s+/).filter(Boolean);
-    var results = [];
-    catalogMap.forEach(function(v, barcode){
-      if(v._n === undefined) v._n = normTr(v.name);   // her tuşta 20 bin adı yeniden normalize etme
-      var hedef = v._n + ' ' + barcode.toLowerCase() + ' ' + normTr(v.stockCode);
-      if(kelimeler.every(function(k){ return hedef.indexOf(k) !== -1; })){
-        results.push({ name: v.name, barcode: barcode, stockCode: v.stockCode || '', oldStock: v.oldStock || '', price: v.price || '', kdv: v.kdv || '' });
-      }
+    var results = katalogAra(kelimeler, 200).liste.map(function(x){
+      var v = x.v;
+      return { name: v.name, barcode: x.barcode, stockCode: v.stockCode || '', oldStock: v.oldStock || '', price: v.price || '', kdv: v.kdv || '' };
     });
     if(results.length === 0){
       priceResultsEl.innerHTML = priceNameMode ? '<div class="empty">Eşleşen ürün yok.</div>'
         : '<div class="empty" style="font-size:15px;">⚠️ Bu barkod katalogda yok<br><b style="font-family:var(--mono); font-size:18px;">' + escapeHtml(raw) + '</b></div>';
       return;
     }
-    results.sort(function(a,b){ return a.name.localeCompare(b.name, 'tr'); });
-    if(results.length > 200) results = results.slice(0, 200); // çok uzun listede performans için sınırla
+    // (sıralama ve 200 ile sınırlama katalogAra içinde)
 
     // Tek sonuç varsa (genelde barkod okutunca) — büyük, ortalanmış, tek bakışta
     // okunan bir kart göster; birden fazla eşleşme varsa (isimle arama) liste kalsın.
@@ -4697,8 +4729,12 @@
   document.getElementById('nameSearchClose').addEventListener('click', function(){
     document.getElementById('nameSearchScreen').classList.add('hidden');
   });
+  // Hızlı yazarken her harfte değil, yazmaya ara verince (120 ms) ara.
+  var nameSearchZamanlayici = null;
   nameSearchInput.addEventListener('input', function(e){
-    renderNameSearchResults(e.target.value.trim());
+    var v = e.target.value.trim();
+    clearTimeout(nameSearchZamanlayici);
+    nameSearchZamanlayici = setTimeout(function(){ renderNameSearchResults(v); }, 120);
   });
 
   function renderNameSearchResults(term){
@@ -4708,24 +4744,15 @@
     // bulunur), baştan sona birebir eşleşme aramaz. Aynı üründen birden
     // fazla barkod eşleşse bile ada göre tekilleştirip tek satır gösterir —
     // ama arama terimi bir barkoda/stok koduna özel eşleşiyorsa o kaydı öne alır.
-    var kelimeler = normTr(term).trim().split(/\s+/).filter(Boolean);
-    var seen = {}; var matches = [];
-    catalogMap.forEach(function(entry, barcode){
-      if(kelimeler.length > 0){
-        var hedef = (normTr(entry.name) + ' ' + barcode.toLowerCase() + ' ' + normTr(entry.stockCode));
-        var hepsiVar = kelimeler.every(function(k){ return hedef.indexOf(k) !== -1; });
-        if(!hepsiVar) return;
-      }
-      var key = entry.name + '|' + barcode; // farklı barkodları da ayrı göster ki barkod/stok kodu araması net eşleşsin
-      if(seen[key]) return;
-      seen[key] = true;
-      matches.push({ name: entry.name, barcode: barcode, stockCode: entry.stockCode || '', oldStock: entry.oldStock || '' });
-    });
-    matches.sort(function(a,b){ return a.name.localeCompare(b.name, 'tr'); });
     if(!term){
       nameSearchResults.innerHTML = '<div class="empty">Ürün adı, barkod ya da stok koduyla aramak için yazmaya başla</div>';
       return;
     }
+    var kelimeler = normTr(term).trim().split(/\s+/).filter(Boolean);
+    var bulunan = katalogAra(kelimeler, 60);
+    var matches = bulunan.liste.map(function(x){
+      return { name: x.v.name, barcode: x.barcode, stockCode: x.v.stockCode || '', oldStock: x.v.oldStock || '' };
+    });
     if(matches.length === 0){
       nameSearchResults.innerHTML = '<div class="empty">"'+escapeHtml(term)+'" ile eşleşen ürün yok</div>';
       return;
@@ -4736,7 +4763,7 @@
         '<div class="info"><div class="name">'+escapeHtml(m.name)+'</div>' +
         '<div class="meta">'+escapeHtml(m.barcode)+(m.stockCode ? ' · '+escapeHtml(m.stockCode) : '')+'</div></div>' +
         '</div>';
-    }).join('') + (matches.length > 60 ? '<div class="empty">+ '+(matches.length-60)+' sonuç daha — daha spesifik yaz</div>' : '');
+    }).join('') + (bulunan.toplam > 60 ? '<div class="empty">+ '+(bulunan.toplam-60)+' sonuç daha — daha spesifik yaz</div>' : '');
   }
 
   nameSearchResults.addEventListener('click', function(e){
