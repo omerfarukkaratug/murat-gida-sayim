@@ -381,6 +381,27 @@ begin
   return jsonb_build_object('status', 'ok', 'degisen', v_degisen, 'silinen', v_silinen);
 end $$;
 
+-- Cari listesi: ERP'den gelen tam liste ile değiştirilir (tek işlemde;
+-- boş liste gelirse hiçbir şey silinmez).
+create or replace function cari_yukle(p_cariler jsonb, p_kaynak text default 'ERP / dış program') returns jsonb
+language plpgsql as $$
+declare v_sayi integer;
+begin
+  select count(*) into v_sayi from jsonb_to_recordset(p_cariler) as x(name text) where coalesce(x.name, '') <> '';
+  if v_sayi = 0 then
+    return jsonb_build_object('status', 'error', 'message', 'Boş cari listesi — değiştirilmedi');
+  end if;
+  delete from cariler;
+  insert into cariler (kod, ad, bakiye)
+    select distinct on (case when coalesce(x.code, '') = '' then gen_random_uuid()::text else x.code end)
+           coalesce(x.code, ''), x.name, nullif(x.balance, '')::numeric
+      from jsonb_to_recordset(p_cariler) as x(name text, code text, balance text)
+     where coalesce(x.name, '') <> '';
+  get diagnostics v_sayi = row_count;
+  insert into sistem_gunlugu (tur, kaynak, detay) values ('cari', coalesce(p_kaynak, ''), v_sayi || ' cari yüklendi');
+  return jsonb_build_object('status', 'ok', 'saved', v_sayi);
+end $$;
+
 -- ------------------------------------------------------------
 -- YETKİLER: Telefonlar (Supabase "anon" anahtarı) tablolara DOĞRUDAN
 -- erişemez; sadece aşağıda izin verilen fonksiyonları çağırabilir.
@@ -405,12 +426,15 @@ alter function sayim_guncelle(text, numeric, text)   security definer set search
 alter function sayim_sil(text, text)                 security definer set search_path = public, extensions;
 alter function mal_yaz(jsonb)                        security definer set search_path = public, extensions;
 alter function katalog_yukle(jsonb, text)            security definer set search_path = public, extensions;
+alter function cari_yukle(jsonb, text)               security definer set search_path = public, extensions;
 
 revoke execute on all functions in schema public from public;
 do $$
 begin
   if exists (select 1 from pg_roles where rolname = 'anon') then
     execute 'revoke all on all tables in schema public from anon, authenticated';
+    -- Supabase varsayılan olarak anon'a TÜM fonksiyonları açar; önce hepsini kapat.
+    execute 'revoke execute on all functions in schema public from anon, authenticated';
     execute 'grant execute on function sayim_yaz(jsonb), sayim_kontrol(text), mal_yaz(jsonb) to anon, authenticated';
   end if;
 end $$;

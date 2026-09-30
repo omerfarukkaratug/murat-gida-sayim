@@ -32,3 +32,12 @@ begin
   assert r->'rows'->'h1' = '[1,2,1]' and (r->>'kilitli')::int = 1, 'ERP''ye aktarılan satır değişmemeli';
   raise notice 'TÜM TESTLER GEÇTİ';
 end $$;
+do $$
+declare r jsonb;
+begin
+  r := cari_yukle('[{"name":"A","code":"C1","balance":"10.5"},{"name":"B","code":"","balance":null},{"name":"A2","code":"C1"}]');
+  assert r->>'status' = 'ok' and (select count(*) from cariler) = 2, 'cari yükleme: ' || r::text;
+  r := cari_yukle('[]');
+  assert r->>'status' = 'error' and (select count(*) from cariler) = 2, 'boş cari listesi silmemeli';
+  raise notice 'CARİ TESTLERİ GEÇTİ';
+end $$;
