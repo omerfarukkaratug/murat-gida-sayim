@@ -137,6 +137,10 @@
     background:rgba(35,32,23,.55); border:1px solid rgba(255,255,255,.4); color:#fff; font-size:18px;
     display:flex; align-items:center; justify-content:center; backdrop-filter:blur(4px);}
   #torchBtn.on, .camTorchBtn.on{background:var(--accent); color:#fff;}
+  .camZoomBtn{position:absolute; top:12px; left:12px; z-index:7; min-width:46px; height:42px; padding:0 10px; border-radius:21px;
+    background:rgba(35,32,23,.55); border:1px solid rgba(255,255,255,.4); color:#fff; font-size:15px; font-weight:800; font-family:var(--mono);
+    display:flex; align-items:center; justify-content:center; backdrop-filter:blur(4px);}
+  .camZoomBtn.on{background:var(--accent);}
   #closeCamBtn, .camCloseBtn{position:absolute; top:12px; right:12px; z-index:7; width:42px; height:42px; border-radius:50%;
     background:rgba(35,32,23,.55); border:1px solid rgba(255,255,255,.4); color:#fff; font-size:16px;
     display:flex; align-items:center; justify-content:center; backdrop-filter:blur(4px);}
@@ -313,7 +317,7 @@
   <header style="border:none; padding:0 0 16px; background:transparent; display:flex; align-items:flex-start; justify-content:space-between;">
     <div>
       <h1><img src="logo-header.png" alt="Murat Gıda" style="height:30px; width:auto; display:block;"></h1>
-      <div class="sub">MK ERP · Murat Gıda • offline • Android • build 100</div>
+      <div class="sub">MK ERP · Murat Gıda • offline • Android • build 101</div>
     </div>
     <button type="button" id="themeToggleBtn" title="Tema seç" style="background:var(--panel2); border:1.5px solid var(--line); color:var(--text); width:34px; height:34px; border-radius:50%; font-size:15px; padding:0; display:flex; align-items:center; justify-content:center; flex-shrink:0;">🎨</button>
   </header>
@@ -2659,6 +2663,7 @@
   // Sadece ihtiyaç anında (ilk kullanımda) indirilip önbelleğe alınıyor;
   // Android'de zaten gerekmediği için hiç indirilmez.
   var bdPolyfillLoadPromise = null;
+  var bdYedekMotor = false; // true: iPhone'daki yazılım (ZBar) motoru kullanılıyor
   function loadBarcodeDetector(){
     if('BarcodeDetector' in window) return Promise.resolve(window.BarcodeDetector);
     if(bdPolyfillLoadPromise) return bdPolyfillLoadPromise;
@@ -2669,8 +2674,15 @@
         var s2 = document.createElement('script');
         s2.src = 'https://cdn.jsdelivr.net/npm/@undecaf/barcode-detector-polyfill@0.9.23/dist/index.js';
         s2.onload = function(){
-          if(window.barcodeDetectorPolyfill && window.barcodeDetectorPolyfill.BarcodeDetectorPolyfill){
-            window.BarcodeDetector = window.barcodeDetectorPolyfill.BarcodeDetectorPolyfill;
+          // DİKKAT: kütüphane kendini "const barcodeDetectorPolyfill = ..." ile
+          // tanımlıyor — bu, window.barcodeDetectorPolyfill OLUŞTURMAZ (sadece
+          // çıplak adıyla erişilir). Eskiden sadece window'a baktığımız için bu
+          // hızlı motor iPhone'da HİÇ devreye girmiyor, en zayıf yedek (ZXing)
+          // kullanılıyordu. İkisine de bakıyoruz.
+          var bdp = (typeof barcodeDetectorPolyfill !== 'undefined') ? barcodeDetectorPolyfill : window.barcodeDetectorPolyfill;
+          if(bdp && bdp.BarcodeDetectorPolyfill){
+            window.BarcodeDetector = bdp.BarcodeDetectorPolyfill;
+            bdYedekMotor = true;
             resolve(window.BarcodeDetector);
           } else {
             bdPolyfillLoadPromise = null; reject(new Error('Barkod tarayıcı yüklenemedi'));
@@ -2703,7 +2715,13 @@
     return zxingLoadPromise;
   }
   var BARCODE_FORMATS = ['ean_13','ean_8','upc_a','upc_e','code_128','code_39','codabar','itf','qr_code'];
-  var CAMERA_CONSTRAINTS = { video: { facingMode: 'environment' } };
+  // iPhone kamerayı varsayılan olarak DÜŞÜK çözünürlükte (640×480) açar; barkod
+  // çizgileri seçilemez. iPhone'da yüksek çözünürlük istenir (Android'e dokunulmadı:
+  // orada yerleşik okuyucu zaten iyi çalışıyor).
+  var IOS_CIHAZ = /iPad|iPhone|iPod/.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+  var CAMERA_CONSTRAINTS = IOS_CIHAZ
+    ? { video: { facingMode: 'environment', width: { ideal: 1920 }, height: { ideal: 1080 } } }
+    : { video: { facingMode: 'environment' } };
 
   // Üç kameranın (Sayım, hızlı tarama, Mal Giriş/Çıkış) hepsi bu TEK fonksiyonu
   // kullanır: sırasıyla native BarcodeDetector → WebAssembly (ZBar) yedeği →
@@ -2720,15 +2738,39 @@
         onBarcode(val);
       }
     }
+    // Aynı anda TEK okuma: önceki kare bitmeden yenisi başlamaz (eskiden her
+    // karede yeni okuma başlıyor, iPhone'da üst üste binip telefonu yoruyordu).
+    var mesgul = false, sonOkuma = 0, tuval = null, tuvalCtx = null;
+    // iPhone (yazılım motoru): tüm kare yerine sadece ekranda görünen
+    // çerçevenin çevresi okunur, gerekirse küçültülür — hem hızlı hem net.
+    function kirpilmisKare(){
+      var vw = videoEl.videoWidth, vh = videoEl.videoHeight;
+      var W = videoEl.clientWidth, H = videoEl.clientHeight;
+      if(!vw || !vh || !W || !H) return videoEl;
+      var olcek = Math.max(W / vw, H / vh);           // object-fit: cover
+      var gw = W / olcek, gh = H / olcek;              // ekranda görünen kısım (video pikseli)
+      var sx = (vw - gw) / 2 + gw * 0.08, sy = (vh - gh) / 2 + gh * 0.12;
+      var sw = gw * 0.84, sh = gh * 0.76;              // çerçeve + pay
+      var kucult = Math.min(1, 1280 / sw);
+      if(!tuval){ tuval = document.createElement('canvas'); tuvalCtx = tuval.getContext('2d', { willReadFrequently: true }); }
+      tuval.width = Math.round(sw * kucult); tuval.height = Math.round(sh * kucult);
+      tuvalCtx.drawImage(videoEl, sx, sy, sw, sh, 0, 0, tuval.width, tuval.height);
+      return tuval;
+    }
     function nativeLoop(detector){
       if(stopped) return;
-      if(videoEl.readyState >= 2){
-        detector.detect(videoEl).then(function(codes){
-          if(codes.length) emit(codes[0].rawValue);
-        }).catch(function(){});
+      var simdi = Date.now();
+      if(!mesgul && videoEl.readyState >= 2 && (!bdYedekMotor || simdi - sonOkuma >= 90)){
+        mesgul = true; sonOkuma = simdi;
+        var kaynak = videoEl;
+        try { if(bdYedekMotor) kaynak = kirpilmisKare(); } catch(e){ kaynak = videoEl; }
+        detector.detect(kaynak).then(function(codes){
+          if(codes.length && !stopped) emit(codes[0].rawValue);
+        }).catch(function(){}).then(function(){ mesgul = false; });
       }
       requestAnimationFrame(function(){ nativeLoop(detector); });
     }
+    var zoomBtn = IOS_CIHAZ ? kameraZoomDugmesi(stream, videoEl) : null;
     loadBarcodeDetector().then(function(BarcodeDetector){
       if(stopped) return;
       nativeLoop(new BarcodeDetector({ formats: BARCODE_FORMATS }));
@@ -2755,8 +2797,42 @@
       stop: function(){
         stopped = true;
         if(zxingReader){ try{ zxingReader.reset(); }catch(e){} zxingReader = null; }
+        if(zoomBtn && zoomBtn.parentNode) zoomBtn.parentNode.removeChild(zoomBtn);
       }
     };
+  }
+
+  // YAKINLAŞTIRMA (iPhone): Pro model iPhone'lar yakından NETLEME YAPAMAZ —
+  // barkoda yaklaştıkça bulanıklaşır. 2x ile telefon biraz uzakta tutulur,
+  // barkod yine büyük ve NET görünür. Seçim telefonda hatırlanır. Telefon
+  // yakınlaştırmayı desteklemiyorsa düğme hiç görünmez.
+  function kameraZoomDugmesi(stream, videoEl){
+    try {
+      var track = stream.getVideoTracks()[0];
+      var caps = track && track.getCapabilities ? track.getCapabilities() : null;
+      if(!caps || !caps.zoom || !(caps.zoom.max >= 1.5)) return null;
+      var secenekler = [1, Math.min(2, caps.zoom.max)];
+      var kayitli = 1;
+      try { kayitli = Number(localStorage.getItem('kameraZoom')) || 1; } catch(e){}
+      var btn = document.createElement('button');
+      btn.type = 'button';
+      btn.className = 'camZoomBtn';
+      var uygula = function(z){
+        z = Math.max(caps.zoom.min || 1, Math.min(caps.zoom.max, z));
+        track.applyConstraints({ advanced: [{ zoom: z }] }).catch(function(){});
+        btn.textContent = (Math.round(z * 10) / 10) + 'x';
+        btn.classList.toggle('on', z > 1);
+        return z;
+      };
+      var aktif = uygula(secenekler.indexOf(kayitli) >= 0 ? kayitli : 1);
+      btn.addEventListener('click', function(e){
+        e.stopPropagation();
+        aktif = uygula(aktif > 1 ? 1 : secenekler[1]);
+        try { localStorage.setItem('kameraZoom', String(aktif > 1 ? secenekler[1] : 1)); } catch(err){}
+      });
+      (videoEl.parentNode || document.body).appendChild(btn);
+      return btn;
+    } catch(e){ return null; }
   }
 
   // ---------- Genel amaçlı hızlı barkod tarayıcı ----------
