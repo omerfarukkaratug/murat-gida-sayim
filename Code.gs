@@ -8,7 +8,7 @@
 // bir sürüm dağıttıktan sonra /exec adresini boş açtığında burada yazan
 // numarayı görmelisin; index.html'in üstündeki "build" numarasıyla
 // eşleşecek şekilde ben her ikisini birlikte güncelliyorum.
-var GS_VERSION = 'build106';
+var GS_VERSION = 'build110';
 
 // Sheets'te "Saat" sütunu zaman biçimli olarak algılanırsa, hücre değeri düz
 // metin değil bir Date nesnesi olarak gelir ve String(...) çirkin bir çıktı
@@ -127,6 +127,11 @@ function doGet(e) {
   if (e.parameter && e.parameter.action === 'sayim_sil') {
     return sayimSil(e.parameter.user, e.parameter.pass, e.parameter.kayitId, e.parameter.callback);
   }
+  // ---- Personel mesai takibi (deneme) — sayımdan tamamen ayrı ----
+  if (e.parameter && e.parameter.action === 'mesai_kaydet') return mesaiKaydet(e.parameter, e.parameter.callback);
+  if (e.parameter && e.parameter.action === 'mesai_benim') return mesaiBenim(e.parameter, e.parameter.callback);
+  if (e.parameter && e.parameter.action === 'mesai_kod') return mesaiKod(e.parameter, e.parameter.callback);
+  if (e.parameter && e.parameter.action === 'mesai_rapor') return mesaiRapor(e.parameter, e.parameter.callback);
   return ContentService
     .createTextOutput('Sayım toplama servisi çalışıyor ✅ kod sürümü: ' + GS_VERSION + ' (' + new Date().toISOString() + ')')
     .setMimeType(ContentService.MimeType.TEXT);
@@ -156,7 +161,7 @@ function outJson(obj, callback) {
 // yetkilendirme için yeterlidir. Tabloyu düzenleme yetkisi olan herkes
 // şifreleri görebilir.
 // ============================================================
-var ALL_PERMS = ['rapor', 'temizle', 'kullanici_yonetimi', 'ayarlar', 'canli_durum', 'duzelt', 'hareket'];
+var ALL_PERMS = ['rapor', 'temizle', 'kullanici_yonetimi', 'ayarlar', 'canli_durum', 'duzelt', 'hareket', 'mesai_yonetim'];
 
 function authenticate(user, pass) {
   user = String(user || '').trim();
@@ -2255,4 +2260,176 @@ function urunHareket(p, callback) {
     gunlukYaz('veritabani', 'ürün hareketleri', 'Sorgu başarısız: ' + err, true);
     return outJson({ status: 'error', message: 'Veri tabanına ulaşılamadı — biraz sonra tekrar dene' }, callback);
   }
+}
+
+
+// ============================================================
+// PERSONEL MESAİ TAKİBİ (deneme) — sayım ve mal kayıtlarından tamamen ayrı
+// 'Mesai' sekmesi: her giriş/çıkış bir satır. Saat TELEFONDAN DEĞİL sunucudan
+// alınır (telefon saati değiştirilerek oynanamaz). Bir giriş/çıkışın kabul
+// edilmesi için İKİSİ BİRDEN gerekir:
+//   1) Telefonun konumu bir şubenin yarıçapı içinde ('Subeler' sekmesi),
+//   2) Mağazadaki ekranda görünen, 30 saniyede bir değişen 6 haneli kod.
+// Sahte konum uygulamasıyla GPS kandırılsa bile kod ancak mağazada görülür.
+// Konum sadece personel Giriş/Çıkış'a bastığı anda bir kez alınır (sürekli
+// takip YOK). Reddedilen denemeler Sistem Günlüğü'ne yazılır.
+// ============================================================
+var MESAI_SEKME = 'Mesai';
+var MESAI_BASLIK = ['Zaman', 'Tarih', 'Saat', 'Personel', 'Tip', 'Şube', 'Mesafe (m)', 'GPS ± (m)', 'Enlem', 'Boylam', 'Konum Yaşı (sn)', 'Cihaz', 'Not'];
+var MESAI_KOD_SN = 30;
+
+function mesaiSir() {
+  var props = PropertiesService.getScriptProperties();
+  var s = props.getProperty('MESAI_SIR');
+  if (!s) { s = Utilities.getUuid() + Utilities.getUuid(); props.setProperty('MESAI_SIR', s); }
+  return s;
+}
+function mesaiKodHesapla(pencere) {
+  var b = Utilities.computeHmacSha256Signature('MKM' + pencere, mesaiSir());
+  var n = ((b[0] & 0x7f) * 16777216) + ((b[1] & 0xff) * 65536) + ((b[2] & 0xff) * 256) + (b[3] & 0xff);
+  return ('000000' + (n % 1000000)).slice(-6);
+}
+function mesaiPencere(ms) { return Math.floor((ms || Date.now()) / 1000 / MESAI_KOD_SN); }
+// Ekrandaki kod en fazla ~1 dakika geçerli (şimdiki ve bir önceki pencere).
+function mesaiKodGecerli(kod) {
+  kod = String(kod || '').replace(/\D/g, '');
+  if (kod.length !== 6) return false;
+  var w = mesaiPencere();
+  return kod === mesaiKodHesapla(w) || kod === mesaiKodHesapla(w - 1);
+}
+function mesaiSheet() {
+  var ss = SpreadsheetApp.getActiveSpreadsheet();
+  var sh = ss.getSheetByName(MESAI_SEKME);
+  if (!sh) { sh = ss.insertSheet(MESAI_SEKME); sh.appendRow(MESAI_BASLIK); sh.setFrozenRows(1); }
+  return sh;
+}
+function mesaiTz() { return Session.getScriptTimeZone() || 'Europe/Istanbul'; }
+function mesaiSatirlar() {
+  var sh = mesaiSheet();
+  if (sh.getLastRow() < 2) return [];
+  return sh.getRange(2, 1, sh.getLastRow() - 1, MESAI_BASLIK.length).getValues().map(function (r) {
+    var z = r[0] instanceof Date ? r[0] : new Date(r[0]);
+    return { zaman: z, personel: String(r[3] || ''), tip: String(r[4] || ''), sube: String(r[5] || ''), not: String(r[12] || '') };
+  }).filter(function (x) { return !isNaN(x.zaman.getTime()) && x.personel; });
+}
+function mesaiSaat(d) { return Utilities.formatDate(d, mesaiTz(), 'HH:mm'); }
+function mesaiTarih(d) { return Utilities.formatDate(d, mesaiTz(), 'yyyy-MM-dd'); }
+
+// Bir kişinin kayıtlarını günlere böler: giriş → sonraki çıkış bir çalışma
+// aralığıdır ve GİRİŞİN günü sayılır (gece yarısını geçen vardiya dahil).
+function mesaiGunler(kayitlar) {
+  kayitlar = kayitlar.slice().sort(function (a, b) { return a.zaman - b.zaman; });
+  var gunler = {}, acik = null;
+  function gun(t) { if (!gunler[t]) gunler[t] = { tarih: t, araliklar: [], dakika: 0, eksik: false }; return gunler[t]; }
+  kayitlar.forEach(function (k) {
+    if (k.tip === 'giris') {
+      if (acik) gun(mesaiTarih(acik.zaman)).araliklar.push({ giris: mesaiSaat(acik.zaman), cikis: '', eksik: true });
+      acik = k;
+    } else if (k.tip === 'cikis') {
+      if (!acik) { gun(mesaiTarih(k.zaman)).araliklar.push({ giris: '', cikis: mesaiSaat(k.zaman), eksik: true }); return; }
+      var dk = Math.round((k.zaman - acik.zaman) / 60000);
+      var g = gun(mesaiTarih(acik.zaman));
+      g.araliklar.push({ giris: mesaiSaat(acik.zaman), cikis: mesaiSaat(k.zaman), dakika: dk });
+      g.dakika += dk;
+      acik = null;
+    }
+  });
+  var simdiIceride = null;
+  if (acik) {
+    gun(mesaiTarih(acik.zaman)).araliklar.push({ giris: mesaiSaat(acik.zaman), cikis: '', acik: true });
+    simdiIceride = { giris: mesaiSaat(acik.zaman), tarih: mesaiTarih(acik.zaman), sube: acik.sube };
+  }
+  Object.keys(gunler).forEach(function (t) { gunler[t].eksik = gunler[t].araliklar.some(function (a) { return a.eksik; }); });
+  return { gunler: Object.keys(gunler).sort().reverse().map(function (t) { return gunler[t]; }), iceride: simdiIceride };
+}
+
+function mesaiKaydet(p, callback) {
+  var auth = authenticate(p.user, p.pass);
+  if (!auth.ok) return outJson({ status: 'error', message: auth.message }, callback);
+  var personel = String(p.user || '').trim();
+  var tip = p.tip === 'cikis' ? 'cikis' : (p.tip === 'giris' ? 'giris' : '');
+  if (!tip) return outJson({ status: 'error', message: 'Giriş mi çıkış mı belli değil' }, callback);
+  var red = function (sebep) {
+    gunlukYaz('mesai', personel, (tip === 'giris' ? 'Giriş' : 'Çıkış') + ' REDDEDİLDİ: ' + sebep, true);
+    return outJson({ status: 'error', message: sebep }, callback);
+  };
+  if (!mesaiKodGecerli(p.kod)) return red('Mağaza kodu yanlış ya da süresi geçmiş — ekrandaki GÜNCEL kodu gir');
+  var enlem = Number(p.enlem), boylam = Number(p.boylam), dogruluk = Math.round(Number(p.dogruluk) || 0);
+  if (!p.enlem || !p.boylam || isNaN(enlem) || isNaN(boylam)) return red('Konum alınamadı — konum iznini aç');
+  var subeler = subeleriOku();
+  if (!subeler.length) return red('Şube konumu tanımlı değil — yönetici Ayarlar\'dan şube eklemeli');
+  var enYakin = null;
+  subeler.forEach(function (b) {
+    var m = mesaiMesafe(enlem, boylam, b.enlem, b.boylam);
+    if (!enYakin || m < enYakin.m) enYakin = { b: b, m: m };
+  });
+  if (enYakin.m > enYakin.b.yaricap) return red('Şube dışındasın (' + enYakin.b.ad + '\'e ' + Math.round(enYakin.m) + ' m)');
+  if (dogruluk > Math.max(150, enYakin.b.yaricap)) return red('GPS çok zayıf (±' + dogruluk + ' m) — açık alana çıkıp tekrar dene');
+  var simdi = new Date();
+  var yas = p.konumZaman ? Math.round((simdi.getTime() - Number(p.konumZaman)) / 1000) : '';
+  var notlar = [];
+  if (dogruluk === 0) notlar.push('GPS doğruluğu 0 (şüpheli)');
+  if (yas !== '' && Math.abs(yas) > 300) notlar.push('telefon saati/konum zamanı ' + yas + ' sn farklı');
+
+  var lock = LockService.getScriptLock();
+  try { lock.waitLock(20000); } catch (e) { return outJson({ status: 'error', message: 'Sunucu meşgul — birazdan tekrar dene' }, callback); }
+  try {
+    var sh = mesaiSheet();
+    // Aynı kişinin 1 dakika içindeki aynı kaydı (çift dokunma / tekrar gönderim) yazılmaz.
+    var kendi = mesaiSatirlar().filter(function (k) { return k.personel.toLowerCase() === personel.toLowerCase(); });
+    var son = kendi.length ? kendi.reduce(function (a, b) { return a.zaman > b.zaman ? a : b; }) : null;
+    if (son && son.tip === tip && simdi - son.zaman < 60000) {
+      return outJson({ status: 'ok', tekrar: true, zaman: mesaiSaat(son.zaman), sube: son.sube, tip: tip }, callback);
+    }
+    if (son && son.tip === tip) notlar.push(tip === 'giris' ? 'önceki girişin çıkışı yok' : 'önceki çıkışın girişi yok');
+    sh.appendRow([simdi, mesaiTarih(simdi), mesaiSaat(simdi), personel, tip, enYakin.b.ad, Math.round(enYakin.m), dogruluk,
+      enlem, boylam, yas, String(p.cihaz || '').substring(0, 120), notlar.join('; ')]);
+  } finally { lock.releaseLock(); }
+  gunlukYaz('mesai', personel, (tip === 'giris' ? 'Giriş' : 'Çıkış') + ': ' + enYakin.b.ad + ' (' + Math.round(enYakin.m) + ' m, GPS ±' + dogruluk + ' m)' + (notlar.length ? ' — ' + notlar.join('; ') : ''), false);
+  return outJson({ status: 'ok', zaman: mesaiSaat(simdi), sube: enYakin.b.ad, tip: tip }, callback);
+}
+function mesaiMesafe(a1, o1, a2, o2) {
+  var R = 6371000, r = Math.PI / 180;
+  var da = (a2 - a1) * r, dO = (o2 - o1) * r;
+  var x = Math.sin(da / 2) * Math.sin(da / 2) + Math.cos(a1 * r) * Math.cos(a2 * r) * Math.sin(dO / 2) * Math.sin(dO / 2);
+  return 2 * R * Math.asin(Math.sqrt(x));
+}
+
+// Kişinin kendi son 31 günü (ve şu an içeride mi).
+function mesaiBenim(p, callback) {
+  var auth = authenticate(p.user, p.pass);
+  if (!auth.ok) return outJson({ status: 'error', message: auth.message }, callback);
+  var ad = String(p.user || '').trim().toLowerCase();
+  var sinir = Date.now() - 32 * 86400000;
+  var kendi = mesaiSatirlar().filter(function (k) { return k.personel.toLowerCase() === ad && k.zaman.getTime() >= sinir; });
+  var g = mesaiGunler(kendi);
+  return outJson({ status: 'ok', gunler: g.gunler.slice(0, 31), iceride: g.iceride, yonetici: auth.permissions.indexOf('mesai_yonetim') !== -1 }, callback);
+}
+
+// Mağaza ekranındaki 6 haneli kod (sadece mesai yöneticisi açabilir).
+function mesaiKod(p, callback) {
+  var auth = requirePermission(p.user, p.pass, 'mesai_yonetim');
+  if (!auth.ok) return outJson({ status: 'error', message: auth.message }, callback);
+  var simdi = Date.now();
+  var w = mesaiPencere(simdi);
+  var kalan = MESAI_KOD_SN - Math.floor((simdi / 1000) % MESAI_KOD_SN);
+  return outJson({ status: 'ok', kod: mesaiKodHesapla(w), kalanSn: kalan, sureSn: MESAI_KOD_SN }, callback);
+}
+
+// Aylık puantaj: herkesin gün gün giriş/çıkış ve toplam süresi + şu an içeride olanlar.
+function mesaiRapor(p, callback) {
+  var auth = requirePermission(p.user, p.pass, 'mesai_yonetim');
+  if (!auth.ok) return outJson({ status: 'error', message: auth.message }, callback);
+  var ay = /^\d{4}-\d{2}$/.test(String(p.ay || '')) ? String(p.ay) : Utilities.formatDate(new Date(), mesaiTz(), 'yyyy-MM');
+  var kisiler = {};
+  mesaiSatirlar().forEach(function (k) { (kisiler[k.personel] = kisiler[k.personel] || []).push(k); });
+  var sonuc = [], iceride = [];
+  Object.keys(kisiler).sort(function (a, b) { return a.localeCompare(b, 'tr'); }).forEach(function (ad) {
+    var g = mesaiGunler(kisiler[ad]);
+    if (g.iceride) iceride.push({ personel: ad, giris: g.iceride.giris, tarih: g.iceride.tarih, sube: g.iceride.sube });
+    var gunler = g.gunler.filter(function (x) { return x.tarih.indexOf(ay) === 0; }).reverse();
+    if (!gunler.length) return;
+    sonuc.push({ personel: ad, gunler: gunler, toplamDakika: gunler.reduce(function (t, x) { return t + x.dakika; }, 0) });
+  });
+  return outJson({ status: 'ok', ay: ay, kisiler: sonuc, iceride: iceride }, callback);
 }
