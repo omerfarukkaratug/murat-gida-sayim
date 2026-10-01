@@ -41,3 +41,13 @@ begin
   assert r->>'status' = 'error' and (select count(*) from cariler) = 2, 'boş cari listesi silmemeli';
   raise notice 'CARİ TESTLERİ GEÇTİ';
 end $$;
+do $$
+declare r jsonb; g1 timestamptz;
+begin
+  perform mal_yaz('{"batchId":"B9","rows":[{"kayitId":"x1","v":1,"miktar":"1"},{"kayitId":"x2","v":1,"miktar":"2"}]}');
+  select guncelleme into g1 from mal_hareketleri where kayit_id = 'x1';
+  perform mal_yaz('{"batchId":"B9","rows":[{"kayitId":"x1","v":2,"miktar":"5"}]}');
+  assert (select count(*) from mal_silinenler where kayit_id = 'x2') = 1, 'silinen mal kalemi işaretlenmeli';
+  assert (select miktar from mal_hareketleri where kayit_id = 'x1') = 5, 'mal güncellenmeli';
+  raise notice 'MAL KOPYA TESTLERİ GEÇTİ';
+end $$;
