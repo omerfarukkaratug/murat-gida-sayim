@@ -8,7 +8,7 @@
 // bir sürüm dağıttıktan sonra /exec adresini boş açtığında burada yazan
 // numarayı görmelisin; index.html'in üstündeki "build" numarasıyla
 // eşleşecek şekilde ben her ikisini birlikte güncelliyorum.
-var GS_VERSION = 'build111';
+var GS_VERSION = 'build112';
 
 // Sheets'te "Saat" sütunu zaman biçimli olarak algılanırsa, hücre değeri düz
 // metin değil bir Date nesnesi olarak gelir ve String(...) çirkin bir çıktı
@@ -132,6 +132,7 @@ function doGet(e) {
   if (e.parameter && e.parameter.action === 'mesai_benim') return mesaiBenim(e.parameter, e.parameter.callback);
   if (e.parameter && e.parameter.action === 'mesai_kod') return mesaiKod(e.parameter, e.parameter.callback);
   if (e.parameter && e.parameter.action === 'mesai_rapor') return mesaiRapor(e.parameter, e.parameter.callback);
+  if (e.parameter && String(e.parameter.action || '').indexOf('ekip_') === 0) return ekipIstek(e.parameter, e.parameter.callback);
   return ContentService
     .createTextOutput('Sayım toplama servisi çalışıyor ✅ kod sürümü: ' + GS_VERSION + ' (' + new Date().toISOString() + ')')
     .setMimeType(ContentService.MimeType.TEXT);
@@ -2307,10 +2308,10 @@ function mesaiTz() { return Session.getScriptTimeZone() || 'Europe/Istanbul'; }
 function mesaiSatirlar() {
   var sh = mesaiSheet();
   if (sh.getLastRow() < 2) return [];
-  return sh.getRange(2, 1, sh.getLastRow() - 1, MESAI_BASLIK.length).getValues().map(function (r) {
+  return sh.getRange(2, 1, sh.getLastRow() - 1, MESAI_BASLIK.length).getValues().map(function (r, i) {
     var z = r[0] instanceof Date ? r[0] : new Date(r[0]);
-    return { zaman: z, personel: String(r[3] || ''), tip: String(r[4] || ''), sube: String(r[5] || ''), not: String(r[12] || '') };
-  }).filter(function (x) { return !isNaN(x.zaman.getTime()) && x.personel; });
+    return { satir: i + 2, zaman: z, personel: String(r[3] || ''), tip: String(r[4] || ''), sube: String(r[5] || ''), not: String(r[12] || '') };
+  }).filter(function (x) { return !isNaN(x.zaman.getTime()) && x.personel && x.not.indexOf('İPTAL') !== 0; });
 }
 function mesaiSaat(d) { return Utilities.formatDate(d, mesaiTz(), 'HH:mm'); }
 function mesaiTarih(d) { return Utilities.formatDate(d, mesaiTz(), 'yyyy-MM-dd'); }
@@ -2443,4 +2444,461 @@ function mesaiRapor(p, callback) {
     sonuc.push({ personel: ad, gunler: gunler, toplamDakika: gunler.reduce(function (t, x) { return t + x.dakika; }, 0) });
   });
   return outJson({ status: 'ok', ay: ay, kisiler: sonuc, iceride: iceride }, callback);
+}
+
+// ============================================================
+// EKİP — bölümler, personel bilgisi, vardiya, izin, duyuru, görev, pano
+// Yetkiler: "mesai" = personel (giriş/çıkış, kendi vardiyası/izni, duyuru,
+// görev). "mesai_yonetim" = ⭐ EKİP LİDERİ (bölümleri ve personeli tanımlar,
+// vardiya planı, izin onayı, düzeltme, duyuru/görev, pano, puantaj).
+// Yöneticilerde ikisi de otomatik var. Kullanıcı şifreleri/rolleri buradan
+// DEĞİŞTİRİLEMEZ (o iş Yönetici Paneli'nde).
+// Sekmeler: Bolumler, PersonelBilgi, Vardiya, Izinler, Duyurular, Gorevler.
+// ============================================================
+var EKIP_SEKME = {
+  Bolumler: ['Bölüm'],
+  PersonelBilgi: ['Personel', 'Bölümler', 'İşe Giriş', 'Doğum Tarihi', 'İzin Devri (gün)', 'Not'],
+  Vardiya: ['Hafta', 'Personel', 'Pzt', 'Sal', 'Çar', 'Per', 'Cum', 'Cmt', 'Paz', 'Güncelleyen', 'Zaman'],
+  Izinler: ['ID', 'Personel', 'Tür', 'Başlangıç', 'Bitiş', 'Gün', 'Açıklama', 'Durum', 'Talep Zamanı', 'Karar Veren', 'Karar Zamanı', 'Karar Notu'],
+  Duyurular: ['ID', 'Zaman', 'Yazan', 'Hedef', 'Başlık', 'Metin', 'Okuyanlar'],
+  Gorevler: ['ID', 'Tarih', 'Bölüm', 'Görev', 'Atanan', 'Oluşturan', 'Durum', 'Tamamlayan', 'Tamamlama Zamanı']
+};
+var IZIN_TURLERI = { yillik: 'Yıllık İzin', rapor: 'Raporlu', mazeret: 'Mazeret İzni', ucretsiz: 'Ücretsiz İzin' };
+var EKIP_GEC_TOLERANS_DK = 5;
+var HAFTALIK_NORMAL_DK = 45 * 60;
+
+function ekipSheet(ad) {
+  var ss = SpreadsheetApp.getActiveSpreadsheet();
+  var sh = ss.getSheetByName(ad);
+  if (!sh) { sh = ss.insertSheet(ad); sh.appendRow(EKIP_SEKME[ad]); sh.setFrozenRows(1); }
+  return sh;
+}
+function ekipOku(ad) {
+  var sh = ekipSheet(ad), n = EKIP_SEKME[ad].length;
+  if (sh.getLastRow() < 2) return [];
+  return sh.getRange(2, 1, sh.getLastRow() - 1, n).getValues().map(function (r, i) { r.satir = i + 2; return r; });
+}
+function ekipYazSatir(ad, satir, degerler) { ekipSheet(ad).getRange(satir, 1, 1, degerler.length).setValues([degerler]); }
+function ekipTarihMetni(v) {
+  if (v instanceof Date) return Utilities.formatDate(v, mesaiTz(), 'yyyy-MM-dd');
+  var s = String(v || '').trim();
+  return /^\d{4}-\d{2}-\d{2}$/.test(s) ? s : '';
+}
+// Benzersiz kayıt kimliği (aynı milisaniyede iki kayıt çakışmasın).
+function ekipId(on) { return on + Date.now().toString(36) + Utilities.getUuid().replace(/-/g, '').slice(0, 6); }
+function ekipBugun() { return Utilities.formatDate(new Date(), mesaiTz(), 'yyyy-MM-dd'); }
+function ekipGunEkle(t, n) { var p = t.split('-'); var d = new Date(Date.UTC(+p[0], +p[1] - 1, +p[2] + n)); return d.toISOString().slice(0, 10); }
+function ekipHaftaGunu(t) { var p = t.split('-'); return (new Date(Date.UTC(+p[0], +p[1] - 1, +p[2])).getUTCDay() + 6) % 7; } // 0=Pzt
+function ekipPazartesi(t) { return ekipGunEkle(t, -ekipHaftaGunu(t)); }
+function ekipMetin(v, n) { return String(v == null ? '' : v).replace(/[\r\n\t]+/g, ' ').trim().substring(0, n || 200); }
+function ekipListe(v) { return String(v || '').split(',').map(function (x) { return x.trim(); }).filter(Boolean); }
+
+// Mesai kullanan aktif kullanıcılar (Kullanicilar sekmesinden; şifreler okunmaz).
+function ekipKullanicilar() {
+  var sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName('Kullanicilar');
+  if (!sheet || sheet.getLastRow() < 2) return [];
+  return sheet.getRange(2, 1, sheet.getLastRow() - 1, 5).getValues().map(function (r) {
+    var rol = String(r[2] || '').trim().toLowerCase() === 'yonetici' ? 'yonetici' : 'kullanici';
+    var yetki = ekipListe(r[3]);
+    return { ad: String(r[0] || '').trim(), rol: rol, lider: rol === 'yonetici' || yetki.indexOf('mesai_yonetim') !== -1,
+      mesai: rol === 'yonetici' || yetki.indexOf('mesai') !== -1 || yetki.indexOf('mesai_yonetim') !== -1,
+      aktif: String(r[4] || 'evet').trim().toLowerCase() !== 'hayir' };
+  }).filter(function (u) { return u.ad && u.aktif && u.mesai; });
+}
+function ekipBolumler() { return ekipOku('Bolumler').map(function (r) { return ekipMetin(r[0], 40); }).filter(Boolean); }
+function ekipPersonelBilgi() {
+  var m = {};
+  ekipOku('PersonelBilgi').forEach(function (r) {
+    var ad = String(r[0] || '').trim(); if (!ad) return;
+    m[ad.toLowerCase()] = { satir: r.satir, ad: ad, bolumler: ekipListe(r[1]), iseGiris: ekipTarihMetni(r[2]), dogum: ekipTarihMetni(r[3]),
+      izinDevri: Number(r[4]) || 0, not: String(r[5] || '') };
+  });
+  return m;
+}
+function ekipPersonel(adi, bilgi) {
+  var b = (bilgi || ekipPersonelBilgi())[String(adi || '').toLowerCase()];
+  return b || { ad: adi, bolumler: [], iseGiris: '', dogum: '', izinDevri: 0, not: '' };
+}
+
+// ---- Yıllık izin hakkı (4857 s. İş K. md. 53): 1-5 yıl (5 dahil) 14, 5-15 yıl 20,
+// 15 yıl ve üstü 26 gün; 18 yaş ve altı / 50 yaş ve üstü en az 20 gün. ----
+function ekipYilFarki(bas, son) {
+  var a = bas.split('-').map(Number), b = son.split('-').map(Number);
+  var y = b[0] - a[0];
+  if (b[1] < a[1] || (b[1] === a[1] && b[2] < a[2])) y--;
+  return y;
+}
+function ekipIzinHak(p, izinler) {
+  var bugun = ekipBugun();
+  var sonuc = { kidemYil: 0, kazanilan: 0, kullanilan: 0, bekleyen: 0, devir: p.izinDevri || 0, kalan: 0, yillikHak: 0, sonrakiHak: '' };
+  izinler.forEach(function (z) {
+    if (z.personel.toLowerCase() !== String(p.ad).toLowerCase() || z.tur !== 'yillik') return;
+    if (z.durum === 'onaylandi') sonuc.kullanilan += z.gun; else if (z.durum === 'bekliyor') sonuc.bekleyen += z.gun;
+  });
+  if (p.iseGiris) {
+    var yil = Math.max(0, ekipYilFarki(p.iseGiris, bugun));
+    sonuc.kidemYil = yil;
+    for (var y = 1; y <= yil; y++) {
+      var gun = y <= 5 ? 14 : (y < 15 ? 20 : 26);
+      if (p.dogum) {
+        var yildonumu = (Number(p.iseGiris.slice(0, 4)) + y) + p.iseGiris.slice(4);
+        var yas = ekipYilFarki(p.dogum, yildonumu);
+        if (yas <= 18 || yas >= 50) gun = Math.max(gun, 20);
+      }
+      sonuc.kazanilan += gun;
+      sonuc.yillikHak = gun;
+    }
+    sonuc.sonrakiHak = (Number(p.iseGiris.slice(0, 4)) + yil + 1) + p.iseGiris.slice(4);
+  }
+  sonuc.kalan = sonuc.kazanilan + sonuc.devir - sonuc.kullanilan;
+  return sonuc;
+}
+// Yıllık izinde Pazar (hafta tatili) sayılmaz; diğer türlerde takvim günü.
+function ekipIzinGun(tur, bas, bit) {
+  var n = 0;
+  for (var t = bas; t <= bit; t = ekipGunEkle(t, 1)) { if (tur === 'yillik' && ekipHaftaGunu(t) === 6) continue; n++; if (n > 400) break; }
+  return n;
+}
+function ekipIzinler() {
+  return ekipOku('Izinler').map(function (r) {
+    return { satir: r.satir, id: String(r[0]), personel: String(r[1] || ''), tur: String(r[2] || ''), bas: ekipTarihMetni(r[3]), bit: ekipTarihMetni(r[4]),
+      gun: Number(r[5]) || 0, aciklama: String(r[6] || ''), durum: String(r[7] || ''), talep: r[8] instanceof Date ? Utilities.formatDate(r[8], mesaiTz(), 'yyyy-MM-dd HH:mm') : String(r[8] || ''),
+      karar: String(r[9] || ''), kararNot: String(r[11] || '') };
+  }).filter(function (z) { return z.id && z.personel && z.bas && z.bit; });
+}
+function ekipIzinGunde(izinler, ad, t) {
+  for (var i = 0; i < izinler.length; i++) {
+    var z = izinler[i];
+    if (z.durum === 'onaylandi' && z.personel.toLowerCase() === ad.toLowerCase() && z.bas <= t && t <= z.bit) return z;
+  }
+  return null;
+}
+
+// ---- Vardiya: hücre "09:00-18:00" (ya da "9-18"), "İzin", "Tatil" ya da boş ----
+function ekipVardiyaCoz(h) {
+  h = String(h || '').trim();
+  var m = /^(\d{1,2})(?::(\d{2}))?\s*-\s*(\d{1,2})(?::(\d{2}))?$/.exec(h);
+  if (!m) return null;
+  var bas = Number(m[1]) * 60 + Number(m[2] || 0), bit = Number(m[3]) * 60 + Number(m[4] || 0);
+  if (bas >= 24 * 60 || bit > 24 * 60) return null;
+  if (bit <= bas) bit += 24 * 60; // gece vardiyası
+  return { bas: bas, bit: bit, dakika: bit - bas };
+}
+function ekipVardiyaNormal(h) {
+  h = String(h || '').trim();
+  if (!h) return '';
+  if (/^(izin|tatil|off|yok)$/i.test(h)) return h.charAt(0).toLocaleUpperCase('tr') + h.slice(1).toLocaleLowerCase('tr');
+  var v = ekipVardiyaCoz(h);
+  if (!v) return null;
+  var f = function (dk) { dk = dk % (24 * 60); return ('0' + Math.floor(dk / 60)).slice(-2) + ':' + ('0' + dk % 60).slice(-2); };
+  return f(v.bas) + '-' + f(v.bit);
+}
+function ekipVardiyalar() {
+  var m = {}; // "hafta|personel" -> {satir, gunler[7]}
+  ekipOku('Vardiya').forEach(function (r) {
+    var h = ekipTarihMetni(r[0]), ad = String(r[1] || '').trim();
+    if (!h || !ad) return;
+    m[h + '|' + ad.toLowerCase()] = { satir: r.satir, gunler: [r[2], r[3], r[4], r[5], r[6], r[7], r[8]].map(function (x) { return String(x || ''); }) };
+  });
+  return m;
+}
+function ekipVardiyaGunde(vardiyalar, ad, t) {
+  var v = vardiyalar[ekipPazartesi(t) + '|' + ad.toLowerCase()];
+  return v ? v.gunler[ekipHaftaGunu(t)] : '';
+}
+function ekipDk(saat) { var p = String(saat || '').split(':'); return p.length === 2 ? Number(p[0]) * 60 + Number(p[1]) : null; }
+
+// ---- Tek bir günün özeti: gerçek çalışma + plan + geç/erken + izin ----
+function ekipGunOzeti(ad, t, gun, vardiyalar, izinler) {
+  var plan = ekipVardiyaGunde(vardiyalar, ad, t);
+  var pv = ekipVardiyaCoz(plan);
+  var izin = ekipIzinGunde(izinler, ad, t);
+  var o = { tarih: t, plan: plan, dakika: gun ? gun.dakika : 0, araliklar: gun ? gun.araliklar : [], eksik: gun ? gun.eksik : false,
+    izin: izin ? (IZIN_TURLERI[izin.tur] || izin.tur) : '', gecDk: 0, erkenDk: 0, planDk: pv ? pv.dakika : 0 };
+  if (pv && gun && gun.araliklar.length) {
+    var ilk = ekipDk(gun.araliklar[0].giris), son = ekipDk(gun.araliklar[gun.araliklar.length - 1].cikis);
+    if (ilk !== null && ilk - pv.bas > EKIP_GEC_TOLERANS_DK) o.gecDk = ilk - pv.bas;
+    if (son !== null) { if (son < ilk) son += 24 * 60; if (pv.bit - son > EKIP_GEC_TOLERANS_DK) o.erkenDk = pv.bit - son; }
+  }
+  return o;
+}
+
+function ekipIstek(p, callback) {
+  var a = String(p.action || '');
+  try {
+    var auth = mesaiYetkili(p);
+    if (!auth.ok) return outJson({ status: 'error', message: auth.message }, callback);
+    var ben = String(p.user || '').trim();
+    var lider = auth.permissions.indexOf('mesai_yonetim') !== -1;
+    var liderGerek = function () { if (!lider) throw new Error('Bu işlem için Ekip Lideri yetkisi gerekir'); };
+    // ---- herkes ----
+    if (a === 'ekip_benim') return outJson(ekipBenim(ben, lider), callback);
+    if (a === 'ekip_izin_talep') return outJson(ekipYaz(function () { return ekipIzinTalep(ben, lider, p); }), callback);
+    if (a === 'ekip_duyuru_okudum') return outJson(ekipYaz(function () { return ekipDuyuruOkudum(ben, p.id); }), callback);
+    if (a === 'ekip_gorev_tamam') return outJson(ekipYaz(function () { return ekipGorevTamam(ben, lider, p.id); }), callback);
+    // ---- Ekip Lideri ----
+    liderGerek();
+    if (a === 'ekip_lider') return outJson(ekipLider(p), callback);
+    if (a === 'ekip_bolum_kaydet') return outJson(ekipYaz(function () { return ekipBolumKaydet(ben, p.liste); }), callback);
+    if (a === 'ekip_personel_kaydet') return outJson(ekipYaz(function () { return ekipPersonelKaydet(ben, p); }), callback);
+    if (a === 'ekip_vardiya_kaydet') return outJson(ekipYaz(function () { return ekipVardiyaKaydet(ben, p); }), callback);
+    if (a === 'ekip_izin_karar') return outJson(ekipYaz(function () { return ekipIzinKarar(ben, p); }), callback);
+    if (a === 'ekip_duzeltme') return outJson(ekipYaz(function () { return ekipDuzeltme(ben, p); }), callback);
+    if (a === 'ekip_duyuru_ekle') return outJson(ekipYaz(function () { return ekipDuyuruEkle(ben, p); }), callback);
+    if (a === 'ekip_gorev_ekle') return outJson(ekipYaz(function () { return ekipGorevEkle(ben, p); }), callback);
+    if (a === 'ekip_puantaj') return outJson(ekipPuantaj(p), callback);
+    return outJson({ status: 'error', message: 'Bilinmeyen işlem' }, callback);
+  } catch (err) {
+    var m = String(err && err.message || err);
+    if (!/yetki|geçersiz|gir|seç|bulunamadı|zaten|olmalı|boş/i.test(m)) gunlukYaz('mesai', String(p.user || ''), a + ' hatası: ' + m, true);
+    return outJson({ status: 'error', message: m }, callback);
+  }
+}
+function ekipYaz(fn) {
+  var lock = LockService.getScriptLock();
+  try { lock.waitLock(20000); } catch (e) { throw new Error('Sunucu meşgul — birazdan tekrar dene'); }
+  try { var r = fn(); r.status = r.status || 'ok'; return r; } finally { lock.releaseLock(); }
+}
+
+// ---- Personelin kendi ekranı: durum, son günler, vardiya, izin, duyuru, görev ----
+function ekipBenim(ben, lider) {
+  var bilgi = ekipPersonelBilgi(), p = ekipPersonel(ben, bilgi), bugun = ekipBugun();
+  var sinir = Date.now() - 32 * 86400000;
+  var g = mesaiGunler(mesaiSatirlar().filter(function (k) { return k.personel.toLowerCase() === ben.toLowerCase() && k.zaman.getTime() >= sinir; }));
+  var vardiyalar = ekipVardiyalar(), izinler = ekipIzinler();
+  var buHafta = ekipPazartesi(bugun);
+  var vardiya = [0, 7].map(function (ek) {
+    var h = ekipGunEkle(buHafta, ek), v = vardiyalar[h + '|' + ben.toLowerCase()];
+    return { hafta: h, gunler: v ? v.gunler : ['', '', '', '', '', '', ''] };
+  });
+  var gunMap = {}; g.gunler.forEach(function (x) { gunMap[x.tarih] = x; });
+  var gunler = g.gunler.slice(0, 31).map(function (x) { return ekipGunOzeti(ben, x.tarih, x, vardiyalar, izinler); });
+  var benimIzin = izinler.filter(function (z) { return z.personel.toLowerCase() === ben.toLowerCase(); }).reverse().slice(0, 30);
+  var duyurular = ekipDuyurular().filter(function (d) { return lider || d.hedef === 'Herkes' || d.hedefler.some(function (h) { return p.bolumler.indexOf(h) !== -1; }); })
+    .slice(0, 30).map(function (d) { return { id: d.id, zaman: d.zaman, yazan: d.yazan, hedef: d.hedef, baslik: d.baslik, metin: d.metin, okudum: d.okuyanlar.indexOf(ben) !== -1 }; });
+  var gorevler = ekipGorevler().filter(function (t) {
+    if (t.tarih > bugun || t.tarih < ekipGunEkle(bugun, -7)) return false;
+    if (t.durum === 'tamam' && t.tarih < bugun) return false;
+    return t.atanan ? t.atanan.toLowerCase() === ben.toLowerCase() : (lider || p.bolumler.indexOf(t.bolum) !== -1);
+  });
+  var kutlama = '';
+  if (p.dogum && p.dogum.slice(5) === bugun.slice(5)) kutlama = '🎂 Doğum günün kutlu olsun!';
+  else if (p.iseGiris && p.iseGiris.slice(5) === bugun.slice(5) && p.iseGiris < bugun) kutlama = '🎉 Bizimle ' + ekipYilFarki(p.iseGiris, bugun) + '. yılın — iyi ki varsın!';
+  return { status: 'ok', ben: ben, lider: lider, bolumler: p.bolumler, iceride: g.iceride, gunler: gunler, vardiya: vardiya,
+    bugunPlan: ekipVardiyaGunde(vardiyalar, ben, bugun), izinHak: ekipIzinHak(p, izinler), izinler: benimIzin, duyurular: duyurular, gorevler: gorevler,
+    kutlama: kutlama, izinTurleri: IZIN_TURLERI, bugun: bugun };
+}
+
+function ekipIzinTalep(ben, lider, p) {
+  var kim = lider && p.personel ? ekipMetin(p.personel, 60) : ben;
+  var tur = IZIN_TURLERI[p.tur] ? p.tur : '';
+  if (!tur) throw new Error('İzin türünü seç');
+  var bas = ekipTarihMetni(p.bas), bit = ekipTarihMetni(p.bit || p.bas);
+  if (!bas || !bit || bit < bas) throw new Error('Tarihleri kontrol et (bitiş, başlangıçtan önce olamaz)');
+  var gun = ekipIzinGun(tur, bas, bit);
+  if (!gun) throw new Error('Seçilen aralıkta izin günü yok');
+  var cakisan = ekipIzinler().filter(function (z) { return z.personel.toLowerCase() === kim.toLowerCase() && z.durum !== 'reddedildi' && z.durum !== 'iptal' && !(z.bit < bas || z.bas > bit); });
+  if (cakisan.length) throw new Error('Bu tarihlerde zaten bir izin kaydı var (' + cakisan[0].bas + ' – ' + cakisan[0].bit + ')');
+  var otomatik = lider && kim.toLowerCase() !== ben.toLowerCase(); // lider başkası için girerse onaylı
+  var simdi = new Date(), id = ekipId('IZ');
+  ekipSheet('Izinler').appendRow([id, kim, tur, bas, bit, gun, ekipMetin(p.aciklama, 300), otomatik ? 'onaylandi' : 'bekliyor', simdi,
+    otomatik ? ben : '', otomatik ? simdi : '', otomatik ? 'Ekip Lideri girdi' : '']);
+  gunlukYaz('mesai', ben, 'İzin ' + (otomatik ? 'girildi' : 'talebi') + ': ' + kim + ' · ' + IZIN_TURLERI[tur] + ' ' + bas + ' – ' + bit + ' (' + gun + ' gün)', false);
+  return { id: id, gun: gun, durum: otomatik ? 'onaylandi' : 'bekliyor' };
+}
+function ekipIzinKarar(ben, p) {
+  var karar = p.karar === 'onay' ? 'onaylandi' : (p.karar === 'red' ? 'reddedildi' : (p.karar === 'iptal' ? 'iptal' : ''));
+  if (!karar) throw new Error('Karar geçersiz');
+  var z = ekipIzinler().filter(function (x) { return x.id === String(p.id); })[0];
+  if (!z) throw new Error('İzin kaydı bulunamadı');
+  if (karar !== 'iptal' && z.durum !== 'bekliyor') throw new Error('Bu talep zaten karara bağlanmış');
+  var sh = ekipSheet('Izinler');
+  sh.getRange(z.satir, 8, 1, 5).setValues([[karar, sh.getRange(z.satir, 9).getValue(), ben, new Date(), ekipMetin(p.not, 200)]]);
+  gunlukYaz('mesai', ben, 'İzin ' + karar + ': ' + z.personel + ' · ' + (IZIN_TURLERI[z.tur] || z.tur) + ' ' + z.bas + ' – ' + z.bit, false);
+  return { durum: karar };
+}
+
+function ekipBolumKaydet(ben, liste) {
+  var l;
+  try { l = JSON.parse(liste || '[]'); } catch (e) { throw new Error('Bölüm listesi okunamadı'); }
+  var temiz = [];
+  (l || []).forEach(function (x) { x = ekipMetin(x, 40).replace(/,/g, ' '); if (x && temiz.indexOf(x) === -1) temiz.push(x); });
+  var sh = ekipSheet('Bolumler');
+  if (sh.getLastRow() >= 2) sh.getRange(2, 1, sh.getLastRow() - 1, 1).clearContent();
+  if (temiz.length) sh.getRange(2, 1, temiz.length, 1).setValues(temiz.map(function (x) { return [x]; }));
+  gunlukYaz('mesai', ben, 'Bölümler: ' + (temiz.join(', ') || '(boş)'), false);
+  return { bolumler: temiz };
+}
+function ekipPersonelKaydet(ben, p) {
+  var ad = ekipMetin(p.personel, 60);
+  if (!ekipKullanicilar().some(function (u) { return u.ad.toLowerCase() === ad.toLowerCase(); })) throw new Error('Personel bulunamadı (Mesai yetkisi olan aktif kullanıcı olmalı)');
+  var tanimli = ekipBolumler();
+  var bolumler = ekipListe(p.bolumler).filter(function (b) { return tanimli.indexOf(b) !== -1; });
+  var iseGiris = p.iseGiris ? ekipTarihMetni(p.iseGiris) : '', dogum = p.dogum ? ekipTarihMetni(p.dogum) : '';
+  if (p.iseGiris && !iseGiris) throw new Error('İşe giriş tarihi geçersiz');
+  if (p.dogum && !dogum) throw new Error('Doğum tarihi geçersiz');
+  var satir = [ad, bolumler.join(', '), iseGiris, dogum, Number(p.izinDevri) || 0, ekipMetin(p.not, 200)];
+  var mevcut = ekipPersonelBilgi()[ad.toLowerCase()];
+  if (mevcut) ekipYazSatir('PersonelBilgi', mevcut.satir, satir); else ekipSheet('PersonelBilgi').appendRow(satir);
+  return { personel: ad };
+}
+function ekipVardiyaKaydet(ben, p) {
+  var hafta = ekipTarihMetni(p.hafta);
+  if (!hafta || ekipHaftaGunu(hafta) !== 0) throw new Error('Hafta Pazartesi tarihi olmalı');
+  var ad = ekipMetin(p.personel, 60);
+  if (!ekipKullanicilar().some(function (u) { return u.ad.toLowerCase() === ad.toLowerCase(); })) throw new Error('Personel bulunamadı');
+  var g;
+  try { g = JSON.parse(p.gunler || '[]'); } catch (e) { throw new Error('Vardiya okunamadı'); }
+  if (!Array.isArray(g) || g.length !== 7) throw new Error('Vardiya 7 gün olmalı');
+  var norm = g.map(function (h, i) {
+    var n = ekipVardiyaNormal(h);
+    if (n === null) throw new Error(['Pzt', 'Sal', 'Çar', 'Per', 'Cum', 'Cmt', 'Paz'][i] + ' geçersiz: "' + ekipMetin(h, 20) + '" — örnek: 09:00-18:00, İzin, boş');
+    return n;
+  });
+  var satir = [hafta, ad].concat(norm).concat([ben, new Date()]);
+  var mevcut = ekipVardiyalar()[hafta + '|' + ad.toLowerCase()];
+  if (mevcut) ekipYazSatir('Vardiya', mevcut.satir, satir); else ekipSheet('Vardiya').appendRow(satir);
+  return { gunler: norm };
+}
+function ekipDuzeltme(ben, p) {
+  var ad = ekipMetin(p.personel, 60), gerekce = ekipMetin(p.gerekce, 200);
+  if (!gerekce) throw new Error('Gerekçe yazmak zorunlu');
+  if (p.iptalSatir) {
+    var k = mesaiSatirlar().filter(function (x) { return x.satir === Number(p.iptalSatir) && x.personel.toLowerCase() === ad.toLowerCase(); })[0];
+    if (!k) throw new Error('Kayıt bulunamadı');
+    mesaiSheet().getRange(k.satir, 13).setValue('İPTAL (' + ben + ', ' + Utilities.formatDate(new Date(), mesaiTz(), 'yyyy-MM-dd HH:mm') + '): ' + gerekce + (k.not ? ' | önceki not: ' + k.not : ''));
+    gunlukYaz('mesai', ben, 'Düzeltme — kayıt iptal: ' + ad + ' ' + mesaiTarih(k.zaman) + ' ' + mesaiSaat(k.zaman) + ' (' + gerekce + ')', false);
+    return { iptal: true };
+  }
+  if (!ekipKullanicilar().some(function (u) { return u.ad.toLowerCase() === ad.toLowerCase(); })) throw new Error('Personel bulunamadı');
+  var tip = p.tip === 'cikis' ? 'cikis' : (p.tip === 'giris' ? 'giris' : '');
+  var t = ekipTarihMetni(p.tarih), dk = ekipDk(p.saat);
+  if (!tip || !t || dk === null || dk >= 24 * 60) throw new Error('Tür, tarih ve saati kontrol et');
+  var p2 = t.split('-').map(Number);
+  // Türkiye saati (UTC+3) ile kayıt zamanı
+  var zaman = new Date(Date.UTC(p2[0], p2[1] - 1, p2[2], Math.floor(dk / 60) - 3, dk % 60));
+  if (zaman.getTime() > Date.now() + 60000) throw new Error('İleri bir saate kayıt eklenemez');
+  mesaiSheet().appendRow([zaman, t, mesaiSaat(zaman), ad, tip, '', '', '', '', '', '', 'Ekip Lideri: ' + ben, 'DÜZELTME (' + ben + '): ' + gerekce]);
+  gunlukYaz('mesai', ben, 'Düzeltme — ' + (tip === 'giris' ? 'giriş' : 'çıkış') + ' eklendi: ' + ad + ' ' + t + ' ' + mesaiSaat(zaman) + ' (' + gerekce + ')', false);
+  return { eklendi: true };
+}
+
+function ekipDuyurular() {
+  return ekipOku('Duyurular').map(function (r) {
+    var hedef = String(r[3] || 'Herkes');
+    return { satir: r.satir, id: String(r[0]), zaman: r[1] instanceof Date ? Utilities.formatDate(r[1], mesaiTz(), 'yyyy-MM-dd HH:mm') : String(r[1] || ''),
+      yazan: String(r[2] || ''), hedef: hedef, hedefler: hedef === 'Herkes' ? [] : ekipListe(hedef), baslik: String(r[4] || ''), metin: String(r[5] || ''), okuyanlar: ekipListe(r[6]) };
+  }).filter(function (d) { return d.id; }).reverse();
+}
+function ekipDuyuruEkle(ben, p) {
+  var baslik = ekipMetin(p.baslik, 80), metin = String(p.metin || '').trim().substring(0, 1000);
+  if (!baslik) throw new Error('Başlık boş olamaz');
+  var hedefler = ekipListe(p.hedef).filter(function (b) { return ekipBolumler().indexOf(b) !== -1; });
+  var id = ekipId('DY');
+  ekipSheet('Duyurular').appendRow([id, new Date(), ben, hedefler.length ? hedefler.join(', ') : 'Herkes', baslik, metin, '']);
+  return { id: id };
+}
+function ekipDuyuruOkudum(ben, id) {
+  var d = ekipDuyurular().filter(function (x) { return x.id === String(id); })[0];
+  if (!d) throw new Error('Duyuru bulunamadı');
+  if (d.okuyanlar.indexOf(ben) === -1) { d.okuyanlar.push(ben); ekipSheet('Duyurular').getRange(d.satir, 7).setValue(d.okuyanlar.join(', ')); }
+  return {};
+}
+function ekipGorevler() {
+  return ekipOku('Gorevler').map(function (r) {
+    return { satir: r.satir, id: String(r[0]), tarih: ekipTarihMetni(r[1]), bolum: String(r[2] || ''), gorev: String(r[3] || ''), atanan: String(r[4] || ''),
+      olusturan: String(r[5] || ''), durum: String(r[6] || 'acik'), tamamlayan: String(r[7] || ''),
+      tamamZaman: r[8] instanceof Date ? Utilities.formatDate(r[8], mesaiTz(), 'HH:mm') : String(r[8] || '') };
+  }).filter(function (t) { return t.id && t.tarih; });
+}
+function ekipGorevEkle(ben, p) {
+  var gorev = ekipMetin(p.gorev, 200), t = ekipTarihMetni(p.tarih) || ekipBugun();
+  if (!gorev) throw new Error('Görev boş olamaz');
+  var bolum = ekipMetin(p.bolum, 40), atanan = ekipMetin(p.atanan, 60);
+  if (!bolum && !atanan) throw new Error('Bölüm ya da kişi seç');
+  var id = ekipId('GV');
+  ekipSheet('Gorevler').appendRow([id, t, bolum, gorev, atanan, ben, 'acik', '', '']);
+  return { id: id };
+}
+function ekipGorevTamam(ben, lider, id) {
+  var t = ekipGorevler().filter(function (x) { return x.id === String(id); })[0];
+  if (!t) throw new Error('Görev bulunamadı');
+  if (t.durum === 'tamam') return { zaten: true };
+  if (!lider && t.atanan && t.atanan.toLowerCase() !== ben.toLowerCase()) throw new Error('Bu görev başkasına atanmış');
+  ekipSheet('Gorevler').getRange(t.satir, 7, 1, 3).setValues([['tamam', ben, new Date()]]);
+  return {};
+}
+
+// ---- Ekip Lideri ekranı: pano, personel, bölümler, bekleyen izinler, vardiya haftası ----
+function ekipLider(p) {
+  var bugun = ekipBugun(), simdiDk = ekipDk(Utilities.formatDate(new Date(), mesaiTz(), 'HH:mm'));
+  var kullanicilar = ekipKullanicilar(), bilgi = ekipPersonelBilgi(), izinler = ekipIzinler(), vardiyalar = ekipVardiyalar();
+  var hafta = ekipTarihMetni(p.hafta); if (!hafta) hafta = ekipPazartesi(bugun); hafta = ekipPazartesi(hafta);
+  var kisiler = {}; mesaiSatirlar().forEach(function (k) { (kisiler[k.personel.toLowerCase()] = kisiler[k.personel.toLowerCase()] || []).push(k); });
+  var personel = kullanicilar.map(function (u) {
+    var b = ekipPersonel(u.ad, bilgi);
+    var kayit = kisiler[u.ad.toLowerCase()] || [];
+    var g = mesaiGunler(kayit.filter(function (k) { return k.zaman.getTime() >= Date.now() - 3 * 86400000; }));
+    var bugunGun = g.gunler.filter(function (x) { return x.tarih === bugun; })[0];
+    var plan = ekipVardiyaGunde(vardiyalar, u.ad, bugun), pv = ekipVardiyaCoz(plan), izin = ekipIzinGunde(izinler, u.ad, bugun);
+    var durum, detay = '';
+    if (g.iceride) { durum = 'iceride'; detay = g.iceride.giris + '\'den beri'; }
+    else if (izin) { durum = 'izinde'; detay = IZIN_TURLERI[izin.tur] || izin.tur; }
+    else if (bugunGun && bugunGun.araliklar.length) { durum = 'cikti'; detay = sureMetniSunucu(bugunGun.dakika) + ' çalıştı'; }
+    else if (pv && simdiDk > pv.bas + 15) { durum = 'gelmedi'; detay = 'Vardiya ' + plan; }
+    else if (pv) { durum = 'bekleniyor'; detay = 'Vardiya ' + plan; }
+    else { durum = 'plansiz'; detay = /izin|tatil/i.test(plan) ? plan : 'Bugün vardiya yok'; }
+    var gecDk = 0;
+    if (pv && bugunGun && bugunGun.araliklar.length) { var ilk = ekipDk(bugunGun.araliklar[0].giris); if (ilk !== null && ilk - pv.bas > EKIP_GEC_TOLERANS_DK) gecDk = ilk - pv.bas; }
+    var v = vardiyalar[hafta + '|' + u.ad.toLowerCase()];
+    return { ad: u.ad, lider: u.lider, bolumler: b.bolumler, iseGiris: b.iseGiris, dogum: b.dogum, izinDevri: b.izinDevri, not: b.not,
+      durum: durum, detay: detay, gecDk: gecDk, izinHak: ekipIzinHak(b, izinler), vardiya: v ? v.gunler : ['', '', '', '', '', '', ''] };
+  });
+  // Yaklaşan doğum günleri / iş yıldönümleri (7 gün)
+  var kutlamalar = [];
+  for (var i = 0; i <= 7; i++) {
+    var t = ekipGunEkle(bugun, i);
+    personel.forEach(function (x) {
+      if (x.dogum && x.dogum.slice(5) === t.slice(5)) kutlamalar.push({ tarih: t, ad: x.ad, tur: '🎂 Doğum günü', gun: i });
+      if (x.iseGiris && x.iseGiris.slice(5) === t.slice(5) && x.iseGiris < t) kutlamalar.push({ tarih: t, ad: x.ad, tur: '🎉 ' + ekipYilFarki(x.iseGiris, t) + '. iş yılı', gun: i });
+    });
+  }
+  var gorevler = ekipGorevler().filter(function (t) { return t.tarih >= ekipGunEkle(bugun, -7); }).reverse();
+  var duyurular = ekipDuyurular().slice(0, 20).map(function (d) { return { id: d.id, zaman: d.zaman, yazan: d.yazan, hedef: d.hedef, baslik: d.baslik, metin: d.metin, okuyanlar: d.okuyanlar }; });
+  var bekleyen = izinler.filter(function (z) { return z.durum === 'bekliyor'; });
+  var sonIzinler = izinler.filter(function (z) { return z.durum !== 'bekliyor'; }).reverse().slice(0, 40);
+  return { status: 'ok', bugun: bugun, hafta: hafta, bolumler: ekipBolumler(), personel: personel, kutlamalar: kutlamalar,
+    bekleyenIzin: bekleyen, sonIzinler: sonIzinler, gorevler: gorevler, duyurular: duyurular, izinTurleri: IZIN_TURLERI };
+}
+function sureMetniSunucu(dk) { dk = Math.round(dk || 0); return Math.floor(dk / 60) + ' sa ' + ('0' + dk % 60).slice(-2) + ' dk'; }
+
+// ---- Aylık puantaj: gün gün plan/gerçek, geç/erken, izin; haftalık fazla mesai ----
+function ekipPuantaj(p) {
+  var ay = /^\d{4}-\d{2}$/.test(String(p.ay || '')) ? String(p.ay) : ekipBugun().slice(0, 7);
+  var kullanicilar = ekipKullanicilar(), bilgi = ekipPersonelBilgi(), izinler = ekipIzinler(), vardiyalar = ekipVardiyalar();
+  var kisiler = {}; mesaiSatirlar().forEach(function (k) { (kisiler[k.personel.toLowerCase()] = kisiler[k.personel.toLowerCase()] || []).push(k); });
+  var ayBas = ay + '-01', aySon = ekipGunEkle(ekipGunEkle(ayBas, 32).slice(0, 8) + '01', -1);
+  var bugun = ekipBugun();
+  var sonuc = kullanicilar.map(function (u) {
+    var g = mesaiGunler(kisiler[u.ad.toLowerCase()] || []);
+    var gm = {}; g.gunler.forEach(function (x) { gm[x.tarih] = x; });
+    var gunler = [], toplam = 0, gecToplam = 0, erkenToplam = 0, izinGun = 0, eksik = 0;
+    for (var t = ayBas; t <= aySon && t <= bugun; t = ekipGunEkle(t, 1)) {
+      var o = ekipGunOzeti(u.ad, t, gm[t], vardiyalar, izinler);
+      if (!o.dakika && !o.plan && !o.izin && !o.araliklar.length) continue;
+      gunler.push(o); toplam += o.dakika; gecToplam += o.gecDk; erkenToplam += o.erkenDk; if (o.izin) izinGun++; if (o.eksik) eksik++;
+    }
+    // Haftalık fazla mesai: Pzt–Paz toplamı 45 saati aşan kısım; haftayı Perşembesi bu ayda olan ay sayar.
+    var haftalar = [], fazla = 0;
+    for (var h = ekipPazartesi(ayBas); h <= aySon; h = ekipGunEkle(h, 7)) {
+      var per = ekipGunEkle(h, 3); if (per.slice(0, 7) !== ay) continue;
+      var dk = 0; for (var d = 0; d < 7; d++) { var x = gm[ekipGunEkle(h, d)]; if (x) dk += x.dakika; }
+      var f = Math.max(0, dk - HAFTALIK_NORMAL_DK); fazla += f;
+      haftalar.push({ hafta: h, dakika: dk, fazlaDk: f });
+    }
+    var b = ekipPersonel(u.ad, bilgi);
+    return { personel: u.ad, bolumler: b.bolumler, gunler: gunler, toplamDakika: toplam, gecDk: gecToplam, erkenDk: erkenToplam, izinGun: izinGun,
+      eksikGun: eksik, haftalar: haftalar, fazlaDk: fazla, calisilanGun: gunler.filter(function (x) { return x.dakika > 0; }).length };
+  }).filter(function (x) { return x.gunler.length; });
+  return { status: 'ok', ay: ay, kisiler: sonuc };
 }

@@ -351,7 +351,7 @@
   <header style="border:none; padding:0 0 16px; background:transparent; display:flex; align-items:flex-start; justify-content:space-between;">
     <div>
       <h1><img src="logo-header.png" alt="Murat Gıda" style="height:30px; width:auto; display:block;"></h1>
-      <div class="sub">MK ERP · Murat Gıda • offline • Android • build 111</div>
+      <div class="sub">MK ERP · Murat Gıda • offline • Android • build 112</div>
     </div>
     <button type="button" id="themeToggleBtn" title="Tema seç" style="background:var(--panel2); border:1.5px solid var(--line); color:var(--text); width:34px; height:34px; border-radius:50%; font-size:15px; padding:0; display:flex; align-items:center; justify-content:center; flex-shrink:0;">🎨</button>
   </header>
@@ -389,7 +389,7 @@
       <button type="button" class="menuBtn" id="menuMalGirisBtn"><span class="menuIcon">📥</span><span>Mal Giriş<span class="menuSub">Fatura/irsaliye ile stok girişi</span></span></button>
       <button type="button" class="menuBtn" id="menuMalCikisBtn"><span class="menuIcon">📤</span><span>Mal Çıkış<span class="menuSub">Fatura/irsaliye ile stok çıkışı</span></span></button>
       <button type="button" class="menuBtn" id="menuFiyatBtn"><span class="menuIcon">💰</span><span>Fiyat &amp; Stok Sorgula<span class="menuSub">Barkod okut, fiyatı ve stoğu gör</span></span></button>
-      <button type="button" class="menuBtn hidden" id="menuMesaiBtn"><span class="menuIcon">🕐</span><span>Mesai<span class="menuSub">Giriş / çıkış, puantaj</span></span></button>
+      <button type="button" class="menuBtn hidden" id="menuMesaiBtn"><span class="menuIcon">🕐</span><span>Mesai<span class="menuSub">Giriş/çıkış, vardiya, izin, duyuru</span></span></button>
       <button type="button" class="menuBtn hidden" id="menuHareketBtn"><span class="menuIcon">🔁</span><span>Ürün Hareketleri<span class="menuSub">Kimden kaça geldi, kime satıldı</span></span></button>
     </div>
     <div class="hint hidden" id="adminOpenLinkWrap" style="text-align:center; margin-top:16px;"><a href="#" id="adminOpenLink" style="color:var(--muted); text-decoration:underline;">⚙ Yönetici Paneli</a></div>
@@ -678,7 +678,7 @@
         <button type="button" id="mesaiCloseBtn" aria-label="Kapat" style="width:34px; height:34px; border-radius:50%; background:var(--panel2); border:1.5px solid var(--line); color:var(--text); font-size:18px; line-height:1; padding:0; display:flex; align-items:center; justify-content:center;">✕</button>
       </div>
     </div>
-    <iframe id="mesaiFrame" title="Mesai" allow="geolocation; fullscreen; screen-wake-lock" style="flex:1; width:100%; border:0; background:var(--bg);"></iframe>
+    <iframe id="mesaiFrame" title="Mesai" allow="geolocation; camera; fullscreen; screen-wake-lock" style="flex:1; width:100%; border:0; background:var(--bg);"></iframe>
   </div>
 
   <div id="hareketScreen" class="hidden" style="position:fixed; inset:0; background:var(--bg); z-index:50; display:flex; flex-direction:column;">
@@ -1584,7 +1584,7 @@
   function canSeePrice(){ return hasPerm('fiyat') && konumIzinli(); }
   function canSeeStock(){ return hasPerm('stok') && konumIzinli(); }
   // Ürün hareketleri (alış fiyatları, müşteri satışları): ayrı yetki + şube içi.
-  // Mesai: giriş/çıkış yapabilen ("mesai") ya da yöneten ("mesai_yonetim").
+  // Mesai: personel ("mesai") ya da ⭐ Ekip Lideri ("mesai_yonetim").
   function canSeeMesai(){ return hasPerm('mesai') || hasPerm('mesai_yonetim'); }
   function canSeeHareket(){ return hasPerm('hareket') && konumIzinli(); }
 
@@ -4522,8 +4522,8 @@
     { key: 'fiyat', label: '💰 Fiyat Görme' },
     { key: 'stok', label: '📦 Stok Görme' },
     { key: 'hareket', label: '🔁 Ürün Hareketleri' },
-    { key: 'mesai', label: '🕐 Mesai (giriş/çıkış)' },
-    { key: 'mesai_yonetim', label: '🕐 Mesai Yönetimi' },
+    { key: 'mesai', label: '🕐 Mesai (personel)' },
+    { key: 'mesai_yonetim', label: '⭐ Ekip Lideri' },
     // Şube dışındayken de fiyat/stok görebilir (konum kısıtlamasından muaf).
     { key: 'konum_serbest', label: '🌍 Şube Dışında da Görür' }
   ];
