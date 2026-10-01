@@ -351,7 +351,7 @@
   <header style="border:none; padding:0 0 16px; background:transparent; display:flex; align-items:flex-start; justify-content:space-between;">
     <div>
       <h1><img src="logo-header.png" alt="Murat Gıda" style="height:30px; width:auto; display:block;"></h1>
-      <div class="sub">MK ERP · Murat Gıda • offline • Android • build 109</div>
+      <div class="sub">MK ERP · Murat Gıda • offline • Android • build 111</div>
     </div>
     <button type="button" id="themeToggleBtn" title="Tema seç" style="background:var(--panel2); border:1.5px solid var(--line); color:var(--text); width:34px; height:34px; border-radius:50%; font-size:15px; padding:0; display:flex; align-items:center; justify-content:center; flex-shrink:0;">🎨</button>
   </header>
@@ -389,6 +389,7 @@
       <button type="button" class="menuBtn" id="menuMalGirisBtn"><span class="menuIcon">📥</span><span>Mal Giriş<span class="menuSub">Fatura/irsaliye ile stok girişi</span></span></button>
       <button type="button" class="menuBtn" id="menuMalCikisBtn"><span class="menuIcon">📤</span><span>Mal Çıkış<span class="menuSub">Fatura/irsaliye ile stok çıkışı</span></span></button>
       <button type="button" class="menuBtn" id="menuFiyatBtn"><span class="menuIcon">💰</span><span>Fiyat &amp; Stok Sorgula<span class="menuSub">Barkod okut, fiyatı ve stoğu gör</span></span></button>
+      <button type="button" class="menuBtn hidden" id="menuMesaiBtn"><span class="menuIcon">🕐</span><span>Mesai<span class="menuSub">Giriş / çıkış, puantaj</span></span></button>
       <button type="button" class="menuBtn hidden" id="menuHareketBtn"><span class="menuIcon">🔁</span><span>Ürün Hareketleri<span class="menuSub">Kimden kaça geldi, kime satıldı</span></span></button>
     </div>
     <div class="hint hidden" id="adminOpenLinkWrap" style="text-align:center; margin-top:16px;"><a href="#" id="adminOpenLink" style="color:var(--muted); text-decoration:underline;">⚙ Yönetici Paneli</a></div>
@@ -668,6 +669,18 @@
   <!-- Fiyat & Stok Sorgula — salt okunur arama, sayıma hiç karışmaz -->
   <!-- ÜRÜN HAREKETLERİ: okutulan ürünün ERP12'deki alışları (tek tek) ve
        satışları (firmalar tek tek, perakende toplam). Veri sunucudan, yetkiyle. -->
+  <!-- MESAİ: ayrı dosyadaki mesai.html uygulamanın içinde açılır (sayım koduna karışmaz). -->
+  <div id="mesaiScreen" class="hidden" style="position:fixed; inset:0; background:var(--bg); z-index:50; display:flex; flex-direction:column;">
+    <div style="padding:16px 16px 10px; border-bottom:1px solid var(--line); background:var(--panel); box-shadow:var(--sh-sm);">
+      <div class="hizliGecis" data-ekran="mesai"></div>
+      <div style="display:flex; align-items:center; justify-content:space-between;">
+        <div style="font-weight:800; font-size:16px;">🕐 Mesai</div>
+        <button type="button" id="mesaiCloseBtn" aria-label="Kapat" style="width:34px; height:34px; border-radius:50%; background:var(--panel2); border:1.5px solid var(--line); color:var(--text); font-size:18px; line-height:1; padding:0; display:flex; align-items:center; justify-content:center;">✕</button>
+      </div>
+    </div>
+    <iframe id="mesaiFrame" title="Mesai" allow="geolocation; fullscreen; screen-wake-lock" style="flex:1; width:100%; border:0; background:var(--bg);"></iframe>
+  </div>
+
   <div id="hareketScreen" class="hidden" style="position:fixed; inset:0; background:var(--bg); z-index:50; display:flex; flex-direction:column;">
     <div style="padding:16px; border-bottom:1px solid var(--line); background:var(--panel); box-shadow:var(--sh-sm);">
       <div class="hizliGecis" data-ekran="hareket"></div>
@@ -1571,6 +1584,8 @@
   function canSeePrice(){ return hasPerm('fiyat') && konumIzinli(); }
   function canSeeStock(){ return hasPerm('stok') && konumIzinli(); }
   // Ürün hareketleri (alış fiyatları, müşteri satışları): ayrı yetki + şube içi.
+  // Mesai: giriş/çıkış yapabilen ("mesai") ya da yöneten ("mesai_yonetim").
+  function canSeeMesai(){ return hasPerm('mesai') || hasPerm('mesai_yonetim'); }
   function canSeeHareket(){ return hasPerm('hareket') && konumIzinli(); }
 
   // ---------- ŞUBE KONUMU (girişte GPS) ----------
@@ -1689,10 +1704,12 @@
     // Fiyat & Stok Sorgula: ikisini de göremeyen için ekranın anlamı yok.
     document.getElementById('menuFiyatBtn').classList.toggle('hidden', !canSeePrice() && !canSeeStock());
     document.getElementById('menuHareketBtn').classList.toggle('hidden', !canSeeHareket());
+    document.getElementById('menuMesaiBtn').classList.toggle('hidden', !canSeeMesai());
     startBtn.textContent = (state.session.scans && state.session.scans.length > 0) ? '▶ Sayıma Devam Et' : 'Sayıma Başla';
     konumKontrol(); // girişte (açılışta ve giriş yapınca) bir kez
   }
   function showLoginUI(){
+    closeMesaiScreen();
     loginCardEl.classList.remove('hidden');
     loggedInCardEl.classList.add('hidden');
     document.getElementById('homeMenuScreen').classList.add('hidden');
@@ -1736,6 +1753,23 @@
     if(el && !el.classList.contains('hidden') && !canSeeHareket()){ stopQuickScan(); hareketStopCamera(); el.classList.add('hidden'); }
   }
   document.getElementById('menuHareketBtn').addEventListener('click', openHareketScreen);
+
+  // ---------- MESAİ (mesai.html çerçeve içinde) ----------
+  function openMesaiScreen(){
+    if(!canSeeMesai()){ warnToast('Mesai yetkin yok — yöneticinden iste'); return; }
+    // Her açılışta taze yüklenir (durum güncel olsun); kapanınca boşaltılır.
+    document.getElementById('mesaiFrame').src = 'mesai.html?gomulu=1&t=' + Date.now();
+    document.getElementById('mesaiScreen').classList.remove('hidden');
+    hizliGecisCiz();
+  }
+  function closeMesaiScreen(){
+    var el = document.getElementById('mesaiScreen');
+    if(!el || el.classList.contains('hidden')) return;
+    el.classList.add('hidden');
+    document.getElementById('mesaiFrame').src = 'about:blank'; // kod ekranı/ekran kilidi dursun
+  }
+  document.getElementById('menuMesaiBtn').addEventListener('click', openMesaiScreen);
+  document.getElementById('mesaiCloseBtn').addEventListener('click', closeMesaiScreen);
   document.getElementById('hareketCloseBtn').addEventListener('click', closeHareketScreen);
   document.getElementById('hareketAdBtn').addEventListener('click', function(){ openNameSearch('hareket'); });
   // Kamera: Fiyat ekranındaki gibi üstte küçük alan; açık kaldıkça okur, her
@@ -3797,7 +3831,7 @@
   var HIZLI_GECIS = [
     ['sayim', '📋', 'Sayım', 'menuSayimBtn'], ['giris', '📥', 'Giriş', 'menuMalGirisBtn'],
     ['cikis', '📤', 'Çıkış', 'menuMalCikisBtn'], ['fiyat', '💰', 'Fiyat', 'menuFiyatBtn'],
-    ['hareket', '🔁', 'Hareket', 'menuHareketBtn']
+    ['hareket', '🔁', 'Hareket', 'menuHareketBtn'], ['mesai', '🕐', 'Mesai', 'menuMesaiBtn']
   ];
   function hizliGecisCiz(){
     var gorunen = HIZLI_GECIS.filter(function(g){ var b = document.getElementById(g[3]); return b && !b.classList.contains('hidden'); });
@@ -3812,6 +3846,7 @@
     var malAcik = !malScreenEl.classList.contains('hidden');
     if(malAcik && malSaving){ warnToast('Kayıt gönderiliyor — bitince geç'); return; }
     if(hedef === 'cikis' && !hasPerm('mal_cikis')){ warnToast('Mal Çıkış yetkin yok — yöneticinden iste'); return; }
+    if(hedef === 'mesai' && !canSeeMesai()){ warnToast('Mesai yetkin yok — yöneticinden iste'); return; }
     if(hedef === 'hareket' && !canSeeHareket()){ warnToast(hasPerm('hareket') ? 'Şube dışında ürün hareketleri gizli' : 'Ürün Hareketleri yetkin yok — yöneticinden iste'); return; }
     if(malAcik && (hedef === malTip)) return;
     if(malAcik){
@@ -3821,6 +3856,7 @@
     }
     if(!priceScreenEl.classList.contains('hidden')) closePriceScreen();
     if(!hareketScreenEl.classList.contains('hidden')) closeHareketScreen();
+    if(hedef !== 'mesai') closeMesaiScreen();
     if(hedef === 'sayim'){
       // Sayım ekranı (okutma) açıksa zaten oradayız; değilse sayım başlangıcı.
       if(document.getElementById('main').classList.contains('hidden')){
@@ -3831,6 +3867,7 @@
     else if(hedef === 'giris' || hedef === 'cikis') openMalHareketScreen(hedef);
     else if(hedef === 'fiyat') openPriceScreen();
     else if(hedef === 'hareket') openHareketScreen();
+    else if(hedef === 'mesai'){ if(document.getElementById('mesaiScreen').classList.contains('hidden')) openMesaiScreen(); }
     hizliGecisCiz();
   }
   document.addEventListener('click', function(e){
@@ -4485,6 +4522,8 @@
     { key: 'fiyat', label: '💰 Fiyat Görme' },
     { key: 'stok', label: '📦 Stok Görme' },
     { key: 'hareket', label: '🔁 Ürün Hareketleri' },
+    { key: 'mesai', label: '🕐 Mesai (giriş/çıkış)' },
+    { key: 'mesai_yonetim', label: '🕐 Mesai Yönetimi' },
     // Şube dışındayken de fiyat/stok görebilir (konum kısıtlamasından muaf).
     { key: 'konum_serbest', label: '🌍 Şube Dışında da Görür' }
   ];

@@ -1,0 +1,338 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, viewport-fit=cover">
+<title>MK Mesai</title>
+<meta name="theme-color" content="#15803d">
+<!--
+  MK ERP — PERSONEL MESAİ TAKİBİ (deneme). Sayım uygulamasından (index.html)
+  tamamen ayrı bir sayfa; sayıma hiçbir şekilde dokunmaz. Aynı kullanıcı adı /
+  şifreyle çalışır (sayım uygulamasında giriş yapılmışsa tekrar sormaz).
+
+  - Giriş/Çıkış için konum SADECE düğmeye basıldığı anda bir kez alınır;
+    arka planda konum ya da kamera kullanılmaz (tarayıcı buna zaten izin vermez).
+  - Sahte konuma karşı: mağazadaki ekranda (kasa bilgisayarı/tablet) 30 sn'de
+    bir değişen 6 haneli kod girilmeden kayıt kabul edilmez.
+  - Saat telefondan değil SUNUCUDAN alınır.
+-->
+<style>
+  :root{
+    --bg:#f2f8ec; --panel:#ffffff; --panel2:#e4f1d8; --line:#c3dfad;
+    --text:#10281a; --muted:#527a5f; --green:#15803d; --amber:#b45309; --red:#c81e1e;
+    --accent:#15803d; --accent2:#1fa04e;
+    --sans:-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    --mono:ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  }
+  @media (prefers-color-scheme: dark){
+    :root{ --bg:#0d1610; --panel:#14211a; --panel2:#1c2e23; --line:#2b4535;
+      --text:#e7f3ea; --muted:#94b49f; --green:#22c55e; --amber:#f59e0b; --red:#f87171; --accent:#22c55e; --accent2:#34d26e; }
+  }
+  *{box-sizing:border-box;}
+  html,body{margin:0; background:var(--bg); color:var(--text); font-family:var(--sans); -webkit-text-size-adjust:100%;}
+  body{padding:16px 16px calc(24px + env(safe-area-inset-bottom)); max-width:560px; margin:0 auto;}
+  h1{font-size:20px; margin:4px 0 14px; display:flex; align-items:center; justify-content:space-between; gap:8px;}
+  .kart{background:var(--panel); border:1px solid var(--line); border-radius:16px; padding:16px; margin-bottom:12px;}
+  .ipucu{font-size:12.5px; color:var(--muted); line-height:1.5;}
+  label{display:block; font-size:12px; font-weight:800; color:var(--muted); text-transform:uppercase; letter-spacing:.05em; margin:10px 0 6px;}
+  input,select{width:100%; font-size:16px; padding:12px 14px; border-radius:12px; border:1.5px solid var(--line); background:var(--panel2); color:var(--text); font-family:inherit;}
+  button{font-family:inherit; font-size:16px; font-weight:800; border-radius:12px; padding:13px 16px; border:1.5px solid var(--line); background:var(--panel2); color:var(--text); cursor:pointer;}
+  button.ana{background:var(--accent); border-color:var(--accent); color:#fff; width:100%;}
+  button:disabled{opacity:.55;}
+  .durum{font-size:15px; font-weight:800; display:flex; align-items:center; gap:8px;}
+  .nokta{width:12px; height:12px; border-radius:50%; flex-shrink:0;}
+  .buyukDugme{width:100%; padding:22px; font-size:22px; border-radius:18px; margin-top:12px; color:#fff; border:none;}
+  .giris{background:var(--green);} .cikis{background:var(--red);}
+  .kodKutu{font-family:var(--mono); font-size:30px; letter-spacing:.3em; text-align:center; font-weight:800;}
+  .satir{display:flex; justify-content:space-between; align-items:flex-start; gap:10px; padding:10px 0; border-bottom:1px solid var(--line); font-size:14px;}
+  .satir:last-child{border-bottom:none;}
+  .saatler{font-family:var(--mono); font-size:13px; color:var(--muted); margin-top:2px;}
+  .sure{font-family:var(--mono); font-weight:800; white-space:nowrap;}
+  .uyari{color:var(--amber); font-weight:700;}
+  .hata{color:var(--red); font-weight:700;}
+  .ust{display:flex; gap:8px; flex-wrap:wrap;}
+  .ust button{flex:1; font-size:14px; padding:10px;}
+  .gizli{display:none !important;}
+  #kodEkrani{position:fixed; inset:0; background:#0b1a10; color:#fff; z-index:20; display:flex; flex-direction:column; align-items:center; justify-content:center; padding:24px; text-align:center;}
+  #kodEkrani .baslik{font-size:clamp(18px,4vw,34px); font-weight:800; opacity:.85;}
+  #kodEkrani .kod{font-family:var(--mono); font-weight:800; font-size:clamp(44px,14vw,220px); letter-spacing:.08em; margin:18px 0; white-space:nowrap;}
+  #kodEkrani .cubuk{width:min(640px,80vw); height:12px; background:#ffffff22; border-radius:8px; overflow:hidden;}
+  #kodEkrani .cubuk div{height:100%; background:#22c55e; transition:width 1s linear;}
+  #kodEkrani .alt{margin-top:18px; opacity:.7; font-size:clamp(13px,2.4vw,20px);}
+  #kodEkrani button{position:absolute; top:16px; right:16px; background:#ffffff22; color:#fff; border:none;}
+  table{width:100%; border-collapse:collapse; font-size:13px;}
+  th,td{text-align:left; padding:6px 4px; border-bottom:1px solid var(--line);}
+  th{color:var(--muted); font-size:11.5px; text-transform:uppercase;}
+  td.sayi{font-family:var(--mono); text-align:right;}
+  #toast{position:fixed; left:16px; right:16px; bottom:calc(20px + env(safe-area-inset-bottom)); max-width:528px; margin:0 auto; padding:14px 16px; border-radius:14px; font-weight:800; color:#fff; z-index:30; text-align:center;}
+</style>
+</head>
+<body>
+  <h1><span>🕐 Mesai</span><span id="kimEl" class="ipucu"></span></h1>
+
+  <!-- Giriş yapılmamışsa -->
+  <div id="girisKart" class="kart gizli">
+    <div class="ipucu">Sayım uygulamasındaki kullanıcı adın ve şifrenle gir.</div>
+    <label for="kAdi">Kullanıcı adı</label><input id="kAdi" autocomplete="username">
+    <label for="kSifre">Şifre</label><input id="kSifre" type="password" autocomplete="current-password">
+    <button class="ana" id="girisBtn" style="margin-top:14px;">Giriş Yap</button>
+    <div id="girisHata" class="hata" style="margin-top:8px;"></div>
+  </div>
+
+  <div id="anaAlan" class="gizli">
+    <div class="kart">
+      <div class="durum" id="durumEl"><span class="nokta" style="background:var(--muted)"></span>Yükleniyor…</div>
+      <button class="buyukDugme giris" id="girisCikisBtn" disabled>…</button>
+      <div class="ipucu" style="margin-top:10px;">📍 Konumun sadece bu düğmeye bastığında bir kez alınır, sürekli takip edilmez. Mağaza ekranındaki 6 haneli kod gerekir.</div>
+    </div>
+
+    <div class="kart gizli" id="kodKart">
+      <div style="font-weight:800;" id="kodBaslik">Mağaza ekranındaki kodu gir</div>
+      <input id="kodInput" class="kodKutu" inputmode="numeric" maxlength="6" autocomplete="one-time-code" placeholder="••••••" style="margin-top:10px;">
+      <div class="ust" style="margin-top:10px;">
+        <button id="kodIptal">Vazgeç</button>
+        <button class="ana" id="kodGonder" style="flex:2;">Onayla</button>
+      </div>
+      <div id="kodDurum" class="ipucu" style="margin-top:8px;"></div>
+    </div>
+
+    <div class="kart">
+      <div style="font-weight:800; margin-bottom:4px;">Son günlerim</div>
+      <div id="benimListe" class="ipucu">Yükleniyor…</div>
+    </div>
+
+    <div class="kart gizli" id="yonetimKart">
+      <div style="font-weight:800; margin-bottom:8px;">Yönetim</div>
+      <div class="ust">
+        <button id="kodEkraniBtn">📺 Mağaza Kod Ekranı</button>
+        <button id="puantajBtn">📊 Aylık Puantaj</button>
+      </div>
+      <div id="puantajAlan" class="gizli" style="margin-top:12px;">
+        <div class="ust"><input type="month" id="ayInput" style="flex:2;"><button id="puantajGetir">Getir</button><button id="csvBtn">⬇ Excel</button></div>
+        <div id="icerideEl" class="ipucu" style="margin-top:10px;"></div>
+        <div id="puantajTablo" style="margin-top:10px; overflow-x:auto;"></div>
+      </div>
+    </div>
+
+    <div style="text-align:center; margin-top:6px;">
+      <a href="./index.html" class="ipucu">⬅ Sayım uygulamasına dön</a> ·
+      <a href="#" id="cikisLink" class="ipucu">Çıkış yap</a>
+    </div>
+  </div>
+
+  <div id="kodEkrani" class="gizli">
+    <button id="kodEkraniKapat">✕ Kapat</button>
+    <div class="baslik">MESAİ GİRİŞ / ÇIKIŞ KODU</div>
+    <div class="kod" id="buyukKod">------</div>
+    <div class="cubuk"><div id="kodCubuk" style="width:100%"></div></div>
+    <div class="alt">Telefonda Mesai → Giriş/Çıkış → bu kodu gir · kod 30 saniyede bir değişir</div>
+  </div>
+
+  <div id="toast" class="gizli"></div>
+
+<script>
+(function(){
+  var SUNUCU_VARSAYILAN = 'https://script.google.com/macros/s/AKfycbwH0hVGDXIQhdSxg2neDBNUEOxY1SNacJRz4cqf3WaP8xgAhlEnKfRv5xnlENKnh3XuYA/exec';
+  var SAYIM_ANAHTAR = 'sayimApp_meta_v2'; // sayım uygulamasının girişi (sadece OKUNUR)
+  var MESAI_ANAHTAR = 'mkMesai_v1';
+  function oku(k){ try { return JSON.parse(localStorage.getItem(k) || 'null'); } catch(e){ return null; } }
+  function yaz(k, v){ try { localStorage.setItem(k, JSON.stringify(v)); } catch(e){} }
+  function $(id){ return document.getElementById(id); }
+  function esc(s){ return String(s == null ? '' : s).replace(/[&<>"']/g, function(c){ return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]; }); }
+
+  // ?gomulu=1: sayım uygulamasının içinde (Mesai ekranı) açıldı — başlık ve
+  // "uygulamaya dön" gizlenir, her zaman uygulamada giriş yapan kişi kullanılır.
+  var GOMULU = /[?&]gomulu=1/.test(location.search);
+  var sayim = oku(SAYIM_ANAHTAR) || {};
+  var sunucu = sayim.serverUrl || SUNUCU_VARSAYILAN;
+  var sayimKimlik = (sayim.currentUser && sayim.savedCredentials) ? { user: sayim.currentUser.name, pass: sayim.savedCredentials.pass } : null;
+  var kimlik = GOMULU ? sayimKimlik : (oku(MESAI_ANAHTAR) || sayimKimlik);
+  if(GOMULU){
+    document.querySelector('h1').classList.add('gizli');
+    document.body.style.paddingTop = '12px';
+    var donLink = document.querySelector('a[href="./index.html"]'); if(donLink && donLink.parentNode) donLink.parentNode.classList.add('gizli');
+  }
+
+  var toastZ = null;
+  function toast(m, tur){
+    var t = $('toast'); t.textContent = m; t.classList.remove('gizli');
+    t.style.background = tur === 'hata' ? 'var(--red)' : (tur === 'uyari' ? 'var(--amber)' : 'var(--green)');
+    clearTimeout(toastZ); toastZ = setTimeout(function(){ t.classList.add('gizli'); }, tur === 'hata' ? 6000 : 3500);
+  }
+
+  var istekNo = 0;
+  function istek(params, cb){
+    var ad = '__mesaiCb' + (++istekNo) + '_' + Date.now();
+    var sc = document.createElement('script'), bitti = false;
+    var z = setTimeout(function(){ son({ status:'error', message:'Sunucu cevap vermedi — interneti kontrol et' }); }, 30000);
+    function son(r){ if(bitti) return; bitti = true; clearTimeout(z); try { delete window[ad]; } catch(e){ window[ad] = undefined; } if(sc.parentNode) sc.parentNode.removeChild(sc); cb(r || { status:'error', message:'Boş cevap' }); }
+    window[ad] = son;
+    var q = Object.keys(params).map(function(k){ return encodeURIComponent(k) + '=' + encodeURIComponent(params[k]); }).join('&');
+    sc.src = sunucu + (sunucu.indexOf('?') >= 0 ? '&' : '?') + q + '&callback=' + ad;
+    sc.onerror = function(){ son({ status:'error', message:'Sunucuya ulaşılamadı' }); };
+    document.body.appendChild(sc);
+  }
+  function kimlikli(p){ p.user = kimlik.user; p.pass = kimlik.pass; return p; }
+
+  // ---------- Giriş ----------
+  function girisGoster(){ $('girisKart').classList.remove('gizli'); $('anaAlan').classList.add('gizli'); $('kimEl').textContent = ''; }
+  $('girisBtn').addEventListener('click', function(){
+    var u = $('kAdi').value.trim(), s = $('kSifre').value;
+    if(!u || !s){ $('girisHata').textContent = 'Kullanıcı adı ve şifre gir'; return; }
+    $('girisBtn').disabled = true;
+    istek({ action:'login', user:u, pass:s }, function(r){
+      $('girisBtn').disabled = false;
+      if(r.status !== 'ok'){ $('girisHata').textContent = r.message || 'Giriş yapılamadı'; return; }
+      kimlik = { user:u, pass:s }; yaz(MESAI_ANAHTAR, kimlik); basla();
+    });
+  });
+  $('kSifre').addEventListener('keydown', function(e){ if(e.key === 'Enter') $('girisBtn').click(); });
+  $('cikisLink').addEventListener('click', function(e){ e.preventDefault(); try { localStorage.removeItem(MESAI_ANAHTAR); } catch(er){} kimlik = null; girisGoster(); });
+
+  // ---------- Durum ve kendi kayıtlarım ----------
+  var iceride = null, yonetici = false;
+  function sureMetni(dk){ dk = Math.max(0, Math.round(dk || 0)); return Math.floor(dk / 60) + ' sa ' + ('0' + (dk % 60)).slice(-2) + ' dk'; }
+  function tarihMetni(t){ var p = String(t).split('-'); var d = new Date(+p[0], +p[1] - 1, +p[2]); return d.toLocaleDateString('tr-TR', { weekday:'short', day:'2-digit', month:'2-digit' }); }
+  function yenile(){
+    istek(kimlikli({ action:'mesai_benim' }), function(r){
+      if(r.status !== 'ok'){
+        if(/şifre|kullanıcı|pasif/i.test(r.message || '') && !GOMULU){ toast(r.message, 'hata'); girisGoster(); return; }
+        $('girisCikisBtn').disabled = true; $('girisCikisBtn').textContent = '—';
+        $('durumEl').innerHTML = '<span class="hata">' + esc(r.message) + '</span>';
+        $('benimListe').innerHTML = '<span class="hata">' + esc(r.message) + '</span>'; return;
+      }
+      iceride = r.iceride; yonetici = !!r.yonetici;
+      $('yonetimKart').classList.toggle('gizli', !yonetici);
+      var btn = $('girisCikisBtn'); btn.disabled = false;
+      if(iceride){
+        $('durumEl').innerHTML = '<span class="nokta" style="background:var(--green)"></span>İÇERİDE — ' + esc(iceride.giris) + '\'den beri' + (iceride.sube ? ' · ' + esc(iceride.sube) : '');
+        btn.textContent = '🔴 ÇIKIŞ YAP'; btn.className = 'buyukDugme cikis';
+      } else {
+        $('durumEl').innerHTML = '<span class="nokta" style="background:var(--muted)"></span>DIŞARIDA';
+        btn.textContent = '🟢 GİRİŞ YAP'; btn.className = 'buyukDugme giris';
+      }
+      var g = r.gunler || [];
+      if(!g.length){ $('benimListe').textContent = 'Henüz kayıt yok.'; return; }
+      var ayToplam = 0, buAy = new Date().toISOString().slice(0, 7);
+      g.forEach(function(x){ if(x.tarih.indexOf(buAy) === 0) ayToplam += x.dakika; });
+      $('benimListe').innerHTML = '<div class="ipucu" style="margin-bottom:4px;">Bu ay toplam: <b>' + sureMetni(ayToplam) + '</b></div>' +
+        g.slice(0, 14).map(function(x){
+          var saatler = x.araliklar.map(function(a){ return (a.giris || '?') + ' → ' + (a.cikis || (a.acik ? 'içeride' : '?')); }).join(' · ');
+          return '<div class="satir"><div><div style="font-weight:700;">' + esc(tarihMetni(x.tarih)) + '</div><div class="saatler">' + esc(saatler) + '</div>' +
+            (x.eksik ? '<div class="uyari" style="font-size:12px;">⚠ Eksik giriş/çıkış — müdüre bildir</div>' : '') + '</div>' +
+            '<div class="sure">' + sureMetni(x.dakika) + '</div></div>';
+        }).join('');
+    });
+  }
+
+  // ---------- Giriş / Çıkış ----------
+  var bekleyenKonum = null, bekleyenTip = '';
+  $('girisCikisBtn').addEventListener('click', function(){
+    bekleyenTip = iceride ? 'cikis' : 'giris';
+    if(!navigator.geolocation){ toast('Bu telefon konum vermiyor', 'hata'); return; }
+    var btn = this; btn.disabled = true; btn.textContent = '📍 Konum alınıyor…';
+    navigator.geolocation.getCurrentPosition(function(pos){
+      bekleyenKonum = pos; btn.disabled = false; yenileDugme();
+      $('kodBaslik').textContent = (bekleyenTip === 'giris' ? 'GİRİŞ' : 'ÇIKIŞ') + ' — mağaza ekranındaki kodu gir';
+      $('kodKart').classList.remove('gizli'); $('kodInput').value = ''; $('kodDurum').textContent = 'Konum alındı (±' + Math.round(pos.coords.accuracy) + ' m).';
+      setTimeout(function(){ $('kodInput').focus(); }, 50);
+    }, function(err){
+      btn.disabled = false; yenileDugme();
+      toast(err && err.code === 1 ? 'Konum izni verilmedi — tarayıcı ayarlarından bu siteye konum izni ver' : 'Konum alınamadı — tekrar dene', 'hata');
+    }, { enableHighAccuracy:true, maximumAge:0, timeout:20000 });
+  });
+  function yenileDugme(){ var b = $('girisCikisBtn'); b.textContent = iceride ? '🔴 ÇIKIŞ YAP' : '🟢 GİRİŞ YAP'; }
+  $('kodIptal').addEventListener('click', function(){ $('kodKart').classList.add('gizli'); bekleyenKonum = null; });
+  $('kodInput').addEventListener('input', function(){ this.value = this.value.replace(/\D/g, '').slice(0, 6); if(this.value.length === 6) $('kodGonder').click(); });
+  var gonderiyor = false;
+  $('kodGonder').addEventListener('click', function(){
+    if(gonderiyor || !bekleyenKonum) return;
+    var kod = $('kodInput').value;
+    if(kod.length !== 6){ $('kodDurum').innerHTML = '<span class="hata">6 haneli kodu gir</span>'; return; }
+    gonderiyor = true; $('kodGonder').disabled = true; $('kodDurum').textContent = 'Gönderiliyor…';
+    var c = bekleyenKonum.coords;
+    istek(kimlikli({ action:'mesai_kaydet', tip:bekleyenTip, kod:kod, enlem:c.latitude, boylam:c.longitude, dogruluk:Math.round(c.accuracy || 0),
+      konumZaman:bekleyenKonum.timestamp, cihaz:navigator.userAgent.slice(0, 120) }), function(r){
+      gonderiyor = false; $('kodGonder').disabled = false;
+      if(r.status !== 'ok'){ $('kodDurum').innerHTML = '<span class="hata">❌ ' + esc(r.message) + '</span>'; toast(r.message, 'hata'); return; }
+      $('kodKart').classList.add('gizli'); bekleyenKonum = null;
+      toast((r.tip === 'giris' ? '✅ Giriş' : '✅ Çıkış') + ' kaydedildi: ' + r.zaman + (r.sube ? ' · ' + r.sube : ''));
+      yenile();
+    });
+  });
+
+  // ---------- Yönetim: mağaza kod ekranı ----------
+  var kodZ = null, kalanZ = null, wakeLock = null;
+  function kodGetir(){
+    istek(kimlikli({ action:'mesai_kod' }), function(r){
+      if($('kodEkrani').classList.contains('gizli')) return;
+      if(r.status !== 'ok'){ $('buyukKod').textContent = '------'; $('kodEkrani').querySelector('.alt').textContent = '❌ ' + (r.message || 'Kod alınamadı') + ' — tekrar deneniyor'; kodZ = setTimeout(kodGetir, 5000); return; }
+      $('buyukKod').textContent = r.kod.slice(0, 3) + ' ' + r.kod.slice(3);
+      var kalan = r.kalanSn, sure = r.sureSn || 30;
+      clearInterval(kalanZ);
+      var ciz = function(){ $('kodCubuk').style.width = Math.max(0, kalan / sure * 100) + '%'; };
+      ciz(); kalanZ = setInterval(function(){ kalan--; ciz(); }, 1000);
+      kodZ = setTimeout(kodGetir, (r.kalanSn + 1) * 1000);
+    });
+  }
+  $('kodEkraniBtn').addEventListener('click', function(){
+    $('kodEkrani').classList.remove('gizli'); kodGetir();
+    try { if(navigator.wakeLock) navigator.wakeLock.request('screen').then(function(w){ wakeLock = w; }).catch(function(){}); } catch(e){}
+    try { if(document.documentElement.requestFullscreen) document.documentElement.requestFullscreen().catch(function(){}); } catch(e){}
+  });
+  $('kodEkraniKapat').addEventListener('click', function(){
+    $('kodEkrani').classList.add('gizli'); clearTimeout(kodZ); clearInterval(kalanZ);
+    try { if(wakeLock) wakeLock.release(); } catch(e){} wakeLock = null;
+    try { if(document.fullscreenElement) document.exitFullscreen(); } catch(e){}
+  });
+
+  // ---------- Yönetim: aylık puantaj ----------
+  var sonRapor = null;
+  $('ayInput').value = new Date().toISOString().slice(0, 7);
+  $('puantajBtn').addEventListener('click', function(){ $('puantajAlan').classList.toggle('gizli'); if(!$('puantajAlan').classList.contains('gizli')) $('puantajGetir').click(); });
+  $('puantajGetir').addEventListener('click', function(){
+    $('puantajTablo').textContent = 'Yükleniyor…';
+    istek(kimlikli({ action:'mesai_rapor', ay:$('ayInput').value }), function(r){
+      if(r.status !== 'ok'){ $('puantajTablo').innerHTML = '<span class="hata">' + esc(r.message) + '</span>'; return; }
+      sonRapor = r;
+      $('icerideEl').innerHTML = r.iceride.length ? '🟢 Şu an içeride: ' + r.iceride.map(function(x){ return '<b>' + esc(x.personel) + '</b> (' + esc(x.giris) + ')'; }).join(', ') : 'Şu an içeride kimse görünmüyor.';
+      if(!r.kisiler.length){ $('puantajTablo').textContent = 'Bu ay kayıt yok.'; return; }
+      $('puantajTablo').innerHTML = r.kisiler.map(function(k){
+        return '<div style="font-weight:800; margin:12px 0 4px;">' + esc(k.personel) + ' — ' + sureMetni(k.toplamDakika) + ' (' + k.gunler.length + ' gün)</div>' +
+          '<table><tr><th>Tarih</th><th>Giriş → Çıkış</th><th style="text-align:right;">Süre</th></tr>' +
+          k.gunler.map(function(g){
+            return '<tr><td>' + esc(tarihMetni(g.tarih)) + '</td><td>' + esc(g.araliklar.map(function(a){ return (a.giris || '?') + '→' + (a.cikis || (a.acik ? 'içeride' : '?')); }).join(', ')) +
+              (g.eksik ? ' <span class="uyari">⚠</span>' : '') + '</td><td class="sayi">' + sureMetni(g.dakika) + '</td></tr>';
+          }).join('') + '</table>';
+      }).join('');
+    });
+  });
+  $('csvBtn').addEventListener('click', function(){
+    if(!sonRapor){ toast('Önce "Getir"e bas', 'uyari'); return; }
+    var sat = [['Personel', 'Tarih', 'Giriş-Çıkış', 'Süre (dk)', 'Süre', 'Eksik']];
+    sonRapor.kisiler.forEach(function(k){
+      k.gunler.forEach(function(g){
+        sat.push([k.personel, g.tarih, g.araliklar.map(function(a){ return (a.giris || '?') + '-' + (a.cikis || '?'); }).join(' / '), g.dakika, sureMetni(g.dakika), g.eksik ? 'EVET' : '']);
+      });
+      sat.push([k.personel, 'TOPLAM', '', k.toplamDakika, sureMetni(k.toplamDakika), '']);
+    });
+    var csv = '﻿' + sat.map(function(r){ return r.map(function(v){ v = String(v); return /[;"\n]/.test(v) ? '"' + v.replace(/"/g, '""') + '"' : v; }).join(';'); }).join('\r\n');
+    var a = document.createElement('a');
+    a.href = URL.createObjectURL(new Blob([csv], { type:'text/csv;charset=utf-8' }));
+    a.download = 'puantaj-' + sonRapor.ay + '.csv'; document.body.appendChild(a); a.click(); a.remove();
+  });
+
+  function basla(){
+    $('girisKart').classList.add('gizli'); $('anaAlan').classList.remove('gizli');
+    $('kimEl').textContent = '👤 ' + kimlik.user;
+    yenile();
+  }
+  if(kimlik) basla();
+  else if(GOMULU){ $('anaAlan').classList.add('gizli'); document.body.insertAdjacentHTML('beforeend', '<div class="kart hata">Önce uygulamaya giriş yap.</div>'); }
+  else girisGoster();
+  // Uygulamaya geri dönülünce (arka plandan) durum tazelensin.
+  document.addEventListener('visibilitychange', function(){ if(!document.hidden && kimlik && $('kodEkrani').classList.contains('gizli')) yenile(); });
+})();
+</script>
+</body>
+</html>
