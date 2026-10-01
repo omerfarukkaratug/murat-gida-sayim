@@ -17,7 +17,8 @@
 # =====================================================================
 
 # ---------------------- AYARLAR ----------------------
-$SqlServer        = "SERVER\ERP12"
+# MK_SAYIM, ERP12'den AYRI olan varsayilan SQL Server'da (SERVER) kuruldu.
+$SqlServer        = "SERVER"
 $YerelVeriTabani  = "MK_SAYIM"
 $DbUrl            = "https://wjyqempcmyrmruhdpcwk.supabase.co"
 $DbAnahtarDosyasi = "C:\Scripts\db-anahtar.txt"
