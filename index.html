@@ -292,6 +292,8 @@
 
   /* KDV etiketi (sayım listesi + fiyat sorgu) */
   .item .meta .kdvTag{color:var(--accent); font-weight:800;}
+  .birimTag{font-weight:800; color:var(--accent);}
+  .birimChip{color:var(--text);}
   .koliUyari{margin:8px 0; padding:10px 12px; border-radius:12px; background:var(--amber); color:#000; font-weight:800; font-size:15px; line-height:1.3;}
   .kdvChip{display:inline-block; font-family:var(--mono); font-size:11px; font-weight:800; padding:2px 8px; border-radius:20px; background:var(--panel2); color:var(--accent); border:1px solid var(--line);}
   #qtyEntryKdv{margin:-4px 0 10px;}
@@ -334,7 +336,7 @@
   <header style="border:none; padding:0 0 16px; background:transparent; display:flex; align-items:flex-start; justify-content:space-between;">
     <div>
       <h1><img src="logo-header.png" alt="Murat Gıda" style="height:30px; width:auto; display:block;"></h1>
-      <div class="sub">MK ERP · Murat Gıda • offline • Android • build 105</div>
+      <div class="sub">MK ERP · Murat Gıda • offline • Android • build 106</div>
     </div>
     <button type="button" id="themeToggleBtn" title="Tema seç" style="background:var(--panel2); border:1.5px solid var(--line); color:var(--text); width:34px; height:34px; border-radius:50%; font-size:15px; padding:0; display:flex; align-items:center; justify-content:center; flex-shrink:0;">🎨</button>
   </header>
@@ -1835,7 +1837,7 @@
   // Sayfa açılışında daha önce yüklenmiş kataloğu belleğe getir (varsa) —
   // her açılışta 50 bin satırı yeniden yüklemene gerek kalmaz.
   idbLoadAll().then(function(rows){
-    rows.forEach(function(r){ catalogMap.set(r.barcode, { name: r.name, stockCode: r.stockCode || '', oldStock: r.oldStock || '', price: r.price || '', kdv: r.kdv || '', carpan: r.carpan || '' }); });
+    rows.forEach(function(r){ catalogMap.set(r.barcode, { name: r.name, stockCode: r.stockCode || '', oldStock: r.oldStock || '', price: r.price || '', kdv: r.kdv || '', carpan: r.carpan || '', birim: r.birim || '' }); });
     updateProductCountLabel();
     setSyncStatus();
   }).catch(function(){ productCountEl.textContent = "Henüz ürün yok"; });
@@ -1914,7 +1916,7 @@
     startBtn.disabled = true;
     idbBulkReplace(res.entries).then(function(){
       catalogMap = new Map();
-      res.entries.forEach(function(e){ catalogMap.set(e.barcode, { name: e.name, stockCode: e.stockCode || '', oldStock: e.oldStock || '', price: e.price || '', kdv: e.kdv || '', carpan: e.carpan || '' }); });
+      res.entries.forEach(function(e){ catalogMap.set(e.barcode, { name: e.name, stockCode: e.stockCode || '', oldStock: e.oldStock || '', price: e.price || '', kdv: e.kdv || '', carpan: e.carpan || '', birim: e.birim || '' }); });
       updateProductCountLabel();
       startBtn.disabled = false;
       successToast(res.count + " ürün telefona kaydedildi");
@@ -2006,11 +2008,11 @@
       var tamYukleme = catalogMap.size === 0;
       var yeni = new Map(), islemler = [];
       entries.forEach(function(e){
-        var v = { name: e.name, stockCode: e.stockCode || '', oldStock: e.oldStock || '', price: e.price || '', kdv: e.kdv || '', carpan: e.carpan || '' };
+        var v = { name: e.name, stockCode: e.stockCode || '', oldStock: e.oldStock || '', price: e.price || '', kdv: e.kdv || '', carpan: e.carpan || '', birim: e.birim || '' };
         yeni.set(e.barcode, v);
         var o = catalogMap.get(e.barcode);
         if(tamYukleme || !o || o.name !== v.name || String(o.stockCode) !== String(v.stockCode) || String(o.oldStock) !== String(v.oldStock) ||
-           String(o.price) !== String(v.price) || String(o.kdv) !== String(v.kdv) || String(o.carpan || '') !== String(v.carpan)){
+           String(o.price) !== String(v.price) || String(o.kdv) !== String(v.kdv) || String(o.carpan || '') !== String(v.carpan) || String(o.birim || '') !== String(v.birim)){
           islemler.push(function(st){ st.put(e); });
         }
       });
@@ -2510,7 +2512,11 @@
       (existingQty > 0 ? 'Bu oturumda önceden sayılan: ' + existingQty : 'Bu üründen ilk okutma');
     var kdvBoxEl = document.getElementById('qtyEntryKdv');
     var kdvTxt = formatKdv((catalogMap.get(pendingScan.barcode) || {}).kdv);
-    if(kdvTxt){ kdvBoxEl.innerHTML = '<span class="kdvChip">' + kdvTxt + '</span>'; kdvBoxEl.classList.remove('hidden'); }
+    var birimTxt = birimAdi(pendingScan.barcode);
+    if(kdvTxt || birimTxt){
+      kdvBoxEl.innerHTML = (birimTxt ? '<span class="kdvChip birimChip">' + escapeHtml(birimTxt) + '</span> ' : '') + (kdvTxt ? '<span class="kdvChip">' + kdvTxt + '</span>' : '');
+      kdvBoxEl.classList.remove('hidden');
+    }
     else { kdvBoxEl.classList.add('hidden'); }
     qtyPad.reset(unit === 'Kg', pendingScan.carpan ? 'KOLİ sayısı gir' : '');
     // Açık bir telefon klavyesi varsa (örn. elle barkod yazıldıysa) kapansın.
@@ -2645,7 +2651,7 @@
     var syncDot = '<span class="syncDot" title="'+(sent?'Dosyaya gönderildi':'Henüz dosyaya gönderilmedi')+'" style="background:'+(sent?'var(--green)':'var(--red)')+';"></span>';
     return '<div class="item">' +
       '<div class="info"><div class="name">'+syncDot+escapeHtml(it.name)+'</div>' +
-      '<div class="meta">'+escapeHtml(it.barcode)+' · '+it.time+oldStockHtml+kdvTagFor(it.barcode)+unitHtml+reyonHtml+'</div></div>' +
+      '<div class="meta">'+escapeHtml(it.barcode)+' · '+it.time+oldStockHtml+kdvTagFor(it.barcode)+birimTagFor(it.barcode)+unitHtml+reyonHtml+'</div></div>' +
       '<div class="qtyBox">' +
         '<input class="qtyInput" type="number" inputmode="'+(unit==='Kg'?'decimal':'numeric')+'" step="'+(unit==='Kg'?'0.001':'1')+'" value="'+it.qty+'" data-id="'+it.id+'">' +
         '<button type="button" class="itemDelBtn" data-id="'+it.id+'" title="Bu kaydı sil">🗑️</button>' +
@@ -2696,6 +2702,15 @@
   }
   // KDV oranı etiketi — katalogdaki değere göre; oran yoksa boş döner.
   function formatKdv(v){ return (v !== '' && v !== null && v !== undefined && !isNaN(Number(v))) ? ('KDV %' + Number(v)) : ''; }
+  // ERP12'deki birim adı (ADET, KOLİ, PAKET, KG…) — sadece gösterim.
+  function birimAdi(barcode){
+    var c = catalogMap.get(barcode);
+    return c && c.birim ? String(c.birim).trim().toLocaleUpperCase('tr-TR') : '';
+  }
+  function birimTagFor(barcode){
+    var b = birimAdi(barcode);
+    return b ? ' · <span class="birimTag">' + escapeHtml(b) + '</span>' : '';
+  }
   function kdvTagFor(barcode){
     var c = catalogMap.get(barcode);
     var t = c ? formatKdv(c.kdv) : '';
@@ -3198,6 +3213,7 @@
       ? Number(r.price).toLocaleString('tr-TR', {minimumFractionDigits:2, maximumFractionDigits:2}) + ' ₺'
       : 'Fiyat yok';
     var kdvHtml = formatKdv(r.kdv) ? '<span class="kdvChip" style="font-size:13px; padding:4px 12px;">' + formatKdv(r.kdv) + '</span>' : '';
+    if(birimAdi(r.barcode)) kdvHtml = '<span class="kdvChip birimChip" style="font-size:13px; padding:4px 12px;">' + escapeHtml(birimAdi(r.barcode)) + '</span> ' + kdvHtml;
     var stokHtml = 'Stok bilgisi yok'; var stokRenk = 'var(--muted)';
     if(r.oldStock !== '' && !isNaN(Number(r.oldStock))){
       var stokN = Number(r.oldStock);
@@ -3785,6 +3801,7 @@
     document.getElementById('malHareketQtyName').textContent = entry.name;
     var meta = 'Barkod: ' + barcode + (entry.stockCode ? (' · ' + entry.stockCode) : '');
     if(canSeeStock() && entry.oldStock !== '' && !isNaN(Number(entry.oldStock))) meta += ' · Sistem: ' + entry.oldStock;
+    if(birimAdi(barcode)) meta += ' · Birim: ' + birimAdi(barcode);
     var kdvTxt = formatKdv(entry.kdv);
     if(kdvTxt) meta += ' · ' + kdvTxt;
     if(canSeePrice() && entry.price !== undefined && entry.price !== '' && !isNaN(Number(entry.price))) meta += ' · Fiyat: ' + fmtPara(entry.price);
@@ -4049,7 +4066,7 @@
     var syncDot = '<span class="syncDot" title="'+(sent?'Dosyaya gönderildi':'Henüz dosyaya gönderilmedi')+'" style="background:'+(sent?'var(--green)':'var(--red)')+';"></span>';
     return '<div class="item browseItem" data-browse-id="'+it.id+'">' +
       '<div class="info"><div class="name">'+syncDot+escapeHtml(it.name)+'</div>' +
-      '<div class="meta">'+escapeHtml(it.barcode)+stockHtml+' · '+it.date+' '+it.time+oldStockHtml+kdvTagFor(it.barcode)+reyonHtml+'</div></div>' +
+      '<div class="meta">'+escapeHtml(it.barcode)+stockHtml+' · '+it.date+' '+it.time+oldStockHtml+kdvTagFor(it.barcode)+birimTagFor(it.barcode)+reyonHtml+'</div></div>' +
       '<div class="qtyBox" style="font-family:var(--mono); font-weight:800; font-size:16px;">'+it.qty+' '+unit+'</div>' +
     '</div>';
   }
@@ -5462,7 +5479,7 @@
       var unit = unitFor(it.barcode);
       return '<div class="item">' +
         '<div class="info"><div class="name">'+escapeHtml(it.name)+'</div>' +
-        '<div class="meta">'+escapeHtml(it.barcode)+' · '+it.time+oldStockHtml+kdvTagFor(it.barcode)+'</div></div>' +
+        '<div class="meta">'+escapeHtml(it.barcode)+' · '+it.time+oldStockHtml+kdvTagFor(it.barcode)+birimTagFor(it.barcode)+'</div></div>' +
         '<div class="qtyBox" style="font-family:var(--mono); font-weight:800; font-size:17px;">'+it.qty+' '+unit+'</div>' +
         '</div>';
     }).join('');

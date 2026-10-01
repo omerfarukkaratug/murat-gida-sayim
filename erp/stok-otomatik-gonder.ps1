@@ -18,6 +18,8 @@
 #     (önceden sadece okutulan barkodunki geliyordu; ikincil barkodda yanlıştı).
 #   - Koli barkodlarının çarpanı (carpan) da gönderilir; sayımda koli okutulunca
 #     telefon girilen koli sayısını adede çevirir (stok ERP12'de adet tutuluyor).
+#   - Barkodun birim adı (ADET, KOLİ, PAKET, KG… — STOK_BIRIM.AD) gönderilir;
+#     uygulamada ürünün yanında gösterilir.
 #
 #  Veri tabanı ayarı (bir kez): C:\Scripts\db-anahtar.txt dosyası oluşturup
 #  içine TEK SATIR olarak Supabase "secret" anahtarını (sb_secret_...) yazın.
@@ -106,12 +108,14 @@ SELECT
   us.EskiStok AS EskiStok,
   f.FIYAT AS Fiyat,
   v.KDV_PAREKENDE AS KdvOrani,
-  bb.CARPAN AS Carpan
+  bb.CARPAN AS Carpan,
+  sb.AD AS Birim
 FROM dbo.STOK_BARKOD_BIRIM bb
 LEFT JOIN dbo.STOK_BARKOD_W w ON w.ID = bb.BARKOD
 LEFT JOIN dbo.STOK_BARKOD_FIYAT_VARSAYILAN f ON f.STOK_STOK_BIRIM = bb.STOK_STOK_BIRIM
 LEFT JOIN dbo.STOK s ON s.ID = bb.STOK
 LEFT JOIN dbo.STOK_VERGI v ON v.ID = s.STOK_VERGI
+LEFT JOIN dbo.STOK_BIRIM sb ON sb.ID = bb.STOK_BIRIM
 -- Eski stok URUN bazinda: ERP12 stogu barkod barkod tutar; ayni urunun
 -- butun barkodlarindaki miktar toplanir, hangi barkod okutulursa okutulsun
 -- ayni (dogru) stok gorunur. Hic miktari olmayan urunde bos kalir.
@@ -174,6 +178,7 @@ try {
             price     = $fiyatDeger
             kdv       = $kdvDeger
             carpan    = $carpanDeger
+            birim     = [string]$r.Birim
         }
     }
 
