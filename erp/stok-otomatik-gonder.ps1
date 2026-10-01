@@ -14,6 +14,8 @@
 #     yazılmaz, 30 sn sonra bir kez daha denenir, olmazsa HATA yazılır.
 #   - Veri tabanı gönderimi (C:\Scripts\db-anahtar.txt varsa).
 #   - TLS 1.2 açıkça etkin (eski Windows'ta bazı sitelere bağlanmak için şart).
+#   - Eski stok ÜRÜN bazında: aynı ürünün tüm barkodlarındaki miktar toplanır
+#     (önceden sadece okutulan barkodunki geliyordu; ikincil barkodda yanlıştı).
 #
 #  Veri tabanı ayarı (bir kez): C:\Scripts\db-anahtar.txt dosyası oluşturup
 #  içine TEK SATIR olarak Supabase "secret" anahtarını (sb_secret_...) yazın.
@@ -93,16 +95,24 @@ SELECT
   w.AD AS UrunAdi,
   bb.BARKOD AS Barkod,
   s.KOD AS StokKodu,
-  COALESCE(m.MIKTAR, bar.MIKTAR) AS EskiStok,
+  us.EskiStok AS EskiStok,
   f.FIYAT AS Fiyat,
   v.KDV_PAREKENDE AS KdvOrani
 FROM dbo.STOK_BARKOD_BIRIM bb
-LEFT JOIN dbo.STOK_BARKOD bar ON bar.BARKOD = bb.BARKOD
-LEFT JOIN dbo.STOK_MIKTAR_BARKODLU m ON m.BARKOD = bb.BARKOD
 LEFT JOIN dbo.STOK_BARKOD_W w ON w.ID = bb.BARKOD
 LEFT JOIN dbo.STOK_BARKOD_FIYAT_VARSAYILAN f ON f.STOK_STOK_BIRIM = bb.STOK_STOK_BIRIM
 LEFT JOIN dbo.STOK s ON s.ID = bb.STOK
 LEFT JOIN dbo.STOK_VERGI v ON v.ID = s.STOK_VERGI
+-- Eski stok URUN bazinda: ERP12 stogu barkod barkod tutar; ayni urunun
+-- butun barkodlarindaki miktar toplanir, hangi barkod okutulursa okutulsun
+-- ayni (dogru) stok gorunur. Hic miktari olmayan urunde bos kalir.
+LEFT JOIN (
+  SELECT ub.STOK, SUM(COALESCE(um.MIKTAR, ubar.MIKTAR)) AS EskiStok
+  FROM dbo.STOK_BARKOD_BIRIM ub
+  LEFT JOIN dbo.STOK_BARKOD ubar ON ubar.BARKOD = ub.BARKOD
+  LEFT JOIN dbo.STOK_MIKTAR_BARKODLU um ON um.BARKOD = ub.BARKOD
+  GROUP BY ub.STOK
+) us ON us.STOK = bb.STOK
 "@
 
 $hataVar = $false
