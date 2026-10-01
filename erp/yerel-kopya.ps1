@@ -17,7 +17,8 @@
 # =====================================================================
 
 # ---------------------- AYARLAR ----------------------
-$SqlServer        = "SERVER\ERP12"
+# MK_SAYIM, ERP12'den AYRI olan varsayilan SQL Server'da (SERVER) kuruldu.
+$SqlServer        = "SERVER"
 $YerelVeriTabani  = "MK_SAYIM"
 $DbUrl            = "https://wjyqempcmyrmruhdpcwk.supabase.co"
 $DbAnahtarDosyasi = "C:\Scripts\db-anahtar.txt"
@@ -56,7 +57,9 @@ function Buluttan-Cek($tablo, $filtre, $sira) {
     while ($true) {
         $url = "$DbUrl/rest/v1/$tablo" + "?select=*&order=$sira&limit=$SayfaBoyutu&offset=$offset"
         if ($filtre) { $url += "&$filtre" }
-        $sayfa = Invoke-RestMethod -Uri $url -Method Get -Headers @{ apikey = $script:Anahtar } -TimeoutSec 120
+        # -UserAgent: Supabase, tarayiciya benzeyen istemcilerde (Windows PowerShell kendini
+        # "Mozilla/5.0 (Windows NT...)" diye tanitir) gizli anahtari 401 ile REDDEDER.
+        $sayfa = Invoke-RestMethod -Uri $url -Method Get -Headers @{ apikey = $script:Anahtar } -TimeoutSec 120 -UserAgent "MK-Sayim/1.0"
         $liste = @($sayfa)
         foreach ($s in $liste) { [void]$hepsi.Add($s) }
         if ($liste.Count -lt $SayfaBoyutu) { break }

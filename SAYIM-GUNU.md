@@ -4,7 +4,7 @@ Hedef: en az 10 telefon, ~80.000 okutma (depo + reyon), **18 saat** (dakikada or
 
 ## 1) Sayımdan önce (bir kez)
 
-- [ ] **Sunucu kodu güncel:** `/exec` adresinde en güncel `kod sürümü` görünüyor (şu an `build99`).
+- [ ] **Sunucu kodu güncel:** `/exec` adresinde en güncel `kod sürümü` görünüyor (şu an `build105`).
 - [ ] **Uygulama güncel:** Her telefonda üstte aynı build numarası görünüyor.
 - [ ] **Yük testi yapıldı** (`yuk-testi.html`, sadece TEST KOPYASINDA):
   - [ ] Önce "Tabloyu 80.000 satıra doldur".
@@ -18,6 +18,7 @@ Hedef: en az 10 telefon, ~80.000 okutma (depo + reyon), **18 saat** (dakikada or
 - [ ] **Kullanıcılar:** Her personelin kendi kullanıcı adı var; fiyat/stok görmemesi gerekenlerde "💰 Fiyat Görme" ve "📦 Stok Görme" kapalı.
 - [ ] **Telefonlar:** şarjlı, powerbank hazır, Chrome güncel, uygulama ana ekrana eklenmiş, kamera izni verilmiş.
 - [ ] **iPhone'larda Dikey Yön Kilidi açık** (sağ üstten aşağı kaydır → 🔒). iPhone uygulamanın ekranı kilitlemesine izin vermez; Android'de uygulama kendisi kilitler.
+- [ ] **Personele koli kuralı söylendi:** koli barkodu okutulunca turuncu "📦 KOLİ BARKODU" yazar → KOLİ sayısı girilir, telefon adede çevirir (ör. 3 koli × 24 = 72). Adet barkodunda adet girilir.
 
 ## 2) Sayım başlarken
 

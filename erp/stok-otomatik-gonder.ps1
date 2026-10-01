@@ -14,6 +14,10 @@
 #     yazılmaz, 30 sn sonra bir kez daha denenir, olmazsa HATA yazılır.
 #   - Veri tabanı gönderimi (C:\Scripts\db-anahtar.txt varsa).
 #   - TLS 1.2 açıkça etkin (eski Windows'ta bazı sitelere bağlanmak için şart).
+#   - Eski stok ÜRÜN bazında: aynı ürünün tüm barkodlarındaki miktar toplanır
+#     (önceden sadece okutulan barkodunki geliyordu; ikincil barkodda yanlıştı).
+#   - Koli barkodlarının çarpanı (carpan) da gönderilir; sayımda koli okutulunca
+#     telefon girilen koli sayısını adede çevirir (stok ERP12'de adet tutuluyor).
 #
 #  Veri tabanı ayarı (bir kez): C:\Scripts\db-anahtar.txt dosyası oluşturup
 #  içine TEK SATIR olarak Supabase "secret" anahtarını (sb_secret_...) yazın.
@@ -22,7 +26,9 @@
 
 # ---------------------- AYARLAR (kendine göre kontrol et) ----------------------
 $SqlServer     = "SERVER\ERP12"
-$Database      = "ERP122025"
+# Bos: ERP12'nin AKTIF yil veri tabani otomatik bulunur (yil devrinden sonra
+# kendiliginden yeni yila gecer). Elle sabitlemek icin: "ERP122026"
+$Database      = ""
 $AppsScriptUrl = "https://script.google.com/macros/s/AKfycbwH0hVGDXIQhdSxg2neDBNUEOxY1SNacJRz4cqf3WaP8xgAhlEnKfRv5xnlENKnh3XuYA/exec"
 $LogFile       = "C:\Scripts\stok-gonderim-log.txt"
 $DbUrl         = "https://wjyqempcmyrmruhdpcwk.supabase.co"
@@ -67,6 +73,7 @@ function Gonder-Sheets($govde, $ne, $adet) {
 }
 
 # Veri tabanına gönder (gölge kopya). Hata olursa sadece günlüğe yazar.
+# -UserAgent şart: Supabase, tarayıcıya benzeyen istemcide gizli anahtarı 401 ile reddeder.
 function Gonder-VeriTabani($fonksiyon, $govde, $ne) {
     if (-not (Test-Path $DbAnahtarDosyasi)) { return }
     try {
@@ -74,7 +81,7 @@ function Gonder-VeriTabani($fonksiyon, $govde, $ne) {
         if (-not $anahtar) { return }
         $baytlar = [System.Text.Encoding]::UTF8.GetBytes($govde)
         $sonuc = Invoke-RestMethod -Uri "$DbUrl/rest/v1/rpc/$fonksiyon" -Method Post -Body $baytlar `
-            -ContentType "application/json; charset=utf-8" -Headers @{ apikey = $anahtar } -TimeoutSec 120
+            -ContentType "application/json; charset=utf-8" -Headers @{ apikey = $anahtar } -TimeoutSec 120 -UserAgent "MK-Sayim/1.0"
         if (Cevap-Basarili $sonuc) {
             Yaz-Log "VERI TABANI: $ne yazildi. Yanit: $($sonuc | ConvertTo-Json -Compress)"
         } else {
@@ -90,16 +97,25 @@ SELECT
   w.AD AS UrunAdi,
   bb.BARKOD AS Barkod,
   s.KOD AS StokKodu,
-  COALESCE(m.MIKTAR, bar.MIKTAR) AS EskiStok,
+  us.EskiStok AS EskiStok,
   f.FIYAT AS Fiyat,
-  v.KDV_PAREKENDE AS KdvOrani
+  v.KDV_PAREKENDE AS KdvOrani,
+  bb.CARPAN AS Carpan
 FROM dbo.STOK_BARKOD_BIRIM bb
-LEFT JOIN dbo.STOK_BARKOD bar ON bar.BARKOD = bb.BARKOD
-LEFT JOIN dbo.STOK_MIKTAR_BARKODLU m ON m.BARKOD = bb.BARKOD
 LEFT JOIN dbo.STOK_BARKOD_W w ON w.ID = bb.BARKOD
 LEFT JOIN dbo.STOK_BARKOD_FIYAT_VARSAYILAN f ON f.STOK_STOK_BIRIM = bb.STOK_STOK_BIRIM
 LEFT JOIN dbo.STOK s ON s.ID = bb.STOK
 LEFT JOIN dbo.STOK_VERGI v ON v.ID = s.STOK_VERGI
+-- Eski stok URUN bazinda: ERP12 stogu barkod barkod tutar; ayni urunun
+-- butun barkodlarindaki miktar toplanir, hangi barkod okutulursa okutulsun
+-- ayni (dogru) stok gorunur. Hic miktari olmayan urunde bos kalir.
+LEFT JOIN (
+  SELECT ub.STOK, SUM(COALESCE(um.MIKTAR, ubar.MIKTAR)) AS EskiStok
+  FROM dbo.STOK_BARKOD_BIRIM ub
+  LEFT JOIN dbo.STOK_BARKOD ubar ON ubar.BARKOD = ub.BARKOD
+  LEFT JOIN dbo.STOK_MIKTAR_BARKODLU um ON um.BARKOD = ub.BARKOD
+  GROUP BY ub.STOK
+) us ON us.STOK = bb.STOK
 "@
 
 $hataVar = $false
@@ -110,6 +126,20 @@ try {
         try { Install-Module -Name SqlServer -Scope CurrentUser -Force -AllowClobber -ErrorAction Stop } catch {}
     }
     Import-Module SqlServer -ErrorAction SilentlyContinue
+
+    # YIL DEVRI: aktif yil = son 7 gunde belge girilmis EN YENI "ERP12yyyy"
+    # veri tabani (devirden hemen sonra yeni yila gecer; yeni yil acilmis ama
+    # henuz kullanilmiyorsa eskide kalir). Hicbirinde hareket yoksa en yenisi.
+    if (-not $Database) {
+        $adaylar = @(Invoke-Sqlcmd -ServerInstance $SqlServer -Database master -QueryTimeout 60 -Query "SELECT name FROM sys.databases WHERE name LIKE 'ERP12[0-9][0-9][0-9][0-9]' AND state = 0 ORDER BY name DESC" | ForEach-Object { [string]$_.name })
+        if ($adaylar.Count -eq 0) { Yaz-Log "HATA: ERP12 yil veri tabani bulunamadi."; exit 1 }
+        foreach ($aday in $adaylar) {
+            $son = Invoke-Sqlcmd -ServerInstance $SqlServer -Database $aday -QueryTimeout 60 -Query "SELECT COUNT(*) AS n FROM dbo.FIS WHERE FIS_TARIHI >= DATEADD(day, -7, GETDATE())"
+            if ($son -and [int]$son.n -gt 0) { $Database = $aday; break }
+        }
+        if (-not $Database) { $Database = $adaylar[0] }
+        Yaz-Log "Aktif ERP veri tabani: $Database"
+    }
 
     $rows = Invoke-Sqlcmd -ServerInstance $SqlServer -Database $Database -Query $query -QueryTimeout 180
 
@@ -127,6 +157,9 @@ try {
         if ($r.EskiStok -ne $null -and $r.EskiStok -isnot [System.DBNull]) { $eskiStokDeger = [double]$r.EskiStok }
         $kdvDeger = $null
         if ($r.KdvOrani -ne $null -and $r.KdvOrani -isnot [System.DBNull]) { $kdvDeger = [double]$r.KdvOrani }
+        # Koli barkodu (CARPAN > 1, orn. 24'lu koli): telefon koli sayisini adede cevirir.
+        $carpanDeger = $null
+        if ($r.Carpan -ne $null -and $r.Carpan -isnot [System.DBNull] -and [double]$r.Carpan -gt 1) { $carpanDeger = [double]$r.Carpan }
         [PSCustomObject]@{
             name      = [string]$r.UrunAdi
             barcode   = [string]$r.Barkod
@@ -134,6 +167,7 @@ try {
             oldStock  = $eskiStokDeger
             price     = $fiyatDeger
             kdv       = $kdvDeger
+            carpan    = $carpanDeger
         }
     }
 

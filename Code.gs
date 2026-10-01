@@ -8,7 +8,7 @@
 // bir sürüm dağıttıktan sonra /exec adresini boş açtığında burada yazan
 // numarayı görmelisin; index.html'in üstündeki "build" numarasıyla
 // eşleşecek şekilde ben her ikisini birlikte güncelliyorum.
-var GS_VERSION = 'build99';
+var GS_VERSION = 'build105';
 
 // Sheets'te "Saat" sütunu zaman biçimli olarak algılanırsa, hücre değeri düz
 // metin değil bir Date nesnesi olarak gelir ve String(...) çirkin bir çıktı
@@ -49,6 +49,9 @@ function doGet(e) {
       katalogVersion: PropertiesService.getScriptProperties().getProperty('KATALOG_VERSION') || '',
       cariVersion: PropertiesService.getScriptProperties().getProperty('CARI_VERSION') || ''
     }, e.parameter.callback);
+  }
+  if (e.parameter && e.parameter.action === 'urun_hareket') {
+    return urunHareket(e.parameter, e.parameter.callback);
   }
   if (e.parameter && e.parameter.action === 'temizle') {
     return handleTemizle(e.parameter.user, e.parameter.pass, e.parameter.callback);
@@ -153,7 +156,7 @@ function outJson(obj, callback) {
 // yetkilendirme için yeterlidir. Tabloyu düzenleme yetkisi olan herkes
 // şifreleri görebilir.
 // ============================================================
-var ALL_PERMS = ['rapor', 'temizle', 'kullanici_yonetimi', 'ayarlar', 'canli_durum', 'duzelt'];
+var ALL_PERMS = ['rapor', 'temizle', 'kullanici_yonetimi', 'ayarlar', 'canli_durum', 'duzelt', 'hareket'];
 
 function authenticate(user, pass) {
   user = String(user || '').trim();
@@ -583,14 +586,17 @@ function getKatalog(callback) {
   var sheet = ss.getSheetByName('Katalog');
   var entries = [];
   if (sheet && sheet.getLastRow() >= 2) {
-    var values = sheet.getRange(2, 1, sheet.getLastRow() - 1, 6).getValues();
+    var values = sheet.getRange(2, 1, sheet.getLastRow() - 1, 7).getValues();
     entries = values
       .filter(function (r) { return r[0] && r[1]; })
       .map(function (r) {
         // ⚠️ "r[3] || ''" yazınca sayısal 0 değeri (stok 0, KDV %0) boş sayılıyordu:
         // sıfır stoklu ürün "stok bilgisi yok" gibi görünüyordu. Sadece gerçekten
         // boş hücreler boş kalır, 0 olduğu gibi gelir.
-        return { name: String(r[0]), barcode: String(r[1]), stockCode: String(r[2] || ''), oldStock: numOrEmpty(r[3]), price: numOrEmpty(r[4]), kdv: numOrEmpty(r[5]) };
+        var e = { name: String(r[0]), barcode: String(r[1]), stockCode: String(r[2] || ''), oldStock: numOrEmpty(r[3]), price: numOrEmpty(r[4]), kdv: numOrEmpty(r[5]) };
+        // Koli barkodu (çarpan > 1): telefon girilen koli sayısını adede çevirir.
+        if (Number(r[6]) > 1) e.carpan = String(r[6]);
+        return e;
       });
   }
   var json = JSON.stringify({ entries: entries });
@@ -1209,22 +1215,28 @@ function listeOzeti(rows) {
   return Utilities.base64Encode(d);
 }
 
+// Koli çarpanı: sadece 1'den büyükse yazılır (adet barkodlarında boş kalır).
+function koliCarpan(v) {
+  var n = Number(v);
+  return (isFinite(n) && n > 1) ? n : '';
+}
+
 function saveKatalogBulk(entries) {
   var ss = SpreadsheetApp.getActiveSpreadsheet();
   var sheet = ss.getSheetByName('Katalog');
   if (!sheet) sheet = ss.insertSheet('Katalog');
   var props = PropertiesService.getScriptProperties();
-  var ozet = listeOzeti(entries.map(function (e) { return [e.name || '', e.barcode || '', e.stockCode || '', cleanNum(e.oldStock), cleanNum(e.price), cleanNum(e.kdv)]; }));
+  var ozet = listeOzeti(entries.map(function (e) { return [e.name || '', e.barcode || '', e.stockCode || '', cleanNum(e.oldStock), cleanNum(e.price), cleanNum(e.kdv), koliCarpan(e.carpan)]; }));
   if (entries.length > 0 && ozet === props.getProperty('KATALOG_OZET') && sheet.getLastRow() === entries.length + 1) {
     return ContentService.createTextOutput(JSON.stringify({ status: 'ok', saved: 0, degisiklikYok: true })).setMimeType(ContentService.MimeType.JSON);
   }
   sheet.clear();
-  sheet.appendRow(['Ürün Adı', 'Barkod', 'Stok Kodu', 'Eski Stok', 'Fiyat', 'KDV %']);
+  sheet.appendRow(['Ürün Adı', 'Barkod', 'Stok Kodu', 'Eski Stok', 'Fiyat', 'KDV %', 'Koli Çarpanı']);
   if (entries.length > 0) {
     var rows = entries.map(function (e) {
-      return [e.name || '', e.barcode || '', e.stockCode || '', cleanNum(e.oldStock), cleanNum(e.price), cleanNum(e.kdv)];
+      return [e.name || '', e.barcode || '', e.stockCode || '', cleanNum(e.oldStock), cleanNum(e.price), cleanNum(e.kdv), koliCarpan(e.carpan)];
     });
-    sheet.getRange(2, 1, rows.length, 6).setValues(rows);
+    sheet.getRange(2, 1, rows.length, 7).setValues(rows);
     // Fiyat sütununu her zaman 2 ondalık basamakla göster — Sheets'in
     // "Otomatik" biçimi bazen kuruşu gizleyip tam sayıya yuvarlanmış
     // GÖRÜNMESİNE yol açabiliyor (asıl değer bozulmuyor ama kafa karıştırıyor).
@@ -1251,17 +1263,17 @@ function saveKatalogItem(entry) {
   var sheet = ss.getSheetByName('Katalog');
   if (!sheet) {
     sheet = ss.insertSheet('Katalog');
-    sheet.appendRow(['Ürün Adı', 'Barkod', 'Stok Kodu', 'Eski Stok', 'Fiyat', 'KDV %']);
+    sheet.appendRow(['Ürün Adı', 'Barkod', 'Stok Kodu', 'Eski Stok', 'Fiyat', 'KDV %', 'Koli Çarpanı']);
   }
   var lastRow = sheet.getLastRow();
-  var rowData = [entry.name, entry.barcode, entry.stockCode || '', cleanNum(entry.oldStock), cleanNum(entry.price), cleanNum(entry.kdv)];
+  var rowData = [entry.name, entry.barcode, entry.stockCode || '', cleanNum(entry.oldStock), cleanNum(entry.price), cleanNum(entry.kdv), koliCarpan(entry.carpan)];
   PropertiesService.getScriptProperties().setProperty('KATALOG_VERSION', new Date().toISOString());
   PropertiesService.getScriptProperties().deleteProperty('KATALOG_OZET'); // bir sonraki ERP listesi tabloyu yeniden yazsın
   if (lastRow >= 2) {
     var barcodes = sheet.getRange(2, 2, lastRow - 1, 1).getValues();
     for (var i = 0; i < barcodes.length; i++) {
       if (String(barcodes[i][0]) === String(entry.barcode)) {
-        sheet.getRange(i + 2, 1, 1, 6).setValues([rowData]);
+        sheet.getRange(i + 2, 1, 1, 7).setValues([rowData]);
         sheet.getRange(i + 2, 5, 1, 1).setNumberFormat('0.00');
         sheet.getRange(i + 2, 6, 1, 1).setNumberFormat('0.##');
         return ContentService.createTextOutput(JSON.stringify({ status: 'ok', updated: true }))
@@ -2214,4 +2226,32 @@ function dbKarsilastir() {
   gunlukYaz('veritabani', 'karşılaştırma', ozet, !tamam);
   Logger.log(ozet);
   return ozet;
+}
+
+// ============================================================
+// ÜRÜN HAREKETLERİ: bir ürünün ERP12'deki alışları (kimden, ne zaman, hangi
+// belgeyle, kaç TL'ye) ve satışları. Veri, ERP bilgisayarındaki
+// hareket-gonder.ps1 ile veri tabanına (Supabase) yazılır; telefon ona
+// DOĞRUDAN erişemez — burada "hareket" yetkisi kontrol edilip gizli
+// anahtarla okunur. (DB_KAPALI sadece gölge yazmayı durdurur, bunu değil.)
+// ============================================================
+function urunHareket(p, callback) {
+  var auth = requirePermission(p.user, p.pass, 'hareket');
+  if (!auth.ok) return outJson({ status: 'error', message: auth.message }, callback);
+  var props = PropertiesService.getScriptProperties();
+  var url = String(props.getProperty('DB_URL') || '').trim().replace(/\/+$/, '');
+  var anahtar = String(props.getProperty('DB_ANAHTAR') || '').trim();
+  if (!url || !anahtar) return outJson({ status: 'error', message: 'Veri tabanı ayarı yok (DB_URL / DB_ANAHTAR)' }, callback);
+  var stokKodu = String(p.stokKodu || '').substring(0, 60);
+  var barkod = String(p.barkod || '').substring(0, 60);
+  if (!stokKodu && !barkod) return outJson({ status: 'error', message: 'Ürün seçilmedi' }, callback);
+  var gun = parseInt(p.gun, 10); if (isNaN(gun) || gun < 0 || gun > 3650) gun = 365;
+  try {
+    var sonuc = dbCagir({ url: url, anahtar: anahtar }, 'urun_hareket', { p_stok_kodu: stokKodu, p_barkod: barkod, p_gun: gun, p_limit: 200 });
+    if (!sonuc || sonuc.status !== 'ok') return outJson({ status: 'error', message: (sonuc && sonuc.message) || 'Veri tabanı cevap vermedi' }, callback);
+    return outJson(sonuc, callback);
+  } catch (err) {
+    gunlukYaz('veritabani', 'ürün hareketleri', 'Sorgu başarısız: ' + err, true);
+    return outJson({ status: 'error', message: 'Veri tabanına ulaşılamadı — biraz sonra tekrar dene' }, callback);
+  }
 }

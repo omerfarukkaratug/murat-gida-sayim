@@ -5,6 +5,8 @@
 --  ERP12'nin veri tabanına (ERP122025) HİÇ DOKUNMAZ — ayrı bir veri tabanı
 --  (MK_SAYIM) oluşturur. Tekrar çalıştırmak güvenlidir: var olanı silmez.
 --
+--  Murat Gıda'da MK_SAYIM, ERP12'den ayrı olan "SERVER" sunucusunda (eski
+--  SQL Server 2008) duruyor; ERP12 ise "SERVER\ERP12" sunucusunda.
 --  Nasıl çalıştırılır: SSMS'te New Query → bu dosyanın tamamını yapıştır → F5.
 --  Sonra yerel-kopya.ps1 bu tablolara 10 dakikada bir yazar.
 --  Saatler TÜRKİYE saatidir (bilgisayarın saat dilimi).
