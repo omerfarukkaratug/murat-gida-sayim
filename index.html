@@ -292,6 +292,7 @@
 
   /* KDV etiketi (sayım listesi + fiyat sorgu) */
   .item .meta .kdvTag{color:var(--accent); font-weight:800;}
+  .koliUyari{margin:8px 0; padding:10px 12px; border-radius:12px; background:var(--amber); color:#000; font-weight:800; font-size:15px; line-height:1.3;}
   .kdvChip{display:inline-block; font-family:var(--mono); font-size:11px; font-weight:800; padding:2px 8px; border-radius:20px; background:var(--panel2); color:var(--accent); border:1px solid var(--line);}
   #qtyEntryKdv{margin:-4px 0 10px;}
   #qtyEntry .barcodeDisplay{font-size:22px; margin-bottom:4px;}
@@ -333,7 +334,7 @@
   <header style="border:none; padding:0 0 16px; background:transparent; display:flex; align-items:flex-start; justify-content:space-between;">
     <div>
       <h1><img src="logo-header.png" alt="Murat Gıda" style="height:30px; width:auto; display:block;"></h1>
-      <div class="sub">MK ERP · Murat Gıda • offline • Android • build 104</div>
+      <div class="sub">MK ERP · Murat Gıda • offline • Android • build 105</div>
     </div>
     <button type="button" id="themeToggleBtn" title="Tema seç" style="background:var(--panel2); border:1.5px solid var(--line); color:var(--text); width:34px; height:34px; border-radius:50%; font-size:15px; padding:0; display:flex; align-items:center; justify-content:center; flex-shrink:0;">🎨</button>
   </header>
@@ -817,6 +818,7 @@
       <div id="qtyEntryBarcode" class="barcodeDisplay"></div>
       <div id="qtyEntryMeta" class="sheetMeta"></div>
       <div id="qtyEntryKdv" class="hidden"></div>
+      <div id="qtyEntryKoli" class="koliUyari hidden"></div>
       <div id="qtyDisplay" class="calcDisplay calcEmpty">Adet gir</div>
       <div id="qtyPreview" class="calcPreview"></div>
       <div id="qtyPad" class="calcPad"></div>
@@ -1833,7 +1835,7 @@
   // Sayfa açılışında daha önce yüklenmiş kataloğu belleğe getir (varsa) —
   // her açılışta 50 bin satırı yeniden yüklemene gerek kalmaz.
   idbLoadAll().then(function(rows){
-    rows.forEach(function(r){ catalogMap.set(r.barcode, { name: r.name, stockCode: r.stockCode || '', oldStock: r.oldStock || '', price: r.price || '', kdv: r.kdv || '' }); });
+    rows.forEach(function(r){ catalogMap.set(r.barcode, { name: r.name, stockCode: r.stockCode || '', oldStock: r.oldStock || '', price: r.price || '', kdv: r.kdv || '', carpan: r.carpan || '' }); });
     updateProductCountLabel();
     setSyncStatus();
   }).catch(function(){ productCountEl.textContent = "Henüz ürün yok"; });
@@ -1912,7 +1914,7 @@
     startBtn.disabled = true;
     idbBulkReplace(res.entries).then(function(){
       catalogMap = new Map();
-      res.entries.forEach(function(e){ catalogMap.set(e.barcode, { name: e.name, stockCode: e.stockCode || '', oldStock: e.oldStock || '', price: e.price || '', kdv: e.kdv || '' }); });
+      res.entries.forEach(function(e){ catalogMap.set(e.barcode, { name: e.name, stockCode: e.stockCode || '', oldStock: e.oldStock || '', price: e.price || '', kdv: e.kdv || '', carpan: e.carpan || '' }); });
       updateProductCountLabel();
       startBtn.disabled = false;
       successToast(res.count + " ürün telefona kaydedildi");
@@ -2004,11 +2006,11 @@
       var tamYukleme = catalogMap.size === 0;
       var yeni = new Map(), islemler = [];
       entries.forEach(function(e){
-        var v = { name: e.name, stockCode: e.stockCode || '', oldStock: e.oldStock || '', price: e.price || '', kdv: e.kdv || '' };
+        var v = { name: e.name, stockCode: e.stockCode || '', oldStock: e.oldStock || '', price: e.price || '', kdv: e.kdv || '', carpan: e.carpan || '' };
         yeni.set(e.barcode, v);
         var o = catalogMap.get(e.barcode);
         if(tamYukleme || !o || o.name !== v.name || String(o.stockCode) !== String(v.stockCode) || String(o.oldStock) !== String(v.oldStock) ||
-           String(o.price) !== String(v.price) || String(o.kdv) !== String(v.kdv)){
+           String(o.price) !== String(v.price) || String(o.kdv) !== String(v.kdv) || String(o.carpan || '') !== String(v.carpan)){
           islemler.push(function(st){ st.put(e); });
         }
       });
@@ -2348,7 +2350,7 @@
     }
     beep(1046, 90, 0.16); // tiz kısa bip: doğru okuma
     if(navigator.vibrate) navigator.vibrate(40);
-    pendingScan = { barcode: barcode, name: entry.name, stockCode: entry.stockCode || '', oldStock: entry.oldStock || '' };
+    pendingScan = { barcode: barcode, name: entry.name, stockCode: entry.stockCode || '', oldStock: entry.oldStock || '', carpan: koliCarpani(entry) };
     openQtyEntry();
   }
 
@@ -2479,6 +2481,14 @@
     return out;
   }
 
+  // KOLİ barkodu: ERP12'de çarpanı 1'den büyük barkod (ör. 24'lü koli). Stok
+  // ERP'de ADET olarak tutuluyor; personel koli sayısını girer, telefon
+  // adede çevirip kaydeder (3 koli × 24 = 72 adet). Rapor ve fark adet olur.
+  function koliCarpani(entry){
+    var c = Number(entry && entry.carpan);
+    return (isFinite(c) && c > 1) ? c : 0;
+  }
+
   function openQtyEntry(){
     if(!pendingScan) return;
     document.getElementById('scanPlaceholder').classList.add('hidden');
@@ -2489,6 +2499,11 @@
     var unit = unitFor(pendingScan.barcode);
     document.getElementById('qtyEntryName').textContent = pendingScan.name;
     document.getElementById('qtyEntryBarcode').innerHTML = formatBarcodeColored(pendingScan.barcode);
+    var koliEl = document.getElementById('qtyEntryKoli');
+    if(pendingScan.carpan){
+      koliEl.textContent = '📦 KOLİ BARKODU — 1 koli = ' + pendingScan.carpan + ' adet. KOLİ SAYISINI gir, adede kendisi çevirir.';
+      koliEl.classList.remove('hidden');
+    } else { koliEl.classList.add('hidden'); }
     document.getElementById('qtyEntryMeta').textContent =
       (unit === 'Kg' ? 'Dökme ürün (Kg) · ' : '') +
       (canSeeStock() && pendingScan.oldStock !== '' ? 'Sistem: ' + pendingScan.oldStock + ' · ' : '') +
@@ -2497,7 +2512,7 @@
     var kdvTxt = formatKdv((catalogMap.get(pendingScan.barcode) || {}).kdv);
     if(kdvTxt){ kdvBoxEl.innerHTML = '<span class="kdvChip">' + kdvTxt + '</span>'; kdvBoxEl.classList.remove('hidden'); }
     else { kdvBoxEl.classList.add('hidden'); }
-    qtyPad.reset(unit === 'Kg');
+    qtyPad.reset(unit === 'Kg', pendingScan.carpan ? 'KOLİ sayısı gir' : '');
     // Açık bir telefon klavyesi varsa (örn. elle barkod yazıldıysa) kapansın.
     if(document.activeElement && document.activeElement.blur) document.activeElement.blur();
   }
@@ -2557,7 +2572,12 @@
     if(addQty === -1){ warnToast('Adet küsuratlı olamaz — sonucu kontrol et'); return; }
     if(!addQty || addQty <= 0){ warnToast(unit === 'Kg' ? "Geçerli bir kilo gir" : "Geçerli bir adet gir"); return; }
     var abnormalLimit = unit === 'Kg' ? 50 : ABNORMAL_QTY;
-    if(addQty > abnormalLimit){
+    var koliSayisi = 0;
+    if(pendingScan.carpan && unit !== 'Kg'){
+      koliSayisi = addQty;
+      if(koliSayisi > abnormalLimit && !confirm(pendingScan.name + ' için ' + koliSayisi + ' KOLİ girdin — bu çok yüksek görünüyor.\nBu doğru mu?')) return;
+      addQty = koliSayisi * pendingScan.carpan;
+    } else if(addQty > abnormalLimit){
       if(!confirm(pendingScan.name + ' için ' + addQty + ' ' + unit + ' girdin — bu çok yüksek görünüyor.\nBu doğru mu?')) return;
     }
     var t = nowParts();
@@ -2567,7 +2587,8 @@
     state.session.scans.push({
       id: makeId(), name: pendingScan.name, barcode: pendingScan.barcode,
       stockCode: pendingScan.stockCode, oldStock: pendingScan.oldStock,
-      qty: addQty, unit: unit, date: t.date, time: t.time, ts: t.ts, reyon: state.reyon || '', v: 1
+      qty: addQty, unit: unit, date: t.date, time: t.time, ts: t.ts, reyon: state.reyon || '', v: 1,
+      koli: koliSayisi || undefined, carpan: koliSayisi ? pendingScan.carpan : undefined
     });
     if(!save()){
       // Telefona yazılamadı: okutmayı geri al, başarı gösterme.
@@ -2575,7 +2596,7 @@
       storageFailAlert('Bu okutma (' + pendingScan.name + ')');
       return;
     }
-    successToast(pendingScan.name + ': ' + addQty + ' ' + unit + ' eklendi');
+    successToast(pendingScan.name + ': ' + (koliSayisi ? (koliSayisi + ' koli = ') : '') + addQty + ' ' + unit + ' eklendi');
     renderList();
     whoLabel.textContent = state.personnel + " · " + countDistinctProducts() + " kalem";
     beep(880, 70, 0.13); if(navigator.vibrate) navigator.vibrate(35); // eklendi onayı — sesli + titreşimli
@@ -2619,6 +2640,7 @@
     var unit = unitFor(it.barcode);
     var unitHtml = unit === 'Kg' ? ' · <span class="oldStock">Kg</span>' : '';
     var reyonHtml = it.reyon ? ' · <span class="oldStock">'+escapeHtml(it.reyon)+'</span>' : '';
+    if(it.koli && it.carpan && Number(it.koli) * Number(it.carpan) === Number(it.qty)) reyonHtml += ' · <span class="oldStock">📦 '+escapeHtml(it.koli)+' koli × '+escapeHtml(it.carpan)+'</span>';
     var sent = isScanSent(it);
     var syncDot = '<span class="syncDot" title="'+(sent?'Dosyaya gönderildi':'Henüz dosyaya gönderilmedi')+'" style="background:'+(sent?'var(--green)':'var(--red)')+';"></span>';
     return '<div class="item">' +
@@ -3288,7 +3310,7 @@
   // onEnter: Enter tuşuna basılınca çağrılır (örn. "Ekle").
   // Bilgisayar/harici klavye de çalışır: rakamlar, * x + - , . ⌫ ve Enter.
   function createCalcPad(displayEl, previewEl, padEl, onEnter){
-    var expr = '', bulk = false;
+    var expr = '', bulk = false, bosYazi = '';
     var OPS = '×+−';
     function lastNum(){ var parts = expr.split(/[×+−]/); return parts[parts.length - 1]; }
     function evaluate(){
@@ -3310,7 +3332,7 @@
       return Math.round(sum * 1000) / 1000;
     }
     function render(){
-      if(!expr){ displayEl.textContent = bulk ? 'Kg gir (örn: 1,5)' : 'Adet gir'; displayEl.classList.add('calcEmpty'); previewEl.textContent = ''; return; }
+      if(!expr){ displayEl.textContent = bulk ? 'Kg gir (örn: 1,5)' : (bosYazi || 'Adet gir'); displayEl.classList.add('calcEmpty'); previewEl.textContent = ''; return; }
       displayEl.classList.remove('calcEmpty');
       displayEl.textContent = expr.replace(/([×+−])/g, ' $1 ');
       displayEl.scrollLeft = displayEl.scrollWidth;
@@ -3375,7 +3397,7 @@
       press(k);
     });
     return {
-      reset: function(isBulk){ bulk = !!isBulk; expr = ''; build(); render(); },
+      reset: function(isBulk, bos){ bulk = !!isBulk; bosYazi = bos || ''; expr = ''; build(); render(); },
       value: evaluate,
       isEmpty: function(){ return !expr; }
     };

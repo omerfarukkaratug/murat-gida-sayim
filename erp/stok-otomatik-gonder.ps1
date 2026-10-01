@@ -16,6 +16,8 @@
 #   - TLS 1.2 açıkça etkin (eski Windows'ta bazı sitelere bağlanmak için şart).
 #   - Eski stok ÜRÜN bazında: aynı ürünün tüm barkodlarındaki miktar toplanır
 #     (önceden sadece okutulan barkodunki geliyordu; ikincil barkodda yanlıştı).
+#   - Koli barkodlarının çarpanı (carpan) da gönderilir; sayımda koli okutulunca
+#     telefon girilen koli sayısını adede çevirir (stok ERP12'de adet tutuluyor).
 #
 #  Veri tabanı ayarı (bir kez): C:\Scripts\db-anahtar.txt dosyası oluşturup
 #  içine TEK SATIR olarak Supabase "secret" anahtarını (sb_secret_...) yazın.
@@ -97,7 +99,8 @@ SELECT
   s.KOD AS StokKodu,
   us.EskiStok AS EskiStok,
   f.FIYAT AS Fiyat,
-  v.KDV_PAREKENDE AS KdvOrani
+  v.KDV_PAREKENDE AS KdvOrani,
+  bb.CARPAN AS Carpan
 FROM dbo.STOK_BARKOD_BIRIM bb
 LEFT JOIN dbo.STOK_BARKOD_W w ON w.ID = bb.BARKOD
 LEFT JOIN dbo.STOK_BARKOD_FIYAT_VARSAYILAN f ON f.STOK_STOK_BIRIM = bb.STOK_STOK_BIRIM
@@ -154,6 +157,9 @@ try {
         if ($r.EskiStok -ne $null -and $r.EskiStok -isnot [System.DBNull]) { $eskiStokDeger = [double]$r.EskiStok }
         $kdvDeger = $null
         if ($r.KdvOrani -ne $null -and $r.KdvOrani -isnot [System.DBNull]) { $kdvDeger = [double]$r.KdvOrani }
+        # Koli barkodu (CARPAN > 1, orn. 24'lu koli): telefon koli sayisini adede cevirir.
+        $carpanDeger = $null
+        if ($r.Carpan -ne $null -and $r.Carpan -isnot [System.DBNull] -and [double]$r.Carpan -gt 1) { $carpanDeger = [double]$r.Carpan }
         [PSCustomObject]@{
             name      = [string]$r.UrunAdi
             barcode   = [string]$r.Barkod
@@ -161,6 +167,7 @@ try {
             oldStock  = $eskiStokDeger
             price     = $fiyatDeger
             kdv       = $kdvDeger
+            carpan    = $carpanDeger
         }
     }
 
