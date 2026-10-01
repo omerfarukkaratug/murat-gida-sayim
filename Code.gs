@@ -8,7 +8,7 @@
 // bir sürüm dağıttıktan sonra /exec adresini boş açtığında burada yazan
 // numarayı görmelisin; index.html'in üstündeki "build" numarasıyla
 // eşleşecek şekilde ben her ikisini birlikte güncelliyorum.
-var GS_VERSION = 'build98';
+var GS_VERSION = 'build99';
 
 // Sheets'te "Saat" sütunu zaman biçimli olarak algılanırsa, hücre değeri düz
 // metin değil bir Date nesnesi olarak gelir ve String(...) çirkin bir çıktı
@@ -974,7 +974,7 @@ function sistemDurumu(user, pass, callback) {
   if (!auth.ok) return outJson({ status: 'error', message: auth.message }, callback);
   var props = PropertiesService.getScriptProperties();
   var son = {};
-  ['katalog', 'katalog_urun', 'cari', 'sayim', 'mal', 'masaustu_kontrol', 'masaustu', 'yetki', 'telefon_hata', 'hata', 'yonetim', 'konum'].forEach(function (t) {
+  ['katalog', 'katalog_urun', 'cari', 'sayim', 'mal', 'masaustu_kontrol', 'masaustu', 'yetki', 'telefon_hata', 'hata', 'yonetim', 'konum', 'veritabani'].forEach(function (t) {
     try { var v = props.getProperty('SON_' + t); if (v) son[t] = JSON.parse(v); } catch (e) { /* bozuk kayıt: atla */ }
   });
   var ss = SpreadsheetApp.getActiveSpreadsheet();
@@ -996,13 +996,21 @@ function sistemDurumu(user, pass, callback) {
   return outJson({
     status: 'ok', surum: GS_VERSION, sunucuZamani: simdiMetin(), sunucuMs: Date.now(),
     son: son,
-    sayilar: { katalog: satir('Katalog'), cari: satir('Cari'), sayim: satir('Sayim'), gecGelen: satir('GecGelenKayitlar'), malBekleyenSatir: malBekleyen },
+    sayilar: { katalog: satir('Katalog'), cari: satir('Cari'), sayim: satir('Sayim'), gecGelen: satir('GecGelenKayitlar'), malBekleyenSatir: malBekleyen, dbKuyruk: satir(DB_KUYRUK_SEKME) },
+    veritabani: !!dbAyar(),
     katalogSurumu: props.getProperty('KATALOG_VERSION') || '',
     gunluk: gunluk
   }, callback);
 }
 
 function doPost(e) {
+  var cevap = doPostIsle(e);
+  // Veri tabanı gölge kopyası: kilit bırakıldıktan SONRA, en fazla dakikada bir.
+  dbGerekirseGonder();
+  return cevap;
+}
+
+function doPostIsle(e) {
   // 10+ telefon aynı anda veri gönderebildiği için, sayfaya yazma işlemini
   // KİLİTLİYORUZ. Kilit olmadan iki telefonun isteği aynı anda işlenirse,
   // ikisi de "son satır şurada" bilgisini eski haliyle okuyup üzerine
@@ -1054,6 +1062,7 @@ function doPost(e) {
     }
     if (data.type === 'mal_hareket') {
       var mOut = saveMalHareket(data);
+      dbKuyrugaEkle('mal', data);
       var mr = {};
       try { mr = JSON.parse(mOut.getContent()); } catch (pe) { /* özet olmadan da günlüğe yaz */ }
       gunlukYaz('mal', 'telefon: ' + (data.personel || '?'),
@@ -1126,7 +1135,10 @@ function doPost(e) {
 
     // Son yazma zamanı (oturum bazında): yönetici rapor oluştururken
     // "telefonlardan hâlâ veri geliyor mu?" kontrolü için (bkz. handleFinalize).
-    if (rows.length > 0 || deletedIds.length > 0) sonYazmaKaydet(sessionId);
+    if (rows.length > 0 || deletedIds.length > 0) {
+      sonYazmaKaydet(sessionId);
+      dbKuyrugaEkle('sayim', { personnel: personnel, sessionId: sessionId, resetToken: data.resetToken || '', rows: rows, deletedIds: deletedIds });
+    }
     // HIZLI ONAY: Bu gönderinin sonucunu (her kaydın tablodaki sürümü/adedi ve
     // bu oturumda silinenler) kısa süreliğine önbelleğe koy. Telefon hemen
     // ardından "sayim_kontrol" ile aynı "nonce"u sorunca tablo HİÇ taranmadan
@@ -1292,6 +1304,7 @@ function handleTemizle(user, pass, callback) {
     }
     var token = new Date().toISOString();
     PropertiesService.getScriptProperties().setProperty('RESET_TOKEN', token);
+    dbKuyrugaEkle('donem', { token: token, aciklama: 'Dosya temizlendi, arşiv: ' + archivedName });
     gunlukYaz('yonetim', String(user || ''), 'Sayım dosyası temizlendi, arşiv: ' + archivedName, false);
     return outJson({ status: 'ok', resetToken: token, archivedSheet: archivedName }, callback);
   } catch (err) {
@@ -1869,6 +1882,7 @@ function sayimGuncelle(user, pass, kayitId, adet, callback) {
         // onayda yeni adedi ve sürümü kendine alır.
         var yeniV = surumOku(values[i][idx['Sürüm']]) + 1;
         sheet.getRange(rowNum, idx['Sürüm'] + 1).setValue(yeniV);
+        dbKuyrugaEkle('guncelle', { kayitId: String(kayitId), adet: yeniAdet, yonetici: String(user || '') });
         // Telefonun hızlı onayına eklensin diye oturum bazında not al (6 saat).
         try {
           var oturum = String(values[i][idx['Oturum ID']] || '');
@@ -1911,6 +1925,7 @@ function sayimSil(user, pass, kayitId, callback) {
         // kendi listesinden kaldırır.
         addSilinenler([kayitId], values[i][idx['Oturum ID']], String(user || 'yonetici'));
         sheet.deleteRow(i + 2);
+        dbKuyrugaEkle('sil', { kayitId: String(kayitId), yonetici: String(user || 'yonetici') });
         return outJson({ status: 'ok' }, callback);
       }
     }
@@ -1920,4 +1935,283 @@ function sayimSil(user, pass, kayitId, callback) {
   } finally {
     lock.releaseLock();
   }
+}
+
+// ============================================================
+// VERİ TABANI GÖLGE KOPYASI (Supabase / PostgreSQL)
+// Sheets ASIL kayıt yeri olmaya devam eder. Sheets'e başarıyla yazılan her
+// sayım/mal/düzeltme/silme/temizleme ayrıca gizli 'DbKuyruk' sekmesine not
+// edilir ve arka planda veri tabanına gönderilir. Veri tabanına ulaşılamazsa
+// kuyrukta bekler, sonra tekrar denenir. Telefonlar bundan ETKİLENMEZ:
+// onay yine Sheets'ten gelir.
+//
+// AÇMAK İÇİN (bir kez): Apps Script → Proje Ayarları → Komut dosyası
+// özellikleri → ekle:  DB_URL = https://<proje>.supabase.co
+//                     DB_ANAHTAR = Supabase "secret" anahtarı (sb_secret_...)
+// Sonra düzenleyicide dbKur fonksiyonunu bir kez çalıştırın.
+// KAPATMAK İÇİN: DB_KAPALI = 1 ekleyin (kuyruğa yazma ve gönderim durur).
+// Bu ayarlar yoksa bu bölümün hiçbir etkisi yoktur.
+// ============================================================
+var DB_KUYRUK_SEKME = 'DbKuyruk';
+var DB_HUCRE_MAX = 45000;       // bir hücreye yazılan en uzun parça (Sheets sınırı 50.000)
+var DB_GONDERIM_ARALIK_MS = 60000; // telefon isteklerinin ardından en fazla dakikada bir gönderim
+
+function dbAyar() {
+  var p = PropertiesService.getScriptProperties();
+  if (String(p.getProperty('DB_KAPALI') || '') === '1') return null;
+  var url = String(p.getProperty('DB_URL') || '').trim().replace(/\/+$/, '');
+  var anahtar = String(p.getProperty('DB_ANAHTAR') || '').trim();
+  return (url && anahtar) ? { url: url, anahtar: anahtar } : null;
+}
+
+function dbKuyrukSheet(olustur) {
+  var ss = SpreadsheetApp.getActiveSpreadsheet();
+  var sheet = ss.getSheetByName(DB_KUYRUK_SEKME);
+  if (!sheet && olustur) {
+    sheet = ss.insertSheet(DB_KUYRUK_SEKME);
+    sheet.getRange(1, 1, 1, 4).setValues([['Kuyruk ID', 'Zaman', 'Tür', 'Veri (parça parça)']]);
+    sheet.hideSheet();
+  }
+  return sheet;
+}
+
+// Kuyruğa ekle. Sheets'e yazan fonksiyonlar bunu KİLİT ALTINDA çağırır,
+// böylece kuyruk sırası Sheets'teki yazma sırasıyla aynıdır. Hata olursa
+// asıl işi (Sheets kaydını) asla bozmaz, sadece günlüğe yazar.
+function dbKuyrugaEkle(tur, veri) {
+  try {
+    if (!dbAyar()) return;
+    var metin = JSON.stringify(veri);
+    var satir = [Utilities.getUuid(), simdiMetin(), tur];
+    for (var i = 0; i < metin.length; i += DB_HUCRE_MAX) satir.push(metin.substring(i, i + DB_HUCRE_MAX));
+    var sheet = dbKuyrukSheet(true);
+    var hedef = sheet.getLastRow() + 1;
+    sheet.getRange(hedef, 1, 1, satir.length).setNumberFormat('@').setValues([satir]);
+  } catch (e) {
+    gunlukYaz('veritabani', 'gölge kopya', 'Kuyruğa eklenemedi (' + tur + '): ' + e, true);
+  }
+}
+
+// Veri tabanı fonksiyonunu çağırır. Ağ/HTTP hatasında İSTİSNA atar (kayıt
+// kuyrukta kalır); fonksiyonun kendisi "status: error" dönerse sonucu döndürür.
+function dbCagir(ayar, fonksiyon, govde) {
+  var yanit = UrlFetchApp.fetch(ayar.url + '/rest/v1/rpc/' + fonksiyon, {
+    method: 'post',
+    contentType: 'application/json',
+    payload: JSON.stringify(govde),
+    headers: { apikey: ayar.anahtar },
+    muteHttpExceptions: true
+  });
+  var kod = yanit.getResponseCode();
+  var metin = yanit.getContentText() || '';
+  if (kod < 200 || kod >= 300) throw new Error('HTTP ' + kod + ' — ' + metin.substring(0, 200));
+  try { return JSON.parse(metin || 'null'); } catch (pe) { return metin; }
+}
+
+function dbKuyrukKaydiGonder(ayar, tur, veri) {
+  if (tur === 'sayim') return dbCagir(ayar, 'sayim_yaz', { p: veri });
+  if (tur === 'mal') return dbCagir(ayar, 'mal_yaz', { p: veri });
+  if (tur === 'guncelle') return dbCagir(ayar, 'sayim_guncelle', { p_kayit: veri.kayitId, p_adet: veri.adet, p_yonetici: veri.yonetici || '' });
+  if (tur === 'sil') return dbCagir(ayar, 'sayim_sil', { p_kayit: veri.kayitId, p_yonetici: veri.yonetici || '' });
+  if (tur === 'donem') return dbCagir(ayar, 'yeni_donem', { p_aciklama: veri.aciklama || '', p_token: veri.token || '' });
+  return { status: 'error', message: 'Bilinmeyen kuyruk türü: ' + tur };
+}
+
+// Kuyruktaki kayıtları SIRAYLA gönderir; ilk ağ hatasında durur (sıra
+// bozulmasın). Gönderilenler kuyruktan silinir. Aynı anda tek gönderim.
+function dbKuyrukGonder(sureMs) {
+  var ayar = dbAyar();
+  if (!ayar) return { durum: 'kapali' };
+  var cache = CacheService.getScriptCache();
+  if (cache.get('db_gonderim_aktif')) return { durum: 'mesgul' };
+  cache.put('db_gonderim_aktif', '1', 360);
+  var props = PropertiesService.getScriptProperties();
+  props.setProperty('DB_SON_GONDERIM_MS', String(Date.now()));
+  var baslangic = Date.now();
+  var gonderilen = {}, gonderilenSayi = 0, reddedilen = 0, agHatasi = null;
+  try {
+    var sheet = dbKuyrukSheet(false);
+    if (!sheet || sheet.getLastRow() < 2) return { durum: 'bos', kalan: 0 };
+    var n = Math.min(sheet.getLastRow() - 1, 200);
+    var degerler = sheet.getRange(2, 1, n, Math.max(sheet.getLastColumn(), 4)).getValues();
+    for (var i = 0; i < degerler.length; i++) {
+      if (Date.now() - baslangic > sureMs) break;
+      var r = degerler[i];
+      var kimlik = String(r[0] || '');
+      if (!kimlik) continue;
+      var metin = '';
+      for (var c = 3; c < r.length; c++) metin += String(r[c] || '');
+      var veri;
+      try { veri = JSON.parse(metin); } catch (pe) {
+        gunlukYaz('veritabani', 'gölge kopya', 'Bozuk kuyruk kaydı atlandı (' + r[2] + ', ' + r[1] + ')', true);
+        gonderilen[kimlik] = true; reddedilen++; continue;
+      }
+      var sonuc;
+      try { sonuc = dbKuyrukKaydiGonder(ayar, String(r[2]), veri); }
+      catch (ag) { agHatasi = String(ag.message || ag); break; }
+      gonderilen[kimlik] = true;
+      gonderilenSayi++;
+      if (sonuc && sonuc.status === 'error') {
+        // Veri tabanı kaydı reddetti (örn. düzeltilen kayıt orada yok): tekrar
+        // denemek sonucu değiştirmez — günlüğe yaz, sıradakine geç.
+        reddedilen++;
+        gunlukYaz('veritabani', 'gölge kopya', 'Veri tabanı kaydı kabul etmedi (' + r[2] + '): ' + sonuc.message, true);
+      }
+    }
+  } finally {
+    // Gönderilenleri kuyruktan sil. Telefon istekleri sona satır ekleyebildiği
+    // için kısa bir kilitle, satırları KİMLİĞİNE göre bulup siliyoruz.
+    var silinecek = Object.keys(gonderilen).length;
+    var kalan = 0;
+    if (silinecek > 0) {
+      var lock = LockService.getScriptLock();
+      if (lock.tryLock(20000)) {
+        try {
+          var sh = dbKuyrukSheet(false);
+          var son = sh.getLastRow();
+          var idler = son >= 2 ? sh.getRange(2, 1, son - 1, 1).getValues() : [];
+          var ilkK = 0;
+          while (ilkK < idler.length && gonderilen[String(idler[ilkK][0])]) ilkK++;
+          if (ilkK === silinecek) {
+            sh.deleteRows(2, ilkK); // olağan durum: baştaki satırlar
+          } else {
+            for (var j = idler.length - 1; j >= 0; j--) if (gonderilen[String(idler[j][0])]) sh.deleteRow(j + 2);
+          }
+          kalan = Math.max(sh.getLastRow() - 1, 0);
+        } finally { lock.releaseLock(); }
+      } else {
+        // Silinemediyse bir sonraki turda TEKRAR gönderilir; sayım/mal/dönem
+        // tekrarı zararsızdır (sürüm kontrolü), düzeltme bir sürüm fazla artar.
+        agHatasi = agHatasi || 'kuyruk temizlenemedi (sunucu meşgul)';
+      }
+    } else {
+      var sh2 = dbKuyrukSheet(false);
+      kalan = sh2 ? Math.max(sh2.getLastRow() - 1, 0) : 0;
+    }
+    cache.remove('db_gonderim_aktif');
+    var ozet = gonderilenSayi + ' gönderildi' + (reddedilen ? ', ' + reddedilen + ' reddedildi' : '') + ', kuyrukta ' + kalan;
+    if (agHatasi) {
+      // Hata günlüğü en fazla 10 dakikada bir (ağ kesintisinde günlük dolmasın).
+      var sonHata = Number(props.getProperty('DB_SON_HATA_MS') || 0);
+      if (Date.now() - sonHata > 600000) {
+        props.setProperty('DB_SON_HATA_MS', String(Date.now()));
+        gunlukYaz('veritabani', 'gölge kopya', 'Veri tabanına ulaşılamadı: ' + agHatasi + ' — ' + ozet + ' (veri Sheets\'te güvende)', true);
+      } else {
+        sonKaydet('veritabani', 'gölge kopya', 'Ulaşılamadı: ' + agHatasi + ' — ' + ozet, true);
+      }
+    } else if (gonderilenSayi > 0) {
+      sonKaydet('veritabani', 'gölge kopya', ozet, false);
+    }
+  }
+  return { durum: agHatasi ? 'hata' : 'ok', gonderilen: gonderilenSayi, reddedilen: reddedilen, hata: agHatasi };
+}
+
+// Telefon isteğinden SONRA (kilit bırakıldıktan sonra) çağrılır: son
+// gönderimin üzerinden 1 dakika geçtiyse kuyruğu en fazla 10 sn gönderir.
+function dbGerekirseGonder() {
+  try {
+    if (!dbAyar()) return;
+    var son = Number(PropertiesService.getScriptProperties().getProperty('DB_SON_GONDERIM_MS') || 0);
+    if (Date.now() - son < DB_GONDERIM_ARALIK_MS) return;
+    dbKuyrukGonder(10000);
+  } catch (e) { /* gölge kopya asıl cevabı asla bozmaz */ }
+}
+
+// Zamanlayıcı (5 dakikada bir): telefon isteği gelmese de kuyruk boşalsın.
+function dbZamanlayici() {
+  dbKuyrukGonder(240000);
+}
+
+// BİR KEZ çalıştırın (Apps Script düzenleyicisinde fonksiyonu seçip ▶).
+// 1) Bağlantıyı dener, 2) 5 dakikalık zamanlayıcıyı kurar, 3) Sheets'teki
+// güncel sayım dönemini veri tabanına bildirir.
+function dbKur() {
+  var ayar = dbAyar();
+  if (!ayar) throw new Error('Önce Komut dosyası özelliklerine DB_URL ve DB_ANAHTAR ekleyin (DB_KAPALI=1 ise kaldırın).');
+  var token = PropertiesService.getScriptProperties().getProperty('RESET_TOKEN') || '';
+  if (token) dbCagir(ayar, 'yeni_donem', { p_aciklama: 'Sheets dönemi (kurulum)', p_token: token });
+  var varMi = ScriptApp.getProjectTriggers().some(function (t) { return t.getHandlerFunction() === 'dbZamanlayici'; });
+  if (!varMi) ScriptApp.newTrigger('dbZamanlayici').timeBased().everyMinutes(5).create();
+  gunlukYaz('veritabani', 'gölge kopya', 'Kurulum tamam: bağlantı çalışıyor, 5 dk zamanlayıcı ' + (varMi ? 'zaten vardı' : 'kuruldu'), false);
+  Logger.log('Tamam — veri tabanı bağlantısı çalışıyor.');
+}
+
+// İSTEĞE BAĞLI, bir kez: gölge mod açılmadan ÖNCE Sheets'te olan sayım
+// satırlarını da kuyruğa ekler (karşılaştırma tam olsun diye).
+function dbMevcutSayimiAktar() {
+  if (!dbAyar()) throw new Error('Gölge kopya kapalı (DB_URL / DB_ANAHTAR yok)');
+  var lock = LockService.getScriptLock();
+  lock.waitLock(30000);
+  try {
+    var sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName('Sayim');
+    if (!sheet || sheet.getLastRow() < 2) return;
+    var token = PropertiesService.getScriptProperties().getProperty('RESET_TOKEN') || '';
+    var degerler = sheet.getRange(2, 1, sheet.getLastRow() - 1, SAYIM_HEADERS.length).getValues();
+    var oturumlar = {};
+    degerler.forEach(function (r) {
+      var id = String(r[11] || '');
+      if (!id) return;
+      var anahtar = String(r[10] || '') + '\u0001' + String(r[2] || '');
+      (oturumlar[anahtar] = oturumlar[anahtar] || []).push({
+        id: id, v: surumOku(r[13]), date: formatDateValue(r[0]), time: formatTimeValue(r[1]), name: String(r[3] || ''),
+        stockCode: String(r[4] || ''), barcode: String(r[5] || ''), unit: String(r[6] || 'Adet'), oldStock: r[7] === '' ? '' : String(r[7]),
+        qty: r[8], reyon: String(r[12] || '')
+      });
+    });
+    var toplam = 0;
+    Object.keys(oturumlar).forEach(function (k) {
+      var p = k.split('\u0001');
+      var liste = oturumlar[k];
+      for (var i = 0; i < liste.length; i += 300) {
+        dbKuyrugaEkle('sayim', { sessionId: p[0] || 'eski-kayit', personnel: p[1], resetToken: token, rows: liste.slice(i, i + 300), deletedIds: [] });
+      }
+      toplam += liste.length;
+    });
+    gunlukYaz('veritabani', 'gölge kopya', 'Mevcut ' + toplam + ' sayım satırı veri tabanı kuyruğuna eklendi', false);
+  } finally { lock.releaseLock(); }
+}
+
+// Karşılaştırma: Sheets'teki 'Sayim' ile veri tabanındaki aktif dönem
+// kayıtlarını kayıt kayıt karşılaştırır (sürüm + adet). Sonucu günlüğe yazar.
+function dbKarsilastir() {
+  var ayar = dbAyar();
+  if (!ayar) throw new Error('Gölge kopya kapalı');
+  var sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName('Sayim');
+  var sheetsK = {};
+  if (sheet && sheet.getLastRow() >= 2) {
+    var n = sheet.getLastRow() - 1;
+    var ids = sheet.getRange(2, SAYIM_COL.KAYIT_ID, n, 1).getValues();
+    var v = sheet.getRange(2, SAYIM_COL.SURUM, n, 1).getValues();
+    var q = sheet.getRange(2, SAYIM_COL.ADET, n, 1).getValues();
+    for (var i = 0; i < n; i++) if (ids[i][0]) sheetsK[String(ids[i][0])] = [surumOku(v[i][0]), Number(q[i][0])];
+  }
+  var token = PropertiesService.getScriptProperties().getProperty('RESET_TOKEN') || '';
+  var dbK = {};
+  var sayfa = 0, boyut = 1000;
+  while (true) {
+    var yanit = UrlFetchApp.fetch(ayar.url + '/rest/v1/sayim_kayitlari?select=kayit_id,surum,adet,gec_geldi,sayim_donemleri!inner(token)' +
+      '&sayim_donemleri.token=eq.' + encodeURIComponent(token) + '&gec_geldi=eq.false&order=kayit_id', {
+      headers: { apikey: ayar.anahtar, Range: (sayfa * boyut) + '-' + (sayfa * boyut + boyut - 1) }, muteHttpExceptions: true });
+    if (yanit.getResponseCode() >= 300) throw new Error('Veri tabanı okunamadı: HTTP ' + yanit.getResponseCode() + ' ' + yanit.getContentText().substring(0, 200));
+    var liste = JSON.parse(yanit.getContentText());
+    liste.forEach(function (r) { dbK[r.kayit_id] = [r.surum, Number(r.adet)]; });
+    if (liste.length < boyut) break;
+    sayfa++;
+  }
+  var eksikDb = [], fazlaDb = [], farkli = [];
+  Object.keys(sheetsK).forEach(function (id) {
+    if (!dbK[id]) eksikDb.push(id);
+    else if (dbK[id][0] !== sheetsK[id][0] || dbK[id][1] !== sheetsK[id][1]) farkli.push(id);
+  });
+  Object.keys(dbK).forEach(function (id) { if (!sheetsK[id]) fazlaDb.push(id); });
+  var kuyruk = dbKuyrukSheet(false);
+  var bekleyen = kuyruk ? Math.max(kuyruk.getLastRow() - 1, 0) : 0;
+  var tamam = !eksikDb.length && !fazlaDb.length && !farkli.length;
+  var ozet = 'Karşılaştırma: Sheets ' + Object.keys(sheetsK).length + ' kayıt, veri tabanı ' + Object.keys(dbK).length + ' kayıt — ' +
+    (tamam ? 'BİREBİR AYNI ✅' : ('veri tabanında eksik ' + eksikDb.length + ', fazla ' + fazlaDb.length + ', farklı ' + farkli.length +
+      (bekleyen ? ' (kuyrukta hâlâ ' + bekleyen + ' kayıt var, gönderilince tekrar deneyin)' : '') +
+      ' · örnek: ' + eksikDb.concat(fazlaDb, farkli).slice(0, 5).join(', ')));
+  gunlukYaz('veritabani', 'karşılaştırma', ozet, !tamam);
+  Logger.log(ozet);
+  return ozet;
 }

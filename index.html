@@ -2,7 +2,7 @@
 <html lang="tr">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, viewport-fit=cover">
 <title>MK ERP — Murat Gıda</title>
 <link rel="manifest" href="manifest.json">
 <meta name="theme-color" content="#ffffff">
@@ -86,10 +86,14 @@
   #setup{padding:18px 16px 28px; overflow-y:auto; background:var(--bg);}
   #setup .card{background:var(--panel); border-radius:var(--r-lg); padding:18px; margin-bottom:16px; box-shadow:var(--sh-sm);}
   label{display:block; font-size:11px; letter-spacing:.08em; text-transform:uppercase; color:var(--muted); margin-bottom:7px; font-weight:700;}
-  input[type=text], input[type=url], input[type=password], textarea{
+  /* EKRAN KAYMASI: iPhone, yazı boyutu 16px'ten küçük bir kutuya dokununca
+     ekranı otomatik YAKINLAŞTIRIR ve sayfa yana kayar. Bu yüzden yazı kutuları
+     en az 16px (ayrıca viewport'ta maximum-scale=1). */
+  input[type=text], input[type=url], input[type=password], input[type=tel], textarea{
     width:100%; background:var(--panel2); border:1.5px solid transparent; color:var(--text);
-    padding:12px 13px; border-radius:var(--r-sm); font-size:15px; font-family:var(--sans); transition:border-color .15s;}
-  input[type=text]:focus, input[type=url]:focus, input[type=password]:focus, textarea:focus{outline:none; border-color:var(--accent); background:var(--panel);}
+    padding:12px 13px; border-radius:var(--r-sm); font-size:16px; font-family:var(--sans); transition:border-color .15s;}
+  input[type=tel]{font-family:var(--mono); font-weight:700;}
+  input[type=text]:focus, input[type=url]:focus, input[type=password]:focus, input[type=tel]:focus, textarea:focus{outline:none; border-color:var(--accent); background:var(--panel);}
   textarea{font-family:var(--mono); font-size:12px; min-height:110px; resize:vertical;}
   .row{margin-bottom:14px;}
   .hint{font-size:11.5px; color:var(--muted); margin-top:6px; line-height:1.55;}
@@ -133,6 +137,10 @@
     background:rgba(35,32,23,.55); border:1px solid rgba(255,255,255,.4); color:#fff; font-size:18px;
     display:flex; align-items:center; justify-content:center; backdrop-filter:blur(4px);}
   #torchBtn.on, .camTorchBtn.on{background:var(--accent); color:#fff;}
+  .camZoomBtn{position:absolute; top:12px; left:12px; z-index:7; min-width:46px; height:42px; padding:0 10px; border-radius:21px;
+    background:rgba(35,32,23,.55); border:1px solid rgba(255,255,255,.4); color:#fff; font-size:15px; font-weight:800; font-family:var(--mono);
+    display:flex; align-items:center; justify-content:center; backdrop-filter:blur(4px);}
+  .camZoomBtn.on{background:var(--accent);}
   #closeCamBtn, .camCloseBtn{position:absolute; top:12px; right:12px; z-index:7; width:42px; height:42px; border-radius:50%;
     background:rgba(35,32,23,.55); border:1px solid rgba(255,255,255,.4); color:#fff; font-size:16px;
     display:flex; align-items:center; justify-content:center; backdrop-filter:blur(4px);}
@@ -179,6 +187,8 @@
   .summaryBar b{color:var(--text); font-size:14px; display:block;}
 
   .manualBar{display:flex; gap:8px; padding:10px 14px; background:var(--panel);}
+  .satirNo{flex-shrink:0; min-width:26px; height:26px; padding:0 6px; border-radius:13px; background:var(--panel2); border:1.5px solid var(--line);
+    color:var(--muted); font-family:var(--mono); font-size:12px; font-weight:800; display:flex; align-items:center; justify-content:center; align-self:center;}
   .manualBar input{flex:1;}
   .manualBar button{background:var(--panel); border:1.5px solid var(--line); color:var(--text); padding:0 16px; border-radius:var(--r-sm); font-size:13px; font-weight:700;}
 
@@ -307,7 +317,7 @@
   <header style="border:none; padding:0 0 16px; background:transparent; display:flex; align-items:flex-start; justify-content:space-between;">
     <div>
       <h1><img src="logo-header.png" alt="Murat Gıda" style="height:30px; width:auto; display:block;"></h1>
-      <div class="sub">MK ERP · Murat Gıda • offline • Android • build 99</div>
+      <div class="sub">MK ERP · Murat Gıda • offline • Android • build 102</div>
     </div>
     <button type="button" id="themeToggleBtn" title="Tema seç" style="background:var(--panel2); border:1.5px solid var(--line); color:var(--text); width:34px; height:34px; border-radius:50%; font-size:15px; padding:0; display:flex; align-items:center; justify-content:center; flex-shrink:0;">🎨</button>
   </header>
@@ -719,7 +729,7 @@
           </div>
           <div class="hint" style="text-align:center; margin:10px 0 6px;">veya barkodu elle gir:</div>
           <div class="manualBar" style="background:transparent; border:none; padding:0;">
-            <input type="tel" id="malHareketBarcodeInput" placeholder="Barkod yaz, Enter'a bas" inputmode="numeric">
+            <input type="tel" id="malHareketBarcodeInput" placeholder="Barkod yaz, ✓ ya da Ekle" inputmode="numeric">
             <button id="malHareketManualAdd">Ekle</button>
             <button type="button" id="malHareketNameSearchBtn" title="Ürün adıyla ara" style="background:var(--panel2); border:1.5px solid var(--line); color:var(--text); width:40px; padding:0; display:flex; align-items:center; justify-content:center;">
               <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.3" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
@@ -1684,6 +1694,7 @@
   }).catch(function(){ productCountEl.textContent = "Henüz ürün yok"; });
 
   function updateProductCountLabel(){
+    katalogAramaOnHazirla(); // katalog her yüklendiğinde/değiştiğinde çağrılıyor
     var names = new Set();
     catalogMap.forEach(function(v){ names.add(v.name); });
     var empty = catalogMap.size === 0;
@@ -2480,6 +2491,42 @@
     return String(s == null ? '' : s).replace(/İ/g, 'i').replace(/I/g, 'i').replace(/ı/g, 'i')
       .toLowerCase().replace(/ç/g, 'c').replace(/ğ/g, 'g').replace(/ö/g, 'o').replace(/ş/g, 's').replace(/ü/g, 'u');
   }
+  // HIZLI KATALOG ARAMASI (40 bin ürün): ürünün aranabilir metni (ad + barkod +
+  // stok kodu, Türkçe harfler sadeleştirilmiş) İLK aramada bir kez hesaplanıp
+  // ürünün üzerinde saklanır. Katalog yenilenince ürünler yeni nesne olduğu için
+  // kendiliğinden yeniden hesaplanır. Eskiden HER HARFTE 40 bin ad yeniden
+  // dönüştürülüyor ve yavaş Türkçe sıralama yapılıyordu: orta seviye telefonda
+  // harf başına ~1 sn donma.
+  function aramaMetniHazirla(v, barcode){
+    if(v._ara === undefined){ v._n = normTr(v.name); v._ara = v._n + ' ' + String(barcode).toLowerCase() + ' ' + normTr(v.stockCode); }
+  }
+  // Katalog yüklenince aranabilir metinler ARKA PLANDA, küçük parçalar hâlinde
+  // (1500 ürün / parça) önceden hazırlanır — ilk aramada da bekleme olmaz,
+  // okutma sırasında da ekran takılmaz.
+  var onHazirlaZamanlayici = null;
+  function katalogAramaOnHazirla(){
+    clearTimeout(onHazirlaZamanlayici);
+    var it = catalogMap.entries();
+    function parca(){
+      var n = 0, r;
+      while(n < 1500 && !(r = it.next()).done){ aramaMetniHazirla(r.value[1], r.value[0]); n++; }
+      if(n === 1500) onHazirlaZamanlayici = setTimeout(parca, 40);
+    }
+    onHazirlaZamanlayici = setTimeout(parca, 3000);
+  }
+  function katalogAra(kelimeler, limit){
+    var sonuc = [];
+    catalogMap.forEach(function(v, barcode){
+      aramaMetniHazirla(v, barcode);
+      for(var i = 0; i < kelimeler.length; i++){ if(v._ara.indexOf(kelimeler[i]) === -1) return; }
+      sonuc.push({ v: v, barcode: barcode });
+    });
+    var toplam = sonuc.length;
+    // Sadeleştirilmiş ada göre sırala (ç→c, ş→s …): Türkçe sıralamaya çok yakın, kat kat hızlı.
+    sonuc.sort(function(a, b){ return a.v._n < b.v._n ? -1 : (a.v._n > b.v._n ? 1 : 0); });
+    if(limit && sonuc.length > limit) sonuc = sonuc.slice(0, limit);
+    return { liste: sonuc, toplam: toplam };
+  }
   // KDV oranı etiketi — katalogdaki değere göre; oran yoksa boş döner.
   function formatKdv(v){ return (v !== '' && v !== null && v !== undefined && !isNaN(Number(v))) ? ('KDV %' + Number(v)) : ''; }
   function kdvTagFor(barcode){
@@ -2653,6 +2700,7 @@
   // Sadece ihtiyaç anında (ilk kullanımda) indirilip önbelleğe alınıyor;
   // Android'de zaten gerekmediği için hiç indirilmez.
   var bdPolyfillLoadPromise = null;
+  var bdYedekMotor = false; // true: iPhone'daki yazılım (ZBar) motoru kullanılıyor
   function loadBarcodeDetector(){
     if('BarcodeDetector' in window) return Promise.resolve(window.BarcodeDetector);
     if(bdPolyfillLoadPromise) return bdPolyfillLoadPromise;
@@ -2663,8 +2711,15 @@
         var s2 = document.createElement('script');
         s2.src = 'https://cdn.jsdelivr.net/npm/@undecaf/barcode-detector-polyfill@0.9.23/dist/index.js';
         s2.onload = function(){
-          if(window.barcodeDetectorPolyfill && window.barcodeDetectorPolyfill.BarcodeDetectorPolyfill){
-            window.BarcodeDetector = window.barcodeDetectorPolyfill.BarcodeDetectorPolyfill;
+          // DİKKAT: kütüphane kendini "const barcodeDetectorPolyfill = ..." ile
+          // tanımlıyor — bu, window.barcodeDetectorPolyfill OLUŞTURMAZ (sadece
+          // çıplak adıyla erişilir). Eskiden sadece window'a baktığımız için bu
+          // hızlı motor iPhone'da HİÇ devreye girmiyor, en zayıf yedek (ZXing)
+          // kullanılıyordu. İkisine de bakıyoruz.
+          var bdp = (typeof barcodeDetectorPolyfill !== 'undefined') ? barcodeDetectorPolyfill : window.barcodeDetectorPolyfill;
+          if(bdp && bdp.BarcodeDetectorPolyfill){
+            window.BarcodeDetector = bdp.BarcodeDetectorPolyfill;
+            bdYedekMotor = true;
             resolve(window.BarcodeDetector);
           } else {
             bdPolyfillLoadPromise = null; reject(new Error('Barkod tarayıcı yüklenemedi'));
@@ -2697,7 +2752,13 @@
     return zxingLoadPromise;
   }
   var BARCODE_FORMATS = ['ean_13','ean_8','upc_a','upc_e','code_128','code_39','codabar','itf','qr_code'];
-  var CAMERA_CONSTRAINTS = { video: { facingMode: 'environment' } };
+  // iPhone kamerayı varsayılan olarak DÜŞÜK çözünürlükte (640×480) açar; barkod
+  // çizgileri seçilemez. iPhone'da yüksek çözünürlük istenir (Android'e dokunulmadı:
+  // orada yerleşik okuyucu zaten iyi çalışıyor).
+  var IOS_CIHAZ = /iPad|iPhone|iPod/.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+  var CAMERA_CONSTRAINTS = IOS_CIHAZ
+    ? { video: { facingMode: 'environment', width: { ideal: 1920 }, height: { ideal: 1080 } } }
+    : { video: { facingMode: 'environment' } };
 
   // Üç kameranın (Sayım, hızlı tarama, Mal Giriş/Çıkış) hepsi bu TEK fonksiyonu
   // kullanır: sırasıyla native BarcodeDetector → WebAssembly (ZBar) yedeği →
@@ -2714,15 +2775,39 @@
         onBarcode(val);
       }
     }
+    // Aynı anda TEK okuma: önceki kare bitmeden yenisi başlamaz (eskiden her
+    // karede yeni okuma başlıyor, iPhone'da üst üste binip telefonu yoruyordu).
+    var mesgul = false, sonOkuma = 0, tuval = null, tuvalCtx = null;
+    // iPhone (yazılım motoru): tüm kare yerine sadece ekranda görünen
+    // çerçevenin çevresi okunur, gerekirse küçültülür — hem hızlı hem net.
+    function kirpilmisKare(){
+      var vw = videoEl.videoWidth, vh = videoEl.videoHeight;
+      var W = videoEl.clientWidth, H = videoEl.clientHeight;
+      if(!vw || !vh || !W || !H) return videoEl;
+      var olcek = Math.max(W / vw, H / vh);           // object-fit: cover
+      var gw = W / olcek, gh = H / olcek;              // ekranda görünen kısım (video pikseli)
+      var sx = (vw - gw) / 2 + gw * 0.08, sy = (vh - gh) / 2 + gh * 0.12;
+      var sw = gw * 0.84, sh = gh * 0.76;              // çerçeve + pay
+      var kucult = Math.min(1, 1280 / sw);
+      if(!tuval){ tuval = document.createElement('canvas'); tuvalCtx = tuval.getContext('2d', { willReadFrequently: true }); }
+      tuval.width = Math.round(sw * kucult); tuval.height = Math.round(sh * kucult);
+      tuvalCtx.drawImage(videoEl, sx, sy, sw, sh, 0, 0, tuval.width, tuval.height);
+      return tuval;
+    }
     function nativeLoop(detector){
       if(stopped) return;
-      if(videoEl.readyState >= 2){
-        detector.detect(videoEl).then(function(codes){
-          if(codes.length) emit(codes[0].rawValue);
-        }).catch(function(){});
+      var simdi = Date.now();
+      if(!mesgul && videoEl.readyState >= 2 && (!bdYedekMotor || simdi - sonOkuma >= 90)){
+        mesgul = true; sonOkuma = simdi;
+        var kaynak = videoEl;
+        try { if(bdYedekMotor) kaynak = kirpilmisKare(); } catch(e){ kaynak = videoEl; }
+        detector.detect(kaynak).then(function(codes){
+          if(codes.length && !stopped) emit(codes[0].rawValue);
+        }).catch(function(){}).then(function(){ mesgul = false; });
       }
       requestAnimationFrame(function(){ nativeLoop(detector); });
     }
+    var zoomBtn = IOS_CIHAZ ? kameraZoomDugmesi(stream, videoEl) : null;
     loadBarcodeDetector().then(function(BarcodeDetector){
       if(stopped) return;
       nativeLoop(new BarcodeDetector({ formats: BARCODE_FORMATS }));
@@ -2749,8 +2834,42 @@
       stop: function(){
         stopped = true;
         if(zxingReader){ try{ zxingReader.reset(); }catch(e){} zxingReader = null; }
+        if(zoomBtn && zoomBtn.parentNode) zoomBtn.parentNode.removeChild(zoomBtn);
       }
     };
+  }
+
+  // YAKINLAŞTIRMA (iPhone): Pro model iPhone'lar yakından NETLEME YAPAMAZ —
+  // barkoda yaklaştıkça bulanıklaşır. 2x ile telefon biraz uzakta tutulur,
+  // barkod yine büyük ve NET görünür. Seçim telefonda hatırlanır. Telefon
+  // yakınlaştırmayı desteklemiyorsa düğme hiç görünmez.
+  function kameraZoomDugmesi(stream, videoEl){
+    try {
+      var track = stream.getVideoTracks()[0];
+      var caps = track && track.getCapabilities ? track.getCapabilities() : null;
+      if(!caps || !caps.zoom || !(caps.zoom.max >= 1.5)) return null;
+      var secenekler = [1, Math.min(2, caps.zoom.max)];
+      var kayitli = 1;
+      try { kayitli = Number(localStorage.getItem('kameraZoom')) || 1; } catch(e){}
+      var btn = document.createElement('button');
+      btn.type = 'button';
+      btn.className = 'camZoomBtn';
+      var uygula = function(z){
+        z = Math.max(caps.zoom.min || 1, Math.min(caps.zoom.max, z));
+        track.applyConstraints({ advanced: [{ zoom: z }] }).catch(function(){});
+        btn.textContent = (Math.round(z * 10) / 10) + 'x';
+        btn.classList.toggle('on', z > 1);
+        return z;
+      };
+      var aktif = uygula(secenekler.indexOf(kayitli) >= 0 ? kayitli : 1);
+      btn.addEventListener('click', function(e){
+        e.stopPropagation();
+        aktif = uygula(aktif > 1 ? 1 : secenekler[1]);
+        try { localStorage.setItem('kameraZoom', String(aktif > 1 ? secenekler[1] : 1)); } catch(err){}
+      });
+      (videoEl.parentNode || document.body).appendChild(btn);
+      return btn;
+    } catch(e){ return null; }
   }
 
   // ---------- Genel amaçlı hızlı barkod tarayıcı ----------
@@ -2950,21 +3069,16 @@
       return;
     }
     var kelimeler = term.split(/\s+/).filter(Boolean);
-    var results = [];
-    catalogMap.forEach(function(v, barcode){
-      if(v._n === undefined) v._n = normTr(v.name);   // her tuşta 20 bin adı yeniden normalize etme
-      var hedef = v._n + ' ' + barcode.toLowerCase() + ' ' + normTr(v.stockCode);
-      if(kelimeler.every(function(k){ return hedef.indexOf(k) !== -1; })){
-        results.push({ name: v.name, barcode: barcode, stockCode: v.stockCode || '', oldStock: v.oldStock || '', price: v.price || '', kdv: v.kdv || '' });
-      }
+    var results = katalogAra(kelimeler, 200).liste.map(function(x){
+      var v = x.v;
+      return { name: v.name, barcode: x.barcode, stockCode: v.stockCode || '', oldStock: v.oldStock || '', price: v.price || '', kdv: v.kdv || '' };
     });
     if(results.length === 0){
       priceResultsEl.innerHTML = priceNameMode ? '<div class="empty">Eşleşen ürün yok.</div>'
         : '<div class="empty" style="font-size:15px;">⚠️ Bu barkod katalogda yok<br><b style="font-family:var(--mono); font-size:18px;">' + escapeHtml(raw) + '</b></div>';
       return;
     }
-    results.sort(function(a,b){ return a.name.localeCompare(b.name, 'tr'); });
-    if(results.length > 200) results = results.slice(0, 200); // çok uzun listede performans için sınırla
+    // (sıralama ve 200 ile sınırlama katalogAra içinde)
 
     // Tek sonuç varsa (genelde barkod okutunca) — büyük, ortalanmış, tek bakışta
     // okunan bir kart göster; birden fazla eşleşme varsa (isimle arama) liste kalsın.
@@ -3429,12 +3543,21 @@
       '<div style="font-weight:800; font-size:13px;">' + escapeHtml(malBelge) + (malFatura ? ' · No ' + escapeHtml(malFatura) : '') + '</div>' +
       '<div style="color:var(--muted);">' + escapeHtml(malCari ? malCari.name : '') + (malCari && malCari.code ? ' · ' + escapeHtml(malCari.code) : '') + '</div>' +
       (malSebep ? '<div style="color:var(--muted);">Sebep: ' + escapeHtml(malSebep) + '</div>' : '') +
-      '<div style="font-family:var(--mono); color:var(--muted);">' + malItems.length + ' satır · toplam ' + fmtQty(toplam) + '</div>' + fiyatHtml;
+      '<div style="font-family:var(--mono); color:var(--muted);"><b style="color:var(--text);">' + malKalemSayisi() + ' kalem</b> · ' + malItems.length + ' satır · toplam ' + fmtQty(toplam) + '</div>' + fiyatHtml;
+  }
+  // Faturayla karşılaştırma için: farklı ürün (barkod) sayısı = faturadaki kalem sayısı.
+  // Aynı ürün art arda okutulunca ayrı satır olur ama tek kalem sayılır.
+  function malKalemSayisi(){
+    var g = {};
+    malItems.forEach(function(it){ g[it.barkod] = true; });
+    return Object.keys(g).length;
   }
   function renderMalList(){
     renderMalMeta();
     if(malItems.length === 0){ malListEl.innerHTML = '<div class="hint">Henüz ürün okutulmadı.</div>'; return; }
-    malListEl.innerHTML = malItems.slice().reverse().map(function(it){
+    var toplamSatir = malItems.length;
+    malListEl.innerHTML = malItems.slice().reverse().map(function(it, i){
+      var sira = toplamSatir - i; // okutma sırası: ilk okutulan 1 (liste en yeniden eskiye)
       var kdvTxt = formatKdv(it.kdv);
       var fiyatSatir = '';
       if(canSeePrice()){
@@ -3443,6 +3566,7 @@
           (f === null ? '<span style="color:var(--amber);">Fiyat yok</span>' : fmtPara(f) + ' × ' + fmtQty(it.miktar) + ' = ' + fmtPara(f * it.miktar)) + '</div>';
       }
       return '<div class="item">' +
+        '<div class="satirNo">' + sira + '</div>' +
         '<div class="info"><div class="name">' + escapeHtml(it.ad) + '</div>' +
         '<div class="meta">' + escapeHtml(it.barkod) + (it.stokKodu ? (' · ' + escapeHtml(it.stokKodu)) : '') + (kdvTxt ? ' · <span class="kdvTag">' + kdvTxt + '</span>' : '') + (it.birim === 'Kg' ? ' · <span class="oldStock">Kg</span>' : '') + (it.stokAc === false ? ' · <span class="noStokTag">STOK AÇILMAYACAK</span>' : (it.yeni ? ' · <span class="noStokTag">YENİ STOK</span>' : '')) + '</div>' + fiyatSatir + '</div>' +
         '<div class="qtyBox">' +
@@ -3566,6 +3690,10 @@
 
   malBarcodeInputEl.addEventListener('keydown', function(e){
     if(e.key === 'Enter'){ document.getElementById('malHareketManualAdd').click(); }
+  });
+  klavyeKapaninca(malBarcodeInputEl, function(v){ // bkz. Sayım: ✓ ile ekle
+    malBarcodeInputEl.value = '';
+    malHareketHandleBarcode(v);
   });
   document.getElementById('malHareketManualAdd').addEventListener('click', function(){
     if(malBarcodeInputEl.value.trim()){ malHareketHandleBarcode(malBarcodeInputEl.value.trim()); malBarcodeInputEl.value = ''; }
@@ -4562,6 +4690,26 @@
   document.getElementById('manualInput').addEventListener('keydown', function(e){
     if(e.key === 'Enter'){ document.getElementById('manualAdd').click(); }
   });
+  // KLAVYEDE "TAMAM": iPhone'un rakam klavyesinde Enter tuşu YOK; üstteki ✓
+  // (Bitti) tuşu sadece klavyeyi kapatır. Barkod yazılıp klavye kapatılınca
+  // ürün otomatik eklenir (Ekle'ye basmaya gerek kalmaz). Uygulama arka plana
+  // atıldığı için klavye kapandıysa EKLENMEZ. Ekle'ye basılmışsa kutu zaten
+  // boşalmış olur, ikinci kez eklenmez.
+  function klavyeKapaninca(inp, ekle){
+    inp.setAttribute('enterkeyhint', 'done');
+    inp.addEventListener('blur', function(){
+      setTimeout(function(){
+        if(document.activeElement === inp) return;
+        if(document.visibilityState !== 'visible' || (document.hasFocus && !document.hasFocus())) return;
+        var v = inp.value.trim();
+        if(v.length >= 4) ekle(v);
+      }, 200);
+    });
+  }
+  klavyeKapaninca(document.getElementById('manualInput'), function(v){
+    document.getElementById('manualInput').value = '';
+    handleScanResult(v);
+  });
 
   // ---------- ÜRÜN ADIYLA ARAMA (katalogdan, barkod olmadan bulmak için) ----------
   // Hem Sayım hem Mal Giriş/Çıkış aynı ekranı kullanır — nameSearchMode hangisinin
@@ -4581,8 +4729,12 @@
   document.getElementById('nameSearchClose').addEventListener('click', function(){
     document.getElementById('nameSearchScreen').classList.add('hidden');
   });
+  // Hızlı yazarken her harfte değil, yazmaya ara verince (120 ms) ara.
+  var nameSearchZamanlayici = null;
   nameSearchInput.addEventListener('input', function(e){
-    renderNameSearchResults(e.target.value.trim());
+    var v = e.target.value.trim();
+    clearTimeout(nameSearchZamanlayici);
+    nameSearchZamanlayici = setTimeout(function(){ renderNameSearchResults(v); }, 120);
   });
 
   function renderNameSearchResults(term){
@@ -4592,24 +4744,15 @@
     // bulunur), baştan sona birebir eşleşme aramaz. Aynı üründen birden
     // fazla barkod eşleşse bile ada göre tekilleştirip tek satır gösterir —
     // ama arama terimi bir barkoda/stok koduna özel eşleşiyorsa o kaydı öne alır.
-    var kelimeler = normTr(term).trim().split(/\s+/).filter(Boolean);
-    var seen = {}; var matches = [];
-    catalogMap.forEach(function(entry, barcode){
-      if(kelimeler.length > 0){
-        var hedef = (normTr(entry.name) + ' ' + barcode.toLowerCase() + ' ' + normTr(entry.stockCode));
-        var hepsiVar = kelimeler.every(function(k){ return hedef.indexOf(k) !== -1; });
-        if(!hepsiVar) return;
-      }
-      var key = entry.name + '|' + barcode; // farklı barkodları da ayrı göster ki barkod/stok kodu araması net eşleşsin
-      if(seen[key]) return;
-      seen[key] = true;
-      matches.push({ name: entry.name, barcode: barcode, stockCode: entry.stockCode || '', oldStock: entry.oldStock || '' });
-    });
-    matches.sort(function(a,b){ return a.name.localeCompare(b.name, 'tr'); });
     if(!term){
       nameSearchResults.innerHTML = '<div class="empty">Ürün adı, barkod ya da stok koduyla aramak için yazmaya başla</div>';
       return;
     }
+    var kelimeler = normTr(term).trim().split(/\s+/).filter(Boolean);
+    var bulunan = katalogAra(kelimeler, 60);
+    var matches = bulunan.liste.map(function(x){
+      return { name: x.v.name, barcode: x.barcode, stockCode: x.v.stockCode || '', oldStock: x.v.oldStock || '' };
+    });
     if(matches.length === 0){
       nameSearchResults.innerHTML = '<div class="empty">"'+escapeHtml(term)+'" ile eşleşen ürün yok</div>';
       return;
@@ -4620,7 +4763,7 @@
         '<div class="info"><div class="name">'+escapeHtml(m.name)+'</div>' +
         '<div class="meta">'+escapeHtml(m.barcode)+(m.stockCode ? ' · '+escapeHtml(m.stockCode) : '')+'</div></div>' +
         '</div>';
-    }).join('') + (matches.length > 60 ? '<div class="empty">+ '+(matches.length-60)+' sonuç daha — daha spesifik yaz</div>' : '');
+    }).join('') + (bulunan.toplam > 60 ? '<div class="empty">+ '+(bulunan.toplam-60)+' sonuç daha — daha spesifik yaz</div>' : '');
   }
 
   nameSearchResults.addEventListener('click', function(e){
@@ -5169,6 +5312,35 @@
   updatePendingBadge();
   setInterval(updateStatus, 8000);
 
+  // ---------- DİKEY KULLANIM ----------
+  // Android'de ana ekrana eklenmiş uygulama manifest ("orientation":"portrait")
+  // ile zaten dönmez; ayrıca kilitlemeyi deniyoruz. iPhone kilitlemeye izin
+  // vermez: telefon yan çevrilince üstte "dik tutun" perdesi çıkar (arkadaki
+  // uygulama ve veriler aynen kalır, telefon düzelince perde kalkar).
+  // Not: klavye açılınca ekran yüksekliği küçülür; bu yüzden ekran oranına
+  // değil telefonun GERÇEK yönüne bakılır. Tabletlerde (kısa kenar ≥ 600) çıkmaz.
+  (function(){
+    try { if(screen.orientation && screen.orientation.lock) screen.orientation.lock('portrait').catch(function(){}); } catch(e){}
+    function yatayMi(){
+      // Sadece dokunmatik TELEFONLAR: bilgisayar/tablet ekranında perde asla çıkmaz.
+      var dokunmatik = (window.matchMedia && window.matchMedia('(pointer: coarse)').matches) || navigator.maxTouchPoints > 0;
+      if(!dokunmatik) return false;
+      if(Math.min(screen.width || 0, screen.height || 0) >= 600) return false;
+      if(screen.orientation && typeof screen.orientation.type === 'string') return screen.orientation.type.indexOf('landscape') === 0;
+      if(typeof window.orientation === 'number') return Math.abs(window.orientation) === 90;
+      return false;
+    }
+    function guncelle(){
+      var perde = document.getElementById('yatayPerde'); // perde bu betikten SONRA tanımlı; her seferinde bul
+      if(perde) perde.classList.toggle('hidden', !yatayMi());
+    }
+    window.addEventListener('orientationchange', function(){ setTimeout(guncelle, 50); });
+    if(screen.orientation && screen.orientation.addEventListener) screen.orientation.addEventListener('change', guncelle);
+    window.addEventListener('resize', guncelle);
+    guncelle();
+    document.addEventListener('DOMContentLoaded', guncelle);
+  })();
+
   if('serviceWorker' in navigator){
     navigator.serviceWorker.register('sw.js').catch(function(){});
     var reloaded = false;
@@ -5179,5 +5351,10 @@
   }
 })();
 </script>
+<div id="yatayPerde" class="hidden" style="position:fixed; inset:0; z-index:10000; background:var(--bg, #f3f7ef); color:var(--text, #1d2b1f); display:flex; flex-direction:column; align-items:center; justify-content:center; gap:14px; text-align:center; padding:24px;">
+  <div style="font-size:54px; line-height:1;">📱</div>
+  <div style="font-size:18px; font-weight:800;">Telefonu dik tutun</div>
+  <div style="font-size:14px; opacity:.75; max-width:320px;">Uygulama dikey kullanım içindir. Verileriniz güvende — telefonu düzeltince kaldığınız yerden devam edersiniz.</div>
+</div>
 </body>
 </html>
