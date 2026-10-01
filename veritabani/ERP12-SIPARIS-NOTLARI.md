@@ -16,7 +16,18 @@ DOVIZ_AD 1, DOVIZ_KUR 1, SATIR_TOPLAM 1318.73, KDV_TOPLAM 254.67, GENELTOPLAM 15
 SIPARIS_ISKONTO_ORAN "          " (10 boşluk), FIS 0, AKTIF 1, ONAYLI 1, VADE_SECENEKLERI 7, YAZILDI 1,
 EMAIL_GONDERILDI 0, DOVIZ_KUR_SECIMI 2, FIS_ODEME_TIPI_ISKONTOLARI 1, FIS_ALT_TIPI 1, diğerleri 0 / ''.
 
+## SIPARIS_TURU (deneme kayıtlarıyla doğrulandı, 01.10.2026)
+- **1 = Verilen Sipariş** (tedarikçiye) — BELGENO "SPRS VRLN-000001", ID 7024541
+- **2 = Alınan Sipariş** (müşteriden) — BELGENO "SPRS LNN1-000001", ID 7024551
+- **3 = Teklif** — "TKLF -00000N"
+Eşleme: telefondaki Mal Giriş → 1 (Verilen), Mal Çıkış → 2 (Alınan).
+
+Farklar: Verilen'de VADE_TARIHI = sipariş günü, VADE_SECENEKLERI 17, FIS_ODEME_TIPI_ISKONTOLARI 0;
+Alınan'da VADE +31 gün, VADE_SECENEKLERI 7, FIS_ODEME_TIPI_ISKONTOLARI 1 (carinin varsayılanından geliyor olabilir).
+ERP'nin kendi kaydında YAZILDI = 0 (yazdırılmadı), ACIKLAMA boş (açıklama başka alanda/tabloda olabilir).
+Detay ID'si başlıktan hemen sonra (7024551 → 7024552): önce başlık, sonra satırlar aynı sayaçtan.
+
 ## Eksik
-- SIPARIS_DETAY örnek satırları.
-- SIPARIS_TURU değerlerinin anlamı (alınan / verilen sipariş / teklif).
-- Belge numarası serisinin nereden alındığı (TKLF için sequence adı).
+- SIPARIS_DETAY örnek satırları (7024541 ve 7024551).
+- "SPRS VRLN" / "SPRS LNN1" belge numarası serisinin tutulduğu yer.
+- Açıklamanın (DENEME) yazıldığı alan.
