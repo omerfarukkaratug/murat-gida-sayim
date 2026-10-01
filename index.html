@@ -247,6 +247,7 @@
   .sdLog b{font-family:var(--mono); font-weight:700; color:var(--muted); font-size:10.5px;}
   #priceCamLive .camWrap{height:30dvh; border-radius:0;}
   .hareketDonem{display:flex; gap:6px; margin-top:10px;}
+  .hareketDonemEtiket{align-self:center; font-size:11.5px; font-weight:800; color:var(--muted); white-space:nowrap;}
   .hareketDonem button{flex:1; padding:8px 0; border-radius:20px; background:var(--panel2); border:1.5px solid var(--line); color:var(--muted); font-size:12.5px; font-weight:800;}
   .hareketDonem button.on{background:var(--accent); border-color:var(--accent); color:#fff;}
   .hrkSekmeler{display:flex; gap:10px; margin:12px 0;}
@@ -665,7 +666,7 @@
         </button>
       </div>
       <div id="hareketDonem" class="hareketDonem">
-        <button type="button" data-gun="90">3 ay</button><button type="button" data-gun="365" class="on">12 ay</button><button type="button" data-gun="0">Tümü</button>
+        <span class="hareketDonemEtiket">Satışlar:</span><button type="button" data-gun="90">3 ay</button><button type="button" data-gun="365" class="on">12 ay</button><button type="button" data-gun="0">Tümü</button>
       </div>
     </div>
     <div id="hareketBody" style="flex:1; overflow-y:auto; padding:12px 14px 24px;"><div class="hint">Ürünü okut ya da barkodunu yaz.</div></div>
@@ -1768,7 +1769,8 @@
       html += '<div class="hrkPerakende"><span>🛒 Perakende (kasa + peşin satış)</span><span style="font-family:var(--mono);">' + fmtQty(d.perakende || 0) + '</span></div>';
       html += satilan.length ? satilan.map(hareketSatirHtml).join('') : '<div class="hint">Bu dönemde firmalara satış yok.</div>';
     }
-    if((hareketSekme === 'gelen' ? gelen : satilan).length >= 200) html += '<div class="hint">İlk 200 belge gösteriliyor — daha kısa dönem seç.</div>';
+    if(hareketSekme === 'gelen' && gelen.length) html += '<div class="hint">Alışların TÜMÜ listelenir (seçilen dönemden bağımsız).</div>';
+    if(hareketSekme === 'satilan' && satilan.length >= 200) html += '<div class="hint">İlk 200 belge gösteriliyor — daha kısa dönem seç.</div>';
     html += '<div class="hint" style="margin-top:10px; font-size:11px;">Fiyatlar KDV dahil birim fiyattır.' + (d.sonVeri ? ' ERP verisi: ' + escapeHtml(d.sonVeri) : '') + '</div>';
     hareketBodyEl.innerHTML = html;
   }

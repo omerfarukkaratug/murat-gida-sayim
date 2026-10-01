@@ -113,15 +113,18 @@ begin
 end $$;
 
 -- ------------------------------------------------------------
--- Sorgu (Apps Script çağırır): bir ürünün son p_gun gündeki hareketleri.
--- Ürün stok koduyla aranır; stok kodu yoksa barkodla.
+-- Sorgu (Apps Script çağırır). Ürün stok koduyla aranır; stok kodu yoksa barkodla.
+-- ALIŞLAR (gelen) dönemden bağımsız HEPSİ listelenir (en fazla 2000 belge);
+-- p_gun sadece satışlara (firma + perakende) uygulanır.
 -- ------------------------------------------------------------
 create or replace function urun_hareket(p_stok_kodu text, p_barkod text, p_gun integer default 365, p_limit integer default 200)
 returns jsonb language sql stable as $$
-  with h as (
+  with u as (
     select * from erp_hareket
      where (case when coalesce(p_stok_kodu, '') <> '' then stok_kodu = p_stok_kodu else barkod = coalesce(p_barkod, '') end)
-       and (coalesce(p_gun, 0) <= 0 or tarih >= now() - make_interval(days => p_gun))
+  ), h as (
+    select * from u
+     where yon = 'gelen' or coalesce(p_gun, 0) <= 0 or tarih >= now() - make_interval(days => p_gun)
   ), p as (
     select coalesce(sum(miktar), 0) as miktar from erp_perakende_gunluk
      where coalesce(p_stok_kodu, '') <> '' and stok_kodu = p_stok_kodu
@@ -133,11 +136,12 @@ returns jsonb language sql stable as $$
     'firmaToplam',  (select coalesce(sum(miktar), 0) from h where yon = 'satilan'),
     'perakende',    (select miktar from p),
     'gelen',   coalesce((select jsonb_agg(jsonb_build_array(to_char(tarih at time zone 'Europe/Istanbul', 'DD.MM.YYYY'), cari, belge_no, miktar, birim, birim_fiyat, fis_turu) order by tarih desc)
-                          from (select * from h where yon = 'gelen' order by tarih desc limit p_limit) a), '[]'::jsonb),
+                          from (select * from h where yon = 'gelen' order by tarih desc limit 2000) a), '[]'::jsonb),
     'satilan', coalesce((select jsonb_agg(jsonb_build_array(to_char(tarih at time zone 'Europe/Istanbul', 'DD.MM.YYYY'), cari, belge_no, miktar, birim, birim_fiyat, fis_turu) order by tarih desc)
                           from (select * from h where yon = 'satilan' order by tarih desc limit p_limit) b), '[]'::jsonb),
     'sonVeri', (select to_char(max(guncelleme) at time zone 'Europe/Istanbul', 'DD.MM.YYYY HH24:MI') from erp_hareket),
-    'kaynaklar', coalesce((select jsonb_agg(distinct kaynak) from h), '[]'::jsonb)
+    'kaynaklar', coalesce((select jsonb_agg(distinct kaynak) from h), '[]'::jsonb),
+    'gelenTumu', true
   )
 $$;
 
