@@ -8,7 +8,7 @@
 // bir sürüm dağıttıktan sonra /exec adresini boş açtığında burada yazan
 // numarayı görmelisin; index.html'in üstündeki "build" numarasıyla
 // eşleşecek şekilde ben her ikisini birlikte güncelliyorum.
-var GS_VERSION = 'build110';
+var GS_VERSION = 'build111';
 
 // Sheets'te "Saat" sütunu zaman biçimli olarak algılanırsa, hücre değeri düz
 // metin değil bir Date nesnesi olarak gelir ve String(...) çirkin bir çıktı
@@ -161,7 +161,7 @@ function outJson(obj, callback) {
 // yetkilendirme için yeterlidir. Tabloyu düzenleme yetkisi olan herkes
 // şifreleri görebilir.
 // ============================================================
-var ALL_PERMS = ['rapor', 'temizle', 'kullanici_yonetimi', 'ayarlar', 'canli_durum', 'duzelt', 'hareket', 'mesai_yonetim'];
+var ALL_PERMS = ['rapor', 'temizle', 'kullanici_yonetimi', 'ayarlar', 'canli_durum', 'duzelt', 'hareket', 'mesai', 'mesai_yonetim'];
 
 function authenticate(user, pass) {
   user = String(user || '').trim();
@@ -2343,8 +2343,19 @@ function mesaiGunler(kayitlar) {
   return { gunler: Object.keys(gunler).sort().reverse().map(function (t) { return gunler[t]; }), iceride: simdiIceride };
 }
 
-function mesaiKaydet(p, callback) {
+// Giriş/çıkış yapabilmek için "mesai" (ya da "mesai_yonetim") yetkisi gerekir.
+function mesaiYetkili(p) {
   var auth = authenticate(p.user, p.pass);
+  if (!auth.ok) return auth;
+  if (auth.permissions.indexOf('mesai') === -1 && auth.permissions.indexOf('mesai_yonetim') === -1) {
+    gunlukYaz('yetki', String(p.user || ''), '"mesai" yetkisi yok, işlem reddedildi', true);
+    return { ok: false, message: 'Mesai yetkin yok — yöneticinden iste' };
+  }
+  return auth;
+}
+
+function mesaiKaydet(p, callback) {
+  var auth = mesaiYetkili(p);
   if (!auth.ok) return outJson({ status: 'error', message: auth.message }, callback);
   var personel = String(p.user || '').trim();
   var tip = p.tip === 'cikis' ? 'cikis' : (p.tip === 'giris' ? 'giris' : '');
@@ -2397,7 +2408,7 @@ function mesaiMesafe(a1, o1, a2, o2) {
 
 // Kişinin kendi son 31 günü (ve şu an içeride mi).
 function mesaiBenim(p, callback) {
-  var auth = authenticate(p.user, p.pass);
+  var auth = mesaiYetkili(p);
   if (!auth.ok) return outJson({ status: 'error', message: auth.message }, callback);
   var ad = String(p.user || '').trim().toLowerCase();
   var sinir = Date.now() - 32 * 86400000;

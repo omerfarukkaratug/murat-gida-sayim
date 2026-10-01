@@ -140,10 +140,18 @@
   function $(id){ return document.getElementById(id); }
   function esc(s){ return String(s == null ? '' : s).replace(/[&<>"']/g, function(c){ return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]; }); }
 
+  // ?gomulu=1: sayım uygulamasının içinde (Mesai ekranı) açıldı — başlık ve
+  // "uygulamaya dön" gizlenir, her zaman uygulamada giriş yapan kişi kullanılır.
+  var GOMULU = /[?&]gomulu=1/.test(location.search);
   var sayim = oku(SAYIM_ANAHTAR) || {};
   var sunucu = sayim.serverUrl || SUNUCU_VARSAYILAN;
-  var kimlik = oku(MESAI_ANAHTAR);
-  if(!kimlik && sayim.currentUser && sayim.savedCredentials) kimlik = { user: sayim.currentUser.name, pass: sayim.savedCredentials.pass };
+  var sayimKimlik = (sayim.currentUser && sayim.savedCredentials) ? { user: sayim.currentUser.name, pass: sayim.savedCredentials.pass } : null;
+  var kimlik = GOMULU ? sayimKimlik : (oku(MESAI_ANAHTAR) || sayimKimlik);
+  if(GOMULU){
+    document.querySelector('h1').classList.add('gizli');
+    document.body.style.paddingTop = '12px';
+    var donLink = document.querySelector('a[href="./index.html"]'); if(donLink && donLink.parentNode) donLink.parentNode.classList.add('gizli');
+  }
 
   var toastZ = null;
   function toast(m, tur){
@@ -188,7 +196,9 @@
   function yenile(){
     istek(kimlikli({ action:'mesai_benim' }), function(r){
       if(r.status !== 'ok'){
-        if(/şifre|kullanıcı|pasif/i.test(r.message || '')){ toast(r.message, 'hata'); girisGoster(); return; }
+        if(/şifre|kullanıcı|pasif/i.test(r.message || '') && !GOMULU){ toast(r.message, 'hata'); girisGoster(); return; }
+        $('girisCikisBtn').disabled = true; $('girisCikisBtn').textContent = '—';
+        $('durumEl').innerHTML = '<span class="hata">' + esc(r.message) + '</span>';
         $('benimListe').innerHTML = '<span class="hata">' + esc(r.message) + '</span>'; return;
       }
       iceride = r.iceride; yonetici = !!r.yonetici;
@@ -317,7 +327,9 @@
     $('kimEl').textContent = '👤 ' + kimlik.user;
     yenile();
   }
-  if(kimlik) basla(); else girisGoster();
+  if(kimlik) basla();
+  else if(GOMULU){ $('anaAlan').classList.add('gizli'); document.body.insertAdjacentHTML('beforeend', '<div class="kart hata">Önce uygulamaya giriş yap.</div>'); }
+  else girisGoster();
   // Uygulamaya geri dönülünce (arka plandan) durum tazelensin.
   document.addEventListener('visibilitychange', function(){ if(!document.hidden && kimlik && $('kodEkrani').classList.contains('gizli')) yenile(); });
 })();
