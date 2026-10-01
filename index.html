@@ -298,6 +298,15 @@
   .hizliGecis button{flex:1 1 0; min-width:0; display:flex; flex-direction:column; align-items:center; gap:1px; padding:5px 2px; border-radius:12px; border:1.5px solid var(--line); background:var(--panel2); color:var(--text); font-weight:800; font-size:11.5px; line-height:1.2; white-space:nowrap; overflow:hidden;}
   .hizliGecis button span:first-child{font-size:17px;}
   .hizliGecis button.on{background:var(--accent); border-color:var(--accent); color:#fff;}
+  /* Mal Giriş/Çıkış: ürün listesine daha çok yer kalsın */
+  #malHareketScan #malHareketMeta{padding:8px 16px !important;}
+  #malScanArea .scanPlaceholderBlock{padding:10px 14px;}
+  #malScanArea .scanBtn{padding:12px;}
+  #malScanArea .malOtoSatir{margin-top:6px !important;}
+  #malScanArea .malElleIpucu{display:none;}
+  #malScanArea .manualBar{margin-top:8px;}
+  #malHareketList .item{padding-top:7px; padding-bottom:7px; margin-bottom:6px;}
+  #malAciklamaBtn.dolu{background:var(--accent); border-color:var(--accent); color:#fff;}
   .birimTag{font-weight:800; color:var(--accent);}
   .birimChip{color:var(--text);}
   .koliUyari{margin:8px 0; padding:10px 12px; border-radius:12px; background:var(--amber); color:#000; font-weight:800; font-size:15px; line-height:1.3;}
@@ -342,7 +351,7 @@
   <header style="border:none; padding:0 0 16px; background:transparent; display:flex; align-items:flex-start; justify-content:space-between;">
     <div>
       <h1><img src="logo-header.png" alt="Murat Gıda" style="height:30px; width:auto; display:block;"></h1>
-      <div class="sub">MK ERP · Murat Gıda • offline • Android • build 107</div>
+      <div class="sub">MK ERP · Murat Gıda • offline • Android • build 108</div>
     </div>
     <button type="button" id="themeToggleBtn" title="Tema seç" style="background:var(--panel2); border:1.5px solid var(--line); color:var(--text); width:34px; height:34px; border-radius:50%; font-size:15px; padding:0; display:flex; align-items:center; justify-content:center; flex-shrink:0;">🎨</button>
   </header>
@@ -778,11 +787,11 @@
           <button class="scanBtn" id="malStartScanBtn">
             <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-4px; margin-right:6px;"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2Z"/><circle cx="12" cy="13" r="4"/></svg>Taramayı Başlat
           </button>
-          <div style="display:flex; align-items:center; justify-content:center; gap:8px; margin-top:12px;">
+          <div class="malOtoSatir" style="display:flex; align-items:center; justify-content:center; gap:8px; margin-top:12px;">
             <label for="malAutoRescanToggle" style="font-size:12.5px; color:var(--muted); font-weight:600;">Otomatik: miktar girince kamera tekrar açılsın</label>
             <input type="checkbox" id="malAutoRescanToggle" style="width:36px; height:20px; accent-color:var(--accent); flex-shrink:0;">
           </div>
-          <div class="hint" style="text-align:center; margin:10px 0 6px;">veya barkodu elle gir:</div>
+          <div class="hint malElleIpucu" style="text-align:center; margin:10px 0 6px;">veya barkodu elle gir:</div>
           <div class="manualBar" style="background:transparent; border:none; padding:0;">
             <input type="tel" id="malHareketBarcodeInput" placeholder="Barkod yaz, ✓ ya da Ekle" inputmode="numeric">
             <button id="malHareketManualAdd">Ekle</button>
@@ -810,12 +819,13 @@
 
       <div id="malHareketList" style="flex:1; overflow-y:auto; padding:0 16px 12px;"><div class="hint">Henüz ürün okutulmadı.</div></div>
       <!-- Fatura/irsaliye altı açıklaması: kayıtla birlikte sunucuya, maile ve masaüstü aktarımına gider. -->
-      <div style="padding:8px 16px 0; background:var(--panel); border-top:1px solid var(--line);">
+      <div id="malAciklamaKutu" class="hidden" style="padding:8px 16px 0; background:var(--panel); border-top:1px solid var(--line);">
         <textarea id="malHareketAciklama" rows="2" maxlength="500" placeholder="📝 Açıklama (isteğe bağlı) — örn. 2 koli hasarlı geldi, fatura sonra gelecek" style="width:100%; resize:none; font-size:13px; padding:8px 10px; border-radius:var(--r-sm); border:1.5px solid var(--line); background:var(--panel2); color:var(--text); font-family:inherit;"></textarea>
       </div>
       <div class="footer">
-        <button class="fb-sync" id="malHareketDiscardBtn" style="flex:none; width:34%;">🗑 Vazgeç</button>
-        <button class="fb-export" id="malHareketSaveBtn" style="flex:1;">💾 Kaydet ve Bitir</button>
+        <button class="fb-sync" id="malHareketDiscardBtn" style="flex:none; width:27%;">🗑 Vazgeç</button>
+        <button class="fb-sync" id="malAciklamaBtn" style="flex:none; width:30%;">📝 Açıklama</button>
+        <button class="fb-export" id="malHareketSaveBtn" style="flex:1;">💾 Kaydet</button>
       </div>
     </div>
   </div>
@@ -3642,7 +3652,7 @@
     malTip = tip;
     hizliGecisCiz();
     malSaving = false;
-    malSaveBtnEl.disabled = false; malSaveBtnEl.textContent = '💾 Kaydet ve Bitir';
+    malSaveBtnEl.disabled = false; malSaveBtnEl.textContent = '💾 Kaydet';
     document.getElementById('malHareketTitle').textContent = tip === 'cikis' ? '📤 Mal Çıkış' : '📥 Mal Giriş';
     document.getElementById('malHareketSebepRow').classList.toggle('hidden', tip !== 'cikis');
     refreshCariHint();
@@ -3761,8 +3771,26 @@
     clearTimeout(malAciklamaTimer);
     malAciklamaTimer = setTimeout(saveMalDraft, 600); // taslağa yaz (her tuşta değil)
   });
+  // Açıklama sadece gerektiğinde (faturada sorun olunca) açılır; yazılmışsa
+  // düğme renkli görünür ve kutu kapalıyken de kayıtla birlikte gider.
+  var malAciklamaKutuEl = document.getElementById('malAciklamaKutu');
+  var malAciklamaBtnEl = document.getElementById('malAciklamaBtn');
+  function malAciklamaDugme(){
+    var dolu = !!String(malAciklama || '').trim();
+    malAciklamaBtnEl.classList.toggle('dolu', dolu);
+    malAciklamaBtnEl.textContent = dolu ? '📝 Açıklama ✓' : '📝 Açıklama';
+  }
+  malAciklamaBtnEl.addEventListener('click', function(){
+    var acilacak = malAciklamaKutuEl.classList.contains('hidden');
+    malAciklamaKutuEl.classList.toggle('hidden', !acilacak);
+    if(acilacak) setTimeout(function(){ malAciklamaEl.focus(); }, 50);
+    else { malAciklamaEl.blur(); malAciklamaDugme(); clearTimeout(malAciklamaTimer); saveMalDraft(); }
+  });
+  malAciklamaEl.addEventListener('input', malAciklamaDugme);
   function enterMalScan(){
     malAciklamaEl.value = malAciklama;
+    malAciklamaKutuEl.classList.add('hidden');
+    malAciklamaDugme();
     document.getElementById('malHareketSetup').classList.add('hidden');
     document.getElementById('malHareketScan').classList.remove('hidden');
     renderMalList();
@@ -3986,7 +4014,7 @@
   function malSaveDone(ok, message){
     malSaving = false;
     malSaveBtnEl.disabled = false;
-    malSaveBtnEl.textContent = '💾 Kaydet ve Bitir';
+    malSaveBtnEl.textContent = '💾 Kaydet';
     if(ok){
       clearMalDraft();
       var n = malItems.length;
@@ -4027,7 +4055,7 @@
         // Onay beklerken liste değiştiyse (yeni okutma/düzeltme) taslağı SİLME.
         var simdiki = JSON.stringify(malItems.map(function(it){ return [it.id, it.v || 1, it.miktar]; }));
         var gonderilen = JSON.stringify(expected.map(function(it){ return [it.id, it.v, it.miktar]; }));
-        if(simdiki !== gonderilen){ malSaveDone(false, 'Kaydederken listede değişiklik yapıldı — "Kaydet ve Bitir"e tekrar bas.'); return; }
+        if(simdiki !== gonderilen){ malSaveDone(false, 'Kaydederken listede değişiklik yapıldı — "Kaydet"e tekrar bas.'); return; }
         malSaveDone(true); return;
       }
       if(fark.kilitli){
@@ -4035,7 +4063,7 @@
         return;
       }
       if(attempt < 4){ setTimeout(function(){ verifyMalBatch(url, batchId, expected, attempt + 1); }, 2500); return; }
-      malSaveDone(false, 'Sunucudan doğru onay alınamadı (' + fark.mesaj + ') — ürünler telefonda duruyor. Bağlantıyı kontrol edip "Kaydet ve Bitir"e tekrar bas (çift kayıt oluşmaz).');
+      malSaveDone(false, 'Sunucudan doğru onay alınamadı (' + fark.mesaj + ') — ürünler telefonda duruyor. Bağlantıyı kontrol edip "Kaydet"e tekrar bas (çift kayıt oluşmaz).');
     }, 9000);
   }
   malSaveBtnEl.addEventListener('click', function(){
