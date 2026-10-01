@@ -67,6 +67,7 @@ function Gonder-Sheets($govde, $ne, $adet) {
 }
 
 # Veri tabanına gönder (gölge kopya). Hata olursa sadece günlüğe yazar.
+# -UserAgent şart: Supabase, tarayıcıya benzeyen istemcide gizli anahtarı 401 ile reddeder.
 function Gonder-VeriTabani($fonksiyon, $govde, $ne) {
     if (-not (Test-Path $DbAnahtarDosyasi)) { return }
     try {
@@ -74,7 +75,7 @@ function Gonder-VeriTabani($fonksiyon, $govde, $ne) {
         if (-not $anahtar) { return }
         $baytlar = [System.Text.Encoding]::UTF8.GetBytes($govde)
         $sonuc = Invoke-RestMethod -Uri "$DbUrl/rest/v1/rpc/$fonksiyon" -Method Post -Body $baytlar `
-            -ContentType "application/json; charset=utf-8" -Headers @{ apikey = $anahtar } -TimeoutSec 120
+            -ContentType "application/json; charset=utf-8" -Headers @{ apikey = $anahtar } -TimeoutSec 120 -UserAgent "MK-Sayim/1.0"
         if (Cevap-Basarili $sonuc) {
             Yaz-Log "VERI TABANI: $ne yazildi. Yanit: $($sonuc | ConvertTo-Json -Compress)"
         } else {
