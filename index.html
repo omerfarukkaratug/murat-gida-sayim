@@ -317,7 +317,7 @@
   <header style="border:none; padding:0 0 16px; background:transparent; display:flex; align-items:flex-start; justify-content:space-between;">
     <div>
       <h1><img src="logo-header.png" alt="Murat Gıda" style="height:30px; width:auto; display:block;"></h1>
-      <div class="sub">MK ERP · Murat Gıda • offline • Android • build 102</div>
+      <div class="sub">MK ERP · Murat Gıda • offline • Android • build 103</div>
     </div>
     <button type="button" id="themeToggleBtn" title="Tema seç" style="background:var(--panel2); border:1.5px solid var(--line); color:var(--text); width:34px; height:34px; border-radius:50%; font-size:15px; padding:0; display:flex; align-items:center; justify-content:center; flex-shrink:0;">🎨</button>
   </header>
@@ -4695,16 +4695,29 @@
   // ürün otomatik eklenir (Ekle'ye basmaya gerek kalmaz). Uygulama arka plana
   // atıldığı için klavye kapandıysa EKLENMEZ. Ekle'ye basılmışsa kutu zaten
   // boşalmış olur, ikinci kez eklenmez.
+  // Uygulama arka plana atılırken klavye kapanırsa EKLEME — son 1,5 sn içinde
+  // sayfa gizlendiyse (uygulama değiştirme, ekran kilidi) dokunma.
+  var sonGizlenme = 0;
+  document.addEventListener('visibilitychange', function(){ if(document.visibilityState !== 'visible') sonGizlenme = Date.now(); });
+  window.addEventListener('pagehide', function(){ sonGizlenme = Date.now(); });
   function klavyeKapaninca(inp, ekle){
     inp.setAttribute('enterkeyhint', 'done');
-    inp.addEventListener('blur', function(){
-      setTimeout(function(){
-        if(document.activeElement === inp) return;
-        if(document.visibilityState !== 'visible' || (document.hasFocus && !document.hasFocus())) return;
+    var bekleyen = null;
+    // iPhone ✓ (Bitti): önce "change", sonra "blur" gelir; bazı sürümlerde biri
+    // eksik olabiliyor — ikisini de dinliyoruz, kısa gecikmeyle TEK kez ekleriz.
+    // (Eskiden ayrıca document.hasFocus() kontrolü vardı; ana ekrana eklenmiş
+    // uygulamada iPhone bunu yanlış "false" döndürdüğü için ✓ çalışmıyordu.)
+    function dene(){
+      clearTimeout(bekleyen);
+      bekleyen = setTimeout(function(){
+        if(document.activeElement === inp) return;            // hâlâ yazıyor
+        if(document.visibilityState !== 'visible' || Date.now() - sonGizlenme < 1500) return;
         var v = inp.value.trim();
-        if(v.length >= 4) ekle(v);
-      }, 200);
-    });
+        if(v.length >= 4) ekle(v);                             // Ekle'ye basıldıysa kutu zaten boş
+      }, 250);
+    }
+    inp.addEventListener('blur', dene);
+    inp.addEventListener('change', dene);
   }
   klavyeKapaninca(document.getElementById('manualInput'), function(v){
     document.getElementById('manualInput').value = '';
