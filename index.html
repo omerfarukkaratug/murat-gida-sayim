@@ -292,6 +292,12 @@
 
   /* KDV etiketi (sayım listesi + fiyat sorgu) */
   .item .meta .kdvTag{color:var(--accent); font-weight:800;}
+  /* Üstte hızlı geçiş: menüye dönmeden ekranlar arası tek dokunuş */
+  .hizliGecis{display:flex; gap:5px; margin:0 0 10px;}
+  .hizliGecis:empty{display:none;}
+  .hizliGecis button{flex:1 1 0; min-width:0; display:flex; flex-direction:column; align-items:center; gap:1px; padding:5px 2px; border-radius:12px; border:1.5px solid var(--line); background:var(--panel2); color:var(--text); font-weight:800; font-size:11.5px; line-height:1.2; white-space:nowrap; overflow:hidden;}
+  .hizliGecis button span:first-child{font-size:17px;}
+  .hizliGecis button.on{background:var(--accent); border-color:var(--accent); color:#fff;}
   .birimTag{font-weight:800; color:var(--accent);}
   .birimChip{color:var(--text);}
   .koliUyari{margin:8px 0; padding:10px 12px; border-radius:12px; background:var(--amber); color:#000; font-weight:800; font-size:15px; line-height:1.3;}
@@ -336,7 +342,7 @@
   <header style="border:none; padding:0 0 16px; background:transparent; display:flex; align-items:flex-start; justify-content:space-between;">
     <div>
       <h1><img src="logo-header.png" alt="Murat Gıda" style="height:30px; width:auto; display:block;"></h1>
-      <div class="sub">MK ERP · Murat Gıda • offline • Android • build 106</div>
+      <div class="sub">MK ERP · Murat Gıda • offline • Android • build 107</div>
     </div>
     <button type="button" id="themeToggleBtn" title="Tema seç" style="background:var(--panel2); border:1.5px solid var(--line); color:var(--text); width:34px; height:34px; border-radius:50%; font-size:15px; padding:0; display:flex; align-items:center; justify-content:center; flex-shrink:0;">🎨</button>
   </header>
@@ -381,6 +387,7 @@
 
   <div id="afterLoginArea" class="hidden">
   <div style="text-align:left; margin-bottom:10px;">
+    <div class="hizliGecis" data-ekran="sayim"></div>
     <a href="#" id="backToMenuLink" style="color:var(--muted); font-size:12.5px; text-decoration:underline;">⬅ Menüye Dön</a>
   </div>
   <div class="card">
@@ -654,6 +661,7 @@
        satışları (firmalar tek tek, perakende toplam). Veri sunucudan, yetkiyle. -->
   <div id="hareketScreen" class="hidden" style="position:fixed; inset:0; background:var(--bg); z-index:50; display:flex; flex-direction:column;">
     <div style="padding:16px; border-bottom:1px solid var(--line); background:var(--panel); box-shadow:var(--sh-sm);">
+      <div class="hizliGecis" data-ekran="hareket"></div>
       <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:10px;">
         <div style="font-weight:800; font-size:16px;">🔁 Ürün Hareketleri</div>
         <button type="button" id="hareketCloseBtn" aria-label="Kapat" style="width:34px; height:34px; border-radius:50%; background:var(--panel2); border:1.5px solid var(--line); color:var(--text); font-size:18px; line-height:1; padding:0; display:flex; align-items:center; justify-content:center;">✕</button>
@@ -677,6 +685,7 @@
 
   <div id="priceScreen" class="hidden" style="position:fixed; inset:0; background:var(--bg); z-index:50; display:flex; flex-direction:column;">
     <div style="padding:16px; border-bottom:1px solid var(--line); background:var(--panel); box-shadow:var(--sh-sm);">
+      <div class="hizliGecis" data-ekran="fiyat"></div>
       <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:10px;">
         <div style="font-weight:800; font-size:16px;">💰 Fiyat &amp; Stok Sorgula</div>
         <button type="button" id="priceCloseTopBtn" aria-label="Kapat" style="width:34px; height:34px; border-radius:50%; background:var(--panel2); border:1.5px solid var(--line); color:var(--text); font-size:18px; line-height:1; padding:0; display:flex; align-items:center; justify-content:center;">✕</button>
@@ -726,6 +735,7 @@
        taslak olarak saklanır (uygulama kapansa bile kaybolmaz). -->
   <div id="malHareketScreen" class="hidden" style="position:fixed; inset:0; background:var(--bg); z-index:50; display:flex; flex-direction:column;">
     <div style="padding:16px; border-bottom:1px solid var(--line); background:var(--panel); box-shadow:var(--sh-sm);">
+      <div class="hizliGecis" data-ekran="mal"></div>
       <div style="display:flex; align-items:center; justify-content:space-between;">
         <div style="font-weight:800; font-size:16px;" id="malHareketTitle">Mal Giriş</div>
         <button type="button" id="malHareketCloseTopBtn" aria-label="Kapat" style="width:34px; height:34px; border-radius:50%; background:var(--panel2); border:1.5px solid var(--line); color:var(--text); font-size:18px; line-height:1; padding:0; display:flex; align-items:center; justify-content:center;">✕</button>
@@ -1673,6 +1683,7 @@
   document.getElementById('menuSayimBtn').addEventListener('click', function(){
     document.getElementById('homeMenuScreen').classList.add('hidden');
     afterLoginAreaEl.classList.remove('hidden');
+    hizliGecisCiz();
   });
   document.getElementById('backToMenuLink').addEventListener('click', function(e){
     e.preventDefault();
@@ -1691,6 +1702,7 @@
   function openHareketScreen(){
     if(!canSeeHareket()){ warnToast(hasPerm('hareket') ? 'Şube dışında ürün hareketleri gizli' : 'Ürün Hareketleri yetkin yok — yöneticinden iste'); return; }
     hareketScreenEl.classList.remove('hidden');
+    hizliGecisCiz();
     setTimeout(function(){ hareketInputEl.focus(); }, 80);
   }
   function closeHareketScreen(){ stopQuickScan(); hareketScreenEl.classList.add('hidden'); }
@@ -3125,6 +3137,7 @@
       ? ('Fiyat ve stok bilgisi: ' + d.toLocaleString('tr-TR', { day:'2-digit', month:'2-digit', hour:'2-digit', minute:'2-digit' }) + ' itibarıyla')
       : '';
     priceScreenEl.classList.remove('hidden');
+    hizliGecisCiz();
     setPriceMode(false, true);
   }
   function closePriceScreen(){ priceStopCamera(); stopQuickScan(); priceScreenEl.classList.add('hidden'); }
@@ -3627,6 +3640,7 @@
 
   function openMalHareketScreen(tip){
     malTip = tip;
+    hizliGecisCiz();
     malSaving = false;
     malSaveBtnEl.disabled = false; malSaveBtnEl.textContent = '💾 Kaydet ve Bitir';
     document.getElementById('malHareketTitle').textContent = tip === 'cikis' ? '📤 Mal Çıkış' : '📥 Mal Giriş';
@@ -3674,6 +3688,54 @@
     var scanning = !document.getElementById('malHareketScan').classList.contains('hidden');
     if(scanning && malItems.length > 0) toast('Taslak saklandı (' + malItems.length + ' ürün) — menüden tekrar açınca devam edersin', 'warn', 3200);
     closeMalHareketScreen();
+  });
+
+  // ---------- HIZLI GEÇİŞ (üstteki düğmeler) ----------
+  // Sayım / Mal Giriş / Mal Çıkış / Fiyat / Hareket arasında menüye dönmeden
+  // geçiş. Sadece menüde görünen (yetkisi olan) ekranlar listelenir. Mal
+  // ekranındaki yarım kayıt taslak olarak kalır (✕ ile kapatmakla aynı).
+  var HIZLI_GECIS = [
+    ['sayim', '📋', 'Sayım', 'menuSayimBtn'], ['giris', '📥', 'Giriş', 'menuMalGirisBtn'],
+    ['cikis', '📤', 'Çıkış', 'menuMalCikisBtn'], ['fiyat', '💰', 'Fiyat', 'menuFiyatBtn'],
+    ['hareket', '🔁', 'Hareket', 'menuHareketBtn']
+  ];
+  function hizliGecisCiz(){
+    var gorunen = HIZLI_GECIS.filter(function(g){ var b = document.getElementById(g[3]); return b && !b.classList.contains('hidden'); });
+    document.querySelectorAll('.hizliGecis').forEach(function(el){
+      var aktif = el.getAttribute('data-ekran') === 'mal' ? malTip : el.getAttribute('data-ekran');
+      el.innerHTML = gorunen.map(function(g){
+        return '<button type="button" data-hedef="' + g[0] + '"' + (g[0] === aktif ? ' class="on"' : '') + '><span>' + g[1] + '</span><span>' + g[2] + '</span></button>';
+      }).join('');
+    });
+  }
+  function hizliGec(hedef){
+    var malAcik = !malScreenEl.classList.contains('hidden');
+    if(malAcik && malSaving){ warnToast('Kayıt gönderiliyor — bitince geç'); return; }
+    if(hedef === 'cikis' && !hasPerm('mal_cikis')){ warnToast('Mal Çıkış yetkin yok — yöneticinden iste'); return; }
+    if(hedef === 'hareket' && !canSeeHareket()){ warnToast(hasPerm('hareket') ? 'Şube dışında ürün hareketleri gizli' : 'Ürün Hareketleri yetkin yok — yöneticinden iste'); return; }
+    if(malAcik && (hedef === malTip)) return;
+    if(malAcik){
+      var scanning = !document.getElementById('malHareketScan').classList.contains('hidden');
+      if(scanning && malItems.length > 0) toast('Taslak saklandı (' + malItems.length + ' ürün) — tekrar açınca devam edersin', 'warn', 3200);
+      closeMalHareketScreen();
+    }
+    if(!priceScreenEl.classList.contains('hidden')) closePriceScreen();
+    if(!hareketScreenEl.classList.contains('hidden')) closeHareketScreen();
+    if(hedef === 'sayim'){
+      // Sayım ekranı (okutma) açıksa zaten oradayız; değilse sayım başlangıcı.
+      if(document.getElementById('main').classList.contains('hidden')){
+        document.getElementById('homeMenuScreen').classList.add('hidden');
+        afterLoginAreaEl.classList.remove('hidden');
+      }
+    }
+    else if(hedef === 'giris' || hedef === 'cikis') openMalHareketScreen(hedef);
+    else if(hedef === 'fiyat') openPriceScreen();
+    else if(hedef === 'hareket') openHareketScreen();
+    hizliGecisCiz();
+  }
+  document.addEventListener('click', function(e){
+    var b = e.target.closest && e.target.closest('.hizliGecis button');
+    if(b) hizliGec(b.getAttribute('data-hedef'));
   });
 
   document.getElementById('malHareketStartBtn').addEventListener('click', function(){
