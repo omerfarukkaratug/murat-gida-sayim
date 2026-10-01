@@ -8,7 +8,7 @@
 // bir sürüm dağıttıktan sonra /exec adresini boş açtığında burada yazan
 // numarayı görmelisin; index.html'in üstündeki "build" numarasıyla
 // eşleşecek şekilde ben her ikisini birlikte güncelliyorum.
-var GS_VERSION = 'build99';
+var GS_VERSION = 'build104';
 
 // Sheets'te "Saat" sütunu zaman biçimli olarak algılanırsa, hücre değeri düz
 // metin değil bir Date nesnesi olarak gelir ve String(...) çirkin bir çıktı
@@ -49,6 +49,9 @@ function doGet(e) {
       katalogVersion: PropertiesService.getScriptProperties().getProperty('KATALOG_VERSION') || '',
       cariVersion: PropertiesService.getScriptProperties().getProperty('CARI_VERSION') || ''
     }, e.parameter.callback);
+  }
+  if (e.parameter && e.parameter.action === 'urun_hareket') {
+    return urunHareket(e.parameter, e.parameter.callback);
   }
   if (e.parameter && e.parameter.action === 'temizle') {
     return handleTemizle(e.parameter.user, e.parameter.pass, e.parameter.callback);
@@ -153,7 +156,7 @@ function outJson(obj, callback) {
 // yetkilendirme için yeterlidir. Tabloyu düzenleme yetkisi olan herkes
 // şifreleri görebilir.
 // ============================================================
-var ALL_PERMS = ['rapor', 'temizle', 'kullanici_yonetimi', 'ayarlar', 'canli_durum', 'duzelt'];
+var ALL_PERMS = ['rapor', 'temizle', 'kullanici_yonetimi', 'ayarlar', 'canli_durum', 'duzelt', 'hareket'];
 
 function authenticate(user, pass) {
   user = String(user || '').trim();
@@ -2214,4 +2217,32 @@ function dbKarsilastir() {
   gunlukYaz('veritabani', 'karşılaştırma', ozet, !tamam);
   Logger.log(ozet);
   return ozet;
+}
+
+// ============================================================
+// ÜRÜN HAREKETLERİ: bir ürünün ERP12'deki alışları (kimden, ne zaman, hangi
+// belgeyle, kaç TL'ye) ve satışları. Veri, ERP bilgisayarındaki
+// hareket-gonder.ps1 ile veri tabanına (Supabase) yazılır; telefon ona
+// DOĞRUDAN erişemez — burada "hareket" yetkisi kontrol edilip gizli
+// anahtarla okunur. (DB_KAPALI sadece gölge yazmayı durdurur, bunu değil.)
+// ============================================================
+function urunHareket(p, callback) {
+  var auth = requirePermission(p.user, p.pass, 'hareket');
+  if (!auth.ok) return outJson({ status: 'error', message: auth.message }, callback);
+  var props = PropertiesService.getScriptProperties();
+  var url = String(props.getProperty('DB_URL') || '').trim().replace(/\/+$/, '');
+  var anahtar = String(props.getProperty('DB_ANAHTAR') || '').trim();
+  if (!url || !anahtar) return outJson({ status: 'error', message: 'Veri tabanı ayarı yok (DB_URL / DB_ANAHTAR)' }, callback);
+  var stokKodu = String(p.stokKodu || '').substring(0, 60);
+  var barkod = String(p.barkod || '').substring(0, 60);
+  if (!stokKodu && !barkod) return outJson({ status: 'error', message: 'Ürün seçilmedi' }, callback);
+  var gun = parseInt(p.gun, 10); if (isNaN(gun) || gun < 0 || gun > 3650) gun = 365;
+  try {
+    var sonuc = dbCagir({ url: url, anahtar: anahtar }, 'urun_hareket', { p_stok_kodu: stokKodu, p_barkod: barkod, p_gun: gun, p_limit: 200 });
+    if (!sonuc || sonuc.status !== 'ok') return outJson({ status: 'error', message: (sonuc && sonuc.message) || 'Veri tabanı cevap vermedi' }, callback);
+    return outJson(sonuc, callback);
+  } catch (err) {
+    gunlukYaz('veritabani', 'ürün hareketleri', 'Sorgu başarısız: ' + err, true);
+    return outJson({ status: 'error', message: 'Veri tabanına ulaşılamadı — biraz sonra tekrar dene' }, callback);
+  }
 }
