@@ -79,6 +79,9 @@ function Gonder-VeriTabani($fonksiyon, $govde, $ne) {
     try {
         $anahtar = (Get-Content -Path $DbAnahtarDosyasi -TotalCount 1).Trim()
         if (-not $anahtar) { return }
+        # ERP'deki bazi adlarda gorunmez NUL karakteri olabiliyor; PostgreSQL
+        # JSON'da "\u0000"i kabul etmez (400 Bad Request). Sadece DB kopyasi icin silinir.
+        $govde = $govde -replace '(?<!\\)((?:\\\\)*)\\u0000', '$1'
         $baytlar = [System.Text.Encoding]::UTF8.GetBytes($govde)
         $sonuc = Invoke-RestMethod -Uri "$DbUrl/rest/v1/rpc/$fonksiyon" -Method Post -Body $baytlar `
             -ContentType "application/json; charset=utf-8" -Headers @{ apikey = $anahtar } -TimeoutSec 120 -UserAgent "MK-Sayim/1.0"
@@ -88,7 +91,10 @@ function Gonder-VeriTabani($fonksiyon, $govde, $ne) {
             Yaz-Log "VERI TABANI HATA: $ne yazilamadi. Yanit: $($sonuc | ConvertTo-Json -Compress) (Sheets etkilenmedi)"
         }
     } catch {
-        Yaz-Log "VERI TABANI HATA: $ne gonderilemedi: $($_.Exception.Message) (Sheets etkilenmedi)"
+        # Sunucunun hata aciklamasi (hangi alan/satir) da gunluge yazilir.
+        $ayrinti = ''
+        if ($_.ErrorDetails -and $_.ErrorDetails.Message) { $ayrinti = ' Ayrinti: ' + $_.ErrorDetails.Message }
+        Yaz-Log "VERI TABANI HATA: $ne gonderilemedi: $($_.Exception.Message)$ayrinti (Sheets etkilenmedi)"
     }
 }
 
