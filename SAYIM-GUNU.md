@@ -17,6 +17,7 @@ Hedef: en az 10 telefon, ~80.000 okutma (depo + reyon), **18 saat** (dakikada or
   - [ ] SQL yedek görevleri (`SqlBackupFree_*`) başarılı — (0xFFFFFFFF) görünmüyor.
 - [ ] **Kullanıcılar:** Her personelin kendi kullanıcı adı var; fiyat/stok görmemesi gerekenlerde "💰 Fiyat Görme" ve "📦 Stok Görme" kapalı.
 - [ ] **Telefonlar:** şarjlı, powerbank hazır, Chrome güncel, uygulama ana ekrana eklenmiş, kamera izni verilmiş.
+- [ ] **iPhone'larda Dikey Yön Kilidi açık** (sağ üstten aşağı kaydır → 🔒). iPhone uygulamanın ekranı kilitlemesine izin vermez; Android'de uygulama kendisi kilitler.
 
 ## 2) Sayım başlarken
 
