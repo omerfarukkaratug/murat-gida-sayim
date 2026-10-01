@@ -408,7 +408,7 @@ begin
   if v_sayi = 0 then
     return jsonb_build_object('status', 'error', 'message', 'Boş cari listesi — değiştirilmedi');
   end if;
-  delete from cariler;
+  delete from cariler where true; -- Supabase (pg_safeupdate) WHERE'siz DELETE'i reddeder
   insert into cariler (kod, ad, bakiye)
     select distinct on (case when coalesce(x.code, '') = '' then gen_random_uuid()::text else x.code end)
            coalesce(x.code, ''), x.name, nullif(x.balance, '')::numeric
