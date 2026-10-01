@@ -351,7 +351,7 @@
   <header style="border:none; padding:0 0 16px; background:transparent; display:flex; align-items:flex-start; justify-content:space-between;">
     <div>
       <h1><img src="logo-header.png" alt="Murat Gıda" style="height:30px; width:auto; display:block;"></h1>
-      <div class="sub">MK ERP · Murat Gıda • offline • Android • build 108</div>
+      <div class="sub">MK ERP · Murat Gıda • offline • Android • build 109</div>
     </div>
     <button type="button" id="themeToggleBtn" title="Tema seç" style="background:var(--panel2); border:1.5px solid var(--line); color:var(--text); width:34px; height:34px; border-radius:50%; font-size:15px; padding:0; display:flex; align-items:center; justify-content:center; flex-shrink:0;">🎨</button>
   </header>
@@ -687,6 +687,19 @@
       </div>
       <div id="hareketDonem" class="hareketDonem">
         <span class="hareketDonemEtiket">Satışlar:</span><button type="button" data-gun="90">3 ay</button><button type="button" data-gun="365" class="on">12 ay</button><button type="button" data-gun="0">Tümü</button>
+      </div>
+    </div>
+    <div id="hareketCamLive" class="hidden">
+      <div class="camWrap">
+        <video id="hareketVideo" class="camVideo" playsinline autoplay muted></video>
+        <div id="hareketFlash" class="camFlash"></div>
+        <div class="scanFrame"></div>
+        <button id="hareketTorchBtn" class="hidden camTorchBtn">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M13 2 3 14h9l-1 8 10-12h-9l1-8Z"/></svg>
+        </button>
+        <button id="hareketCloseCamBtn" class="camCloseBtn">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M18 6 6 18M6 6l12 12"/></svg>
+        </button>
       </div>
     </div>
     <div id="hareketBody" style="flex:1; overflow-y:auto; padding:12px 14px 24px;"><div class="hint">Ürünü okut ya da barkodunu yaz.</div></div>
@@ -1715,17 +1728,74 @@
     hizliGecisCiz();
     setTimeout(function(){ hareketInputEl.focus(); }, 80);
   }
-  function closeHareketScreen(){ stopQuickScan(); hareketScreenEl.classList.add('hidden'); }
+  function closeHareketScreen(){ stopQuickScan(); hareketStopCamera(); hareketScreenEl.classList.add('hidden'); }
   // Konum sonradan "şube dışı" olursa açık ekran kapanır.
   // (Açılışta konum kontrolü bu satırdan ÖNCE çalışabilir — ekranı doğrudan bul.)
   function hareketKonumKontrol(){
     var el = document.getElementById('hareketScreen');
-    if(el && !el.classList.contains('hidden') && !canSeeHareket()){ stopQuickScan(); el.classList.add('hidden'); }
+    if(el && !el.classList.contains('hidden') && !canSeeHareket()){ stopQuickScan(); hareketStopCamera(); el.classList.add('hidden'); }
   }
   document.getElementById('menuHareketBtn').addEventListener('click', openHareketScreen);
   document.getElementById('hareketCloseBtn').addEventListener('click', closeHareketScreen);
   document.getElementById('hareketAdBtn').addEventListener('click', function(){ openNameSearch('hareket'); });
-  document.getElementById('hareketKameraBtn').addEventListener('click', function(){ startQuickScan(function(val){ hareketAra(val); }); });
+  // Kamera: Fiyat ekranındaki gibi üstte küçük alan; açık kaldıkça okur, her
+  // YENİ barkodda hareketleri getirir (aynı barkod tekrar sorgulanmaz).
+  var hareketCamStream = null, hareketCamEngine = null, hareketCamTrack = null, hareketTorchOn = false;
+  function hareketFlash(color){
+    var f = document.getElementById('hareketFlash');
+    f.className = 'camFlash ' + color; f.style.opacity = 1;
+    setTimeout(function(){ f.style.opacity = 0; }, 140);
+  }
+  function hareketStartCamera(){
+    if(hareketCamStream) return;
+    if(document.activeElement) document.activeElement.blur();
+    document.getElementById('hareketCamLive').classList.remove('hidden');
+    navigator.mediaDevices.getUserMedia(CAMERA_CONSTRAINTS)
+      .then(function(stream){
+        if(document.getElementById('hareketScreen').classList.contains('hidden')){ stream.getTracks().forEach(function(t){ t.stop(); }); return; }
+        hareketCamStream = stream;
+        var v = document.getElementById('hareketVideo');
+        v.srcObject = stream;
+        hareketCamTrack = stream.getVideoTracks()[0];
+        var caps = hareketCamTrack.getCapabilities ? hareketCamTrack.getCapabilities() : {};
+        document.getElementById('hareketTorchBtn').classList.toggle('hidden', !caps.torch);
+        hareketCamEngine = startBarcodeEngine(stream, v, function(val){
+          val = (val || '').trim();
+          if(!val || (hareketSon && hareketSon.barkod === val)) return;
+          var found = catalogMap.has(val);
+          hareketFlash(found ? 'green' : 'amber');
+          if(found){ beep(1046, 90, 0.16); } else { beep(220, 320, 0.16); }
+          if(navigator.vibrate) navigator.vibrate(30);
+          hareketAra(val);
+        }, function(){
+          errorToast("Barkod tarayıcı yüklenemedi — internete bağlanıp tekrar dene, ya da elle yaz");
+          hareketStopCamera();
+        });
+      })
+      .catch(function(){
+        errorToast("Kamera açılamadı — izinleri kontrol edin");
+        hareketStopCamera();
+      });
+  }
+  function hareketStopCamera(){
+    if(hareketCamEngine){ hareketCamEngine.stop(); hareketCamEngine = null; }
+    if(hareketCamStream){ hareketCamStream.getTracks().forEach(function(tr){ tr.stop(); }); hareketCamStream = null; }
+    hareketCamTrack = null; hareketTorchOn = false;
+    var tb = document.getElementById('hareketTorchBtn'); if(tb) tb.classList.remove('on');
+    var cl = document.getElementById('hareketCamLive'); if(cl) cl.classList.add('hidden');
+  }
+  document.getElementById('hareketTorchBtn').addEventListener('click', function(){
+    if(!hareketCamTrack) return;
+    hareketTorchOn = !hareketTorchOn;
+    hareketCamTrack.applyConstraints({ advanced: [{ torch: hareketTorchOn }] }).catch(function(){
+      warnToast("El feneri bu cihazda desteklenmiyor"); hareketTorchOn = false;
+    });
+    this.classList.toggle('on', hareketTorchOn);
+  });
+  document.getElementById('hareketCloseCamBtn').addEventListener('click', hareketStopCamera);
+  document.getElementById('hareketKameraBtn').addEventListener('click', function(){
+    if(hareketCamStream) hareketStopCamera(); else hareketStartCamera();
+  });
   document.getElementById('hareketAraBtn').addEventListener('click', function(){ var v = hareketInputEl.value.trim(); if(v) hareketAra(v); });
   hareketInputEl.setAttribute('enterkeyhint', 'search');
   hareketInputEl.addEventListener('keydown', function(e){ if(e.key === 'Enter'){ var v = hareketInputEl.value.trim(); if(v){ hareketAra(v); hareketInputEl.blur(); } } });
@@ -2508,6 +2578,22 @@
   // KOLİ barkodu: ERP12'de çarpanı 1'den büyük barkod (ör. 24'lü koli). Stok
   // ERP'de ADET olarak tutuluyor; personel koli sayısını girer, telefon
   // adede çevirip kaydeder (3 koli × 24 = 72 adet). Rapor ve fark adet olur.
+  // Koli olarak okutulmuş kayıt mı? (adet = koli × çarpan tutuyorsa) → çarpan, değilse 0.
+  // Kayıt sunucuya ADET olarak gider; ekranda koli sayısı ve KOLİ birimi gösterilir.
+  function koliKaydiCarpan(it){
+    var k = Number(it && it.koli), c = Number(it && it.carpan);
+    return (k > 0 && c > 1 && Math.abs(k * c - Number(it.qty)) < 0.0005) ? c : 0;
+  }
+  function koliMetni(it){
+    var c = koliKaydiCarpan(it);
+    return c ? ' · <span class="oldStock">📦 1 koli = ' + escapeHtml(c) + ' · toplam ' + escapeHtml(it.qty) + ' adet</span>' : '';
+  }
+  function fiyatTagFor(barcode){
+    if(!canSeePrice()) return '';
+    var c = catalogMap.get(barcode);
+    if(!c || c.price === '' || c.price === undefined || isNaN(Number(c.price))) return '';
+    return ' · <span class="kdvTag">' + fmtPara(c.price) + '</span>';
+  }
   function koliCarpani(entry){
     var c = Number(entry && entry.carpan);
     return (isFinite(c) && c > 1) ? c : 0;
@@ -2668,14 +2754,14 @@
     var unit = unitFor(it.barcode);
     var unitHtml = unit === 'Kg' ? ' · <span class="oldStock">Kg</span>' : '';
     var reyonHtml = it.reyon ? ' · <span class="oldStock">'+escapeHtml(it.reyon)+'</span>' : '';
-    if(it.koli && it.carpan && Number(it.koli) * Number(it.carpan) === Number(it.qty)) reyonHtml += ' · <span class="oldStock">📦 '+escapeHtml(it.koli)+' koli × '+escapeHtml(it.carpan)+'</span>';
+    var kc = koliKaydiCarpan(it);
     var sent = isScanSent(it);
     var syncDot = '<span class="syncDot" title="'+(sent?'Dosyaya gönderildi':'Henüz dosyaya gönderilmedi')+'" style="background:'+(sent?'var(--green)':'var(--red)')+';"></span>';
     return '<div class="item">' +
       '<div class="info"><div class="name">'+syncDot+escapeHtml(it.name)+'</div>' +
-      '<div class="meta">'+escapeHtml(it.barcode)+' · '+it.time+oldStockHtml+kdvTagFor(it.barcode)+birimTagFor(it.barcode)+unitHtml+reyonHtml+'</div></div>' +
+      '<div class="meta">'+escapeHtml(it.barcode)+' · '+it.time+oldStockHtml+kdvTagFor(it.barcode)+birimTagFor(it.barcode)+fiyatTagFor(it.barcode)+unitHtml+reyonHtml+koliMetni(it)+'</div></div>' +
       '<div class="qtyBox">' +
-        '<input class="qtyInput" type="number" inputmode="'+(unit==='Kg'?'decimal':'numeric')+'" step="'+(unit==='Kg'?'0.001':'1')+'" value="'+it.qty+'" data-id="'+it.id+'">' +
+        '<input class="qtyInput" type="number" inputmode="'+(unit==='Kg'?'decimal':'numeric')+'" step="'+(unit==='Kg'?'0.001':'1')+'" value="'+(kc ? it.koli : it.qty)+'" data-id="'+it.id+'"'+(kc ? ' data-koli="1" title="Koli sayısı"' : '')+'>' +
         '<button type="button" class="itemDelBtn" data-id="'+it.id+'" title="Bu kaydı sil">🗑️</button>' +
       '</div></div>';
   }
@@ -2787,12 +2873,15 @@
     return it.a !== undefined && it.a >= (it.v || 1);
   }
 
-  function setQty(id, newQty){
+  // koliModu: girilen değer KOLİ sayısıdır (koli olarak okutulmuş kayıt) — adede çevrilir.
+  function setQty(id, newQty, koliModu){
     var idx = state.session.scans.findIndex(function(s){ return s.id === id; });
     if(idx === -1) return;
     var it = state.session.scans[idx];
     var unit = unitFor(it.barcode);
     newQty = parseQtyForBarcode(newQty, it.barcode);
+    var carpan = koliModu ? koliKaydiCarpan(it) : 0, yeniKoli = 0;
+    if(carpan && newQty > 0){ yeniKoli = newQty; newQty = yeniKoli * carpan; }
     if(newQty === 0){
       if(!confirm('"'+it.name+'" kaydını silmek istediğine emin misin? (Yanlış ürün okuttuysan bunu sil.)')){
         renderList(); // vazgeçildi, eski değere geri dön
@@ -2813,17 +2902,18 @@
       return;
     }
     var abnormalLimit = unit === 'Kg' ? 50 : ABNORMAL_QTY;
-    if(newQty > abnormalLimit){
-      if(!confirm(it.name + ' için ' + newQty + ' ' + unit + ' girdin — bu çok yüksek görünüyor.\nBu doğru mu?')){
+    if((yeniKoli || newQty) > abnormalLimit){
+      if(!confirm(it.name + ' için ' + (yeniKoli ? yeniKoli + ' KOLİ' : newQty + ' ' + unit) + ' girdin — bu çok yüksek görünüyor.\nBu doğru mu?')){
         renderList(); // eski değere geri dön (görsel olarak sıfırla)
         return;
       }
     }
-    var eskiQty = it.qty, eskiV = it.v;
+    var eskiQty = it.qty, eskiV = it.v, eskiKoli = it.koli;
     it.qty = newQty;
+    if(yeniKoli) it.koli = yeniKoli;
     bumpScanVersion(it);
     if(!save()){
-      it.qty = eskiQty; it.v = eskiV;
+      it.qty = eskiQty; it.v = eskiV; it.koli = eskiKoli;
       renderList();
       storageFailAlert('Adet düzeltmesi');
       return;
@@ -2834,7 +2924,7 @@
 
   listEl.addEventListener('change', function(e){
     if(!e.target.classList.contains('qtyInput')) return;
-    setQty(e.target.getAttribute('data-id'), e.target.value);
+    setQty(e.target.getAttribute('data-id'), e.target.value, e.target.hasAttribute('data-koli'));
   });
   listEl.addEventListener('click', function(e){
     var btn = e.target.closest('.itemDelBtn');
@@ -3841,7 +3931,7 @@
       return '<div class="item">' +
         '<div class="satirNo">' + sira + '</div>' +
         '<div class="info"><div class="name">' + escapeHtml(it.ad) + '</div>' +
-        '<div class="meta">' + escapeHtml(it.barkod) + (it.stokKodu ? (' · ' + escapeHtml(it.stokKodu)) : '') + (kdvTxt ? ' · <span class="kdvTag">' + kdvTxt + '</span>' : '') + (it.birim === 'Kg' ? ' · <span class="oldStock">Kg</span>' : '') + (it.stokAc === false ? ' · <span class="noStokTag">STOK AÇILMAYACAK</span>' : (it.yeni ? ' · <span class="noStokTag">YENİ STOK</span>' : '')) + '</div>' + fiyatSatir + '</div>' +
+        '<div class="meta">' + escapeHtml(it.barkod) + (it.stokKodu ? (' · ' + escapeHtml(it.stokKodu)) : '') + (kdvTxt ? ' · <span class="kdvTag">' + kdvTxt + '</span>' : '') + (it.birim === 'Kg' ? '' : birimTagFor(it.barkod)) + (it.birim === 'Kg' ? ' · <span class="oldStock">Kg</span>' : '') + (it.stokAc === false ? ' · <span class="noStokTag">STOK AÇILMAYACAK</span>' : (it.yeni ? ' · <span class="noStokTag">YENİ STOK</span>' : '')) + '</div>' + fiyatSatir + '</div>' +
         '<div class="qtyBox">' +
           '<input class="qtyInput mhQty" type="number" inputmode="' + (it.birim === 'Kg' ? 'decimal' : 'numeric') + '" step="' + (it.birim === 'Kg' ? '0.001' : '1') + '" value="' + it.miktar + '" data-mh-id="' + escAttr(it.id) + '">' +
           '<button type="button" class="itemDelBtn mhDelBtn" data-mh-id="' + escAttr(it.id) + '" title="Bu satırı sil">🗑️</button>' +
@@ -4156,8 +4246,8 @@
     var syncDot = '<span class="syncDot" title="'+(sent?'Dosyaya gönderildi':'Henüz dosyaya gönderilmedi')+'" style="background:'+(sent?'var(--green)':'var(--red)')+';"></span>';
     return '<div class="item browseItem" data-browse-id="'+it.id+'">' +
       '<div class="info"><div class="name">'+syncDot+escapeHtml(it.name)+'</div>' +
-      '<div class="meta">'+escapeHtml(it.barcode)+stockHtml+' · '+it.date+' '+it.time+oldStockHtml+kdvTagFor(it.barcode)+birimTagFor(it.barcode)+reyonHtml+'</div></div>' +
-      '<div class="qtyBox" style="font-family:var(--mono); font-weight:800; font-size:16px;">'+it.qty+' '+unit+'</div>' +
+      '<div class="meta">'+escapeHtml(it.barcode)+stockHtml+' · '+it.date+' '+it.time+oldStockHtml+kdvTagFor(it.barcode)+birimTagFor(it.barcode)+fiyatTagFor(it.barcode)+reyonHtml+koliMetni(it)+'</div></div>' +
+      '<div class="qtyBox" style="font-family:var(--mono); font-weight:800; font-size:16px;">'+(koliKaydiCarpan(it) ? it.koli+' KOLİ' : it.qty+' '+unit)+'</div>' +
     '</div>';
   }
 
@@ -4185,17 +4275,19 @@
 
   var browseEditModalEl = document.getElementById('browseEditModal');
   var browseEditQtyInput = document.getElementById('browseEditQtyInput');
-  var browseEditIdVal = null;
+  var browseEditIdVal = null, browseEditKoli = false;
 
   function openBrowseEditModal(id){
     var it = state.session.scans.find(function(s){ return s.id === id; });
     if(!it) return;
     browseEditIdVal = id;
     var unit = unitFor(it.barcode);
+    var kc = koliKaydiCarpan(it);
+    browseEditKoli = !!kc;
     document.getElementById('browseEditName').textContent = it.name;
     document.getElementById('browseEditMeta').textContent =
-      it.barcode + ' · ' + it.date + ' ' + it.time + (unit === 'Kg' ? ' · Kg' : '') + (it.reyon ? ' · ' + it.reyon : '');
-    browseEditQtyInput.value = it.qty;
+      it.barcode + ' · ' + it.date + ' ' + it.time + (unit === 'Kg' ? ' · Kg' : '') + (kc ? ' · KOLİ sayısı (1 koli = ' + kc + ' adet)' : '') + (it.reyon ? ' · ' + it.reyon : '');
+    browseEditQtyInput.value = kc ? it.koli : it.qty;
     browseEditQtyInput.setAttribute('inputmode', unit === 'Kg' ? 'decimal' : 'numeric');
     browseEditQtyInput.setAttribute('step', unit === 'Kg' ? '0.001' : '1');
     browseEditModalEl.classList.remove('hidden');
@@ -4206,7 +4298,7 @@
   document.getElementById('browseEditCancel').addEventListener('click', closeBrowseEditModal);
   document.getElementById('browseEditSave').addEventListener('click', function(){
     if(!browseEditIdVal) return;
-    setQty(browseEditIdVal, browseEditQtyInput.value); // setQty zaten kaydeder, listeleri günceller, senkrona kuyruklar
+    setQty(browseEditIdVal, browseEditQtyInput.value, browseEditKoli); // setQty zaten kaydeder, listeleri günceller, senkrona kuyruklar
     closeBrowseEditModal();
   });
   document.getElementById('browseEditDelete').addEventListener('click', function(){
@@ -5569,8 +5661,8 @@
       var unit = unitFor(it.barcode);
       return '<div class="item">' +
         '<div class="info"><div class="name">'+escapeHtml(it.name)+'</div>' +
-        '<div class="meta">'+escapeHtml(it.barcode)+' · '+it.time+oldStockHtml+kdvTagFor(it.barcode)+birimTagFor(it.barcode)+'</div></div>' +
-        '<div class="qtyBox" style="font-family:var(--mono); font-weight:800; font-size:17px;">'+it.qty+' '+unit+'</div>' +
+        '<div class="meta">'+escapeHtml(it.barcode)+' · '+it.time+oldStockHtml+kdvTagFor(it.barcode)+birimTagFor(it.barcode)+koliMetni(it)+'</div></div>' +
+        '<div class="qtyBox" style="font-family:var(--mono); font-weight:800; font-size:17px;">'+(koliKaydiCarpan(it) ? it.koli+' KOLİ' : it.qty+' '+unit)+'</div>' +
         '</div>';
     }).join('');
     document.getElementById('reviewScreen').classList.remove('hidden');
