@@ -11,6 +11,10 @@
 #  - ERP12'ye HİÇBİR ŞEY YAZMAZ, sadece okur.
 #  - Günde bir kez son 400 günü baştan gönderir (ERP'de düzeltilen/silinen
 #    belgeler de düzelsin), diğer çalışmalarda sadece son 3 günü.
+#  - YIL DEVRİ OTOMATİK: ERP12'nin en yeni İKİ yıl veri tabanını (örn. ERP122026
+#    ve ERP122025) kendisi bulur ve ikisini de gönderir — devirden sonra eski
+#    yıla geç girilen faturalar da gelir. Daha eski yılların kayıtları veri
+#    tabanında olduğu gibi kalır (silinmez), uygulamada görünmeye devam eder.
 #
 #  Kurulum: C:\Scripts\db-anahtar.txt (Supabase secret anahtarı) olmalı.
 #  Görev Zamanlayıcı: saatte bir
@@ -19,12 +23,16 @@
 
 # ---------------------- AYARLAR ----------------------
 $SqlServer        = "SERVER\ERP12"
-$Database         = "ERP122025"
+# Bos: ERP12 yil veri tabanlari (ERP12 + 4 haneli yil) otomatik bulunur.
+# Elle vermek icin virgulle: "ERP122026,ERP122025"
+$Database         = ""
 $DbUrl            = "https://wjyqempcmyrmruhdpcwk.supabase.co"
 $DbAnahtarDosyasi = "C:\Scripts\db-anahtar.txt"
 $LogFile          = "C:\Scripts\hareket-log.txt"
-$TamGonderimDosya = "C:\Scripts\hareket-son-tam.txt"
+$TamGonderimKlasor = "C:\Scripts"
 $TamGun           = 400
+# Bir yil veri tabani ILK kez gonderilirken (durum dosyasi yok) daha geriye git.
+$IlkGun           = 800
 $KisaGun          = 3
 $Parca            = 3000
 # FIS_DETAY'daki miktar ve KDV DAHIL birim fiyat. Bos birakilirsa sutun
@@ -66,15 +74,18 @@ function Rpc($fonksiyon, $govdeJson) {
 }
 
 # Satirlari parca parca gonderir; ILK parca o araliktaki eski kayitlari siler.
-function Parcali-Gonder($fonksiyon, $satirlar, $basJson, $bitJson) {
+function Parcali-Gonder($fonksiyon, $kaynak, $satirlar, $basJson, $bitJson) {
     $toplam = 0
     $i = 0
     do {
         $son = [Math]::Min($i + $Parca, $satirlar.Count)
-        $dilim = if ($satirlar.Count -gt 0) { @($satirlar[$i..($son - 1)]) } else { @() }
+        # DIKKAT: "$x = if (...) { @(...) }" tek elemanli diziyi tek nesneye cevirir
+        # (veri tabani "dizi degil" diye reddeder) -> once bos dizi, sonra ata.
+        $dilim = @()
+        if ($satirlar.Count -gt 0) { $dilim = @($satirlar[$i..($son - 1)]) }
         $json = if ($dilim.Count -gt 0) { ConvertTo-Json -InputObject $dilim -Depth 3 -Compress } else { "[]" }
         $temizle = if ($i -eq 0) { "true" } else { "false" }
-        $govde = '{"p_satirlar":' + $json + ',"p_bas":' + $basJson + ',"p_bit":' + $bitJson + ',"p_temizle":' + $temizle + '}'
+        $govde = '{"p_kaynak":"' + $kaynak + '","p_satirlar":' + $json + ',"p_bas":' + $basJson + ',"p_bit":' + $bitJson + ',"p_temizle":' + $temizle + '}'
         $r = Rpc $fonksiyon $govde
         $toplam += [int]$r.eklenen
         $i = $son
@@ -82,39 +93,34 @@ function Parcali-Gonder($fonksiyon, $satirlar, $basJson, $bitJson) {
     return $toplam
 }
 
-$baglanti = $null
-try {
-    if (-not (Test-Path $DbAnahtarDosyasi)) { Yaz-Log "HATA: $DbAnahtarDosyasi yok."; exit 1 }
-    $script:Anahtar = (Get-Content -Path $DbAnahtarDosyasi -TotalCount 1).Trim()
-
-    # Tam mi kisa mi? (gunde bir tam gonderim)
+function Veritabani-Gonder($Db, $baglanti) {
+    $TamGonderimDosya = Join-Path $TamGonderimKlasor "hareket-son-tam-$Db.txt"
     $tam = $true
-    if (Test-Path $TamGonderimDosya) {
+    $ilk = -not (Test-Path $TamGonderimDosya)
+    if (-not $ilk) {
         $sonTam = [datetime]::MinValue
         if ([datetime]::TryParse((Get-Content $TamGonderimDosya -TotalCount 1), [ref]$sonTam)) {
             $tam = ((Get-Date) - $sonTam).TotalHours -ge 20
         }
     }
-    $gun = if ($tam) { $TamGun } else { $KisaGun }
+    $gun = if ($ilk) { $IlkGun } elseif ($tam) { $TamGun } else { $KisaGun }
     $bas = (Get-Date).Date.AddDays(-$gun)
     $bit = (Get-Date).Date.AddDays(1)
-    Yaz-Log "Basliyor: son $gun gun ($(if ($tam) { 'TAM' } else { 'kisa' }) gonderim)"
-
-    $baglanti = New-Object System.Data.SqlClient.SqlConnection("Server=$SqlServer;Database=$Database;Integrated Security=SSPI;")
-    $baglanti.Open()
+    Yaz-Log "[$Db] Basliyor: son $gun gun ($(if ($tam) { 'TAM' } else { 'kisa' }) gonderim)"
+    $baglanti.ChangeDatabase($Db)
 
     # --- FIS_DETAY sutunlari: miktar ve KDV dahil fiyat ---
     $kolonlar = @((Sql-Tablo $baglanti "SELECT COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_NAME = 'FIS_DETAY'") | ForEach-Object { [string]$_.COLUMN_NAME })
     $miktar = $MiktarKolonu
     if (-not $miktar) { $miktar = @("MIKTAR", "MIKTAR1", "ADET") | Where-Object { $kolonlar -contains $_ } | Select-Object -First 1 }
-    if (-not $miktar) { Yaz-Log "HATA: FIS_DETAY'da miktar sutunu bulunamadi. Sutunlar: $($kolonlar -join ', ')"; exit 1 }
+    if (-not $miktar) { throw "[$Db] FIS_DETAY'da miktar sutunu bulunamadi. Sutunlar: $($kolonlar -join ', ')" }
     $fiyat = $FiyatIfadesi
     if (-not $fiyat) {
         $aday = @("KDV_DAHIL_FIYAT", "FIYAT_KDV_DAHIL", "BIRIM_FIYAT_KDV_DAHIL", "KDVLI_FIYAT", "KDVLI_BIRIM_FIYAT") | Where-Object { $kolonlar -contains $_ } | Select-Object -First 1
         if ($aday) { $fiyat = "d.$aday" }
     }
     if (-not $fiyat) {
-        Yaz-Log "UYARI: KDV dahil fiyat sutunu bulunamadi, fiyatlar bos gonderiliyor. Sutunlar: $($kolonlar -join ', ')"
+        Yaz-Log "[$Db] UYARI: KDV dahil fiyat sutunu bulunamadi, fiyatlar bos gonderiliyor. Sutunlar: $($kolonlar -join ', ')"
         $fiyat = "CAST(NULL AS decimal(18,4))"
     }
 
@@ -148,7 +154,7 @@ WHERE f.FIS_TARIHI >= '$basSql' AND f.FIS_TARIHI < '$bitSql'
             miktar = Sayi $r.miktar; birim_fiyat = Sayi $r.birim_fiyat
         })
     }
-    $n1 = Parcali-Gonder "hareket_yukle" $satirlar ('"' + (Iso $bas) + '"') ('"' + (Iso $bit) + '"')
+    $n1 = Parcali-Gonder "hareket_yukle" $Db $satirlar ('"' + (Iso $bas) + '"') ('"' + (Iso $bit) + '"')
 
     # --- 2) Perakende: kasa (11) + Pesin Satis Carisi -> urun/gun toplami ---
     $sql2 = @"
@@ -166,10 +172,33 @@ GROUP BY s.KOD, CONVERT(char(10), f.FIS_TARIHI, 23)
     foreach ($r in $dt2.Rows) {
         [void]$gunluk.Add([PSCustomObject]@{ stok_kodu = [string]$r.stok_kodu; gun = [string]$r.gun; miktar = Sayi $r.miktar })
     }
-    $n2 = Parcali-Gonder "perakende_yukle" $gunluk ('"' + $basSql + '"') ('"' + $bitSql + '"')
+    $n2 = Parcali-Gonder "perakende_yukle" $Db $gunluk ('"' + $basSql + '"') ('"' + $bitSql + '"')
 
     if ($tam) { Set-Content -Path $TamGonderimDosya -Value (Get-Date -Format "yyyy-MM-dd HH:mm:ss") }
-    Yaz-Log "TAMAM: $n1 belge satiri, $n2 perakende gun-urun toplami gonderildi (miktar: $miktar, fiyat: $fiyat)"
+    Yaz-Log "[$Db] TAMAM: $n1 belge satiri, $n2 perakende gun-urun toplami gonderildi (miktar: $miktar, fiyat: $fiyat)"
+}
+
+$baglanti = $null
+$hataVar = $false
+try {
+    if (-not (Test-Path $DbAnahtarDosyasi)) { Yaz-Log "HATA: $DbAnahtarDosyasi yok."; exit 1 }
+    $script:Anahtar = (Get-Content -Path $DbAnahtarDosyasi -TotalCount 1).Trim()
+
+    $baglanti = New-Object System.Data.SqlClient.SqlConnection("Server=$SqlServer;Database=master;Integrated Security=SSPI;")
+    $baglanti.Open()
+
+    # Hangi yil veri tabanlari? (en yeni iki tanesi)
+    if ($Database) {
+        $dbler = @($Database.Split(",") | ForEach-Object { $_.Trim() } | Where-Object { $_ })
+    } else {
+        $dbler = @((Sql-Tablo $baglanti "SELECT TOP 2 name FROM sys.databases WHERE name LIKE 'ERP12[0-9][0-9][0-9][0-9]' AND state = 0 ORDER BY name DESC") | ForEach-Object { [string]$_.name })
+    }
+    if ($dbler.Count -eq 0) { Yaz-Log "HATA: ERP12 yil veri tabani bulunamadi."; exit 1 }
+
+    foreach ($db in $dbler) {
+        try { Veritabani-Gonder $db $baglanti }
+        catch { $hataVar = $true; Yaz-Log "HATA: [$db] $($_.Exception.Message)" }
+    }
 }
 catch {
     Yaz-Log "HATA: $($_.Exception.Message)"
@@ -178,3 +207,4 @@ catch {
 finally {
     if ($baglanti -ne $null) { $baglanti.Close() }
 }
+if ($hataVar) { exit 1 }

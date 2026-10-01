@@ -22,7 +22,9 @@
 
 # ---------------------- AYARLAR (kendine göre kontrol et) ----------------------
 $SqlServer     = "SERVER\ERP12"
-$Database      = "ERP122025"
+# Bos: ERP12'nin AKTIF yil veri tabani otomatik bulunur (yil devrinden sonra
+# kendiliginden yeni yila gecer). Elle sabitlemek icin: "ERP122026"
+$Database      = ""
 $AppsScriptUrl = "https://script.google.com/macros/s/AKfycbwH0hVGDXIQhdSxg2neDBNUEOxY1SNacJRz4cqf3WaP8xgAhlEnKfRv5xnlENKnh3XuYA/exec"
 $LogFile       = "C:\Scripts\stok-gonderim-log.txt"
 $DbUrl         = "https://wjyqempcmyrmruhdpcwk.supabase.co"
@@ -111,6 +113,20 @@ try {
         try { Install-Module -Name SqlServer -Scope CurrentUser -Force -AllowClobber -ErrorAction Stop } catch {}
     }
     Import-Module SqlServer -ErrorAction SilentlyContinue
+
+    # YIL DEVRI: aktif yil = son 7 gunde belge girilmis EN YENI "ERP12yyyy"
+    # veri tabani (devirden hemen sonra yeni yila gecer; yeni yil acilmis ama
+    # henuz kullanilmiyorsa eskide kalir). Hicbirinde hareket yoksa en yenisi.
+    if (-not $Database) {
+        $adaylar = @(Invoke-Sqlcmd -ServerInstance $SqlServer -Database master -QueryTimeout 60 -Query "SELECT name FROM sys.databases WHERE name LIKE 'ERP12[0-9][0-9][0-9][0-9]' AND state = 0 ORDER BY name DESC" | ForEach-Object { [string]$_.name })
+        if ($adaylar.Count -eq 0) { Yaz-Log "HATA: ERP12 yil veri tabani bulunamadi."; exit 1 }
+        foreach ($aday in $adaylar) {
+            $son = Invoke-Sqlcmd -ServerInstance $SqlServer -Database $aday -QueryTimeout 60 -Query "SELECT COUNT(*) AS n FROM dbo.FIS WHERE FIS_TARIHI >= DATEADD(day, -7, GETDATE())"
+            if ($son -and [int]$son.n -gt 0) { $Database = $aday; break }
+        }
+        if (-not $Database) { $Database = $adaylar[0] }
+        Yaz-Log "Aktif ERP veri tabani: $Database"
+    }
 
     $rows = Invoke-Sqlcmd -ServerInstance $SqlServer -Database $Database -Query $query -QueryTimeout 180
 

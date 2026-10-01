@@ -26,6 +26,14 @@ Fiyat Gör'e benzer: ürün okutulur, iki düğme çıkar.
 - `Code.gs` (build104) — `action=urun_hareket`, "hareket" yetkisi kontrolü, gizli anahtarla okur.
 - `index.html` (build 104) — menüde "🔁 Ürün Hareketleri", kullanıcı yetkisi "🔁 Ürün Hareketleri".
 
+## Yıl devri
+- ERP12 her yıl yeni veri tabanı açar (ERP122025, ERP122026…). Her kayıt `kaynak` (veri tabanı adı) taşır;
+  gönderimde sadece aynı kaynağın kayıtları silinip yenilenir → devirden sonra eski yıl verisi KALIR.
+- hareket-gonder.ps1 en yeni İKİ yılı otomatik bulur ve gönderir (devirden sonra eski yıla geç girilen
+  faturalar da gelir). İlk kurulumda her yıl için 800 gün geriye gider.
+- stok-otomatik-gonder.ps1 aktif yılı kendisi seçer: son 7 günde belge girilmiş en yeni ERP12 veri tabanı.
+- Uygulamada "Tümü" bütün yılları birlikte gösterir; 12 ay seçiliyken de yıl geçişi kesintisizdir.
+
 ## Açık konu
 - FIS_DETAY'ın gerçek sütun adları henüz görülmedi; ilk çalıştırmanın günlüğü kontrol edilecek.
 - Birim (adet/koli) adı şimdilik boş; gerekirse STOK_BIRIM tablosundan eklenecek.
