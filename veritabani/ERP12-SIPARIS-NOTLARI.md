@@ -50,3 +50,19 @@ işlem içinde kilitle (aynı anda iki numara çakışmasın). ERP'nin kendi ser
 ## Eksik
 - Açıklamanın yazıldığı alan (deneme kayıtlarında ACIKLAMA boş).
 - FIS_DETAY'ın da MIKTAR_FIS / DAHIL_FIYAT kullandığı doğrulanacak (hareket-gonder.ps1 buna göre güncellendi).
+
+## Uygulama: erp/siparis-aktar.ps1 + veritabani/004_siparis_aktarim.sql (sayımdan sonra canlıya)
+- Mal Giriş → Verilen Sipariş (1, seri "MOB VRLN-"), Mal Çıkış → Alınan Sipariş (2, seri "MOB LNN-").
+- Cari: CARI.KOD (yoksa AD) → bulunamazsa belge AKTARILMAZ (hata, her çalışmada tekrar denenir).
+- Adres: CARI_ADRES (CARI = cari) ilk kayıt. LOKASYON/PROJE: ERP'nin kendi son siparişinden.
+- Ürün: STOK_BARKOD_BIRIM (barkod) → STOK, STOK_BIRIM; KDV: STOK_VERGI.KDV_TOPTAN.
+  ERP'de olmayan barkod atlanır, siparişin açıklamasına yazılır.
+- Fiyat: verilen → son alış (FIS_DETAY.FIYAT, FIS_TURU 1/5, en yeni); alış geçmişi yoksa 0.
+  alınan → telefondaki KDV dahil fiyat, FIYAT = dahil / (1 + KDV/100).
+- Numara: NEXT VALUE FOR dbo.ID; belge no: seri + (en büyük + 1), UPDLOCK/HOLDLOCK ile.
+- Her belge tek transaction. Yerel liste (siparis-aktarilan.txt) + bulut kaydı ile çift yazma yok.
+- Aktarıldıktan sonra telefonda değişen belge: ERP'ye dokunulmaz, durum 'degisti' + uyarı.
+- Sabit varsayımlar (gerçek kopyada doğrulanacak): VADE_SECENEKLERI 7, FIS_ODEME_TIPI_ISKONTOLARI 1,
+  YEREL_KARSI_FIYAT 0, LISTE_FIYATI 0, ACIKLAMA sütun uzunluğuna göre kısaltılır.
+- Test (sahte ERP, tüm sütunlar NOT NULL): belge/satır toplamları ERP'nin kendi kaydıyla aynı formülde,
+  son alış fiyatı doğru seçiliyor (POS satırı hariç), tekrar çalıştırmada çift kayıt yok.
