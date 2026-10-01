@@ -27,7 +27,19 @@ Alınan'da VADE +31 gün, VADE_SECENEKLERI 7, FIS_ODEME_TIPI_ISKONTOLARI 1 (cari
 ERP'nin kendi kaydında YAZILDI = 0 (yazdırılmadı), ACIKLAMA boş (açıklama başka alanda/tabloda olabilir).
 Detay ID'si başlıktan hemen sonra (7024551 → 7024552): önce başlık, sonra satırlar aynı sayaçtan.
 
+## SIPARIS_DETAY (her satır ayrı ID, başlıktan sonra aynı sayaçtan)
+SIPARIS (başlık ID), LOKASYON 75919, STOK (ürün ID), STOK_CINSI 1, STOK_BIRIM 1012, BARKOD, KOLI_BARKODU '',
+DOVIZ_AD 1, CARPAN 1, KAB 0, MIKTAR_FIS (miktar), MIKTAR_BEDELSIZ 0, ANLASMA_FIYAT 0,
+FIYAT (KDV hariç birim), DAHIL_FIYAT (KDV dahil birim), TUTAR = FIYAT×MIKTAR, DAHIL_TUTAR,
+ISKONTO '', ISKONTO_HESAP 0, OTV_ORAN 0, OTV_TUTAR 0, KDV_TOPTAN (oran: 1/10/20), TEVKIF 0, KUR 1, FIYAT_FARKI 0,
+SERINO_ZORUNLU 0, YEREL_KARSI_FIYAT / BELGE_TARIHINDEKI_SON_ALIS_FIYATI / LISTE_FIYATI (ERP'nin hesapladığı bilgi alanları),
+HK_MIKTAR_FIS '', TOPLAM_SATIR_ISKONTOSU 0, TOPLAM_FIS_ISKONTOSU 0, TOPLAM_OTV 0, TOPLAM_KDV_MATRAHI = TUTAR,
+TOPLAM_KDV = TUTAR×oran/100, TOPLAM_TEVKIF 0, HESAPLANAN_FIYAT = YEREL_FIYAT = FIYAT, ACIKLAMA '', KOD (stok kodu),
+ONERILEN_FIYAT 0, JOKER '', AMBALAJ_BIRIM = STOK_BIRIM, AMBALAJ_MIKTAR = MIKTAR, AMBALAJ_CARPAN 1, FK_STOK_TEVKIF_LESTE 0,
+FK_PERSONEL 0, ALT_BIRIM_MIKTARI = MIKTAR, SEVK_ADRES 0, BUNDLE_DETAY 0, KT_BUNDLE_FIYAT 0.
+Başlık: SATIR_TOPLAM = Σ TUTAR, KDV_TOPLAM = round(Σ TOPLAM_KDV, 2), GENELTOPLAM = Σ DAHIL_TUTAR (doğrulandı).
+
 ## Eksik
-- SIPARIS_DETAY örnek satırları (7024541 ve 7024551).
 - "SPRS VRLN" / "SPRS LNN1" belge numarası serisinin tutulduğu yer.
-- Açıklamanın (DENEME) yazıldığı alan.
+- Açıklamanın yazıldığı alan (deneme kayıtlarında ACIKLAMA boş).
+- FIS_DETAY'ın da MIKTAR_FIS / DAHIL_FIYAT kullandığı doğrulanacak (hareket-gonder.ps1 buna göre güncellendi).

@@ -112,11 +112,12 @@ function Veritabani-Gonder($Db, $baglanti) {
     # --- FIS_DETAY sutunlari: miktar ve KDV dahil fiyat ---
     $kolonlar = @((Sql-Tablo $baglanti "SELECT COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_NAME = 'FIS_DETAY'") | ForEach-Object { [string]$_.COLUMN_NAME })
     $miktar = $MiktarKolonu
-    if (-not $miktar) { $miktar = @("MIKTAR", "MIKTAR1", "ADET") | Where-Object { $kolonlar -contains $_ } | Select-Object -First 1 }
+    if (-not $miktar) { $miktar = @("MIKTAR_FIS", "MIKTAR", "MIKTAR1", "ADET") | Where-Object { $kolonlar -contains $_ } | Select-Object -First 1 }
     if (-not $miktar) { throw "[$Db] FIS_DETAY'da miktar sutunu bulunamadi. Sutunlar: $($kolonlar -join ', ')" }
     $fiyat = $FiyatIfadesi
     if (-not $fiyat) {
-        $aday = @("KDV_DAHIL_FIYAT", "FIYAT_KDV_DAHIL", "BIRIM_FIYAT_KDV_DAHIL", "KDVLI_FIYAT", "KDVLI_BIRIM_FIYAT") | Where-Object { $kolonlar -contains $_ } | Select-Object -First 1
+        # ERP12 SIPARIS_DETAY'da: MIKTAR_FIS ve DAHIL_FIYAT (FIS_DETAY'in da ayni oldugu varsayiliyor).
+        $aday = @("DAHIL_FIYAT", "KDV_DAHIL_FIYAT", "FIYAT_KDV_DAHIL", "BIRIM_FIYAT_KDV_DAHIL", "KDVLI_FIYAT", "KDVLI_BIRIM_FIYAT") | Where-Object { $kolonlar -contains $_ } | Select-Object -First 1
         if ($aday) { $fiyat = "d.$aday" }
     }
     if (-not $fiyat) {
