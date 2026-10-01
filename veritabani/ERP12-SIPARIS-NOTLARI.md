@@ -39,7 +39,14 @@ ONERILEN_FIYAT 0, JOKER '', AMBALAJ_BIRIM = STOK_BIRIM, AMBALAJ_MIKTAR = MIKTAR,
 FK_PERSONEL 0, ALT_BIRIM_MIKTARI = MIKTAR, SEVK_ADRES 0, BUNDLE_DETAY 0, KT_BUNDLE_FIYAT 0.
 Başlık: SATIR_TOPLAM = Σ TUTAR, KDV_TOPLAM = round(Σ TOPLAM_KDV, 2), GENELTOPLAM = Σ DAHIL_TUTAR (doğrulandı).
 
+## Belge numarası serileri: KOD_BELGE
+Bilgisayar (PC_AD) + belge türü (FK_FIS_TURU) başına seri ön eki ve ilk numara:
+23 "SPRS LNN-" (alınan sipariş), 32 "SPRS VRLN-" (verilen sipariş), 31 "TKLF -", 33 "TKLF LNN -", 29 "MNT VRLN-", 34 "MNT LNN-";
+ILK_NO "000001". Sayaç tutulmuyor → ERP sonraki numarayı mevcut belgelerden (aynı ön ek, en büyük + 1) hesaplıyor olmalı.
+Deneme kaydı "SPRS LNN1-000001" başka bir bilgisayarın serisi (PC_AD farklı).
+Plan: program KENDİ ön ekini kullanır (örn. "MOB VRLN-" / "MOB LNN-"), numara = aynı ön ekli en büyük + 1,
+işlem içinde kilitle (aynı anda iki numara çakışmasın). ERP'nin kendi serileriyle karışmaz.
+
 ## Eksik
-- "SPRS VRLN" / "SPRS LNN1" belge numarası serisinin tutulduğu yer.
 - Açıklamanın yazıldığı alan (deneme kayıtlarında ACIKLAMA boş).
 - FIS_DETAY'ın da MIKTAR_FIS / DAHIL_FIYAT kullandığı doğrulanacak (hareket-gonder.ps1 buna göre güncellendi).
