@@ -128,6 +128,18 @@ create table if not exists mal_hareketleri (
   olusturma       timestamptz not null default now()
 );
 create index if not exists mal_hareketleri_batch on mal_hareketleri (batch_id);
+-- Yerel SQL Server kopyası "neler değişti?" diye bu sütuna bakar.
+alter table mal_hareketleri add column if not exists guncelleme timestamptz not null default now();
+create index if not exists mal_hareketleri_guncelleme on mal_hareketleri (guncelleme);
+create index if not exists sayim_kayitlari_guncelleme on sayim_kayitlari (guncelleme);
+create index if not exists silinen_kayitlar_zaman on silinen_kayitlar (zaman);
+-- Telefonda silinen mal kalemleri (yerel kopya da silsin diye).
+create table if not exists mal_silinenler (
+  kayit_id    text primary key,
+  batch_id    text not null default '',
+  zaman       timestamptz not null default now()
+);
+create index if not exists mal_silinenler_zaman on mal_silinenler (zaman);
 create index if not exists mal_hareketleri_bekleyen on mal_hareketleri (olusturma) where aktarildi is null;
 
 -- ---------- Sistem günlüğü ----------
@@ -332,17 +344,22 @@ begin
         left(coalesce(p->>'aciklama', ''), 500), left(coalesce(p->>'konum', ''), 120), coalesce(r->>'tarih', ''), coalesce(r->>'saat', ''))
     on conflict (kayit_id) do update
       set miktar = excluded.miktar, surum = excluded.surum, tarih = excluded.tarih, saat = excluded.saat,
-          aciklama = excluded.aciklama, kdv = excluded.kdv, fiyat = excluded.fiyat
+          aciklama = excluded.aciklama, kdv = excluded.kdv, fiyat = excluded.fiyat, guncelleme = now()
       where m.batch_id = excluded.batch_id and m.aktarildi is null and excluded.surum > m.surum;
     -- Aynı sürümde sadece açıklama değiştiyse (aktarılmamışsa) açıklamayı güncelle.
-    update mal_hareketleri set aciklama = left(coalesce(p->>'aciklama', ''), 500)
-     where kayit_id = v_id and batch_id = v_batch and aktarildi is null;
+    update mal_hareketleri set aciklama = left(coalesce(p->>'aciklama', ''), 500), guncelleme = now()
+     where kayit_id = v_id and batch_id = v_batch and aktarildi is null
+       and aciklama is distinct from left(coalesce(p->>'aciklama', ''), 500);
   end loop;
 
   -- Telefonda silinmiş kalemler (aktarılmamışsa).
   select v_kilitli + count(*) into v_kilitli from mal_hareketleri
    where batch_id = v_batch and not (kayit_id = any(v_ids)) and aktarildi is not null;
-  delete from mal_hareketleri where batch_id = v_batch and not (kayit_id = any(v_ids)) and aktarildi is null;
+  with silinen as (
+    delete from mal_hareketleri where batch_id = v_batch and not (kayit_id = any(v_ids)) and aktarildi is null
+    returning kayit_id, batch_id)
+  insert into mal_silinenler (kayit_id, batch_id) select kayit_id, batch_id from silinen
+    on conflict (kayit_id) do update set zaman = now();
 
   return jsonb_build_object('status', 'ok', 'batchId', v_batch, 'kilitli', v_kilitli,
     'rows', coalesce((select jsonb_object_agg(kayit_id, jsonb_build_array(surum, miktar, case when aktarildi is null then 0 else 1 end))
@@ -413,7 +430,7 @@ do $$
 declare t text;
 begin
   foreach t in array array['subeler','kullanicilar','urunler','cariler','sayim_donemleri','sayim_kayitlari',
-                           'silinen_kayitlar','mal_hareketleri','sistem_gunlugu'] loop
+                           'silinen_kayitlar','mal_hareketleri','mal_silinenler','sistem_gunlugu'] loop
     execute format('alter table %I enable row level security', t);
   end loop;
 end $$;

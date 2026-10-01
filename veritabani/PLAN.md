@@ -19,8 +19,17 @@ Gerçek veri tabanı (PostgreSQL) aynı anda çok telefonun yazmasını, sorguyu
    - Açma: Apps Script → Proje Ayarları → Komut dosyası özellikleri: `DB_URL`, `DB_ANAHTAR` (secret key) → `dbKur` çalıştır.
    - Eski kayıtlar: `dbMevcutSayimiAktar` (bir kez). Karşılaştırma: `dbKarsilastir` (sonuç Sistem Durumu günlüğünde).
    - Acil kapatma: `DB_KAPALI = 1`.
-4. Sayım sonrası: telefonlar doğrudan veri tabanına geçer, Sheets sadece rapor/yedek kalır.
-5. Kişisel kullanıcılar (şifreler bcrypt ile), fiyatların sunucu tarafında gizlenmesi, firma alan adı.
+4. **Yerel SQL Server kopyası** (`erp/MK_SAYIM_kurulum.sql` + `erp/yerel-kopya.ps1`): buluttaki sayım ve mal
+   kayıtları 10 dakikada bir sunucu bilgisayardaki AYRI `MK_SAYIM` veri tabanına kopyalanır (ERP12'ye dokunmaz).
+   Sadece değişenler çekilir (10 dk geri pay ile), silinenler yerelden de silinir. SQL Server 2008 uyumluluk
+   seviyesinde (100) test edildi. Kurulum:
+   - Supabase'de `001_sema.sql` tekrar çalıştırılır (mal_hareketleri.guncelleme, mal_silinenler).
+   - SSMS'te `MK_SAYIM_kurulum.sql` (tekrar çalıştırmak güvenli).
+   - `C:\Scripts\db-anahtar.txt` = Supabase secret anahtarı (tek satır).
+   - `C:\Scripts\yerel-kopya.ps1` → Görev Zamanlayıcı, 10 dakikada bir.
+   - `MK_SAYIM` SQL yedekleme görevine eklenmeli.
+5. Sayım sonrası: telefonlar doğrudan veri tabanına geçer, Sheets sadece rapor/yedek kalır.
+6. Kişisel kullanıcılar (şifreler bcrypt ile), fiyatların sunucu tarafında gizlenmesi, firma alan adı.
 
 ## Kural
 Sayımdan önceki son 10 günde (20 Ekim sonrası) canlı sisteme yeni bağlantı eklenmez; sadece hata düzeltmesi.

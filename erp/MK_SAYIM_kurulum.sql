@@ -1,0 +1,128 @@
+-- =====================================================================
+--  Murat Gıda - YEREL KOPYA veri tabanı (SQL Server 2008 ve üstü)
+-- =====================================================================
+--  Buluttaki (Supabase) sayım ve mal kayıtlarının yerel kopyası.
+--  ERP12'nin veri tabanına (ERP122025) HİÇ DOKUNMAZ — ayrı bir veri tabanı
+--  (MK_SAYIM) oluşturur. Tekrar çalıştırmak güvenlidir: var olanı silmez.
+--
+--  Nasıl çalıştırılır: SSMS'te New Query → bu dosyanın tamamını yapıştır → F5.
+--  Sonra yerel-kopya.ps1 bu tablolara 10 dakikada bir yazar.
+--  Saatler TÜRKİYE saatidir (bilgisayarın saat dilimi).
+-- =====================================================================
+
+IF DB_ID('MK_SAYIM') IS NULL CREATE DATABASE MK_SAYIM;
+GO
+USE MK_SAYIM;
+GO
+
+IF OBJECT_ID('dbo.SAYIM_DONEMLERI', 'U') IS NULL
+CREATE TABLE dbo.SAYIM_DONEMLERI (
+  ID          BIGINT        NOT NULL PRIMARY KEY,
+  TOKEN       NVARCHAR(100) NOT NULL,
+  BASLANGIC   DATETIME      NULL,
+  ACIKLAMA    NVARCHAR(500) NULL
+);
+GO
+
+IF OBJECT_ID('dbo.SAYIM_KAYITLARI', 'U') IS NULL
+CREATE TABLE dbo.SAYIM_KAYITLARI (
+  KAYIT_ID       NVARCHAR(100) NOT NULL PRIMARY KEY,
+  OTURUM_ID      NVARCHAR(100) NULL,
+  DONEM_ID       BIGINT        NULL,
+  GEC_GELDI      BIT           NULL,
+  PERSONEL       NVARCHAR(100) NULL,
+  URUN_ADI       NVARCHAR(400) NULL,
+  STOK_KODU      NVARCHAR(100) NULL,
+  BARKOD         NVARCHAR(100) NULL,
+  BIRIM          NVARCHAR(20)  NULL,
+  ESKI_STOK      DECIMAL(18,3) NULL,
+  ADET           DECIMAL(18,3) NULL,
+  FARK           DECIMAL(18,3) NULL,
+  REYON          NVARCHAR(100) NULL,
+  SUBE           NVARCHAR(100) NULL,
+  SURUM          INT           NULL,
+  OKUTMA_TARIHI  NVARCHAR(20)  NULL,
+  OKUTMA_SAATI   NVARCHAR(20)  NULL,
+  OKUTMA_ZAMANI  DATETIME      NULL,
+  OLUSTURMA      DATETIME      NULL,
+  GUNCELLEME     DATETIME      NULL
+);
+GO
+IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'IX_SAYIM_BARKOD')
+  CREATE INDEX IX_SAYIM_BARKOD ON dbo.SAYIM_KAYITLARI (BARKOD);
+IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'IX_SAYIM_DONEM')
+  CREATE INDEX IX_SAYIM_DONEM ON dbo.SAYIM_KAYITLARI (DONEM_ID, GEC_GELDI);
+GO
+
+IF OBJECT_ID('dbo.SILINEN_KAYITLAR', 'U') IS NULL
+CREATE TABLE dbo.SILINEN_KAYITLAR (
+  KAYIT_ID   NVARCHAR(100) NOT NULL PRIMARY KEY,
+  OTURUM_ID  NVARCHAR(100) NULL,
+  SILEN      NVARCHAR(100) NULL,
+  ZAMAN      DATETIME      NULL
+);
+GO
+
+IF OBJECT_ID('dbo.MAL_HAREKETLERI', 'U') IS NULL
+CREATE TABLE dbo.MAL_HAREKETLERI (
+  KAYIT_ID    NVARCHAR(100) NOT NULL PRIMARY KEY,
+  BATCH_ID    NVARCHAR(100) NULL,
+  TIP         NVARCHAR(10)  NULL,
+  BELGE_TURU  NVARCHAR(50)  NULL,
+  BELGE_NO    NVARCHAR(100) NULL,
+  CARI        NVARCHAR(300) NULL,
+  CARI_KODU   NVARCHAR(100) NULL,
+  SEBEP       NVARCHAR(200) NULL,
+  PERSONEL    NVARCHAR(100) NULL,
+  BARKOD      NVARCHAR(100) NULL,
+  URUN_ADI    NVARCHAR(400) NULL,
+  STOK_KODU   NVARCHAR(100) NULL,
+  MIKTAR      DECIMAL(18,3) NULL,
+  BIRIM       NVARCHAR(20)  NULL,
+  KDV         DECIMAL(9,2)  NULL,
+  FIYAT       DECIMAL(18,4) NULL,
+  SURUM       INT           NULL,
+  ACIKLAMA    NVARCHAR(500) NULL,
+  KONUM       NVARCHAR(120) NULL,
+  TARIH       NVARCHAR(20)  NULL,
+  SAAT        NVARCHAR(20)  NULL,
+  AKTARILDI   DATETIME      NULL,
+  OLUSTURMA   DATETIME      NULL,
+  GUNCELLEME  DATETIME      NULL
+);
+GO
+IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'IX_MAL_BATCH')
+  CREATE INDEX IX_MAL_BATCH ON dbo.MAL_HAREKETLERI (BATCH_ID);
+GO
+
+IF OBJECT_ID('dbo.MAL_SILINENLER', 'U') IS NULL
+CREATE TABLE dbo.MAL_SILINENLER (
+  KAYIT_ID  NVARCHAR(100) NOT NULL PRIMARY KEY,
+  BATCH_ID  NVARCHAR(100) NULL,
+  ZAMAN     DATETIME      NULL
+);
+GO
+
+-- Kopyalamanın durumu: her tablo için en son nereye kadar kopyalandı.
+IF OBJECT_ID('dbo.KOPYA_DURUMU', 'U') IS NULL
+CREATE TABLE dbo.KOPYA_DURUMU (
+  TABLO        NVARCHAR(50)  NOT NULL PRIMARY KEY,
+  SON_DEGISIM  NVARCHAR(40)  NULL,     -- buluttaki son değişiklik damgası (UTC, ISO)
+  SON_CALISMA  DATETIME      NULL,
+  SON_SATIR    INT           NULL,
+  MESAJ        NVARCHAR(500) NULL
+);
+GO
+
+-- Kolay rapor: aktif dönemin sayımı (geç gelenler hariç), ürün bazında toplam.
+IF OBJECT_ID('dbo.V_AKTIF_SAYIM_TOPLAM', 'V') IS NOT NULL DROP VIEW dbo.V_AKTIF_SAYIM_TOPLAM;
+GO
+CREATE VIEW dbo.V_AKTIF_SAYIM_TOPLAM AS
+SELECT k.BARKOD, MAX(k.STOK_KODU) AS STOK_KODU, MAX(k.URUN_ADI) AS URUN_ADI,
+       SUM(k.ADET) AS SAYILAN, MAX(k.ESKI_STOK) AS ESKI_STOK, COUNT(*) AS OKUTMA_SAYISI
+FROM dbo.SAYIM_KAYITLARI k
+WHERE k.DONEM_ID = (SELECT MAX(ID) FROM dbo.SAYIM_DONEMLERI) AND ISNULL(k.GEC_GELDI, 0) = 0
+GROUP BY k.BARKOD;
+GO
+
+PRINT 'MK_SAYIM hazir.';
