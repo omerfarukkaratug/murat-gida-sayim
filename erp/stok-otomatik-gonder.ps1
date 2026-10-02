@@ -35,9 +35,22 @@ $AppsScriptUrl = "https://script.google.com/macros/s/AKfycbwH0hVGDXIQhdSxg2neDBN
 $LogFile       = "C:\Scripts\stok-gonderim-log.txt"
 $DbUrl         = "https://wjyqempcmyrmruhdpcwk.supabase.co"
 $DbAnahtarDosyasi = "C:\Scripts\db-anahtar.txt"
+# Sunucunun (Apps Script) ERP anahtari: Yonetici Paneli > Ayarlar > Veri Guvenligi >
+# "ERP anahtari olustur" ile uretilir ve bu dosyaya TEK SATIR olarak yazilir.
+# Dosya yoksa gonderim anahtarsiz yapilir ("Kimlik zorunlu" acikken REDDEDILIR).
+$ErpAnahtarDosyasi = "C:\Scripts\erp-anahtar.txt"
 # --------------------------------------------------------------------------------
 
 try { [Net.ServicePointManager]::SecurityProtocol = [Net.ServicePointManager]::SecurityProtocol -bor [Net.SecurityProtocolType]::Tls12 } catch {}
+
+# ERP anahtarini dosyadan oku (yoksa bos). Anahtar ASLA gunluge yazilmaz.
+$ErpAnahtar = ""
+try {
+    if (Test-Path $ErpAnahtarDosyasi) { $ErpAnahtar = ((Get-Content -Path $ErpAnahtarDosyasi -TotalCount 1 -ErrorAction Stop) -as [string]).Trim() }
+} catch { $ErpAnahtar = "" }
+# JSON govdesine eklenecek parca: "anahtar":"...", (anahtar yoksa bos)
+$ErpAnahtarJson = ""
+if ($ErpAnahtar) { $ErpAnahtarJson = '"anahtar":' + (ConvertTo-Json -InputObject $ErpAnahtar -Compress) + ',' }
 
 function Yaz-Log($mesaj) {
     $satir = "$(Get-Date -Format 'yyyy-MM-dd HH:mm:ss') - $mesaj"
@@ -184,7 +197,7 @@ try {
 
     # Liste BİR KEZ JSON'a çevrilir, iki gönderimde de aynı metin kullanılır.
     $entriesJson = ConvertTo-Json -InputObject @($entries) -Depth 4 -Compress
-    $payload = '{"type":"katalog_bulk","entries":' + $entriesJson + '}'
+    $payload = '{"type":"katalog_bulk",' + $ErpAnahtarJson + '"entries":' + $entriesJson + '}'
 
     Yaz-Log "Sunucuya gonderiliyor..."
     if (-not (Gonder-Sheets $payload "urun" $entries.Count)) { $hataVar = $true }
@@ -219,7 +232,7 @@ WHERE b.DOVIZ_AD = 'TRY'
         }
 
         $cariJson = ConvertTo-Json -InputObject @($cariEntries) -Depth 4 -Compress
-        $cariPayload = '{"type":"cari_bulk","entries":' + $cariJson + '}'
+        $cariPayload = '{"type":"cari_bulk",' + $ErpAnahtarJson + '"entries":' + $cariJson + '}'
 
         Yaz-Log "Cari listesi sunucuya gonderiliyor..."
         if (-not (Gonder-Sheets $cariPayload "cari" $cariEntries.Count)) { $hataVar = $true }
