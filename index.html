@@ -351,7 +351,7 @@
   <header style="border:none; padding:0 0 16px; background:transparent; display:flex; align-items:flex-start; justify-content:space-between;">
     <div>
       <h1><img src="logo-header.png" alt="Murat Gıda" style="height:30px; width:auto; display:block;"></h1>
-      <div class="sub">MK ERP · Murat Gıda • offline • Android • build 112</div>
+      <div class="sub">MK ERP · Murat Gıda • offline • Android • build 113</div>
     </div>
     <button type="button" id="themeToggleBtn" title="Tema seç" style="background:var(--panel2); border:1.5px solid var(--line); color:var(--text); width:34px; height:34px; border-radius:50%; font-size:15px; padding:0; display:flex; align-items:center; justify-content:center; flex-shrink:0;">🎨</button>
   </header>
@@ -4469,8 +4469,11 @@
       document.getElementById('adminUsersList').innerHTML = '<div class="hint">⏳ Mevcut liste yükleniyor…</div>';
       jsonpRequestP(url, { action:'kullanicilar_detay', user:auth.user, pass:auth.pass }, function(err, data){
         if(!err && data && data.status === 'ok' && data.users){
+          // Yeni sunucu (build 113+) şifreleri geri göndermez: kutu boş gelir,
+          // boş bırakılan şifre DEĞİŞMEZ. Eski sunucuda eski düzen sürer.
+          adminSifreOzet = !!data.sifreOzet;
           adminUsersData = data.users.map(function(u){
-            return { name: u.name, pass: u.pass, role: u.role, active: u.active !== false, perms: permsFromString(u.yetkiler) };
+            return { name: u.name, orig: u.name, pass: adminSifreOzet ? '' : u.pass, role: u.role, active: u.active !== false, perms: permsFromString(u.yetkiler) };
           });
         } else {
           adminUsersData = [];
@@ -4510,6 +4513,7 @@
 
   // ---------- Kullanıcı Yönetimi: tik kutulu, kart tabanlı düzenleyici ----------
   var adminUsersData = []; // { name, pass, role: 'yonetici'|'kullanici', perms: {rapor,temizle,kullanici_yonetimi,ayarlar} }
+  var adminSifreOzet = false; // sunucu şifreleri özetle saklıyor mu (build 113+)
   var adminUsersLoadFailed = false; // mevcut liste sunucudan hiç çekilemediyse true — bu durumda kaydetmek veri kaybına yol açar
   var PERM_LABELS = [
     { key: 'rapor', label: '📊 Rapor' },
@@ -4560,7 +4564,7 @@
       row.innerHTML =
         '<div style="display:flex; gap:6px; margin-bottom:8px;">' +
           '<input type="text" class="u-name" placeholder="👤 İsim" value="' + escAttr(u.name) + '" style="flex:1.2; padding:9px; font-size:13px;">' +
-          '<input type="text" class="u-pass" placeholder="🔑 Şifre" value="' + escAttr(u.pass) + '" style="flex:1; padding:9px; font-size:13px; font-family:var(--mono);">' +
+          '<input type="text" class="u-pass" placeholder="' + (adminSifreOzet && u.orig ? '🔑 Yeni şifre (boş = aynı)' : '🔑 Şifre') + '" autocomplete="off" value="' + escAttr(u.pass) + '" style="flex:1; padding:9px; font-size:13px; font-family:var(--mono);">' +
           '<button type="button" class="u-del" title="Sil" style="width:36px; flex-shrink:0; background:transparent; border:none; font-size:19px; padding:0;">🗑️</button>' +
         '</div>' +
         '<div style="display:flex; gap:6px; margin-bottom:8px;">' +
@@ -4601,14 +4605,24 @@
     if(adminUsersLoadFailed){
       if(!window.confirm('⚠️ Mevcut liste hiç yüklenemediği için sunucudaki kullanıcılar bu ekranda görünmüyor.\nYine de kaydedersen, sunucudaki TÜM kullanıcılar silinip sadece burada yazdıkların kalır.\nGerçekten devam etmek istiyor musun?')) return;
     }
-    var missing = adminUsersData.some(function(u){ return !u.name.trim() || !u.pass.trim(); });
-    if(missing){ warnToast('Her kullanıcının bir ismi ve şifresi olmalı'); return; }
+    // Mevcut kullanıcının şifre kutusu boşsa şifresi değişmez (yeni sunucu);
+    // yeni eklenen kullanıcıya şifre şart.
+    var missing = adminUsersData.some(function(u){ return !u.name.trim() || (!u.pass.trim() && !(adminSifreOzet && u.orig)); });
+    if(missing){ warnToast(adminSifreOzet ? 'Her kullanıcının bir ismi olmalı; yeni eklenen kullanıcıya şifre de yaz' : 'Her kullanıcının bir ismi ve şifresi olmalı'); return; }
+    var bozuk = adminUsersData.some(function(u){ return /[;\n\r]/.test(u.name) || /[;\n\r]/.test(u.pass); });
+    if(bozuk){ warnToast('İsim ve şifrede noktalı virgül (;) kullanılamaz'); return; }
+    var adlar = {}, cift = '';
+    adminUsersData.forEach(function(u){ var k = u.name.trim().toLowerCase(); if(adlar[k]) cift = u.name.trim(); adlar[k] = true; });
+    if(cift){ warnToast('"' + cift + '" adı iki kez yazılmış'); return; }
+    var aktifYonetici = adminUsersData.some(function(u){ return u.role === 'yonetici' && u.active !== false; });
+    if(!aktifYonetici){ warnToast('En az bir aktif yönetici olmalı'); return; }
     var data = adminUsersData.map(function(u){
-      var line = u.name.trim() + ';' + u.pass;
+      var line = u.name.trim() + ';' + u.pass.trim();
       line += ';' + u.role;
       var permStr = u.role !== 'yonetici' ? permsToString(u.perms) : '';
       line += ';' + permStr;
       line += ';' + (u.active === false ? 'hayir' : 'evet');
+      line += ';' + (u.orig || ''); // eski ad: yeniden adlandırılan kullanıcının şifresi korunabilsin
       return line;
     }).join('\n');
     var url = state.serverUrl || DEFAULT_SERVER_URL;
@@ -4617,6 +4631,19 @@
       if(err){ adminResultEl.textContent = '❌ ' + err; return; }
       if(!res || res.status === 'error'){ adminResultEl.textContent = '❌ ' + ((res && res.message) || 'bilinmeyen hata'); return; }
       adminUsersLoadFailed = false;
+      // Kendi şifresini (ya da adını) değiştiren yönetici bu telefonda kilitlenmesin.
+      if(state.currentUser && state.savedCredentials){
+        var ben = adminUsersData.filter(function(u){ return (u.orig || u.name).trim().toLowerCase() === state.currentUser.name.toLowerCase(); })[0];
+        if(ben){
+          if(ben.pass.trim()) state.savedCredentials.pass = ben.pass.trim();
+          if(ben.name.trim() !== state.currentUser.name){ state.currentUser.name = ben.name.trim(); state.savedCredentials.name = ben.name.trim(); }
+          save();
+        }
+      }
+      if(adminSifreOzet){
+        adminUsersData.forEach(function(u){ u.name = u.name.trim(); u.orig = u.name; u.pass = ''; });
+        renderUsersList();
+      }
       adminResultEl.textContent = '✅ ' + res.saved + ' kullanıcı kaydedildi. Telefonlar bir sonraki açılışta/online olduklarında listeyi otomatik çekecek.';
       fetchUserRoster();
     }, 20000);
@@ -5761,13 +5788,81 @@
     document.addEventListener('DOMContentLoaded', guncelle);
   })();
 
+  // ---------- GÜNCELLEME: kullanıcı kontrollü ----------
+  // Eskiden yeni sürüm gelir gelmez sayfa KENDİLİĞİNDEN yenileniyordu; sayımın
+  // ortasında ekran aniden tazeleniyordu. Artık yeni sürüm arka planda hazır
+  // bekler, altta "Yeni sürüm hazır" şeridi çıkar; personel uygun bir anda
+  // "Güncelle"ye basar. Basmazsa uygulama bir sonraki tam kapanıp açılışta
+  // kendiliğinden güncellenir. Kayıtlar telefonda saklı olduğu için güncelleme
+  // hiçbir kaydı silmez.
   if('serviceWorker' in navigator){
-    navigator.serviceWorker.register('sw.js').catch(function(){});
-    var reloaded = false;
+    var guncelleIstendi = false, guncelleSerit = null;
+    function guncellemeSeridi(bekleyen){
+      if(guncelleSerit || !bekleyen) return;
+      guncelleSerit = document.createElement('div');
+      guncelleSerit.style.cssText = 'position:fixed; left:10px; right:10px; bottom:calc(10px + env(safe-area-inset-bottom)); z-index:9000; background:var(--panel, #fff); color:var(--text, #111); border:2px solid var(--accent, #5546ea); border-radius:14px; box-shadow:0 8px 24px rgba(0,0,0,.25); padding:12px; display:flex; align-items:center; gap:10px; font-size:13px; line-height:1.4;';
+      guncelleSerit.innerHTML = '<div style="flex:1;"><b>🔄 Yeni sürüm hazır</b><br><span style="opacity:.75;">Elindeki işi bitirince güncelle. Kayıtların silinmez.</span></div>' +
+        '<button type="button" id="guncelleSimdiBtn" style="background:var(--accent, #5546ea); color:#fff; padding:11px 14px; font-size:13px; font-weight:800; border-radius:10px; white-space:nowrap;">Güncelle</button>' +
+        '<button type="button" id="guncelleSonraBtn" aria-label="Sonra" style="background:transparent; color:inherit; font-size:18px; padding:4px 6px;">✕</button>';
+      document.body.appendChild(guncelleSerit);
+      document.getElementById('guncelleSonraBtn').addEventListener('click', function(){
+        guncelleSerit.remove(); guncelleSerit = null;
+        setTimeout(function(){ if(bekleyen.state === 'installed') guncellemeSeridi(bekleyen); }, 30 * 60 * 1000); // 30 dk sonra tekrar hatırlat
+      });
+      document.getElementById('guncelleSimdiBtn').addEventListener('click', function(){
+        this.disabled = true; this.textContent = '⏳';
+        try { save(); } catch(e){}
+        guncelleIstendi = true;
+        bekleyen.postMessage('SKIP_WAITING');
+        // Yeni sürüm devreye girmezse (çok eski tarayıcı) yine de sayfayı tazele.
+        setTimeout(function(){ window.location.reload(); }, 4000);
+      });
+    }
+    navigator.serviceWorker.register('sw.js').then(function(reg){
+      function izle(sw){
+        if(!sw) return;
+        var soruldu = false;
+        function bak(){
+          if(sw.state !== 'installed' || !navigator.serviceWorker.controller || soruldu) return;
+          soruldu = true;
+          // Bekleyen sürüm bu sayfayla AYNI build ise (sayfa internetten zaten
+          // yeni geldi) sessizce devreye al — şerit de yenileme de gerekmez.
+          // Farklıysa sayfa eski demektir: şeridi göster, kullanıcı karar versin.
+          var sayfaSurum = (/build (\d+)/.exec(document.querySelector('.sub') ? document.querySelector('.sub').textContent : '') || [])[1];
+          var bitti = false;
+          function karar(swSurum){
+            if(bitti) return; bitti = true;
+            if(sayfaSurum && swSurum === 'sayim-v' + sayfaSurum) sw.postMessage('SKIP_WAITING');
+            else guncellemeSeridi(sw);
+          }
+          try {
+            var kanal = new MessageChannel();
+            kanal.port1.onmessage = function(ev){ karar(String(ev.data || '')); };
+            sw.postMessage({ type: 'SURUM' }, [kanal.port2]);
+          } catch(e){ karar(''); }
+          setTimeout(function(){ karar(''); }, 2500);
+        }
+        sw.addEventListener('statechange', bak); bak();
+      }
+      izle(reg.waiting); izle(reg.installing);
+      reg.addEventListener('updatefound', function(){ izle(reg.installing); });
+      // Uygulama gün boyu açık kalabiliyor: saatte bir yeni sürüm var mı diye bak.
+      setInterval(function(){ if(navigator.onLine) reg.update().catch(function(){}); }, 60 * 60 * 1000);
+    }).catch(function(){});
     navigator.serviceWorker.addEventListener('controllerchange', function(){
-      if(reloaded) return; reloaded = true;
-      window.location.reload(); // yeni sürüm devreye girince sayfayı tazele
+      if(!guncelleIstendi) return; // kullanıcı istemeden sayfa ASLA yenilenmez
+      guncelleIstendi = false;
+      window.location.reload();
     });
+    // iPhone'da barkod motoru (ZBar) dışarıdan iner. İnternet varken şimdiden
+    // indirip bir kez çalıştırıyoruz ki önbelleğe girsin; sayım sırasında
+    // internet kesilse de kamera çalışır. Android'de (yerleşik okuyucu) atlanır.
+    setTimeout(function(){
+      if('BarcodeDetector' in window || !navigator.onLine) return;
+      loadBarcodeDetector().then(function(BD){
+        try { var tuval = document.createElement('canvas'); tuval.width = tuval.height = 16; new BD({ formats: ['ean_13'] }).detect(tuval).catch(function(){}); } catch(e){}
+      }).catch(function(){});
+    }, 5000);
   }
 })();
 </script>

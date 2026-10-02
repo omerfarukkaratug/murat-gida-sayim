@@ -74,9 +74,13 @@ kendi yönetici hesabını yaz — örn. `Ayşe Yılmaz | güçlüBirŞifre | yo
 | evet`. Bu hesapla giriş yaptıktan sonra diğer kullanıcıları Yönetici
 Paneli → Kullanıcı Yönetimi'nden ekleyebilirsin.
 
-⚠️ Şifreler `Kullanicilar` sekmesinde düz metin olarak durur — bu,
-kurumsal bir güvenlik sistemi değil, ekip içi basit bir yetkilendirmedir.
-Tabloyu düzenleme yetkisi olan biri şifreleri görebilir.
+🔒 Şifreler `Kullanicilar` sekmesinde **özet** olarak durur (build 113+):
+hücrede `s256$...` ile başlayan okunamaz bir metin görürsün. Tabloyu açan
+biri şifreleri okuyamaz, Yönetici Paneli de mevcut şifreleri göstermez
+(şifre kutusu boş gelir; boş bırakılan şifre değişmez). Eskiden düz metin
+yazılmış şifreler, o kişi ilk giriş yaptığında kendiliğinden özete çevrilir.
+Not: şifre telefonda hâlâ saklanır ve her istekte sunucuya gider; tam oturum
+sistemi veri tabanı geçişiyle birlikte gelecek.
 
 ## 6) Yapay zeka değerlendirmesini açma (opsiyonel)
 "Sayımı Bitir ve Rapor Oluştur" işlemi, dikkat çeken stok farkları varsa
@@ -130,7 +134,9 @@ girilmiş sayım kayıtlarını düzeltme/silme).
 
 **Şifremi unuttum / admin dışarıda kaldı:** Kullanıcı Yönetimi yetkisi
 olan kimse kalmadıysa, Google E-Tablo'yu aç → **Kullanicilar** sekmesi →
-ilgili kişinin **Şifre** hücresini elle değiştir. (Eski "admin/admin" yedek
+ilgili kişinin **Şifre** hücresindeki `s256$...` metnini silip yerine yeni
+şifreyi **düz metin** olarak yaz; o kişi bu şifreyle ilk giriş yaptığında
+hücre kendiliğinden tekrar özete çevrilir. (Eski "admin/admin" yedek
 girişi güvenlik nedeniyle kaldırıldı — sekmede hiç yönetici kalmadıysa
 elle `Ad | Şifre | yonetici | | evet` biçiminde bir satır ekle.)
 
