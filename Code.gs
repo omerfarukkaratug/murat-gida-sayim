@@ -8,7 +8,7 @@
 // bir sürüm dağıttıktan sonra /exec adresini boş açtığında burada yazan
 // numarayı görmelisin; index.html'in üstündeki "build" numarasıyla
 // eşleşecek şekilde ben her ikisini birlikte güncelliyorum.
-var GS_VERSION = 'build112';
+var GS_VERSION = 'build113';
 
 // Sheets'te "Saat" sütunu zaman biçimli olarak algılanırsa, hücre değeri düz
 // metin değil bir Date nesnesi olarak gelir ve String(...) çirkin bir çıktı
@@ -156,13 +156,40 @@ function outJson(obj, callback) {
 // Yedek "admin/admin" girişi KALDIRILDI: artık sadece 'Kullanicilar'
 // sekmesinde tanımlı kullanıcılar giriş yapabilir. Sekmede hiç yönetici
 // yoksa, tabloyu açıp elle bir satır ekleyin (örn: Ad | Şifre | yonetici |
-// | evet). NOT:
-// Şifreler düz metin olarak saklanır (Apps Script'in sunduğu basit bir
-// koruma) — kurumsal güvenlik seviyesinde değildir, sadece ekip içi
-// yetkilendirme için yeterlidir. Tabloyu düzenleme yetkisi olan herkes
-// şifreleri görebilir.
+// | evet) — elle yazılan düz metin şifre ilk girişte özete çevrilir.
+// Şifreler tabloda tuzlu SHA-256 özeti olarak saklanır (bkz. ŞİFRE ÖZETİ);
+// tabloyu açan biri şifreleri okuyamaz. Şifre telefonda hâlâ saklanır ve her
+// istekte sunucuya gönderilir — tam oturum sistemi veri tabanı geçişinde.
 // ============================================================
 var ALL_PERMS = ['rapor', 'temizle', 'kullanici_yonetimi', 'ayarlar', 'canli_durum', 'duzelt', 'hareket', 'mesai', 'mesai_yonetim'];
+
+// ---- ŞİFRE ÖZETİ ----
+// Şifreler tabloda artık DÜZ METİN durmaz: "s256$<tuz>$<özet>" biçiminde,
+// kullanıcıya özel rastgele tuzla SHA-256 özeti saklanır. Tabloyu açan biri
+// şifreleri okuyamaz; yönetici paneline de şifre geri gönderilmez.
+// GEÇİŞ: tabloda hâlâ düz metin duran şifre, o kullanıcı ilk kez doğru
+// şifreyle giriş yaptığında (ya da herhangi bir yetkili işlem yaptığında)
+// kendiliğinden özete çevrilir — kimsenin şifresi değişmez, kimse tekrar
+// şifre belirlemek zorunda kalmaz.
+var SIFRE_ON_EK = 's256$';
+function sifreHex(tuz, pass) {
+  var d = Utilities.computeDigest(Utilities.DigestAlgorithm.SHA_256, tuz + ':' + String(pass), Utilities.Charset.UTF_8);
+  var out = '';
+  for (var i = 0; i < d.length; i++) { var b = (d[i] + 256) % 256; out += (b < 16 ? '0' : '') + b.toString(16); }
+  return out;
+}
+function sifreOzetle(pass) {
+  var tuz = Utilities.getUuid().replace(/-/g, '').slice(0, 16);
+  return SIFRE_ON_EK + tuz + '$' + sifreHex(tuz, pass);
+}
+function sifreOzetMi(kayitli) { return String(kayitli || '').indexOf(SIFRE_ON_EK) === 0; }
+function sifreDogru(kayitli, pass) {
+  kayitli = String(kayitli || '');
+  if (!sifreOzetMi(kayitli)) return kayitli !== '' && kayitli === String(pass); // eski düz metin kayıt
+  var p = kayitli.split('$');
+  if (p.length !== 3 || !p[1] || !p[2]) return false;
+  return sifreHex(p[1], pass) === p[2];
+}
 
 function authenticate(user, pass) {
   user = String(user || '').trim();
@@ -180,7 +207,12 @@ function authenticate(user, pass) {
       var yetkiler = String(values[i][3] || '').split(',').map(function (s) { return s.trim(); }).filter(Boolean);
       var active = String(values[i][4] || 'evet').trim().toLowerCase() !== 'hayir';
       if (!active) return { ok: false, message: 'Bu kullanıcı pasif duruma alınmış' };
-      if (pw !== pass) return { ok: false, message: 'Şifre yanlış' };
+      if (!sifreDogru(pw, pass)) return { ok: false, message: 'Şifre yanlış' };
+      // Düz metin duran şifreyi ilk doğru girişte özete çevir (başarısız
+      // olursa giriş yine de geçerli; bir sonraki girişte tekrar denenir).
+      if (!sifreOzetMi(pw)) {
+        try { sheet.getRange(i + 2, 2).setValue(sifreOzetle(pass)); } catch (ozErr) { /* geçiş sonraya kalır */ }
+      }
       return { ok: true, role: role, permissions: role === 'yonetici' ? ALL_PERMS : yetkiler };
     }
   }
@@ -230,6 +262,31 @@ function getCari(callback) {
   return ContentService.createTextOutput(json).setMimeType(ContentService.MimeType.JSON);
 }
 
+// ============================================================
+// TABLOYU GÜVENLİ DEĞİŞTİRME
+// Eskiden "önce sheet.clear(), sonra yaz" yapılıyordu: yazma yarıda kalırsa
+// (zaman aşımı, kota, bağlantı) tablo BOŞ kalıyordu — kullanıcı listesinde bu
+// olursa kimse giriş yapamaz, katalogda olursa telefonlar boş katalog çeker.
+// Artık yeni içerik eskisinin ÜZERİNE tek bir yazma işlemiyle konur; yazma
+// başarısız olursa eski içerik aynen durur. Fazla kalan eski satırlar ancak
+// yeni içerik yerine oturduktan SONRA silinir.
+// ============================================================
+function tabloyuDegistir(sheet, basliklar, rows) {
+  var n = basliklar.length;
+  for (var i = 0; i < rows.length; i++) {
+    if (!rows[i] || rows[i].length !== n) throw new Error('Tablo satırı ' + (i + 1) + ' beklenen ' + n + ' sütunda değil');
+  }
+  var hepsi = [basliklar].concat(rows);
+  if (sheet.getMaxColumns() < n) sheet.insertColumnsAfter(sheet.getMaxColumns(), n - sheet.getMaxColumns());
+  if (sheet.getMaxRows() < hepsi.length) sheet.insertRowsAfter(sheet.getMaxRows(), hepsi.length - sheet.getMaxRows());
+  var eskiSon = sheet.getLastRow();
+  var eskiSutun = sheet.getLastColumn();
+  sheet.getRange(1, 1, hepsi.length, n).setValues(hepsi);
+  if (eskiSon > hepsi.length) sheet.getRange(hepsi.length + 1, 1, eskiSon - hepsi.length, Math.max(eskiSutun, n)).clearContent();
+  if (eskiSutun > n) sheet.getRange(1, n + 1, hepsi.length, eskiSutun - n).clearContent();
+}
+function jsonCikti(o) { return ContentService.createTextOutput(JSON.stringify(o)).setMimeType(ContentService.MimeType.JSON); }
+
 function saveCariBulk(entries) {
   var ss = SpreadsheetApp.getActiveSpreadsheet();
   var sheet = ss.getSheetByName('Cari');
@@ -239,13 +296,14 @@ function saveCariBulk(entries) {
   if (entries.length > 0 && ozet === props.getProperty('CARI_OZET') && sheet.getLastRow() === entries.length + 1) {
     return ContentService.createTextOutput(JSON.stringify({ status: 'ok', saved: 0, degisiklikYok: true })).setMimeType(ContentService.MimeType.JSON);
   }
-  sheet.clear();
-  sheet.appendRow(['Cari Adı', 'Cari Kodu', 'Bakiye']);
-  if (entries.length > 0) {
-    var rows = entries.map(function (e) { return [e.name || '', e.code || '', cleanNum(e.balance)]; });
-    sheet.getRange(2, 1, rows.length, 3).setValues(rows);
-    sheet.getRange(2, 3, rows.length, 1).setNumberFormat('0.00');
+  // BOŞ liste = büyük ihtimalle ERP sorgusu başarısız oldu. Mevcut cari
+  // listesini silmek yerine reddet; eldeki liste aynen kalır.
+  if (!Array.isArray(entries) || entries.length === 0) {
+    return jsonCikti({ status: 'error', bosListe: true, message: 'Boş cari listesi geldi — mevcut liste korunuyor' });
   }
+  var rows = entries.map(function (e) { return [e.name || '', e.code || '', cleanNum(e.balance)]; });
+  tabloyuDegistir(sheet, ['Cari Adı', 'Cari Kodu', 'Bakiye'], rows);
+  sheet.getRange(2, 3, rows.length, 1).setNumberFormat('0.00');
   props.setProperty('CARI_VERSION', new Date().toISOString());
   props.setProperty('CARI_OZET', ozet);
   return ContentService.createTextOutput(JSON.stringify({ status: 'ok', saved: entries.length })).setMimeType(ContentService.MimeType.JSON);
@@ -958,9 +1016,7 @@ function subeKaydet(user, pass, data, callback) {
   var ss = SpreadsheetApp.getActiveSpreadsheet();
   var sheet = ss.getSheetByName('Subeler');
   if (!sheet) sheet = ss.insertSheet('Subeler');
-  sheet.clear();
-  sheet.getRange(1, 1, 1, SUBE_BASLIK.length).setValues([SUBE_BASLIK]);
-  if (satirlar.length) sheet.getRange(2, 1, satirlar.length, SUBE_BASLIK.length).setValues(satirlar);
+  tabloyuDegistir(sheet, SUBE_BASLIK, satirlar);
   gunlukYaz('yonetim', String(user || ''), 'Şube konumları kaydedildi: ' + (satirlar.map(function (r) { return r[0] + ' (' + r[3] + ' m)'; }).join(', ') || 'hiç şube yok'), false);
   return outJson({ status: 'ok', subeler: subeleriOku() }, callback);
 }
@@ -1059,7 +1115,9 @@ function doPostIsle(e) {
     if (data.type === 'katalog_bulk') {
       var kOut = saveKatalogBulk(data.entries || []);
       var kDegismedi = kOut.getContent().indexOf('degisiklikYok') !== -1;
-      gunlukYaz('katalog', kaynak, (data.entries || []).length + ' ürün geldi' + (kDegismedi ? ' — değişiklik yok, tablo aynen kaldı' : ' — katalog güncellendi'), false);
+      var kBos = kOut.getContent().indexOf('bosListe') !== -1;
+      gunlukYaz('katalog', kaynak, kBos ? 'BOŞ katalog geldi — reddedildi, mevcut katalog korundu'
+        : (data.entries || []).length + ' ürün geldi' + (kDegismedi ? ' — değişiklik yok, tablo aynen kaldı' : ' — katalog güncellendi'), kBos);
       return kOut;
     }
     if (data.type === 'katalog_item') {
@@ -1070,7 +1128,9 @@ function doPostIsle(e) {
     if (data.type === 'cari_bulk') {
       var cOut = saveCariBulk(data.entries || []);
       var cDegismedi = cOut.getContent().indexOf('degisiklikYok') !== -1;
-      gunlukYaz('cari', kaynak, (data.entries || []).length + ' cari geldi' + (cDegismedi ? ' — değişiklik yok' : ' — liste güncellendi'), false);
+      var cBos = cOut.getContent().indexOf('bosListe') !== -1;
+      gunlukYaz('cari', kaynak, cBos ? 'BOŞ cari listesi geldi — reddedildi, mevcut liste korundu'
+        : (data.entries || []).length + ' cari geldi' + (cDegismedi ? ' — değişiklik yok' : ' — liste güncellendi'), cBos);
       return cOut;
     }
     if (data.type === 'mal_hareket') {
@@ -1237,19 +1297,20 @@ function saveKatalogBulk(entries) {
   if (entries.length > 0 && ozet === props.getProperty('KATALOG_OZET') && sheet.getLastRow() === entries.length + 1) {
     return ContentService.createTextOutput(JSON.stringify({ status: 'ok', saved: 0, degisiklikYok: true })).setMimeType(ContentService.MimeType.JSON);
   }
-  sheet.clear();
-  sheet.appendRow(['Ürün Adı', 'Barkod', 'Stok Kodu', 'Eski Stok', 'Fiyat', 'KDV %', 'Koli Çarpanı', 'Birim']);
-  if (entries.length > 0) {
-    var rows = entries.map(function (e) {
-      return [e.name || '', e.barcode || '', e.stockCode || '', cleanNum(e.oldStock), cleanNum(e.price), cleanNum(e.kdv), koliCarpan(e.carpan), String(e.birim || '')];
-    });
-    sheet.getRange(2, 1, rows.length, 8).setValues(rows);
-    // Fiyat sütununu her zaman 2 ondalık basamakla göster — Sheets'in
-    // "Otomatik" biçimi bazen kuruşu gizleyip tam sayıya yuvarlanmış
-    // GÖRÜNMESİNE yol açabiliyor (asıl değer bozulmuyor ama kafa karıştırıyor).
-    sheet.getRange(2, 5, rows.length, 1).setNumberFormat('0.00');
-    sheet.getRange(2, 6, rows.length, 1).setNumberFormat('0.##');
+  // BOŞ liste = büyük ihtimalle ERP sorgusu başarısız oldu ya da dosya yanlış
+  // okundu. Kataloğu silmek yerine reddet; eldeki katalog aynen kalır.
+  if (!Array.isArray(entries) || entries.length === 0) {
+    return jsonCikti({ status: 'error', bosListe: true, message: 'Boş katalog geldi — mevcut katalog korunuyor' });
   }
+  var rows = entries.map(function (e) {
+    return [e.name || '', e.barcode || '', e.stockCode || '', cleanNum(e.oldStock), cleanNum(e.price), cleanNum(e.kdv), koliCarpan(e.carpan), String(e.birim || '')];
+  });
+  tabloyuDegistir(sheet, ['Ürün Adı', 'Barkod', 'Stok Kodu', 'Eski Stok', 'Fiyat', 'KDV %', 'Koli Çarpanı', 'Birim'], rows);
+  // Fiyat sütununu her zaman 2 ondalık basamakla göster — Sheets'in
+  // "Otomatik" biçimi bazen kuruşu gizleyip tam sayıya yuvarlanmış
+  // GÖRÜNMESİNE yol açabiliyor (asıl değer bozulmuyor ama kafa karıştırıyor).
+  sheet.getRange(2, 5, rows.length, 1).setNumberFormat('0.00');
+  sheet.getRange(2, 6, rows.length, 1).setNumberFormat('0.##');
   // Katalog her değiştiğinde bir "sürüm" damgası basıyoruz — telefonlar bunu
   // (resetcheck ile) düzenli kontrol edip kendi sürümünden farklıysa
   // kataloğu OTOMATİK olarak sunucudan çeker, kimse elle "Sunucudan Çek"e
@@ -1656,16 +1717,17 @@ function getKullanicilarDetay(user, pass, callback) {
     var values = sheet.getRange(2, 1, sheet.getLastRow() - 1, 5).getValues();
     users = values.filter(function (r) { return r[0]; }).map(function (r) {
       return {
-        name: String(r[0]).trim(), pass: String(r[1] || ''),
+        name: String(r[0]).trim(), pass: '', // şifre ASLA geri gönderilmez
         role: String(r[2] || 'kullanici').trim().toLowerCase() === 'yonetici' ? 'yonetici' : 'kullanici',
         yetkiler: String(r[3] || ''), active: String(r[4] || 'evet').trim().toLowerCase() !== 'hayir'
       };
     });
   }
-  return outJson({ status: 'ok', users: users }, callback);
+  // sifreOzet: true → uygulama "şifre boş = değişmesin" düzenini kullanabilir.
+  return outJson({ status: 'ok', users: users, sifreOzet: true }, callback);
 }
 
-// data: "Ad;Şifre;Rol;Yetkiler;Aktif" formatında, her satırda bir kullanıcı.
+// data: "Ad;Şifre;Rol;Yetkiler;Aktif;EskiAd" formatında, her satırda bir kullanıcı.
 // Rol "yonetici" ya da boş/"kullanici" olabilir; Yetkiler sadece rol
 // "kullanici" iken anlamlıdır (rapor,temizle,kullanici_yonetimi,ayarlar,
 // canli_durum,duzelt arasından virgülle ayrılmış bir alt küme). Aktif
@@ -1683,25 +1745,54 @@ function handleKullanicilarKaydet(user, pass, data, callback) {
     var ss = SpreadsheetApp.getActiveSpreadsheet();
     var sheet = ss.getSheetByName('Kullanicilar');
     if (!sheet) sheet = ss.insertSheet('Kullanicilar');
-    sheet.clear();
-    sheet.appendRow(['Ad', 'Şifre', 'Rol', 'Yetkiler', 'Aktif']);
+
+    // Mevcut şifreler (ad -> tabloda kayıtlı değer): şifresi boş gönderilen
+    // kullanıcının şifresi DEĞİŞMEZ, eski kaydı aynen korunur.
+    var eski = {};
+    if (sheet.getLastRow() >= 2) {
+      sheet.getRange(2, 1, sheet.getLastRow() - 1, 2).getValues().forEach(function (r) {
+        var ad = String(r[0] || '').trim().toLowerCase();
+        if (ad) eski[ad] = String(r[1] || '');
+      });
+    }
+
+    // ÖNCE tüm listeyi doğrula — hata varsa tabloya HİÇ dokunulmaz.
     var lines = String(data || '').split('\n');
-    var rows = [];
+    var rows = [], gorulen = {}, aktifYonetici = 0, hata = '';
     lines.forEach(function (line) {
+      if (hata) return;
       line = line.trim();
       if (!line) return;
       var parts = line.split(';');
       var name = (parts[0] || '').trim();
       if (!name) return;
+      var anahtar = name.toLowerCase();
+      if (gorulen[anahtar]) { hata = '"' + name + '" adı listede iki kez geçiyor'; return; }
+      gorulen[anahtar] = true;
       var passw = (parts[1] || '').trim();
       var role = (parts[2] || 'kullanici').trim().toLowerCase();
       if (role !== 'yonetici') role = 'kullanici';
       var yetkiler = (parts[3] || '').trim();
       var aktif = (parts[4] || 'evet').trim().toLowerCase();
       if (aktif !== 'hayir') aktif = 'evet';
-      rows.push([name, passw, role, yetkiler, aktif]);
+      var eskiAd = (parts[5] || '').trim().toLowerCase();
+      var kayit;
+      if (passw) {
+        kayit = sifreOzetle(passw);                       // yeni / değiştirilen şifre
+      } else {
+        kayit = eski[eskiAd] || eski[anahtar] || '';      // boş = mevcut şifre aynen kalsın
+        if (!kayit) { hata = '"' + name + '" için şifre girilmeli'; return; }
+        if (!sifreOzetMi(kayit)) kayit = sifreOzetle(kayit); // düz metin kaldıysa şimdi özetle
+      }
+      if (role === 'yonetici' && aktif === 'evet') aktifYonetici++;
+      rows.push([name, kayit, role, yetkiler, aktif]);
     });
-    if (rows.length > 0) sheet.getRange(2, 1, rows.length, 5).setValues(rows);
+    if (hata) return outJson({ status: 'error', message: hata }, callback);
+    if (rows.length === 0) return outJson({ status: 'error', message: 'Liste boş — en az bir kullanıcı olmalı' }, callback);
+    if (aktifYonetici === 0) return outJson({ status: 'error', message: 'En az bir AKTİF yönetici olmalı — yoksa kimse kullanıcıları düzenleyemez' }, callback);
+
+    tabloyuDegistir(sheet, ['Ad', 'Şifre', 'Rol', 'Yetkiler', 'Aktif'], rows);
+    gunlukYaz('yonetim', String(user || ''), 'Kullanıcı listesi kaydedildi: ' + rows.length + ' kullanıcı', false);
     return outJson({ status: 'ok', saved: rows.length }, callback);
   } catch (err) {
     return outJson({ status: 'error', message: err.toString() }, callback);
