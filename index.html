@@ -351,7 +351,7 @@
   <header style="border:none; padding:0 0 16px; background:transparent; display:flex; align-items:flex-start; justify-content:space-between;">
     <div>
       <h1><img src="logo-header.png" alt="Murat Gıda" style="height:30px; width:auto; display:block;"></h1>
-      <div class="sub">MK ERP · Murat Gıda • offline • Android • build 113</div>
+      <div class="sub">MK ERP · Murat Gıda • offline • Android • build 114</div>
     </div>
     <button type="button" id="themeToggleBtn" title="Tema seç" style="background:var(--panel2); border:1.5px solid var(--line); color:var(--text); width:34px; height:34px; border-radius:50%; font-size:15px; padding:0; display:flex; align-items:center; justify-content:center; flex-shrink:0;">🎨</button>
   </header>
@@ -1011,6 +1011,16 @@
         <div class="hint" style="margin-bottom:8px;">"Sayımı Bitir ve Rapor Oluştur" her çalıştığında, Son Stok Sayımı bu adrese CSV eki olarak otomatik gönderilir. Boş bırakırsan mail gönderilmez.</div>
         <input type="text" id="adminBackupEmail" placeholder="ornek@murat-gida.com" style="margin-bottom:10px;">
         <button id="adminWakeLockSave" style="width:100%; background:var(--ink); color:#fff; padding:11px;">Ayarları Kaydet</button>
+        <div style="font-weight:800; font-size:13px; margin:18px 0 4px;">🔒 Veri Güvenliği</div>
+        <div class="hint" style="margin-bottom:8px;">"Kimlik zorunlu" açıkken katalog, cari ve tüm kayıtlar sadece <b>giriş yapmış kullanıcıdan</b> (ERP bilgisayarından ise gizli anahtarla) kabul edilir; adresi bilen yabancı hiçbir şey okuyamaz, gönderemez. <b>Açmadan önce:</b> tüm telefonlar build 114 ya da üstü olmalı ve ERP anahtarı ERP bilgisayarına yazılmış olmalı.</div>
+        <div id="adminGuvenlikDurum" class="hint" style="margin-bottom:8px; line-height:1.7;">⏳ Yükleniyor…</div>
+        <div id="adminErpAnahtarKutu" class="hidden" style="margin-bottom:8px;">
+          <div class="hint" style="margin-bottom:4px; color:var(--amber); font-weight:700;">Bu anahtar SADECE ŞİMDİ gösterilir. ERP bilgisayarında C:\Scripts\erp-anahtar.txt dosyasına tek satır olarak yaz.</div>
+          <input type="text" id="adminErpAnahtar" readonly style="font-family:var(--mono); font-size:12px; margin-bottom:6px;">
+          <button type="button" id="adminErpAnahtarKopyala" style="width:100%; background:var(--panel); border:1.5px solid var(--line); color:var(--text); padding:9px;">📋 Kopyala</button>
+        </div>
+        <button type="button" id="adminErpAnahtarBtn" style="width:100%; background:var(--panel); border:1.5px dashed var(--line); color:var(--text); padding:11px; margin-bottom:8px;">🔑 ERP anahtarı oluştur</button>
+        <button type="button" id="adminGuvenlikBtn" class="hidden" style="width:100%; background:var(--ink); color:#fff; padding:11px;">🔒 Kimlik zorunlu: AÇ</button>
       </div>
 
       <div id="adminSectionCanliDurum" class="hidden" style="border-top:1px solid var(--line); margin:14px 0 12px; padding-top:12px;">
@@ -1942,6 +1952,12 @@
         state.personnel = user;
         save();
         showLoggedInUI();
+        // Katalog, cari ve personel listesi artık giriş ister: girişten hemen
+        // sonra (kimlikle) güncel olanları çek.
+        // Cari listesi her girişte yenilenir: bakiyeler kullanıcının yetkisine
+        // göre gelir (aynı telefonda kullanıcı değişince eski liste kalmasın).
+        state.cariVersion = '';
+        setTimeout(function(){ try { checkResetToken(); fetchUserRoster(); } catch(e){} }, 300);
       }, 20000);
     } else {
       if(!tryOfflineLogin(user, pass)){
@@ -2060,7 +2076,7 @@
     fetch(url, {
       method:'POST', mode:'no-cors',
       headers:{'Content-Type':'text/plain;charset=utf-8'},
-      body: JSON.stringify({ type:'katalog_bulk', entries: entries, kaynak: kaynakEtiketi() })
+      body: kimlikliGovde({ type:'katalog_bulk', entries: entries, kaynak: kaynakEtiketi() })
     }).then(function(){
       successToast("Katalog buluta gönderildi — diğer telefonlar artık çekebilir");
       state.catalogSyncedAt = nowParts();
@@ -2090,7 +2106,7 @@
     fetch(url, {
       method:'POST', mode:'no-cors',
       headers:{'Content-Type':'text/plain;charset=utf-8'},
-      body: JSON.stringify({ type:'katalog_item', entry: entry, kaynak: kaynakEtiketi() })
+      body: kimlikliGovde({ type:'katalog_item', entry: entry, kaynak: kaynakEtiketi() })
     }).catch(function(){ /* sessiz geç, yerel kayıt zaten yapıldı, veri kaybı yok */ });
   }
 
@@ -2161,6 +2177,34 @@
   // yanıtlarında CORS kısıtlamasına takılabiliyor; <script> etiketiyle
   // yükleme bu kısıtlamaya hiç girmediği için çok daha güvenilir çalışıyor.
   // Hem katalog çekmede hem de ekip ilerlemesi sorgulamada kullanılır.
+  // ---------- KİMLİK: her isteğe giriş bilgisi (build 114) ----------
+  // Sunucu artık katalog, cari, ilerleme gibi okumaları ve tüm gönderimleri
+  // sadece GİRİŞ YAPMIŞ kullanıcıdan kabul edebiliyor (yönetici "Kimlik
+  // zorunlu"yu açınca). Bu yüzden giriş yapılmışsa her isteğe kullanıcı adı ve
+  // şifre eklenir. "login" ve "resetcheck" zaten açık; onlara eklenmez.
+  function kimlikBilgisi(){
+    return (state.currentUser && state.savedCredentials && state.savedCredentials.pass)
+      ? { user: state.currentUser.name, pass: state.savedCredentials.pass } : null;
+  }
+  // Gönderim gövdesine (POST) kimlik ekler; özgün nesneye dokunmaz, böylece
+  // şifre kuyruktaki/telefondaki kayıtların içine YAZILMAZ.
+  function kimlikliGovde(obj){
+    var k = kimlikBilgisi();
+    if(!k) return JSON.stringify(obj);
+    var kopya = {}; Object.keys(obj).forEach(function(a){ kopya[a] = obj[a]; });
+    kopya.user = k.user; kopya.pass = k.pass;
+    return JSON.stringify(kopya);
+  }
+  // Sunucu "giriş gerekli" derse (şifre değişmiş, kullanıcı pasife alınmış…)
+  // personele ne yapacağını söyle — dakikada en fazla bir kez.
+  var kimlikUyariZamani = 0;
+  function kimlikCevabiIzle(data){
+    if(!data || data.kimlik !== true || !state.currentUser) return;
+    if(Date.now() - kimlikUyariZamani < 60000) return;
+    kimlikUyariZamani = Date.now();
+    errorToast('Sunucu girişini tanımadı — çıkış yapıp tekrar giriş yap. Kayıtların telefonda saklı, kaybolmaz.');
+  }
+
   function jsonpRequest(url, action, cb, timeoutMs){
     var cbName = 'sayimCb_' + action + '_' + Date.now();
     var timeoutId = setTimeout(function(){
@@ -2176,11 +2220,13 @@
     window[cbName] = function(data){
       cleanup();
       if(typeof markServerReachable === 'function') markServerReachable();
+      kimlikCevabiIzle(data);
       cb(null, data);
     };
     var sep = url.indexOf('?') === -1 ? '?' : '&';
     var script = document.createElement('script');
-    script.src = url + sep + 'action=' + action + '&callback=' + cbName;
+    var kimlik = (action === 'resetcheck' || action === 'login') ? null : kimlikBilgisi();
+    script.src = url + sep + 'action=' + action + (kimlik ? '&user=' + encodeURIComponent(kimlik.user) + '&pass=' + encodeURIComponent(kimlik.pass) : '') + '&callback=' + cbName;
     script.onerror = function(){ cleanup(); if(typeof markServerUnreachable === 'function') markServerUnreachable(); cb('sunucuya ulaşılamadı'); };
     document.body.appendChild(script);
   }
@@ -2197,7 +2243,11 @@
     var cbName = 'sayimCb_' + (params.action||'x') + '_' + Date.now();
     var timeoutId = setTimeout(function(){ cleanup(); if(typeof markServerUnreachable === 'function') markServerUnreachable(); cb('zaman aşımı / bağlantı kurulamadı'); }, timeoutMs || 60000);
     function cleanup(){ clearTimeout(timeoutId); delete window[cbName]; if(script.parentNode) script.parentNode.removeChild(script); }
-    window[cbName] = function(data){ cleanup(); if(typeof markServerReachable === 'function') markServerReachable(); cb(null, data); };
+    window[cbName] = function(data){ cleanup(); if(typeof markServerReachable === 'function') markServerReachable(); if(params.action !== 'login') kimlikCevabiIzle(data); cb(null, data); };
+    if(params.user === undefined && params.action !== 'login' && params.action !== 'resetcheck'){
+      var kimlik = kimlikBilgisi();
+      if(kimlik){ var p2 = {}; Object.keys(params).forEach(function(a){ p2[a] = params[a]; }); p2.user = kimlik.user; p2.pass = kimlik.pass; params = p2; }
+    }
     var qs = Object.keys(params).map(function(k){ return encodeURIComponent(k) + '=' + encodeURIComponent(params[k]); }).join('&');
     qs += '&callback=' + cbName;
     var sep = url.indexOf('?') === -1 ? '?' : '&';
@@ -2278,7 +2328,9 @@
       // katalog/cari güncellemesi bir sonraki sessiz ana ertelenir: indirme ve
       // işleme telefonu birkaç yüz ms meşgul eder, okutmanın arasına girmesin.
       var okutmaSuruyor = Date.now() - sonOkutmaZamani < 60000;
-      if(data.katalogVersion && data.katalogVersion !== state.catalogVersion && typeof fetchCatalogFromServer === 'function' && !okutmaSuruyor && !katalogIndiriliyor){
+      // Giriş yapılmadan katalog/cari istenmez: sunucu bunları sadece giriş
+      // yapmış kullanıcıya verir (girişten hemen sonra bu kontrol tekrar çalışır).
+      if(state.currentUser && data.katalogVersion && data.katalogVersion !== state.catalogVersion && typeof fetchCatalogFromServer === 'function' && !okutmaSuruyor && !katalogIndiriliyor){
         katalogIndiriliyor = true;
         fetchCatalogFromServer(true, function(success){
           katalogIndiriliyor = false;
@@ -2287,7 +2339,7 @@
       }
       // Cari listesi de aynı mantıkla otomatik güncellenir (Mal Giriş/Çıkış
       // ekranlarındaki cari seçim listesi için).
-      if(data.cariVersion && data.cariVersion !== state.cariVersion && typeof fetchCariList === 'function' && !okutmaSuruyor){
+      if(state.currentUser && data.cariVersion && data.cariVersion !== state.cariVersion && typeof fetchCariList === 'function' && !okutmaSuruyor){
         // Sürüm damgası, liste GERÇEKTEN indikten sonra işlenir — indirme başarısız olursa bir sonraki kontrolde tekrar denenir.
         fetchCariList(function(ok){ if(ok){ state.cariVersion = data.cariVersion; save(); } });
       }
@@ -3675,8 +3727,8 @@
     if(rows.length){ cariList = rows; }
     else if(legacyCariList.length){ idbCariReplace(legacyCariList).catch(function(){}); }
     refreshCariHint();
-    if(!cariList.length) fetchCariList();
-  }).catch(function(){ refreshCariHint(); if(!cariList.length) fetchCariList(); });
+    if(!cariList.length && state.currentUser) fetchCariList();
+  }).catch(function(){ refreshCariHint(); if(!cariList.length && state.currentUser) fetchCariList(); });
 
   function fmtMoney(n){ return Number(n).toLocaleString('tr-TR', { minimumFractionDigits:2, maximumFractionDigits:2 }) + ' ₺'; }
   function cariBalanceText(c){
@@ -4214,7 +4266,7 @@
     fetch(url, {
       method: 'POST', mode: 'no-cors',
       headers: { 'Content-Type': 'text/plain;charset=utf-8' },
-      body: JSON.stringify(payload)
+      body: kimlikliGovde(payload)
     }).then(function(){
       malSaveBtnEl.textContent = '⏳ Sunucu onayı bekleniyor…';
       setTimeout(function(){ verifyMalBatch(url, malBatchId, expected, 0); }, 1200);
@@ -4492,6 +4544,7 @@
       jsonpRequestP(url, { action:'subeler' }, function(err, data){
         if(!err && data && data.status === 'ok' && Array.isArray(data.subeler)){ adminSubeler = data.subeler; renderAdminSubeler(); }
       }, 15000);
+      guvenlikYukle();
       jsonpRequestP(url, { action:'ayar_getir', user:auth.user, pass:auth.pass }, function(err, data){
         if(!err && data && data.status === 'ok'){
           if(data.defaultWakeLock !== undefined) document.getElementById('adminWakeLockCheck').checked = data.defaultWakeLock !== 'false';
@@ -4505,6 +4558,81 @@
     // çekmiyor — ayrı ekran açıldığında (adminDuzeltOpenBtn) çekiliyor.
   }
   function closeAdminModal(){ adminModalEl.classList.add('hidden'); }
+
+  // ---------- Yönetici: Veri Güvenliği (kimlik zorunluluğu + ERP anahtarı) ----------
+  var guvenlikDurum = null;
+  function guvenlikCiz(){
+    var el = document.getElementById('adminGuvenlikDurum'), btn = document.getElementById('adminGuvenlikBtn');
+    if(!guvenlikDurum){ btn.classList.add('hidden'); return; }
+    var g = guvenlikDurum, satir = [];
+    satir.push(g.zorunlu ? '<b style="color:var(--green);">🟢 Kimlik zorunlu: AÇIK</b> — kimliksiz istekler reddediliyor'
+      : '<b style="color:var(--amber);">🟠 Kimlik zorunlu: KAPALI</b> — geçiş dönemi, kimliksiz istekler hâlâ kabul ediliyor');
+    satir.push(g.erpAnahtarVar ? '🔑 ERP anahtarı: tanımlı' : '🔑 ERP anahtarı: <b style="color:var(--red);">yok</b> — önce oluştur');
+    var son = g.sonKimliksiz;
+    if(son && son.ms && (g.sunucuMs - son.ms) < 24 * 3600 * 1000){
+      satir.push('⚠️ Son kimliksiz istek: <b>' + escapeHtml(son.zaman || '') + '</b> — ' + escapeHtml(son.kaynak || '') +
+        (g.zorunlu ? '' : '<br>Bu, hâlâ eski sürümde bir telefon ya da anahtarsız ERP gönderimi olduğunu gösterir.'));
+    } else if(!g.zorunlu){
+      satir.push('✅ Son 24 saatte kimliksiz istek yok — açmak güvenli görünüyor');
+    }
+    el.innerHTML = satir.join('<br>');
+    btn.classList.remove('hidden');
+    btn.textContent = g.zorunlu ? '🔓 Kimlik zorunlu: KAPAT' : '🔒 Kimlik zorunlu: AÇ';
+    document.getElementById('adminErpAnahtarBtn').textContent = g.erpAnahtarVar ? '🔑 ERP anahtarını yenile' : '🔑 ERP anahtarı oluştur';
+  }
+  function guvenlikYukle(){
+    var auth = currentAuth(); if(!auth || !navigator.onLine) return;
+    var url = state.serverUrl || DEFAULT_SERVER_URL;
+    document.getElementById('adminErpAnahtarKutu').classList.add('hidden');
+    jsonpRequestP(url, { action:'guvenlik_getir', user:auth.user, pass:auth.pass }, function(err, data){
+      if(err || !data || data.status !== 'ok'){
+        guvenlikDurum = null; guvenlikCiz();
+        document.getElementById('adminGuvenlikDurum').innerHTML = '❌ Güvenlik durumu alınamadı' + (data && data.message ? ' (' + escapeHtml(data.message) + ')' : '') +
+          '.<br>Sunucu kodu (Code.gs) <b>build 114</b> ya da üstü olmalı — Apps Script\'te yeni sürüm dağıt.';
+        return;
+      }
+      guvenlikDurum = data; guvenlikCiz();
+    }, 15000);
+  }
+  document.getElementById('adminGuvenlikBtn').addEventListener('click', function(){
+    var auth = currentAuth(); if(!auth || !guvenlikDurum) return;
+    if(!navigator.onLine){ warnToast('İnternet yok — bu işlem için sunucuya bağlanmak gerekiyor'); return; }
+    var ac = !guvenlikDurum.zorunlu;
+    if(ac && !window.confirm('Kimlik zorunluluğu AÇILSIN mı?\n\nBundan sonra:\n• build 113 ve daha eski telefonlar kayıt GÖNDEREMEZ, katalog çekemez (kayıtları telefonda bekler, güncelleyince gider).\n• ERP bilgisayarında anahtar yoksa katalog ve cari aktarımı DURUR.\n\nSorun çıkarsa buradan tekrar kapatabilirsin.')) return;
+    if(!ac && !window.confirm('Kimlik zorunluluğu KAPATILSIN mı? Kimliksiz istekler tekrar kabul edilecek.')) return;
+    var url = state.serverUrl || DEFAULT_SERVER_URL;
+    adminResultEl.textContent = '⏳ Kaydediliyor…';
+    jsonpRequestP(url, { action:'guvenlik_kaydet', user:auth.user, pass:auth.pass, zorunlu: ac ? 'true' : 'false' }, function(err, res){
+      if(err){ adminResultEl.textContent = '❌ ' + err; return; }
+      if(!res || res.status !== 'ok'){ adminResultEl.textContent = '❌ ' + ((res && res.message) || 'bilinmeyen hata'); return; }
+      adminResultEl.textContent = res.zorunlu ? '✅ Kimlik zorunluluğu açıldı.' : '✅ Kimlik zorunluluğu kapatıldı.';
+      guvenlikYukle();
+    }, 20000);
+  });
+  document.getElementById('adminErpAnahtarBtn').addEventListener('click', function(){
+    var auth = currentAuth(); if(!auth) return;
+    if(!navigator.onLine){ warnToast('İnternet yok — bu işlem için sunucuya bağlanmak gerekiyor'); return; }
+    if(guvenlikDurum && guvenlikDurum.erpAnahtarVar && !window.confirm('Yeni anahtar oluşturulunca ESKİ anahtar geçersiz olur.\nERP bilgisayarındaki dosyayı yeni anahtarla güncelleyene kadar' + (guvenlikDurum.zorunlu ? ' katalog ve cari aktarımı DURUR.' : ' aktarım kimliksiz sayılır.') + '\n\nDevam edilsin mi?')) return;
+    var url = state.serverUrl || DEFAULT_SERVER_URL;
+    adminResultEl.textContent = '⏳ Anahtar oluşturuluyor…';
+    jsonpRequestP(url, { action:'guvenlik_anahtar', user:auth.user, pass:auth.pass }, function(err, res){
+      if(err){ adminResultEl.textContent = '❌ ' + err + ' — sunucu kodu build 114 olmalı'; return; }
+      if(!res || res.status !== 'ok' || !res.anahtar){ adminResultEl.textContent = '❌ ' + ((res && res.message) || 'bilinmeyen hata'); return; }
+      adminResultEl.textContent = '✅ Anahtar oluşturuldu — aşağıdaki kutudan kopyala.';
+      guvenlikYukle();
+      setTimeout(function(){ // guvenlikYukle kutuyu gizler; anahtarı ondan sonra göster
+        document.getElementById('adminErpAnahtar').value = res.anahtar;
+        document.getElementById('adminErpAnahtarKutu').classList.remove('hidden');
+      }, 50);
+    }, 20000);
+  });
+  document.getElementById('adminErpAnahtarKopyala').addEventListener('click', function(){
+    var inp = document.getElementById('adminErpAnahtar');
+    inp.select(); inp.setSelectionRange(0, 99);
+    var tamam = function(){ successToast('Anahtar kopyalandı'); };
+    if(navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(inp.value).then(tamam).catch(function(){ try { document.execCommand('copy'); tamam(); } catch(e){ warnToast('Kopyalanamadı — kutudan elle seç'); } });
+    else { try { document.execCommand('copy'); tamam(); } catch(e){ warnToast('Kopyalanamadı — kutudan elle seç'); } }
+  });
 
   document.getElementById('adminOpenLink').addEventListener('click', function(e){ e.preventDefault(); openAdminModal(); });
   document.getElementById('mainAdminBtn').addEventListener('click', function(){ openAdminModal(); }); // sayım ekranından ayrılmadan direkt panel açılır
@@ -5359,7 +5487,7 @@
     if(!navigator.sendBeacon || !state.serverUrl || state.pendingSessions.length === 0) return;
     state.pendingSessions.forEach(function(payload){
       try{
-        navigator.sendBeacon(state.serverUrl, new Blob([JSON.stringify(payload)], { type: 'text/plain;charset=utf-8' }));
+        navigator.sendBeacon(state.serverUrl, new Blob([kimlikliGovde(payload)], { type: 'text/plain;charset=utf-8' }));
       }catch(e){ /* sessiz geç — veri kuyrukta kalmaya devam ediyor, kayıp yok */ }
     });
   }
@@ -5614,7 +5742,7 @@
       payload.nonce = makeId();
       var tamKontrol = Date.now() - sonTamKontrol > 10 * 60000;
       if(tamKontrol) sonTamKontrol = Date.now();
-      postWithTimeout(url, JSON.stringify(payload), SYNC_POST_TIMEOUT_MS)
+      postWithTimeout(url, kimlikliGovde(payload), SYNC_POST_TIMEOUT_MS)
         .then(function(){
           if(typeof markServerReachable === 'function') markServerReachable();
           return fetchSessionAck(url, sid, tamKontrol ? '' : payload.nonce);

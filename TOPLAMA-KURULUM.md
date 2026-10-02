@@ -132,6 +132,35 @@ Yetkiler artık altısı: `rapor`, `temizle`, `kullanici_yonetimi`,
 `ayarlar`, `canli_durum` (kim ne sayıyor canlı görme), `duzelt` (yanlış
 girilmiş sayım kayıtlarını düzeltme/silme).
 
+## Veri Güvenliği: kimlik zorunluluğu (build 114+)
+
+Sunucu adresi uygulamanın içinde yazdığı için, adresi bilen biri eskiden giriş
+yapmadan kataloğu ve cari bakiyelerini okuyabiliyor, kayıt gönderebiliyordu.
+Artık telefonlar her isteğe giriş bilgisini, ERP bilgisayarı da gizli bir
+anahtarı ekliyor. Reddetme ise **sizin açtığınız** bir ayara bağlı:
+
+**Yönetici Paneli → Ayarlar → 🔒 Veri Güvenliği**
+
+1. **Sunucu ve uygulama build 114** olsun (`/exec` adresinde `build114`).
+2. **🔑 ERP anahtarı oluştur**'a bas. Anahtar sadece o an gösterilir.
+3. ERP bilgisayarında `C:\Scripts\erp-anahtar.txt` dosyasını oluştur, anahtarı
+   **tek satır** olarak yapıştır. `stok-otomatik-gonder.ps1` dosyasını da
+   repodaki güncel hâliyle değiştir.
+4. Bir gün bekle. Panelde "Son 24 saatte kimliksiz istek yok ✅" yazınca
+   (yani tüm telefonlar güncellenmiş, ERP anahtarla gönderiyor) **Kimlik
+   zorunlu: AÇ**'a bas.
+
+Kapalıyken (geçiş dönemi) hiçbir şey reddedilmez; kimliksiz gelen istekler
+Sistem Durumu günlüğüne "kimliksiz istek" diye düşer — kimin güncellenmediğini
+buradan görürsün. Açıkken build 113 ve daha eski telefonlar kayıt gönderemez
+(kayıtları telefonda bekler, güncelleyince gider). Sorun çıkarsa aynı düğmeyle
+kapatılır.
+
+Açıkken girişsiz açık kalanlar: giriş denemesi, sürüm yazısı ve `resetcheck`
+(sadece sürüm damgaları). Cari **bakiyesi** yalnızca yönetici ve "Fiyat Görme"
+yetkisi olan kullanıcıya gönderilir. `yuk-testi.html` kimlik göndermez;
+zorunluluk açıkken yük testi yapılacaksa önce kapatılmalıdır.
+
 **Şifremi unuttum / admin dışarıda kaldı:** Kullanıcı Yönetimi yetkisi
 olan kimse kalmadıysa, Google E-Tablo'yu aç → **Kullanicilar** sekmesi →
 ilgili kişinin **Şifre** hücresindeki `s256$...` metnini silip yerine yeni

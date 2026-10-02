@@ -8,7 +8,7 @@
 // bir sürüm dağıttıktan sonra /exec adresini boş açtığında burada yazan
 // numarayı görmelisin; index.html'in üstündeki "build" numarasıyla
 // eşleşecek şekilde ben her ikisini birlikte güncelliyorum.
-var GS_VERSION = 'build113';
+var GS_VERSION = 'build114';
 
 // Sheets'te "Saat" sütunu zaman biçimli olarak algılanırsa, hücre değeri düz
 // metin değil bir Date nesnesi olarak gelir ve String(...) çirkin bir çıktı
@@ -28,15 +28,26 @@ function doGet(e) {
   // ?action=ilerleme ile ekip genelinde sayım ilerlemesini (%) döndürür.
   // ?callback=xxx varsa (uygulama içinden <script> etiketiyle çağrılır),
   // JSONP formatında sarıp döner — CORS kısıtlamasına hiç takılmadan çalışır.
-  if (e.parameter && e.parameter.action === 'katalog') {
-    return getKatalog(e.parameter.callback);
+  var P = e.parameter || {};
+  var kapi = function (ne) { return kimlikGerek(P.user, P.pass, ne); };
+  var k;
+  if (P.action === 'katalog') {
+    k = kapi('katalog okuma'); if (!k.ok) return kimlikRed(k, P.callback);
+    return getKatalog(P.callback);
   }
-  if (e.parameter && e.parameter.action === 'cari') {
-    return getCari(e.parameter.callback);
+  if (P.action === 'cari') {
+    k = kapi('cari okuma'); if (!k.ok) return kimlikRed(k, P.callback);
+    // Bakiye: sadece yönetici / "fiyat" yetkisi olan görür. (Geçiş döneminde
+    // kimliksiz gelen eski telefonlara eskisi gibi gönderilir.)
+    return getCari(P.callback, k.kimliksiz && !k.auth ? true : fiyatGorur(k.auth));
   }
-  if (e.parameter && e.parameter.action === 'ilerleme') {
-    return getIlerleme(e.parameter.callback);
+  if (P.action === 'ilerleme') {
+    k = kapi('ilerleme okuma'); if (!k.ok) return kimlikRed(k, P.callback);
+    return getIlerleme(P.callback);
   }
+  if (P.action === 'guvenlik_getir') return guvenlikGetir(P.user, P.pass, P.callback);
+  if (P.action === 'guvenlik_kaydet') return guvenlikKaydet(P.user, P.pass, P.zorunlu, P.callback);
+  if (P.action === 'guvenlik_anahtar') return guvenlikAnahtarUret(P.user, P.pass, P.callback);
   // ---- Giriş / yetkilendirme ----
   if (e.parameter && e.parameter.action === 'login') {
     return handleLogin(e.parameter.user, e.parameter.pass, e.parameter.callback);
@@ -59,8 +70,11 @@ function doGet(e) {
   if (e.parameter && e.parameter.action === 'finalize') {
     return handleFinalize(e.parameter.user, e.parameter.pass, e.parameter.force, e.parameter.haric, e.parameter.callback);
   }
-  if (e.parameter && e.parameter.action === 'kullanicilar') {
-    return getKullanicilar(e.parameter.callback);
+  if (P.action === 'kullanicilar') {
+    // Giriş ekranı bu listeyi isim önerisi için girişten ÖNCE de ister; zorunlu
+    // modda reddedilir ama günlüğe hata olarak yazılmaz.
+    k = kimlikGerek(P.user, P.pass, 'personel listesi okuma', null, true); if (!k.ok) return kimlikRed(k, P.callback);
+    return getKullanicilar(P.callback);
   }
   if (e.parameter && e.parameter.action === 'kullanicilar_detay') {
     return getKullanicilarDetay(e.parameter.user, e.parameter.pass, e.parameter.callback);
@@ -75,33 +89,38 @@ function doGet(e) {
   // mal_kontrol: telefon, kaydın sunucuya GERÇEKTEN yazıldığını doğrular.
   // mal_export / mal_export_onay: sunucudaki PowerShell script'i yeni
   // kayıtları masaüstüne CSV olarak indirir, sonra "indirildi" diye işaretler.
-  if (e.parameter && e.parameter.action === 'mal_kontrol') {
-    return malKontrol(e.parameter.batch, e.parameter.callback);
+  if (P.action === 'mal_kontrol') {
+    k = kapi('mal kaydı kontrolü'); if (!k.ok) return kimlikRed(k, P.callback);
+    return malKontrol(P.batch, P.callback);
   }
   // sayim_kontrol: telefon, gönderdiği sayım kayıtlarının sunucuya hangi
   // SÜRÜMLE yazıldığını sorar. Telefon kuyruğundan sadece burada doğrulanan
   // kayıtları çıkarır (bkz. sayimKontrol).
   // Sistem Durumu ekranı: son gelen veriler, sayılar, günlük ve hatalar.
   // Şube konumları: telefonlar girişte konumlarını bunlarla karşılaştırır.
-  if (e.parameter && e.parameter.action === 'subeler') {
-    return outJson({ status: 'ok', subeler: subeleriOku() }, e.parameter.callback);
+  if (P.action === 'subeler') {
+    k = kapi('şube listesi okuma'); if (!k.ok) return kimlikRed(k, P.callback);
+    return outJson({ status: 'ok', subeler: subeleriOku() }, P.callback);
   }
   if (e.parameter && e.parameter.action === 'sube_kaydet') {
     return subeKaydet(e.parameter.user, e.parameter.pass, e.parameter.data, e.parameter.callback);
   }
   // Telefon girişte nerede olduğunu bildirir (Sistem Durumu günlüğüne yazılır).
-  if (e.parameter && e.parameter.action === 'konum_bildir') {
-    return konumBildir(e.parameter, e.parameter.callback);
+  if (P.action === 'konum_bildir') {
+    k = kapi('konum bildirimi'); if (!k.ok) return kimlikRed(k, P.callback);
+    return konumBildir(P, P.callback);
   }
   if (e.parameter && e.parameter.action === 'sistem_durumu') {
     return sistemDurumu(e.parameter.user, e.parameter.pass, e.parameter.callback);
   }
   // Telefon, gönderemediği verinin hatasını bildirir (günlüğe yazılır).
-  if (e.parameter && e.parameter.action === 'hata_bildir') {
-    return hataBildir(e.parameter, e.parameter.callback);
+  if (P.action === 'hata_bildir') {
+    k = kapi('hata bildirimi'); if (!k.ok) return kimlikRed(k, P.callback);
+    return hataBildir(P, P.callback);
   }
-  if (e.parameter && e.parameter.action === 'sayim_kontrol') {
-    return sayimKontrol(e.parameter.session, e.parameter.nonce, e.parameter.callback);
+  if (P.action === 'sayim_kontrol') {
+    k = kapi('sayım onayı'); if (!k.ok) return kimlikRed(k, P.callback);
+    return sayimKontrol(P.session, P.nonce, P.callback);
   }
   if (e.parameter && e.parameter.action === 'mal_export') {
     return malExport(e.parameter.user, e.parameter.pass, e.parameter.callback);
@@ -233,6 +252,99 @@ function requirePermission(user, pass, perm) {
   return auth;
 }
 
+// ============================================================
+// GÜVENLİK: KİMLİKSİZ İSTEKLERİ KAPATMA (build 114)
+// Eskiden katalog, cari (bakiyeler), personel listesi ve ilerleme GİRİŞ
+// YAPMADAN okunabiliyor; sayım, mal hareketi ve katalog da kimlik sorulmadan
+// yazılabiliyordu — adresi bilen herkes için. Artık bu isteklerin hepsi
+// kullanıcı adı + şifre (ERP bilgisayarı için gizli anahtar) taşır.
+//
+// GEÇİŞ DÖNEMİ: Telefonlar, sunucu ve ERP bilgisayarı aynı anda güncellenemez.
+// 'GUVENLIK_ZORUNLU' ayarı KAPALIYKEN (varsayılan) kimliksiz istekler eskisi
+// gibi kabul edilir ama Sistem Günlüğü'ne "kimliksiz istek" diye not düşülür.
+// Tüm telefonlar yeni sürüme geçip ERP anahtarı kurulunca yönetici panelden
+// "Kimlik zorunlu"yu açar; o andan sonra kimliksiz istek REDDEDİLİR.
+// ============================================================
+var GUV_OZELLIK = 'GUVENLIK_ZORUNLU';
+var ERP_ANAHTAR_OZELLIK = 'ERP_ANAHTAR';
+function guvenlikZorunlu() { return PropertiesService.getScriptProperties().getProperty(GUV_OZELLIK) === 'true'; }
+
+// Kimlik doğrulama, 2 dakikalık önbellekle: sayım günü her telefon birkaç
+// saniyede bir istek atar; her seferinde Kullanicilar sekmesini okumayalım.
+// (Şifre değişikliği / pasife alma en geç 2 dakikada geçerli olur.)
+function kimlikOnbellek(user, pass) {
+  user = String(user || '').trim(); pass = String(pass || '');
+  if (!user || !pass) return { ok: false, message: 'Giriş gerekli' };
+  var anahtar = 'kimlik_' + sifreHex('onbellek', user.toLowerCase() + '\n' + pass);
+  var cache = null;
+  try { cache = CacheService.getScriptCache(); var v = cache.get(anahtar); if (v) return JSON.parse(v); } catch (e) { /* önbelleksiz devam */ }
+  var a = authenticate(user, pass);
+  if (a.ok && cache) { try { cache.put(anahtar, JSON.stringify(a), 120); } catch (e2) { /* önemli değil */ } }
+  return a;
+}
+// Aynı tür not en fazla 10 dakikada bir günlüğe düşer (günlük dolmasın).
+function guvenlikNot(tur, ne, detay, hata) {
+  try {
+    var c = CacheService.getScriptCache(), k = 'guvnot_' + tur + '_' + ne;
+    if (c.get(k)) return;
+    c.put(k, '1', 600);
+  } catch (e) { /* önbellek yoksa her seferinde yaz */ }
+  gunlukYaz(tur, ne, detay, hata);
+}
+// İstek kimlikli mi? Dönüş: { ok, auth, kimliksiz } ya da { ok:false, kimlik, message }.
+// yetki verilirse (örn. 'ayarlar') kullanıcının o yetkisi de olmalı.
+function kimlikGerek(user, pass, ne, yetki, sessiz) {
+  var a = kimlikOnbellek(user, pass);
+  if (a.ok && (!yetki || a.permissions.indexOf(yetki) !== -1)) return { ok: true, auth: a };
+  if (!guvenlikZorunlu()) {
+    guvenlikNot('guvenlik', ne, (a.ok ? 'Yetkisiz' : 'Kimliksiz') + ' istek kabul edildi (geçiş dönemi) — "Kimlik zorunlu" açılınca reddedilecek', false);
+    return { ok: true, auth: a.ok ? a : null, kimliksiz: true };
+  }
+  // sessiz: giriş ekranındaki telefonların olağan istekleri günlüğü doldurmasın.
+  if (!sessiz) guvenlikNot('guvenlik_red', ne, (a.ok ? 'Yetkisiz' : 'Kimliksiz') + ' istek REDDEDİLDİ' + (user ? ' (' + String(user).substring(0, 60) + ')' : ''), true);
+  if (a.ok) return { ok: false, message: 'Bu işlem için yetkin yok' };
+  return { ok: false, kimlik: true, message: 'Giriş gerekli — çıkış yapıp tekrar giriş yap' };
+}
+function kimlikRed(k, callback) { return outJson({ status: 'error', kimlik: !!k.kimlik, message: k.message }, callback); }
+function erpAnahtarDogru(anahtar) {
+  var k = PropertiesService.getScriptProperties().getProperty(ERP_ANAHTAR_OZELLIK);
+  return !!k && String(anahtar || '') === k;
+}
+// Fiyat/bakiye görebilir mi: yönetici ya da "fiyat" yetkisi olan.
+function fiyatGorur(auth) { return !!auth && (auth.role === 'yonetici' || auth.permissions.indexOf('fiyat') !== -1); }
+
+// ---- Yönetici paneli: güvenlik durumu / ayarı / ERP anahtarı ----
+function guvenlikGetir(user, pass, callback) {
+  var auth = requirePermission(user, pass, 'ayarlar');
+  if (!auth.ok) return outJson({ status: 'error', message: auth.message }, callback);
+  var props = PropertiesService.getScriptProperties();
+  var son = null;
+  try { var v = props.getProperty('SON_guvenlik'); if (v) son = JSON.parse(v); } catch (e) { son = null; }
+  return outJson({ status: 'ok', zorunlu: guvenlikZorunlu(), erpAnahtarVar: !!props.getProperty(ERP_ANAHTAR_OZELLIK), sonKimliksiz: son, sunucuMs: Date.now() }, callback);
+}
+function guvenlikKaydet(user, pass, zorunlu, callback) {
+  var auth = requirePermission(user, pass, 'ayarlar');
+  if (!auth.ok) return outJson({ status: 'error', message: auth.message }, callback);
+  var props = PropertiesService.getScriptProperties();
+  var ac = String(zorunlu) === 'true';
+  if (ac && !props.getProperty(ERP_ANAHTAR_OZELLIK)) {
+    return outJson({ status: 'error', message: 'Önce ERP anahtarını oluşturup ERP bilgisayarına yaz — yoksa katalog ve cari aktarımı durur' }, callback);
+  }
+  props.setProperty(GUV_OZELLIK, ac ? 'true' : 'false');
+  gunlukYaz('yonetim', String(user || ''), 'Kimlik zorunluluğu ' + (ac ? 'AÇILDI — kimliksiz istekler artık reddediliyor' : 'KAPATILDI — kimliksiz istekler kabul ediliyor'), false);
+  return outJson({ status: 'ok', zorunlu: ac }, callback);
+}
+// Yeni ERP anahtarı üretir ve SADECE bu cevapta bir kez gösterir. Eski anahtar
+// o anda geçersiz olur.
+function guvenlikAnahtarUret(user, pass, callback) {
+  var auth = requirePermission(user, pass, 'ayarlar');
+  if (!auth.ok) return outJson({ status: 'error', message: auth.message }, callback);
+  var anahtar = (Utilities.getUuid() + Utilities.getUuid()).replace(/-/g, '').slice(0, 40);
+  PropertiesService.getScriptProperties().setProperty(ERP_ANAHTAR_OZELLIK, anahtar);
+  gunlukYaz('yonetim', String(user || ''), 'Yeni ERP anahtarı oluşturuldu (eskisi geçersiz)', false);
+  return outJson({ status: 'ok', anahtar: anahtar }, callback);
+}
+
 function handleLogin(user, pass, callback) {
   var auth = authenticate(user, pass);
   if (!auth.ok) {
@@ -245,7 +357,8 @@ function handleLogin(user, pass, callback) {
 // Cari (tedarikçi/müşteri) listesi — Mal Giriş/Mal Çıkış ekranlarında
 // seçilebilecek cari hesapları. Katalog ile aynı mantık: "Cari" sekiminden
 // okunur, telefonlar otomatik senkronize eder (CARI_VERSION ile).
-function getCari(callback) {
+function getCari(callback, bakiyeGoster) {
+  if (bakiyeGoster === undefined) bakiyeGoster = true;
   var ss = SpreadsheetApp.getActiveSpreadsheet();
   var sheet = ss.getSheetByName('Cari');
   var entries = [];
@@ -253,7 +366,7 @@ function getCari(callback) {
     var values = sheet.getRange(2, 1, sheet.getLastRow() - 1, 3).getValues();
     entries = values
       .filter(function (r) { return r[0]; })
-      .map(function (r) { return { name: String(r[0]), code: String(r[1] || ''), balance: String(r[2] || '') }; });
+      .map(function (r) { return { name: String(r[0]), code: String(r[1] || ''), balance: bakiyeGoster ? String(r[2] || '') : '' }; });
   }
   var json = JSON.stringify({ entries: entries });
   if (callback) {
@@ -1043,7 +1156,7 @@ function sistemDurumu(user, pass, callback) {
   if (!auth.ok) return outJson({ status: 'error', message: auth.message }, callback);
   var props = PropertiesService.getScriptProperties();
   var son = {};
-  ['katalog', 'katalog_urun', 'cari', 'sayim', 'mal', 'masaustu_kontrol', 'masaustu', 'yetki', 'telefon_hata', 'hata', 'yonetim', 'konum', 'veritabani'].forEach(function (t) {
+  ['katalog', 'katalog_urun', 'cari', 'sayim', 'mal', 'masaustu_kontrol', 'masaustu', 'yetki', 'telefon_hata', 'hata', 'yonetim', 'konum', 'veritabani', 'guvenlik', 'guvenlik_red'].forEach(function (t) {
     try { var v = props.getProperty('SON_' + t); if (v) son[t] = JSON.parse(v); } catch (e) { /* bozuk kayıt: atla */ }
   });
   var ss = SpreadsheetApp.getActiveSpreadsheet();
@@ -1112,6 +1225,22 @@ function doPostIsle(e) {
     // Kaynak: telefon kendini bildirir ("telefon: Ali"); bildirmeyen gönderici
     // ERP bilgisayarındaki aktarım programıdır.
     var kaynak = data.kaynak ? String(data.kaynak) : 'ERP / dış program';
+
+    // ---- KİMLİK KAPISI (bkz. GÜVENLİK bölümü) ----
+    // Katalog/cari listesinin tamamını değiştirmek: ERP anahtarı ya da
+    // "ayarlar" yetkili kullanıcı. Diğer her yazma: giriş yapmış kullanıcı.
+    var topluMu = data.type === 'katalog_bulk' || data.type === 'cari_bulk';
+    var postKapi = (topluMu && erpAnahtarDogru(data.anahtar)) ? { ok: true }
+      : kimlikGerek(data.user, data.pass,
+          data.type === 'katalog_bulk' ? 'katalog gönderimi' : data.type === 'cari_bulk' ? 'cari gönderimi'
+            : data.type === 'katalog_item' ? 'yeni ürün gönderimi' : data.type === 'mal_hareket' ? 'mal hareketi gönderimi' : 'sayım gönderimi',
+          topluMu ? 'ayarlar' : null);
+    // Şifre ve anahtar bundan sonra HİÇBİR yere (günlük, kuyruk, veri tabanı) taşınmaz.
+    delete data.user; delete data.pass; delete data.anahtar;
+    if (!postKapi.ok) {
+      return ContentService.createTextOutput(JSON.stringify({ status: 'error', kimlik: !!postKapi.kimlik, message: postKapi.message })).setMimeType(ContentService.MimeType.JSON);
+    }
+
     if (data.type === 'katalog_bulk') {
       var kOut = saveKatalogBulk(data.entries || []);
       var kDegismedi = kOut.getContent().indexOf('degisiklikYok') !== -1;
