@@ -44,3 +44,12 @@ etiketleri logosuz (eksik) basılır.
 - "Fiyat tarihi" varsayılan olarak bugündür; fiyat daha önce değiştiyse o günü seçin.
 - Net miktar ürün adından tahmin edilir ("500 ML", "6X200 GR"); yanlışsa düzeltin.
 - Üretim yeri ve net miktar ürün bazında **bu telefonda** hatırlanır.
+
+## Çeşitler tek etikette
+Aynı ürünün fiyatı aynı olan çeşitleri (örn. yumuşatıcının kokuları) için tek
+etiket basılabilir. Bir çeşidi ekleyince sayfa, katalogda **fiyatı ve net
+miktarı aynı, adının ilk iki sözcüğü aynı** olan diğer çeşitleri bulur ve "tek
+etikette topla" önerir; ad "… ÇEŞİTLERİ 1440 ML" biçiminde gelir, düzeltilebilir.
+Gruptaki ürünlerden birinin fiyatı sonradan değişirse etiket basılmaz; o ürün
+gruptan çıkarılır. Üretim yeri de hepsinde aynı olmalıdır — farklı olanı
+gruptan çıkarıp ayrı etiket basın.
