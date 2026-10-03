@@ -235,6 +235,13 @@
     <div class="kart">
       <div class="kartBaslik"><span>3 · Etiketler <span id="listeSayi" class="ipucu"></span></span><button type="button" id="temizleBtn" style="padding:6px 10px; font-size:12px;">Listeyi boşalt</button></div>
       <div id="liste"><div class="ipucu">Henüz ürün eklenmedi.</div></div>
+      <!-- Liste aktarma: telefonda hazırla, yazıcının bağlı olduğu bilgisayarda getirip bas. -->
+      <div class="satir" style="margin-top:12px;">
+        <button type="button" id="listeGonderBtn" style="flex:1; font-size:13px;">📤 Listeyi gönder</button>
+        <button type="button" id="listeGetirBtn" style="flex:1; font-size:13px;">📥 Gönderilen listeyi getir</button>
+      </div>
+      <div class="ipucu" style="margin-top:4px;">Yazıcı bilgisayara bağlıysa: telefonda "gönder", bilgisayarda bu sayfayı açıp "getir".</div>
+      <div id="aktarKutu" class="gizli" style="margin-top:8px;"></div>
     </div>
 
     <div class="kart" id="onizleKart">
@@ -492,7 +499,10 @@
     durum.liste.unshift({
       id: kimlikNo(), barkod: u.barkod, ad: u.ad, katalogAd: u.ad, fiyat: u.fiyat, elle: !!u.elle,
       // Üretim yeri: ERP stok kartında ülke girilmişse o (esas), yoksa bu telefonda daha önce yazılan.
-      yer: u.erpYer || bil.yer || '', erpYer: u.erpYer || '', mik: bil.mik || tahmin.mik, birim: bil.birim || tahmin.birim,
+      // İkisi de yoksa ve barkod 868/869 ile başlıyorsa "Türkiye" yazılır (barkodYer işaretiyle; elle düzeltilebilir).
+      yer: u.erpYer || bil.yer || (/^86[89]/.test(u.barkod || '') ? 'Türkiye' : ''),
+      barkodYer: !u.erpYer && !bil.yer && /^86[89]/.test(u.barkod || ''),
+      erpYer: u.erpYer || '', mik: bil.mik || tahmin.mik, birim: bil.birim || tahmin.birim,
       // Fiyat tarihi: sunucu fiyatın değiştiği günü biliyorsa o, bilmiyorsa bugün.
       tarih: u.ft || bugun(), ft: u.ft || '', of: u.of || '',
       baslik: '', ozel: '', indirim: !!u.indirim, onceki: u.onceki || '', bitis: u.bitis || '', adet: 1
@@ -612,9 +622,9 @@
               '<button type="button" data-is="gcikar" data-b="' + esc(x.barkod) + '" style="padding:0 6px; font-size:12px; border:none; background:transparent; color:var(--red); flex-shrink:0;">✕</button></div>'; }).join('') +
             '<button type="button" data-is="dagit" style="margin-top:6px; padding:6px 10px; font-size:12px;">Grubu dağıt (tek ürüne dön)</button></div>' : '') +
         '<label>Etikette yazacak ürün adı</label><input data-al="ad" value="' + esc(u.ad) + '">' +
-        '<div class="satir"><div style="flex:1.5;"><label>Üretim yeri (zorunlu)' + (u.erpYer && u.yer === u.erpYer ? ' · ERP\'den' : '') + '</label><input data-al="yer" class="' + (String(u.yer || '').trim() ? '' : 'eksik') + '" value="' + esc(u.yer) + '" placeholder="örn. Türkiye, Almanya"></div>' +
+        '<div class="satir"><div style="flex:1.5;"><label>Üretim yeri (zorunlu)' + (u.erpYer && u.yer === u.erpYer ? ' · ERP\'den' : (u.barkodYer && u.yer === 'Türkiye' ? ' · barkoddan' : '')) + '</label><input data-al="yer" class="' + (String(u.yer || '').trim() ? '' : 'eksik') + '" value="' + esc(u.yer) + '" placeholder="örn. Türkiye, Almanya"></div>' +
           '<button type="button" data-is="tr" style="flex:none; padding:10px;">Türkiye</button></div>' +
-        (trBarkod && !String(u.yer || '').trim() ? '<div class="ipucu" style="margin-top:4px;">Barkod Türkiye kayıtlı bir firmaya ait; bu, ürünün Türkiye\'de üretildiğini <b>kanıtlamaz</b>. Üretim yerini ambalajdan oku.</div>' : '') +
+        (u.barkodYer && u.yer === 'Türkiye' ? '<div class="ipucu" style="margin-top:4px;">"Türkiye" barkoddan (868/869) yazıldı. Ürün ithalse ambalajdaki ülkeyi yaz.</div>' : '') +
         '<div class="satir"><div><label>Net miktar</label><input data-al="mik" type="text" inputmode="decimal" value="' + esc(String(u.mik).replace('.', ',')) + '"></div>' +
           '<div><label>Birim</label><select data-al="birim">' + BIRIMLER.map(function(b){ return '<option value="' + b[0] + '"' + (u.birim === b[0] ? ' selected' : '') + '>' + b[1] + '</option>'; }).join('') + '</select></div>' +
           '<div><label>Kaç etiket</label><input data-al="adet" type="number" inputmode="numeric" min="1" max="99" value="' + esc(u.adet) + '"></div></div>' +
@@ -680,6 +690,86 @@
     else if(b.getAttribute('data-is') === 'dagit'){ u.grup = null; u.ad = u.katalogAd || u.ad; }
     kaydet(); listeCiz(); ciz();
   });
+  // ---------- Liste aktarma (telefon → bilgisayar) ----------
+  var SUNUCU = sayim.serverUrl || 'https://script.google.com/macros/s/AKfycbwH0hVGDXIQhdSxg2neDBNUEOxY1SNacJRz4cqf3WaP8xgAhlEnKfRv5xnlENKnh3XuYA/exec';
+  function kimlikBilgisi(){
+    return (kullanici && sayim.savedCredentials && sayim.savedCredentials.pass) ? { user: kullanici.name, pass: sayim.savedCredentials.pass } : null;
+  }
+  var jsonpSayac = 0;
+  function sunucuSor(params, cb){
+    var ad = 'etiketCb_' + Date.now() + '_' + (++jsonpSayac), bitti = false, k = kimlikBilgisi();
+    if(k){ params.user = k.user; params.pass = k.pass; }
+    var sc = document.createElement('script');
+    function son(hata, veri){ if(bitti) return; bitti = true; clearTimeout(z); try { delete window[ad]; } catch(e){ window[ad] = undefined; } if(sc.parentNode) sc.parentNode.removeChild(sc); cb(hata, veri); }
+    var z = setTimeout(function(){ son('zaman aşımı'); }, 30000);
+    window[ad] = function(veri){ son(null, veri); };
+    sc.onerror = function(){ son('sunucuya ulaşılamadı'); };
+    sc.src = SUNUCU + '?' + Object.keys(params).map(function(a){ return encodeURIComponent(a) + '=' + encodeURIComponent(params[a]); }).join('&') + '&callback=' + ad;
+    document.body.appendChild(sc);
+  }
+  function aktarHata(veri, hata){
+    if(veri && veri.kimlik) return 'Oturum doğrulanamadı — ana uygulamada çıkış yapıp yeniden giriş yap';
+    return (veri && veri.message) || hata || 'bilinmeyen hata';
+  }
+  $('listeGonderBtn').addEventListener('click', function(){
+    if(!durum.liste.length){ toast('Liste boş', 'uyari'); return; }
+    if(!navigator.onLine){ toast('İnternet yok — liste gönderilemedi', 'hata'); return; }
+    var btn = this, id = kimlikNo(), k = kimlikBilgisi();
+    var govde = { type: 'etiket_liste', id: id, liste: durum.liste, kaynak: 'telefon: ' + (kullanici.name || '?') };
+    if(k){ govde.user = k.user; govde.pass = k.pass; }
+    var metin = JSON.stringify(govde);
+    if(JSON.stringify(durum.liste).length > 44000){ toast('Liste çok uzun — bir kısmını basıp çıkar, sonra kalanı gönder', 'hata'); return; }
+    btn.disabled = true; btn.textContent = '📤 Gönderiliyor…';
+    var bitir = function(m, tur){ btn.disabled = false; btn.textContent = '📤 Listeyi gönder'; toast(m, tur); };
+    // Gönderim yanıtı okunamaz (no-cors); listenin sunucuya ulaştığı ayrıca sorularak doğrulanır.
+    var deneme = 0;
+    var dogrula = function(){
+      sunucuSor({ action: 'etiket_liste', id: id }, function(hata, veri){
+        if(!hata && veri && veri.status === 'ok' && !veri.yok) return bitir(durum.liste.length + ' ürünlük liste gönderildi — bilgisayarda "getir" de');
+        if(veri && veri.status === 'error') return bitir('Gönderilemedi: ' + aktarHata(veri, hata), 'hata');
+        if(++deneme < 4) return setTimeout(dogrula, 2500);
+        bitir('Listenin ulaştığı doğrulanamadı — tekrar dene', 'hata');
+      });
+    };
+    fetch(SUNUCU, { method: 'POST', mode: 'no-cors', headers: { 'Content-Type': 'text/plain;charset=utf-8' }, body: metin })
+      .then(function(){ setTimeout(dogrula, 1500); })
+      .catch(function(){ bitir('Sunucuya ulaşılamadı — liste gönderilemedi', 'hata'); });
+  });
+  function listeyiAl(id){
+    var kutu = $('aktarKutu');
+    kutu.innerHTML = '<div class="ipucu">Liste getiriliyor…</div>';
+    sunucuSor({ action: 'etiket_liste', id: id }, function(hata, veri){
+      if(hata || !veri || veri.status !== 'ok' || veri.yok || !Array.isArray(veri.liste)){ kutu.innerHTML = ''; kutu.classList.add('gizli'); toast('Liste getirilemedi: ' + aktarHata(veri, hata), 'hata'); return; }
+      var eklenen = 0, atlanan = 0;
+      veri.liste.slice().reverse().forEach(function(u){
+        if(!u || typeof u !== 'object') return;
+        if(u.barkod && !u.grup && listedeMi(u.barkod)){ atlanan++; return; }
+        u.id = kimlikNo(); durum.liste.unshift(u); eklenen++;
+        if(u.barkod && !u.grup) bilgiHatirla(u);
+      });
+      kaydet(); fiyatlariTazele(); listeCiz(); ciz();
+      kutu.innerHTML = ''; kutu.classList.add('gizli');
+      toast(eklenen + ' ürün listeye eklendi' + (atlanan ? ' (' + atlanan + ' tanesi zaten listedeydi)' : ''));
+    });
+  }
+  $('listeGetirBtn').addEventListener('click', function(){
+    var kutu = $('aktarKutu');
+    if(!navigator.onLine){ toast('İnternet yok', 'hata'); return; }
+    kutu.classList.remove('gizli'); kutu.innerHTML = '<div class="ipucu">Gönderilen listeler aranıyor…</div>';
+    sunucuSor({ action: 'etiket_liste' }, function(hata, veri){
+      if(hata || !veri || veri.status !== 'ok'){ kutu.innerHTML = '<div class="uyari kirmizi">Listeler alınamadı: ' + esc(aktarHata(veri, hata)) + '</div>'; return; }
+      var l = (veri.listeler || []).slice(0, 8);
+      if(!l.length){ kutu.innerHTML = '<div class="ipucu">Gönderilmiş liste yok. Önce telefonda "Listeyi gönder" de.</div>'; return; }
+      kutu.innerHTML = l.map(function(x){
+        return '<button type="button" data-liste="' + esc(x.id) + '" style="width:100%; margin-top:6px; text-align:left; font-size:13px;">' +
+          esc(x.kullanici || '?') + ' · ' + esc(x.zaman) + ' · <b>' + esc(x.adet) + ' ürün</b></button>';
+      }).join('');
+    });
+  });
+  $('aktarKutu').addEventListener('click', function(e){
+    var b = e.target.closest('button[data-liste]'); if(b) listeyiAl(b.getAttribute('data-liste'));
+  });
+
   $('temizleBtn').addEventListener('click', function(){
     if(!durum.liste.length || !window.confirm('Listedeki ' + durum.liste.length + ' ürün çıkarılsın mı? (Üretim yeri gibi bilgiler hatırlanır.)')) return;
     durum.liste = []; kaydet(); listeCiz(); ciz();

@@ -8,7 +8,7 @@
 // bir sürüm dağıttıktan sonra /exec adresini boş açtığında burada yazan
 // numarayı görmelisin; index.html'in üstündeki "build" numarasıyla
 // eşleşecek şekilde ben her ikisini birlikte güncelliyorum.
-var GS_VERSION = 'build118';
+var GS_VERSION = 'build120';
 
 // Sheets'te "Saat" sütunu zaman biçimli olarak algılanırsa, hücre değeri düz
 // metin değil bir Date nesnesi olarak gelir ve String(...) çirkin bir çıktı
@@ -44,6 +44,10 @@ function doGet(e) {
   if (P.action === 'ilerleme') {
     k = kapi('ilerleme okuma'); if (!k.ok) return kimlikRed(k, P.callback);
     return getIlerleme(P.callback);
+  }
+  if (P.action === 'etiket_liste') {
+    k = kapi('etiket listesi okuma'); if (!k.ok) return kimlikRed(k, P.callback);
+    return etiketListeGetir(P.id, P.callback);
   }
   if (P.action === 'guvenlik_getir') return guvenlikGetir(P.user, P.pass, P.callback);
   if (P.action === 'guvenlik_kaydet') return guvenlikKaydet(P.user, P.pass, P.zorunlu, P.callback);
@@ -398,6 +402,60 @@ function tabloyuDegistir(sheet, basliklar, rows) {
   if (eskiSon > hepsi.length) sheet.getRange(hepsi.length + 1, 1, eskiSon - hepsi.length, Math.max(eskiSutun, n)).clearContent();
   if (eskiSutun > n) sheet.getRange(1, n + 1, hepsi.length, eskiSutun - n).clearContent();
 }
+// ---- ETİKET LİSTESİ AKTARMA ----
+// Telefonda hazırlanan etiket listesi buraya kaydedilir; yazıcının bağlı olduğu
+// bilgisayar aynı listeyi çekip basar. Son ETIKET_LISTE_SAKLA liste tutulur.
+var ETIKET_LISTE_SEKME = 'EtiketListe';
+var ETIKET_LISTE_BASLIK = ['Id', 'Zaman', 'Kullanıcı', 'Adet', 'Veri'];
+var ETIKET_LISTE_SAKLA = 30;
+var ETIKET_LISTE_SINIR = 45000; // bir hücreye sığan metin sınırının (50.000) altında
+function etiketListeSayfa(olustur) {
+  var ss = SpreadsheetApp.getActiveSpreadsheet();
+  var sheet = ss.getSheetByName(ETIKET_LISTE_SEKME);
+  if (!sheet && olustur) {
+    sheet = ss.insertSheet(ETIKET_LISTE_SEKME);
+    sheet.getRange(1, 1, 1, ETIKET_LISTE_BASLIK.length).setValues([ETIKET_LISTE_BASLIK]);
+  }
+  return sheet;
+}
+function etiketListeKaydet(data, gonderen) {
+  var id = String(data.id || '').replace(/[^A-Za-z0-9_-]/g, '').substring(0, 40);
+  var liste = data.liste;
+  if (!id || !Array.isArray(liste) || !liste.length) return jsonCikti({ status: 'error', message: 'Boş etiket listesi' });
+  var veri = JSON.stringify(liste);
+  if (veri.length > ETIKET_LISTE_SINIR) return jsonCikti({ status: 'error', buyuk: true, message: 'Liste çok uzun — ikiye bölerek gönderin' });
+  var sheet = etiketListeSayfa(true);
+  var son = sheet.getLastRow();
+  if (son >= 2) {
+    // Aynı liste iki kez geldiyse (tekrar deneme) ikinci kez yazılmaz.
+    var idler = sheet.getRange(2, 1, son - 1, 1).getValues();
+    for (var i = 0; i < idler.length; i++) if (String(idler[i][0]) === id) return jsonCikti({ status: 'ok', id: id, zatenVar: true });
+  }
+  var zaman = Utilities.formatDate(new Date(), fiyatTz(), 'dd.MM.yyyy HH:mm');
+  sheet.getRange(son + 1, 1, 1, 5).setNumberFormat('@').setValues([[id, zaman, String(gonderen || '').substring(0, 60), String(liste.length), veri]]);
+  var fazla = sheet.getLastRow() - 1 - ETIKET_LISTE_SAKLA;
+  if (fazla > 0) sheet.deleteRows(2, fazla);
+  return jsonCikti({ status: 'ok', id: id });
+}
+// id verilmezse son listelerin özeti (yeniden eskiye), verilirse o listenin kendisi.
+function etiketListeGetir(id, callback) {
+  var sheet = etiketListeSayfa(false);
+  var son = sheet ? sheet.getLastRow() : 0;
+  var satirlar = son >= 2 ? sheet.getRange(2, 1, son - 1, 5).getValues() : [];
+  var zamanMetni = function (v) { return v instanceof Date ? Utilities.formatDate(v, fiyatTz(), 'dd.MM.yyyy HH:mm') : String(v || ''); };
+  if (id) {
+    for (var i = satirlar.length - 1; i >= 0; i--) {
+      if (String(satirlar[i][0]) !== String(id)) continue;
+      var liste = [];
+      try { liste = JSON.parse(String(satirlar[i][4] || '[]')); } catch (pe) { return outJson({ status: 'error', message: 'Liste okunamadı' }, callback); }
+      return outJson({ status: 'ok', id: String(id), zaman: zamanMetni(satirlar[i][1]), kullanici: String(satirlar[i][2] || ''), liste: liste }, callback);
+    }
+    return outJson({ status: 'ok', yok: true }, callback);
+  }
+  var ozet = satirlar.map(function (r) { return { id: String(r[0]), zaman: zamanMetni(r[1]), kullanici: String(r[2] || ''), adet: Number(r[3]) || 0 }; }).reverse();
+  return outJson({ status: 'ok', listeler: ozet }, callback);
+}
+
 function jsonCikti(o) { return ContentService.createTextOutput(JSON.stringify(o)).setMimeType(ContentService.MimeType.JSON); }
 
 function saveCariBulk(entries) {
@@ -1240,14 +1298,20 @@ function doPostIsle(e) {
     var postKapi = (topluMu && erpAnahtarDogru(data.anahtar)) ? { ok: true }
       : kimlikGerek(data.user, data.pass,
           data.type === 'katalog_bulk' ? 'katalog gönderimi' : data.type === 'cari_bulk' ? 'cari gönderimi'
-            : data.type === 'katalog_item' ? 'yeni ürün gönderimi' : data.type === 'mal_hareket' ? 'mal hareketi gönderimi' : 'sayım gönderimi',
+            : data.type === 'etiket_liste' ? 'etiket listesi gönderimi' : data.type === 'katalog_item' ? 'yeni ürün gönderimi' : data.type === 'mal_hareket' ? 'mal hareketi gönderimi' : 'sayım gönderimi',
           topluMu ? 'ayarlar' : null);
+    var gonderenAd = data.user ? String(data.user) : '';
     // Şifre ve anahtar bundan sonra HİÇBİR yere (günlük, kuyruk, veri tabanı) taşınmaz.
     delete data.user; delete data.pass; delete data.anahtar;
     if (!postKapi.ok) {
       return ContentService.createTextOutput(JSON.stringify({ status: 'error', kimlik: !!postKapi.kimlik, message: postKapi.message })).setMimeType(ContentService.MimeType.JSON);
     }
 
+    if (data.type === 'etiket_liste') {
+      var eOut = etiketListeKaydet(data, gonderenAd);
+      gunlukYaz('etiket_liste', kaynak, 'Etiket listesi: ' + ((data.liste || []).length) + ' ürün', eOut.getContent().indexOf('"error"') !== -1);
+      return eOut;
+    }
     if (data.type === 'katalog_bulk') {
       var kOut = saveKatalogBulk(data.entries || []);
       var kDegismedi = kOut.getContent().indexOf('degisiklikYok') !== -1;
