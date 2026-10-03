@@ -502,7 +502,7 @@
       if(String(k.barcode) === u.barkod || k.price === '') continue;
       if(Math.abs(sayi(k.price) - u.fiyat) > 0.004) continue;            // fiyat birebir aynı
       if(Number(k.carpan) > 1) continue;                                 // koli barkodu değil
-      if(ortakOnEk(s0, sozcukler(k.name)) < 2) continue;                 // adın ilk iki sözcüğü aynı
+      if(ortakOnEk(s0, sozcukler(k.name)) < 1) continue;                 // adın ilk sözcüğü (marka) aynı: HARIBO SOLUCAN / HARIBO ALTIN AYICIK
       var m = miktarBul(k.name); if(m.mik !== m0.mik || m.birim !== m0.birim) continue; // net miktar aynı
       if(ben.yer && k.yer && normTr(ben.yer) !== normTr(k.yer)) continue;  // üretim yeri (ERP'de biliniyorsa) aynı
       var n = normTr(k.name); if(gorulen[n]) continue; gorulen[n] = true;  // aynı ürünün ikinci barkodu
