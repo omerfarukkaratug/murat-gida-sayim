@@ -80,3 +80,15 @@ onaylar. İndirim etiketinde önceki fiyat ve **bitiş tarihi** zorunludur
 listeye ekler (etiketleri yenilemek için). "Fiyatı düşenleri indirimli ekle"
 son 30 günde fiyatı düşenleri indirim etiketi olarak ekler. Bir seferde en
 fazla 150 ürün eklenir.
+
+## Üretim yeri ERP'den gelir (build 117)
+
+- Kaynak: ERP12 stok kartındaki **Ülke** alanı (`dbo.STOK.ULKE` → `dbo.ULKE.AD`).
+  `stok-otomatik-gonder.ps1` bunu katalogla birlikte gönderir; Katalog sekmesinde
+  11. sütun **Üretim Yeri** olarak durur.
+- Etiket sayfasında ürün eklenince üretim yeri kendiliğinden dolar (alan başlığında
+  "· ERP'den" yazar). Ülke "Türkiye" ise yerli üretim işareti de kendiliğinden gelir.
+- Stok kartında ülke **boşsa** alan boş kalır ve etiket "Eksik: üretim yeri" uyarısı
+  verir — ya ERP'de stok kartına ülke girilir (kalıcı çözüm) ya da etiket ekranında
+  elle yazılır.
+- Aynı fiyatlı çeşitleri tek etikette toplarken üretim yeri farklı olanlar gruba alınmaz.

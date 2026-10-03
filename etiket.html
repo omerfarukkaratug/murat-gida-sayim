@@ -364,7 +364,11 @@
         // Fiyat değişti: eski indirim bilgisi artık geçersiz, yeniden onaylanmalı.
         if(u.indirim){ u.indirim = false; u.onceki = ''; u.bitis = ''; }
       }
-      if(k){ u.ft = k.ft || ''; u.of = k.of || ''; }
+      if(k){
+        u.ft = k.ft || ''; u.of = k.of || '';
+        // ERP'de ülke sonradan girildiyse/değiştiyse etikete yansısın.
+        if(k.yer && !u.grup && u.erpYer !== k.yer){ u.erpYer = k.yer; u.yer = k.yer; }
+      }
     });
     if(degisen){ kaydet(); toast(degisen + ' ürünün fiyatı katalogda değişmiş — etiketler güncellendi', 'uyari'); }
   }
@@ -412,6 +416,7 @@
       if(Number(k.carpan) > 1) continue;                                 // koli barkodu değil
       if(ortakOnEk(s0, sozcukler(k.name)) < 2) continue;                 // adın ilk iki sözcüğü aynı
       var m = miktarBul(k.name); if(m.mik !== m0.mik || m.birim !== m0.birim) continue; // net miktar aynı
+      if(ben.yer && k.yer && normTr(ben.yer) !== normTr(k.yer)) continue;  // üretim yeri (ERP'de biliniyorsa) aynı
       var n = normTr(k.name); if(gorulen[n]) continue; gorulen[n] = true;  // aynı ürünün ikinci barkodu
       cikan.push({ barkod: String(k.barcode), ad: k.name });
       if(cikan.length >= 60) break;
@@ -468,7 +473,7 @@
     if(!k){ toast('Bu barkod katalogda yok: ' + barkod, 'uyari'); return false; }
     var f = sayi(k.price);
     if(k.price === '' || isNaN(f) || f <= 0){ toast('Bu ürünün katalogda fiyatı yok — etiket basılamaz', 'hata'); return false; }
-    urunEkle({ barkod: barkod, ad: k.name, fiyat: f, elle: false, ft: k.ft || '', of: k.of || '', tartili: barkod.indexOf('29') === 0 || String(k.birim || '').toLowerCase() === 'kg' });
+    urunEkle({ barkod: barkod, ad: k.name, fiyat: f, elle: false, ft: k.ft || '', of: k.of || '', erpYer: k.yer || '', tartili: barkod.indexOf('29') === 0 || String(k.birim || '').toLowerCase() === 'kg' });
     return true;
   }
   function gunFarki(a, b){ return Math.round((Date.parse(a + 'T00:00:00') - Date.parse(b + 'T00:00:00')) / 86400000); }
@@ -486,7 +491,8 @@
     var tahmin = u.tartili ? { mik: 1, birim: 'kg' } : miktarBul(u.ad);
     durum.liste.unshift({
       id: kimlikNo(), barkod: u.barkod, ad: u.ad, katalogAd: u.ad, fiyat: u.fiyat, elle: !!u.elle,
-      yer: bil.yer || '', mik: bil.mik || tahmin.mik, birim: bil.birim || tahmin.birim,
+      // Üretim yeri: ERP stok kartında ülke girilmişse o (esas), yoksa bu telefonda daha önce yazılan.
+      yer: u.erpYer || bil.yer || '', erpYer: u.erpYer || '', mik: bil.mik || tahmin.mik, birim: bil.birim || tahmin.birim,
       // Fiyat tarihi: sunucu fiyatın değiştiği günü biliyorsa o, bilmiyorsa bugün.
       tarih: u.ft || bugun(), ft: u.ft || '', of: u.of || '',
       baslik: '', ozel: '', indirim: !!u.indirim, onceki: u.onceki || '', bitis: u.bitis || '', adet: 1
@@ -606,7 +612,7 @@
               '<button type="button" data-is="gcikar" data-b="' + esc(x.barkod) + '" style="padding:0 6px; font-size:12px; border:none; background:transparent; color:var(--red); flex-shrink:0;">✕</button></div>'; }).join('') +
             '<button type="button" data-is="dagit" style="margin-top:6px; padding:6px 10px; font-size:12px;">Grubu dağıt (tek ürüne dön)</button></div>' : '') +
         '<label>Etikette yazacak ürün adı</label><input data-al="ad" value="' + esc(u.ad) + '">' +
-        '<div class="satir"><div style="flex:1.5;"><label>Üretim yeri (zorunlu)</label><input data-al="yer" class="' + (String(u.yer || '').trim() ? '' : 'eksik') + '" value="' + esc(u.yer) + '" placeholder="örn. Türkiye, Almanya"></div>' +
+        '<div class="satir"><div style="flex:1.5;"><label>Üretim yeri (zorunlu)' + (u.erpYer && u.yer === u.erpYer ? ' · ERP\'den' : '') + '</label><input data-al="yer" class="' + (String(u.yer || '').trim() ? '' : 'eksik') + '" value="' + esc(u.yer) + '" placeholder="örn. Türkiye, Almanya"></div>' +
           '<button type="button" data-is="tr" style="flex:none; padding:10px;">Türkiye</button></div>' +
         (trBarkod && !String(u.yer || '').trim() ? '<div class="ipucu" style="margin-top:4px;">Barkod Türkiye kayıtlı bir firmaya ait; bu, ürünün Türkiye\'de üretildiğini <b>kanıtlamaz</b>. Üretim yerini ambalajdan oku.</div>' : '') +
         '<div class="satir"><div><label>Net miktar</label><input data-al="mik" type="text" inputmode="decimal" value="' + esc(String(u.mik).replace('.', ',')) + '"></div>' +
@@ -712,7 +718,7 @@
       var b = String(x.k.barcode);
       if(listedeMi(b)){ atlanan++; return; }
       if(eklenen >= TOPLU_SINIR) return;
-      urunEkle({ barkod: b, ad: x.k.name, fiyat: x.f, elle: false, ft: x.k.ft || '', of: x.k.of || '',
+      urunEkle({ barkod: b, ad: x.k.name, fiyat: x.f, elle: false, ft: x.k.ft || '', of: x.k.of || '', erpYer: x.k.yer || '',
         tartili: b.indexOf('29') === 0 || String(x.k.birim || '').toLowerCase() === 'kg',
         indirim: indirimli && !!x.d, onceki: (indirimli && x.d) ? String(x.d.onceki).replace('.', ',') : '', bitis: (indirimli && x.d) ? bitis : '' }, true);
       eklenen++;

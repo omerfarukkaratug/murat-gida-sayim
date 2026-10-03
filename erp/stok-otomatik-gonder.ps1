@@ -122,13 +122,17 @@ SELECT
   f.FIYAT AS Fiyat,
   v.KDV_PAREKENDE AS KdvOrani,
   bb.CARPAN AS Carpan,
-  sb.AD AS Birim
+  sb.AD AS Birim,
+  ul.AD AS Ulke
 FROM dbo.STOK_BARKOD_BIRIM bb
 LEFT JOIN dbo.STOK_BARKOD_W w ON w.ID = bb.BARKOD
 LEFT JOIN dbo.STOK_BARKOD_FIYAT_VARSAYILAN f ON f.STOK_STOK_BIRIM = bb.STOK_STOK_BIRIM
 LEFT JOIN dbo.STOK s ON s.ID = bb.STOK
 LEFT JOIN dbo.STOK_VERGI v ON v.ID = s.STOK_VERGI
 LEFT JOIN dbo.STOK_BIRIM sb ON sb.ID = bb.STOK_BIRIM
+-- Uretim yeri: stok kartindaki ULKE alani (dbo.ULKE.AD, orn. "Turkiye", "Almanya").
+-- Fiyat etiketindeki "Uretim yeri" ve yerli uretim logosu buradan gelir.
+LEFT JOIN dbo.ULKE ul ON ul.ID = s.ULKE
 -- Eski stok URUN bazinda: ERP12 stogu barkod barkod tutar; ayni urunun
 -- butun barkodlarindaki miktar toplanir, hangi barkod okutulursa okutulsun
 -- ayni (dogru) stok gorunur. Hic miktari olmayan urunde bos kalir.
@@ -183,6 +187,8 @@ try {
         # Koli barkodu (CARPAN > 1, orn. 24'lu koli): telefon koli sayisini adede cevirir.
         $carpanDeger = $null
         if ($r.Carpan -ne $null -and $r.Carpan -isnot [System.DBNull] -and [double]$r.Carpan -gt 1) { $carpanDeger = [double]$r.Carpan }
+        $ulkeDeger = ""
+        if ($r.Ulke -ne $null -and $r.Ulke -isnot [System.DBNull]) { $ulkeDeger = ([string]$r.Ulke).Trim() }
         [PSCustomObject]@{
             name      = [string]$r.UrunAdi
             barcode   = [string]$r.Barkod
@@ -192,6 +198,7 @@ try {
             kdv       = $kdvDeger
             carpan    = $carpanDeger
             birim     = [string]$r.Birim
+            ulke      = $ulkeDeger
         }
     }
 
