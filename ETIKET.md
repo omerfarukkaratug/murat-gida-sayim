@@ -111,3 +111,9 @@ basılamaz. Bunun yerine:
 
 Listeler tablodaki `EtiketListe` sekmesinde durur; son 30 liste saklanır. Çok uzun listeler
 (yaklaşık 150 üründen fazla) bölünerek gönderilmelidir.
+
+## A4'e dizme (build 121)
+
+Yazıcı yalnızca A4 basıyorsa A6/A5 afişler A4 kâğıda dizilir ("A4 kâğıda diz" kutusu, varsayılan açık):
+A6 → dik A4'te 4 tane, A5 → yatık A4'te yan yana 2 tane. Kesik çizgilerden kesilir.
+Yazdırma penceresinde: kâğıt A4, ölçek %100, kenar boşluğu "Yok", "Üstbilgi ve altbilgi" kapalı.
