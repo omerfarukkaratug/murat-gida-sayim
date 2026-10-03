@@ -4,7 +4,7 @@ Hedef: en az 10 telefon, ~80.000 okutma (depo + reyon), **18 saat** (dakikada or
 
 ## 1) Sayımdan önce (bir kez)
 
-- [ ] **Sunucu kodu güncel:** `/exec` adresinde en güncel `kod sürümü` görünüyor (şu an `build117`).
+- [ ] **Sunucu kodu güncel:** `/exec` adresinde en güncel `kod sürümü` görünüyor (şu an `build118`).
 - [ ] **Uygulama güncel:** Her telefonda üstte aynı build numarası görünüyor.
 - [ ] **Yük testi yapıldı** (`yuk-testi.html`, sadece TEST KOPYASINDA):
   - [ ] Önce "Tabloyu 80.000 satıra doldur".
