@@ -57,3 +57,26 @@ gruptan çıkarılır. Üretim yeri de hepsinde aynı olmalıdır — farklı ol
 gruptan çıkarıp ayrı etiket basın.
 
 Afişlerde grup etiketinin altında kapsanan çeşitler küçük yazıyla listelenir ("Çeşitler: Lavanta · Gül · …"). Raf etiketinde yer olmadığı için liste basılmaz.
+
+## Fiyat izleme ve indirim önerisi (sunucu build 116+)
+Sunucu, katalog her yenilendiğinde fiyatı değişen ürünü kaydeder:
+- **Fiyat Tarihi** (Katalog 9. sütun): fiyatın değiştiği gün. Etiketteki "fiyat
+  değişiklik tarihi" buradan kendiliğinden gelir.
+- **Önceki Fiyat** (10. sütun): değişimden önceki **30 gün** içindeki en düşük
+  fiyat. (Fiyat Etiketi Yönetmeliği 10 gün, reklam kılavuzu 30 gün der; 30
+  günün en düşüğü ikisini de karşılar.)
+- **FiyatGecmisi** sekmesi: her değişimin kaydı (zaman, barkod, eski, yeni).
+  "Önceki fiyat buydu" diyebilmenin kanıtıdır; silmeyin.
+
+İzleme, build 116'nın yüklendiği gün başlar; öncesi bilinmez. İlk 30 gün
+içinde sayfa bunu hatırlatır.
+
+**İndirim kendiliğinden yazılmaz.** Fiyatı düşen ürün eklenince sayfa "fiyat
+şu gün şundan şuna düşmüş, indirim etiketi basılsın mı?" diye sorar; personel
+onaylar. İndirim etiketinde önceki fiyat ve **bitiş tarihi** zorunludur
+(indirimli satış reklamında başlangıç ve bitiş tarihi belirtilmelidir).
+
+**Toplu ekle:** "Fiyatı değişenler" son 1/3/7/30 günde fiyatı değişen ürünleri
+listeye ekler (etiketleri yenilemek için). "Fiyatı düşenleri indirimli ekle"
+son 30 günde fiyatı düşenleri indirim etiketi olarak ekler. Bir seferde en
+fazla 150 ürün eklenir.

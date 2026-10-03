@@ -24,6 +24,12 @@
   yazılabilir; önceki fiyat = indirimden önceki 10 gün içindeki EN DÜŞÜK fiyat
   (çabuk bozulan ürünlerde bir önceki fiyat). İspat yükü satıcıdadır. Bu yüzden
   "İndirim" seçilince önceki fiyat girilmeden etiket basılmaz.
+  FİYAT İZLEME: sunucu (Code.gs build 116+) her katalog yenilemesinde fiyatı
+  değişen ürünü kaydeder ve katalogla birlikte "ft" (fiyatın değiştiği gün) ile
+  "of" (ondan önceki 30 günün en düşük fiyatı) gönderir. Bu sayfa fiyatı DÜŞEN
+  ürünü görünce indirimi KENDİLİĞİNDEN YAZMAZ, önerir; onayı personel verir
+  (her fiyat düşüşü kampanya değildir, ispat yükü satıcıdadır). İndirimli satış
+  reklamında başlangıç ve bitiş tarihi de zorunludur → "İndirim bitiş tarihi".
   Yetki: yönetici ya da "etiket" yetkisi.
 -->
 <style>
@@ -211,6 +217,21 @@
       <button type="button" id="elleBtn" style="width:100%; margin-top:8px; border-style:dashed; font-size:13px;">➕ Katalogda olmayan ürünü elle ekle</button>
     </div>
 
+    <div class="kart" id="topluKart">
+      <div class="kartBaslik">Toplu ekle</div>
+      <div id="topluBilgi" class="ipucu" style="margin-bottom:8px;"></div>
+      <div class="satir">
+        <div style="flex:1.1;"><label for="topluGun">Fiyatı değişenler</label>
+          <select id="topluGun"><option value="1">Bugün</option><option value="3">Son 3 gün</option><option value="7" selected>Son 7 gün</option><option value="30">Son 30 gün</option></select></div>
+        <button type="button" id="topluDegisenBtn" style="flex:1.6; font-size:13px;">🔄 Listeye ekle</button>
+      </div>
+      <div class="satir">
+        <div style="flex:1.1;"><label for="topluBitis">İndirim bitiş tarihi</label><input id="topluBitis" type="date"></div>
+        <button type="button" id="topluDusenBtn" style="flex:1.6; font-size:13px;">📉 Fiyatı düşenleri indirimli ekle</button>
+      </div>
+      <button type="button" id="topluTrBtn" style="width:100%; margin-top:10px; font-size:13px; border-style:dashed;">Üretim yeri boş olanlara "Türkiye" yaz</button>
+    </div>
+
     <div class="kart">
       <div class="kartBaslik"><span>3 · Etiketler <span id="listeSayi" class="ipucu"></span></span><button type="button" id="temizleBtn" style="padding:6px 10px; font-size:12px;">Listeyi boşalt</button></div>
       <div id="liste"><div class="ipucu">Henüz ürün eklenmedi.</div></div>
@@ -271,6 +292,9 @@
 
   // ---------- Yetki ----------
   var sayim = oku(SAYIM_ANAHTAR) || {};
+  var FIYAT_IZLEME = /^\d{4}-\d{2}-\d{2}$/.test(String(sayim.fiyatIzleme || '')) ? sayim.fiyatIzleme : ''; // geçmişin tutulmaya başlandığı gün
+  var INDIRIM_PENCERE_GUN = 30;   // fiyat düşüşü en fazla bu kadar gün "indirim" olarak önerilir
+  var TOPLU_SINIR = 150;          // bir seferde listeye en fazla bu kadar ürün eklenir
   var kullanici = sayim.currentUser || null;
   var yetkili = !!kullanici && (kullanici.role === 'yonetici' || (kullanici.permissions || []).indexOf('etiket') !== -1);
   if(!yetkili){ $('yetkiYok').classList.remove('gizli'); return; }
@@ -323,6 +347,7 @@
     katalog = r; katalogHarita = {};
     r.forEach(function(k){ katalogHarita[String(k.barcode)] = k; });
     katalogBilgisi();
+    topluBilgiCiz();
     fiyatlariTazele();
     listeCiz(); ciz();
   });
@@ -333,7 +358,13 @@
     durum.liste.forEach(function(u){
       if(u.elle || !u.barkod) return;
       var f = katalogFiyat(u.barkod);
-      if(!isNaN(f) && f > 0 && Math.abs(f - u.fiyat) > 0.004){ u.fiyat = f; u.tarih = bugun(); degisen++; }
+      var k = katalogHarita[u.barkod];
+      if(!isNaN(f) && f > 0 && Math.abs(f - u.fiyat) > 0.004){
+        u.fiyat = f; u.tarih = (k && k.ft) || bugun(); degisen++;
+        // Fiyat değişti: eski indirim bilgisi artık geçersiz, yeniden onaylanmalı.
+        if(u.indirim){ u.indirim = false; u.onceki = ''; u.bitis = ''; }
+      }
+      if(k){ u.ft = k.ft || ''; u.of = k.of || ''; }
     });
     if(degisen){ kaydet(); toast(degisen + ' ürünün fiyatı katalogda değişmiş — etiketler güncellendi', 'uyari'); }
   }
@@ -348,6 +379,9 @@
     var re = /(\d+(?:\.\d+)?)\s*(kg|gr|g|lt|l|ml|cl|mt|m|cm)\b/g, son = null, x;
     while((x = re.exec(s))) son = x;
     if(son) return { mik: Number(son[1]), birim: cev[son[2]] };
+    // "100 LÜ", "24'LÜ", "6 LI": paketteki adet → birim fiyat adet başına.
+    var li = /(\d+)\s*'?\s*l[iu]\b/.exec(s);
+    if(li && Number(li[1]) > 1) return { mik: Number(li[1]), birim: 'adet' };
     return { mik: 1, birim: 'adet' };
   }
   // Birim fiyat: fiyat / net miktar, yönetmelikteki ölçü birimine (kg, L, m, adet) çevrilerek.
@@ -434,17 +468,30 @@
     if(!k){ toast('Bu barkod katalogda yok: ' + barkod, 'uyari'); return false; }
     var f = sayi(k.price);
     if(k.price === '' || isNaN(f) || f <= 0){ toast('Bu ürünün katalogda fiyatı yok — etiket basılamaz', 'hata'); return false; }
-    urunEkle({ barkod: barkod, ad: k.name, fiyat: f, elle: false, tartili: barkod.indexOf('29') === 0 || String(k.birim || '').toLowerCase() === 'kg' });
+    urunEkle({ barkod: barkod, ad: k.name, fiyat: f, elle: false, ft: k.ft || '', of: k.of || '', tartili: barkod.indexOf('29') === 0 || String(k.birim || '').toLowerCase() === 'kg' });
     return true;
   }
-  function urunEkle(u){
+  function gunFarki(a, b){ return Math.round((Date.parse(a + 'T00:00:00') - Date.parse(b + 'T00:00:00')) / 86400000); }
+  // Fiyatı son 30 günde DÜŞMÜŞ mü? (önerilecek indirim: önceki fiyat = 30 günün en düşüğü)
+  function dususBilgisi(k, fiyat){
+    var of = sayi(k.of), ft = k.ft || '';
+    if(!ft || isNaN(of) || !(of > fiyat + 0.004)) return null;
+    var gun = gunFarki(bugun(), ft);
+    if(gun < 0 || gun > INDIRIM_PENCERE_GUN) return null;
+    return { onceki: of, tarih: ft, oran: Math.round((1 - fiyat / of) * 100),
+      eksikGecmis: !!FIYAT_IZLEME && gunFarki(ft, FIYAT_IZLEME) < INDIRIM_PENCERE_GUN };
+  }
+  function urunEkle(u, sessiz){
     var bil = durum.urun[u.barkod] || {};
     var tahmin = u.tartili ? { mik: 1, birim: 'kg' } : miktarBul(u.ad);
     durum.liste.unshift({
       id: kimlikNo(), barkod: u.barkod, ad: u.ad, katalogAd: u.ad, fiyat: u.fiyat, elle: !!u.elle,
       yer: bil.yer || '', mik: bil.mik || tahmin.mik, birim: bil.birim || tahmin.birim,
-      tarih: bugun(), baslik: '', ozel: '', indirim: false, onceki: '', adet: 1
+      // Fiyat tarihi: sunucu fiyatın değiştiği günü biliyorsa o, bilmiyorsa bugün.
+      tarih: u.ft || bugun(), ft: u.ft || '', of: u.of || '',
+      baslik: '', ozel: '', indirim: !!u.indirim, onceki: u.onceki || '', bitis: u.bitis || '', adet: 1
     });
+    if(sessiz) return;
     kaydet(); listeCiz(); ciz();
     toast('Eklendi: ' + u.ad);
   }
@@ -455,7 +502,7 @@
   });
 
   // ---------- Kamera (telefonun kendi okuyucusu; iPhone'da ZBar) ----------
-  var akis = null, okuyucu = null, taraZ = null, bdYukleniyor = null;
+  var akis = null, okuyucu = null, taraZ = null, bdYukleniyor = null, sonKod = '', sonKodZaman = 0;
   function okuyucuYukle(){
     if('BarcodeDetector' in window) return Promise.resolve(window.BarcodeDetector);
     if(bdYukleniyor) return bdYukleniyor;
@@ -492,7 +539,14 @@
       if(k && k.length && k[0].rawValue){
         var kod = String(k[0].rawValue).trim();
         if(navigator.vibrate) navigator.vibrate(30);
-        kameraKapat(); barkodEkle(kod);
+        // Kamera AÇIK kalır: personel ürünleri art arda okutur. Aynı barkod 3 sn
+        // içinde tekrar görülürse yok sayılır (çift ekleme olmasın).
+        if(!(kod === sonKod && Date.now() - sonKodZaman < 3000)){
+          sonKod = kod; sonKodZaman = Date.now();
+          var zaten = durum.liste.some(function(x){ return x.barkod === kod || (x.grup && x.grup.some(function(g){ return g.barkod === kod; })); });
+          if(zaten) toast('Bu ürün zaten listede', 'uyari'); else barkodEkle(kod);
+        }
+        taraZ = setTimeout(tara, 900);
         return;
       }
       sonra();
@@ -519,7 +573,11 @@
     if(!String(u.yer || '').trim()) e.push('üretim yeri');
     if(!u.tarih) e.push('fiyat tarihi');
     var mik = sayi(u.mik); if(isNaN(mik) || mik <= 0) e.push('net miktar');
-    if(u.indirim){ var o = sayi(u.onceki); if(isNaN(o) || o <= sayi(u.fiyat)) e.push('indirimden önceki fiyat (şimdiki fiyattan yüksek olmalı)'); }
+    if(u.indirim){
+      var o = sayi(u.onceki); if(isNaN(o) || o <= sayi(u.fiyat)) e.push('indirimden önceki fiyat (şimdiki fiyattan yüksek olmalı)');
+      if(!u.bitis) e.push('indirim bitiş tarihi'); else if(u.bitis < bugun()) e.push('indirim bitiş tarihi geçmiş');
+      else if(u.tarih && u.bitis < u.tarih) e.push('bitiş tarihi başlangıçtan önce');
+    }
     var fark = grupFiyatFarki(u);
     if(fark.length) e.push('gruptaki ' + fark.length + ' ürünün fiyatı artık farklı (' + fark[0].ad + ') — onu gruptan çıkar');
     return e;
@@ -534,6 +592,7 @@
       var bf = birimFiyat(u), eks = eksikler(u);
       var trBarkod = /^86[89]/.test(u.barkod);
       var benzer = benzerBul(u);
+      var dusus = (!u.elle && u.barkod && !u.grup) ? dususBilgisi({ ft: u.ft, of: u.of }, u.fiyat) : null;
       return '<div class="urun" data-id="' + esc(u.id) + '">' +
         '<div class="urunUst"><div style="min-width:0;"><div class="urunAd">' + esc(u.ad) + '</div>' +
           '<div class="urunMeta">' + (u.grup ? u.grup.length + ' çeşit, tek etiket' : (u.barkod ? esc(u.barkod) : 'elle eklendi')) + (bf ? ' · birim fiyat ' + para(bf.tutar) + ' ₺/' + bf.birim : '') + '</div></div>' +
@@ -560,8 +619,14 @@
         (u.baslik === 'ozel' && !u.indirim ? '<label>Başlık metni</label><input data-al="ozel" maxlength="24" value="' + esc(u.ozel) + '">' +
           (RISKLI.test(u.ozel || '') ? '<div class="uyari" style="margin:6px 0 0;">Bu söz indirim ya da fiyat karşılaştırması anlamı taşıyor. Gerçek bir indirimse aşağıdan "İndirimli satış"ı kullan; karşılaştırma iddiasını (ör. "en ucuz") belgeyle kanıtlaman gerekir.</div>' : '') : '') +
         '<div style="display:flex; align-items:center; gap:8px; margin-top:12px;"><input data-al="indirim" type="checkbox"' + (u.indirim ? ' checked' : '') + '><span style="font-size:13.5px; font-weight:700;">İndirimli satış (etikete "İNDİRİM" yazılır)</span></div>' +
-        (u.indirim ? '<label>İndirimden önceki fiyat (₺)</label><input data-al="onceki" type="text" inputmode="decimal" value="' + esc(u.onceki) + '" placeholder="örn. 129,90">' +
-          '<div class="ipucu" style="margin-top:4px;">Buraya indirimden önceki <b>10 gün içinde uygulanan en düşük fiyatı</b> yaz (çabuk bozulan üründe bir önceki fiyat). Bunu kanıtlamak satıcının sorumluluğunda. "Fiyat tarihi" indirimin başladığı gün olmalı.</div>' : '') +
+        (u.indirim ? '<div class="satir"><div><label>İndirimden önceki fiyat (₺)</label><input data-al="onceki" type="text" inputmode="decimal" value="' + esc(u.onceki) + '" placeholder="örn. 129,90"></div>' +
+            '<div><label>İndirim bitiş tarihi</label><input data-al="bitis" type="date" class="' + (u.bitis ? '' : 'eksik') + '" value="' + esc(u.bitis || '') + '"></div></div>' +
+          (dusus && sayi(u.onceki) > dusus.onceki + 0.004 ? '<div class="uyari" style="margin:6px 0 0;">Sistemde bu ürünün son 30 gündeki en düşük fiyatı <b>' + para(dusus.onceki) + ' ₺</b> görünüyor. Daha yüksek bir önceki fiyat yazarsan bunu kanıtlayamayabilirsin.</div>' : '') +
+          '<div class="ipucu" style="margin-top:4px;">Önceki fiyat: indirimden önceki <b>10 gün içinde uygulanan en düşük fiyat</b> (çabuk bozulan üründe bir önceki fiyat). "Fiyat tarihi" indirimin başladığı gün olmalı; indirimin bittiği gün de etikete yazılır. Kanıt sorumluluğu satıcıda.</div>'
+          : (dusus ? '<div style="margin-top:10px; border:1.5px solid var(--accent); border-radius:12px; padding:10px;">' +
+              '<div style="font-size:13.5px; font-weight:700; line-height:1.45;">📉 Bu ürünün fiyatı ' + tarihTr(dusus.tarih) + ' günü <b>' + para(dusus.onceki) + ' ₺ → ' + para(u.fiyat) + ' ₺</b> düşmüş (%' + dusus.oran + ').</div>' +
+              (dusus.eksikGecmis ? '<div class="ipucu" style="margin-top:4px;">Fiyat geçmişi ' + tarihTr(FIYAT_IZLEME) + ' gününden beri tutuluyor. Ondan önce daha düşük bir fiyat uygulandıysa önceki fiyatı düzelt.</div>' : '') +
+              '<button type="button" data-is="indirimYaz" class="ana" style="width:100%; margin-top:8px; font-size:13.5px;">İndirim etiketi olarak bas</button></div>' : '')) +
       '</div>';
     }).join('');
   }
@@ -591,6 +656,10 @@
     var u = urunBul(b); if(!u) return;
     if(b.getAttribute('data-is') === 'sil'){ durum.liste = durum.liste.filter(function(x){ return x.id !== u.id; }); }
     else if(b.getAttribute('data-is') === 'tr'){ u.yer = 'Türkiye'; bilgiHatirla(u); }
+    else if(b.getAttribute('data-is') === 'indirimYaz'){
+      var dz = dususBilgisi({ ft: u.ft, of: u.of }, u.fiyat);
+      if(dz){ u.indirim = true; u.onceki = String(dz.onceki).replace('.', ','); u.tarih = dz.tarih; if(!u.bitis) u.bitis = $('topluBitis').value || ''; }
+    }
     else if(b.getAttribute('data-is') === 'grup'){
       var uyeler = [{ barkod: u.barkod, ad: u.katalogAd || u.ad }].concat(benzerBul(u));
       u.grup = uyeler; u.ad = grupAdiOner(uyeler);
@@ -608,6 +677,70 @@
   $('temizleBtn').addEventListener('click', function(){
     if(!durum.liste.length || !window.confirm('Listedeki ' + durum.liste.length + ' ürün çıkarılsın mı? (Üretim yeri gibi bilgiler hatırlanır.)')) return;
     durum.liste = []; kaydet(); listeCiz(); ciz();
+  });
+
+  // ---------- Toplu ekleme (fiyat izleme verisinden) ----------
+  function listedeMi(barkod){ return durum.liste.some(function(x){ return x.barkod === barkod || (x.grup && x.grup.some(function(g){ return g.barkod === barkod; })); }); }
+  // Fiyatı son "gun" günde değişen ürünler (koli barkodları ve fiyatsızlar hariç).
+  function degisenler(gun, sadeceDusen){
+    var c = [], gorulen = {};
+    katalog.forEach(function(k){
+      if(!k.ft || k.price === '' || Number(k.carpan) > 1) return;
+      var f = sayi(k.price); if(isNaN(f) || f <= 0) return;
+      var fark = gunFarki(bugun(), k.ft); if(fark < 0 || fark >= gun) return;
+      var d = dususBilgisi(k, f);
+      if(sadeceDusen && !d) return;
+      var n = normTr(k.name); if(gorulen[n]) return; gorulen[n] = true; // aynı ürünün ikinci barkodu
+      c.push({ k: k, f: f, d: d });
+    });
+    return c;
+  }
+  function topluBilgiCiz(){
+    var el = $('topluBilgi');
+    var izlenen = katalog.some(function(k){ return !!k.ft; });
+    if(!FIYAT_IZLEME && !izlenen){
+      el.innerHTML = 'Fiyat izleme henüz başlamamış: sunucu kodu (Code.gs) <b>build 116</b> olunca fiyatı değişen ürünler burada toplu eklenebilir ve fiyat tarihi kendiliğinden gelir.';
+    } else {
+      var d7 = degisenler(7, false).length, dd = degisenler(INDIRIM_PENCERE_GUN, true).length;
+      el.innerHTML = 'Son 7 günde fiyatı değişen <b>' + d7 + '</b> ürün var; son 30 günde fiyatı düşen <b>' + dd + '</b> ürün.' +
+        (FIYAT_IZLEME ? ' (Fiyat geçmişi ' + tarihTr(FIYAT_IZLEME) + ' gününden beri tutuluyor.)' : '');
+    }
+  }
+  function topluEkle(liste, indirimli, bitis){
+    var eklenen = 0, atlanan = 0;
+    liste.forEach(function(x){
+      var b = String(x.k.barcode);
+      if(listedeMi(b)){ atlanan++; return; }
+      if(eklenen >= TOPLU_SINIR) return;
+      urunEkle({ barkod: b, ad: x.k.name, fiyat: x.f, elle: false, ft: x.k.ft || '', of: x.k.of || '',
+        tartili: b.indexOf('29') === 0 || String(x.k.birim || '').toLowerCase() === 'kg',
+        indirim: indirimli && !!x.d, onceki: (indirimli && x.d) ? String(x.d.onceki).replace('.', ',') : '', bitis: (indirimli && x.d) ? bitis : '' }, true);
+      eklenen++;
+    });
+    kaydet(); listeCiz(); ciz();
+    var kalan = liste.length - eklenen - atlanan;
+    toast(eklenen + ' ürün eklendi' + (atlanan ? ', ' + atlanan + ' zaten listedeydi' : '') + (kalan > 0 ? '. ' + kalan + ' ürün daha var: bunları bastıktan sonra tekrar ekle' : ''), eklenen ? '' : 'uyari');
+  }
+  $('topluDegisenBtn').addEventListener('click', function(){
+    var gun = parseInt($('topluGun').value, 10) || 7, l = degisenler(gun, false);
+    if(!l.length){ toast('Bu sürede fiyatı değişen ürün yok', 'uyari'); return; }
+    topluEkle(l, false, '');
+  });
+  $('topluDusenBtn').addEventListener('click', function(){
+    var bitis = $('topluBitis').value;
+    if(!bitis){ toast('Önce indirim bitiş tarihini seç', 'uyari'); $('topluBitis').focus(); return; }
+    if(bitis < bugun()){ toast('Bitiş tarihi geçmiş olamaz', 'hata'); return; }
+    var l = degisenler(INDIRIM_PENCERE_GUN, true);
+    if(!l.length){ toast('Son 30 günde fiyatı düşen ürün yok', 'uyari'); return; }
+    if(!window.confirm(l.length + ' ürünün fiyatı son 30 günde düşmüş.\n\nHepsi "İNDİRİM" etiketiyle, sistemdeki önceki fiyat (30 günün en düşüğü) gösterilerek eklenecek. Her birini listede kontrol edip düzeltebilirsin.\n\nDevam edilsin mi?')) return;
+    topluEkle(l, true, bitis);
+  });
+  $('topluTrBtn').addEventListener('click', function(){
+    var bos = durum.liste.filter(function(u){ return !String(u.yer || '').trim(); });
+    if(!bos.length){ toast('Üretim yeri boş ürün yok', 'uyari'); return; }
+    if(!window.confirm(bos.length + ' ürünün üretim yeri "Türkiye" yazılacak.\n\nBunların HEPSİ Türkiye\'de mi üretiliyor? İthal olan varsa önce onun üretim yerini elle yaz.')) return;
+    bos.forEach(function(u){ u.yer = 'Türkiye'; bilgiHatirla(u); });
+    kaydet(); listeCiz(); ciz();
   });
 
   // ---------- Biçim seçimi ----------
@@ -669,7 +802,7 @@
       '<div class="aAlt"><div class="aBilgi">' +
         (bf ? '<div><b>Birim fiyatı:</b> ' + para(bf.tutar) + ' ₺ / ' + bf.birim + '</div>' : '') +
         '<div><b>Üretim yeri:</b> ' + esc(String(u.yer || '').trim()) + '</div>' +
-        '<div><b>' + (u.indirim ? 'İndirim başlangıcı' : 'Fiyat değişiklik tarihi') + ':</b> ' + tarihTr(u.tarih) + '</div>' +
+        '<div><b>' + (u.indirim ? 'İndirim tarihleri' : 'Fiyat değişiklik tarihi') + ':</b> ' + tarihTr(u.tarih) + (u.indirim && u.bitis ? ' – ' + tarihTr(u.bitis) : '') + '</div>' +
         (u.barkod && !u.grup ? '<div class="brk">' + esc(u.barkod) + '</div>' : '') +
       '</div>' + yerliHtml(u) + '</div>' +
     '</div></div>';
@@ -682,7 +815,7 @@
         (u.indirim && onceki > u.fiyat ? '<div>Önceki: <span class="eski">' + para(onceki) + ' ₺</span></div>' : '') +
         (bf ? '<div><b>Birim fiyatı:</b> ' + para(bf.tutar) + ' ₺/' + bf.birim + '</div>' : '') +
         '<div><b>Üretim yeri:</b> ' + esc(String(u.yer || '').trim()) + '</div>' +
-        '<div><b>' + (u.indirim ? 'İndirim' : 'Fiyat') + ' tarihi:</b> ' + tarihTr(u.tarih) + '</div>' +
+        '<div><b>' + (u.indirim ? 'İndirim:' : 'Fiyat tarihi:') + '</b> ' + (u.indirim && u.bitis ? tarihTr(u.tarih).slice(0, 5) + ' – ' + tarihTr(u.bitis) : tarihTr(u.tarih)) + '</div>' +
       '</div><div class="rFiyatKutu sig" data-em="18" data-min="8"><span class="rFiyat yazi">' + fiyatHtml(u.fiyat) + '</span></div></div>' +
       '<div class="rAlt">' + (yerliHtml(u) || '<span>' + esc(MAGAZA_ADI) + '</span>') + '<span class="brk">' + esc(u.grup ? '' : (u.barkod || '')) + '</span><span>KDV dâhil</span></div>' +
     '</div>';
