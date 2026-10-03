@@ -351,7 +351,7 @@
   <header style="border:none; padding:0 0 16px; background:transparent; display:flex; align-items:flex-start; justify-content:space-between;">
     <div>
       <h1><img src="logo-header.png" alt="Murat Gıda" style="height:30px; width:auto; display:block;"></h1>
-      <div class="sub">MK ERP · Murat Gıda • offline • Android • build 114</div>
+      <div class="sub">MK ERP · Murat Gıda • offline • Android • build 116</div>
     </div>
     <button type="button" id="themeToggleBtn" title="Tema seç" style="background:var(--panel2); border:1.5px solid var(--line); color:var(--text); width:34px; height:34px; border-radius:50%; font-size:15px; padding:0; display:flex; align-items:center; justify-content:center; flex-shrink:0;">🎨</button>
   </header>
@@ -389,6 +389,7 @@
       <button type="button" class="menuBtn" id="menuMalGirisBtn"><span class="menuIcon">📥</span><span>Mal Giriş<span class="menuSub">Fatura/irsaliye ile stok girişi</span></span></button>
       <button type="button" class="menuBtn" id="menuMalCikisBtn"><span class="menuIcon">📤</span><span>Mal Çıkış<span class="menuSub">Fatura/irsaliye ile stok çıkışı</span></span></button>
       <button type="button" class="menuBtn" id="menuFiyatBtn"><span class="menuIcon">💰</span><span>Fiyat &amp; Stok Sorgula<span class="menuSub">Barkod okut, fiyatı ve stoğu gör</span></span></button>
+      <button type="button" class="menuBtn hidden" id="menuEtiketBtn"><span class="menuIcon">🏷️</span><span>Etiket Yazdır<span class="menuSub">Raf etiketi, A5 / A4 / A3 fiyat afişi</span></span></button>
       <button type="button" class="menuBtn hidden" id="menuMesaiBtn"><span class="menuIcon">🕐</span><span>Mesai<span class="menuSub">Giriş/çıkış, vardiya, izin, duyuru</span></span></button>
       <button type="button" class="menuBtn hidden" id="menuHareketBtn"><span class="menuIcon">🔁</span><span>Ürün Hareketleri<span class="menuSub">Kimden kaça geldi, kime satıldı</span></span></button>
     </div>
@@ -1595,6 +1596,8 @@
   function canSeeStock(){ return hasPerm('stok') && konumIzinli(); }
   // Ürün hareketleri (alış fiyatları, müşteri satışları): ayrı yetki + şube içi.
   // Mesai: personel ("mesai") ya da ⭐ Ekip Lideri ("mesai_yonetim").
+  // Fiyat etiketi (etiket.html): "etiket" yetkisi + şube içinde olma (fiyat gösterdiği için).
+  function canSeeEtiket(){ return hasPerm('etiket') && konumIzinli(); }
   function canSeeMesai(){ return hasPerm('mesai') || hasPerm('mesai_yonetim'); }
   function canSeeHareket(){ return hasPerm('hareket') && konumIzinli(); }
 
@@ -1649,6 +1652,7 @@
     if(state.currentUser && typeof showLoggedInUI === 'function' && !document.getElementById('homeMenuScreen').classList.contains('hidden')){
       document.getElementById('menuFiyatBtn').classList.toggle('hidden', !canSeePrice() && !canSeeStock());
       document.getElementById('menuHareketBtn').classList.toggle('hidden', !canSeeHareket());
+      document.getElementById('menuEtiketBtn').classList.toggle('hidden', !canSeeEtiket());
     }
     if(typeof hareketKonumKontrol === 'function') hareketKonumKontrol();
     if(listEl) renderList(); // sayfa açılışında liste henüz hazır değilse atla
@@ -1715,6 +1719,7 @@
     document.getElementById('menuFiyatBtn').classList.toggle('hidden', !canSeePrice() && !canSeeStock());
     document.getElementById('menuHareketBtn').classList.toggle('hidden', !canSeeHareket());
     document.getElementById('menuMesaiBtn').classList.toggle('hidden', !canSeeMesai());
+    document.getElementById('menuEtiketBtn').classList.toggle('hidden', !canSeeEtiket());
     startBtn.textContent = (state.session.scans && state.session.scans.length > 0) ? '▶ Sayıma Devam Et' : 'Sayıma Başla';
     konumKontrol(); // girişte (açılışta ve giriş yapınca) bir kez
   }
@@ -1779,6 +1784,9 @@
     document.getElementById('mesaiFrame').src = 'about:blank'; // kod ekranı/ekran kilidi dursun
   }
   document.getElementById('menuMesaiBtn').addEventListener('click', openMesaiScreen);
+  // Etiket ayrı sayfada açılır (telefonun yazdırma penceresi tam sayfa ister).
+  // Sayım kayıtları telefonda saklı; "Uygulamaya dön" ile kaldığın yere gelirsin.
+  document.getElementById('menuEtiketBtn').addEventListener('click', function(){ try { save(); } catch(e){} window.location.href = 'etiket.html'; });
   document.getElementById('mesaiCloseBtn').addEventListener('click', closeMesaiScreen);
   document.getElementById('hareketCloseBtn').addEventListener('click', closeHareketScreen);
   document.getElementById('hareketAdBtn').addEventListener('click', function(){ openNameSearch('hareket'); });
@@ -1979,7 +1987,7 @@
   // Sayfa açılışında daha önce yüklenmiş kataloğu belleğe getir (varsa) —
   // her açılışta 50 bin satırı yeniden yüklemene gerek kalmaz.
   idbLoadAll().then(function(rows){
-    rows.forEach(function(r){ catalogMap.set(r.barcode, { name: r.name, stockCode: r.stockCode || '', oldStock: r.oldStock || '', price: r.price || '', kdv: r.kdv || '', carpan: r.carpan || '', birim: r.birim || '' }); });
+    rows.forEach(function(r){ catalogMap.set(r.barcode, { name: r.name, stockCode: r.stockCode || '', oldStock: r.oldStock || '', price: r.price || '', kdv: r.kdv || '', carpan: r.carpan || '', birim: r.birim || '', ft: r.ft || '', of: r.of || '' }); });
     updateProductCountLabel();
     setSyncStatus();
   }).catch(function(){ productCountEl.textContent = "Henüz ürün yok"; });
@@ -2139,6 +2147,8 @@
         return;
       }
       var entries = (data && data.entries) || [];
+      // Fiyat geçmişinin tutulmaya başlandığı gün (etiket sayfası "önceki fiyat"ın ne kadar güvenilir olduğunu buradan bilir).
+      if(data && data.fiyatIzleme && state.fiyatIzleme !== data.fiyatIzleme){ state.fiyatIzleme = data.fiyatIzleme; save(); }
       if(entries.length === 0){
         if(!silent){ warnToast("Sunucuda henüz katalog yok — önce bir telefon yüklemeli"); updateProductCountLabel(); }
         if(onDone) onDone(false);
@@ -2150,11 +2160,11 @@
       var tamYukleme = catalogMap.size === 0;
       var yeni = new Map(), islemler = [];
       entries.forEach(function(e){
-        var v = { name: e.name, stockCode: e.stockCode || '', oldStock: e.oldStock || '', price: e.price || '', kdv: e.kdv || '', carpan: e.carpan || '', birim: e.birim || '' };
+        var v = { name: e.name, stockCode: e.stockCode || '', oldStock: e.oldStock || '', price: e.price || '', kdv: e.kdv || '', carpan: e.carpan || '', birim: e.birim || '', ft: e.ft || '', of: e.of || '' };
         yeni.set(e.barcode, v);
         var o = catalogMap.get(e.barcode);
         if(tamYukleme || !o || o.name !== v.name || String(o.stockCode) !== String(v.stockCode) || String(o.oldStock) !== String(v.oldStock) ||
-           String(o.price) !== String(v.price) || String(o.kdv) !== String(v.kdv) || String(o.carpan || '') !== String(v.carpan) || String(o.birim || '') !== String(v.birim)){
+           String(o.price) !== String(v.price) || String(o.kdv) !== String(v.kdv) || String(o.carpan || '') !== String(v.carpan) || String(o.birim || '') !== String(v.birim) || String(o.ft || '') !== String(v.ft) || String(o.of || '') !== String(v.of)){
           islemler.push(function(st){ st.put(e); });
         }
       });
@@ -4573,7 +4583,10 @@
       satir.push('⚠️ Son kimliksiz istek: <b>' + escapeHtml(son.zaman || '') + '</b> — ' + escapeHtml(son.kaynak || '') +
         (g.zorunlu ? '' : '<br>Bu, hâlâ eski sürümde bir telefon ya da anahtarsız ERP gönderimi olduğunu gösterir.'));
     } else if(!g.zorunlu){
-      satir.push('✅ Son 24 saatte kimliksiz istek yok — açmak güvenli görünüyor');
+      // "Yok" demek güvenli demek değil: sunucu yeni güncellendiyse henüz gözlem yoktur.
+      satir.push(g.erpAnahtarVar
+        ? 'ℹ️ Son 24 saatte kimliksiz istek görülmedi. Sunucu yeni güncellendiyse <b>en az bir gün bekle</b>: ERP ve tüm telefonlar bu sürede veri göndermiş olmalı.'
+        : 'ℹ️ Henüz kimliksiz istek görülmedi, ama ERP anahtarı kurulmadan açma.');
     }
     el.innerHTML = satir.join('<br>');
     btn.classList.remove('hidden');
@@ -4657,7 +4670,8 @@
     { key: 'mesai', label: '🕐 Mesai (personel)' },
     { key: 'mesai_yonetim', label: '⭐ Ekip Lideri' },
     // Şube dışındayken de fiyat/stok görebilir (konum kısıtlamasından muaf).
-    { key: 'konum_serbest', label: '🌍 Şube Dışında da Görür' }
+    { key: 'konum_serbest', label: '🌍 Şube Dışında da Görür' },
+    { key: 'etiket', label: '🏷️ Etiket Yazdırma' }
   ];
 
   function permsFromString(s){

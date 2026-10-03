@@ -8,7 +8,7 @@
 // bir sürüm dağıttıktan sonra /exec adresini boş açtığında burada yazan
 // numarayı görmelisin; index.html'in üstündeki "build" numarasıyla
 // eşleşecek şekilde ben her ikisini birlikte güncelliyorum.
-var GS_VERSION = 'build114';
+var GS_VERSION = 'build116';
 
 // Sheets'te "Saat" sütunu zaman biçimli olarak algılanırsa, hücre değeri düz
 // metin değil bir Date nesnesi olarak gelir ve String(...) çirkin bir çıktı
@@ -763,7 +763,8 @@ function getKatalog(callback) {
   var sheet = ss.getSheetByName('Katalog');
   var entries = [];
   if (sheet && sheet.getLastRow() >= 2) {
-    var values = sheet.getRange(2, 1, sheet.getLastRow() - 1, 8).getValues();
+    var genislik = Math.min(Math.max(sheet.getLastColumn(), 8), KATALOG_BASLIK.length);
+    var values = sheet.getRange(2, 1, sheet.getLastRow() - 1, genislik).getValues();
     entries = values
       .filter(function (r) { return r[0] && r[1]; })
       .map(function (r) {
@@ -774,10 +775,15 @@ function getKatalog(callback) {
         // Koli barkodu (çarpan > 1): telefon girilen koli sayısını adede çevirir.
         if (Number(r[6]) > 1) e.carpan = String(r[6]);
         if (r[7]) e.birim = String(r[7]); // ERP12 birim adı: ADET, KOLİ, KG…
+        // Fiyat izleme (etiket için): fiyatın son değiştiği gün ve o günden
+        // önceki 30 gün içindeki en düşük fiyat. Hiç değişmediyse alan gelmez.
+        var ft = fiyatTarihiMetni(r[8]);
+        if (ft) { e.ft = ft; if (r[9] !== '' && r[9] !== null && r[9] !== undefined) e.of = String(r[9]); }
         return e;
       });
   }
-  var json = JSON.stringify({ entries: entries });
+  // fiyatIzleme: fiyat geçmişinin tutulmaya başlandığı gün (öncesi bilinmez).
+  var json = JSON.stringify({ entries: entries, fiyatIzleme: PropertiesService.getScriptProperties().getProperty('FIYAT_IZLEME_BASLANGIC') || '' });
   if (callback) {
     return ContentService
       .createTextOutput(callback + '(' + json + ')')
@@ -1417,6 +1423,73 @@ function koliCarpan(v) {
   return (isFinite(n) && n > 1) ? n : '';
 }
 
+// ============================================================
+// FİYAT İZLEME (etiket ve indirim için)
+// Katalog her yenilendiğinde gelen fiyat, tablodaki önceki fiyatla
+// karşılaştırılır. Fiyatı değişen her ürün için:
+//   • 'Fiyat Tarihi' (9. sütun): fiyatın değiştiği gün → etiketteki "fiyat
+//     değişiklik tarihi" buradan gelir, personel elle yazmaz.
+//   • 'Önceki Fiyat' (10. sütun): değişimden önceki 30 gün içinde uygulanan EN
+//     DÜŞÜK fiyat → "indirim" etiketi basılacaksa gösterilecek önceki fiyat.
+//     (Fiyat Etiketi Yönetmeliği m.11 on gün der; reklam kılavuzu otuz gün
+//     diyor. Otuz günün en düşüğü ikisini de karşılar.)
+//   • 'FiyatGecmisi' sekmesine bir satır: Zaman | Barkod | Eski | Yeni. Bu
+//     sekme, "önceki fiyat buydu" diyebilmenin KANITIDIR; 400 günden eski
+//     satırlar silinir.
+// İzleme bu sürümün yüklendiği gün başlar (FIYAT_IZLEME_BASLANGIC); öncesi
+// bilinmez, o yüzden ilk 30 gün içindeki "önceki fiyat" eksik olabilir.
+// ============================================================
+var KATALOG_BASLIK = ['Ürün Adı', 'Barkod', 'Stok Kodu', 'Eski Stok', 'Fiyat', 'KDV %', 'Koli Çarpanı', 'Birim', 'Fiyat Tarihi', 'Önceki Fiyat'];
+var FIYAT_GECMIS_SEKME = 'FiyatGecmisi';
+var FIYAT_GECMIS_BASLIK = ['Zaman', 'Barkod', 'Eski Fiyat', 'Yeni Fiyat'];
+var ONCEKI_FIYAT_GUN = 30;
+function fiyatTz() { return Session.getScriptTimeZone() || 'Europe/Istanbul'; }
+// Hücredeki tarih (Sheets metni Date'e çevirebilir) → 'yyyy-MM-dd' ya da ''.
+function fiyatTarihiMetni(v) {
+  if (v instanceof Date) return isNaN(v.getTime()) ? '' : Utilities.formatDate(v, fiyatTz(), 'yyyy-MM-dd');
+  var m = /^(\d{4}-\d{2}-\d{2})/.exec(String(v || '').trim());
+  return m ? m[1] : '';
+}
+// Değişen barkodlar için son 30 gündeki en düşük fiyat (geçmiş sekmesinden).
+function fiyatGecmisEnDusuk(barkodlar) {
+  var sonuc = {};
+  var sh = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(FIYAT_GECMIS_SEKME);
+  if (!sh || sh.getLastRow() < 2) return sonuc;
+  var sinir = Date.now() - ONCEKI_FIYAT_GUN * 86400000;
+  sh.getRange(2, 1, sh.getLastRow() - 1, 4).getValues().forEach(function (r) {
+    var b = String(r[1]);
+    if (!barkodlar[b]) return;
+    var z = r[0] instanceof Date ? r[0].getTime() : Date.parse(r[0]);
+    if (isNaN(z) || z < sinir) return;
+    // O değişimin iki ucu da son 30 günde uygulanmış fiyatlardır.
+    [r[2], r[3]].forEach(function (f) { f = Number(f); if (isFinite(f) && f > 0 && (sonuc[b] === undefined || f < sonuc[b])) sonuc[b] = f; });
+  });
+  return sonuc;
+}
+function fiyatGecmisYaz(degisen) {
+  if (!degisen.length) return;
+  var ss = SpreadsheetApp.getActiveSpreadsheet();
+  var sh = ss.getSheetByName(FIYAT_GECMIS_SEKME);
+  if (!sh) {
+    sh = ss.insertSheet(FIYAT_GECMIS_SEKME);
+    sh.getRange(1, 1, 1, FIYAT_GECMIS_BASLIK.length).setValues([FIYAT_GECMIS_BASLIK]);
+  }
+  var zaman = Utilities.formatDate(new Date(), fiyatTz(), 'yyyy-MM-dd HH:mm:ss');
+  var satirlar = degisen.map(function (d) { return [zaman, d[0], d[1], d[2]]; });
+  if (sh.getMaxRows() < sh.getLastRow() + satirlar.length) sh.insertRowsAfter(sh.getMaxRows(), sh.getLastRow() + satirlar.length - sh.getMaxRows());
+  var ilk = sh.getLastRow() + 1;
+  sh.getRange(ilk, 2, satirlar.length, 1).setNumberFormat('@'); // barkod metin kalsın
+  sh.getRange(ilk, 1, satirlar.length, 4).setValues(satirlar);
+  // 400 günden eski kayıtları baştan sil (sekme sonsuza kadar büyümesin).
+  if (sh.getLastRow() > 60000) {
+    var sinir = Date.now() - 400 * 86400000;
+    var zamanlar = sh.getRange(2, 1, Math.min(sh.getLastRow() - 1, 20000), 1).getValues();
+    var sil = 0;
+    while (sil < zamanlar.length) { var z = zamanlar[sil][0] instanceof Date ? zamanlar[sil][0].getTime() : Date.parse(zamanlar[sil][0]); if (isNaN(z) || z >= sinir) break; sil++; }
+    if (sil > 0) sh.deleteRows(2, sil);
+  }
+}
+
 function saveKatalogBulk(entries) {
   var ss = SpreadsheetApp.getActiveSpreadsheet();
   var sheet = ss.getSheetByName('Katalog');
@@ -1431,15 +1504,57 @@ function saveKatalogBulk(entries) {
   if (!Array.isArray(entries) || entries.length === 0) {
     return jsonCikti({ status: 'error', bosListe: true, message: 'Boş katalog geldi — mevcut katalog korunuyor' });
   }
+
+  // ---- Fiyat izleme: tablodaki mevcut fiyatlarla karşılaştır ----
+  var bugun = Utilities.formatDate(new Date(), fiyatTz(), 'yyyy-MM-dd');
+  if (!props.getProperty('FIYAT_IZLEME_BASLANGIC')) props.setProperty('FIYAT_IZLEME_BASLANGIC', bugun);
+  var eski = {}; // barkod -> { f: fiyat, ft: fiyat tarihi, of: önceki fiyat }
+  if (sheet.getLastRow() >= 2) {
+    var gen = Math.min(Math.max(sheet.getLastColumn(), 8), KATALOG_BASLIK.length);
+    sheet.getRange(2, 1, sheet.getLastRow() - 1, gen).getValues().forEach(function (r) {
+      var b = String(r[1] || ''); if (!b) return;
+      eski[b] = { f: cleanNum(r[4]), ft: gen > 8 ? fiyatTarihiMetni(r[8]) : '', of: gen > 9 ? cleanNum(r[9]) : '' };
+    });
+  }
+  var degisen = [], degisenBarkod = {};
   var rows = entries.map(function (e) {
-    return [e.name || '', e.barcode || '', e.stockCode || '', cleanNum(e.oldStock), cleanNum(e.price), cleanNum(e.kdv), koliCarpan(e.carpan), String(e.birim || '')];
+    var b = String(e.barcode || ''), f = cleanNum(e.price), o = eski[b], ft = '', of = '';
+    if (o) {
+      ft = o.ft; of = o.of;
+      if (typeof f === 'number' && typeof o.f === 'number' && f > 0 && o.f > 0 && Math.abs(f - o.f) > 0.004) {
+        degisen.push([b, o.f, f]); degisenBarkod[b] = true;
+        ft = bugun; of = o.f; // en düşük fiyat aşağıda geçmişe bakılarak düzeltilir
+      }
+    }
+    return [e.name || '', e.barcode || '', e.stockCode || '', cleanNum(e.oldStock), f, cleanNum(e.kdv), koliCarpan(e.carpan), String(e.birim || ''), ft, of];
   });
-  tabloyuDegistir(sheet, ['Ürün Adı', 'Barkod', 'Stok Kodu', 'Eski Stok', 'Fiyat', 'KDV %', 'Koli Çarpanı', 'Birim'], rows);
+  if (degisen.length) {
+    var enDusuk = fiyatGecmisEnDusuk(degisenBarkod);
+    rows.forEach(function (r) {
+      var b = String(r[1]);
+      if (degisenBarkod[b] && enDusuk[b] !== undefined && typeof r[9] === 'number' && enDusuk[b] < r[9]) r[9] = enDusuk[b];
+    });
+  }
+
+  // 'Fiyat Tarihi' sütunu METİN kalsın: Sheets "2026-10-03" yazısını tarihe
+  // çevirirse saat dilimi farkıyla bir gün kayabiliyor.
+  if (sheet.getMaxColumns() < KATALOG_BASLIK.length) sheet.insertColumnsAfter(sheet.getMaxColumns(), KATALOG_BASLIK.length - sheet.getMaxColumns());
+  if (sheet.getMaxRows() < rows.length + 1) sheet.insertRowsAfter(sheet.getMaxRows(), rows.length + 1 - sheet.getMaxRows());
+  sheet.getRange(1, 9, rows.length + 1, 1).setNumberFormat('@');
+
+  tabloyuDegistir(sheet, KATALOG_BASLIK, rows);
   // Fiyat sütununu her zaman 2 ondalık basamakla göster — Sheets'in
   // "Otomatik" biçimi bazen kuruşu gizleyip tam sayıya yuvarlanmış
   // GÖRÜNMESİNE yol açabiliyor (asıl değer bozulmuyor ama kafa karıştırıyor).
   sheet.getRange(2, 5, rows.length, 1).setNumberFormat('0.00');
   sheet.getRange(2, 6, rows.length, 1).setNumberFormat('0.##');
+  sheet.getRange(2, 10, rows.length, 1).setNumberFormat('0.00');
+  // Geçmiş, katalog yerine oturduktan SONRA yazılır; yazılamazsa katalog yine
+  // doğrudur, sadece o değişimin kanıt satırı eksik kalır (günlüğe düşer).
+  if (degisen.length) {
+    try { fiyatGecmisYaz(degisen); }
+    catch (ge) { gunlukYaz('hata', 'fiyat izleme', 'Fiyat geçmişi yazılamadı (' + degisen.length + ' değişim): ' + ge, true); }
+  }
   // Katalog her değiştiğinde bir "sürüm" damgası basıyoruz — telefonlar bunu
   // (resetcheck ile) düzenli kontrol edip kendi sürümünden farklıysa
   // kataloğu OTOMATİK olarak sunucudan çeker, kimse elle "Sunucudan Çek"e
@@ -1447,7 +1562,7 @@ function saveKatalogBulk(entries) {
   props.setProperty('KATALOG_VERSION', new Date().toISOString());
   props.setProperty('KATALOG_OZET', ozet);
   return ContentService
-    .createTextOutput(JSON.stringify({ status: 'ok', saved: entries.length }))
+    .createTextOutput(JSON.stringify({ status: 'ok', saved: entries.length, fiyatDegisen: degisen.length }))
     .setMimeType(ContentService.MimeType.JSON);
 }
 
