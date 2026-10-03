@@ -99,3 +99,15 @@ ERP'de ülke boşsa ve bu telefonda daha önce yazılmamışsa, barkodu 868 ya d
 başlayan ürünlerde üretim yeri kendiliğinden "Türkiye" yazılır (alan başlığında
 "· barkoddan" görünür). Barkod ön eki firmanın Türkiye'de kayıtlı olduğunu gösterir,
 üretim yerini kanıtlamaz: Türk firmasının ithal ettiği ürünlerde ülke elle düzeltilmelidir.
+
+## Liste aktarma: telefonda hazırla, bilgisayardan bas (build 120)
+
+Yazıcı yalnızca USB ile bir bilgisayara bağlıysa (ör. Epson L1300) telefondan doğrudan
+basılamaz. Bunun yerine:
+
+1. Telefonda Etiket ekranında ürünler okutulur, bilgiler tamamlanır, **📤 Listeyi gönder** denir.
+2. Yazıcının bağlı olduğu bilgisayarda uygulama açılır, giriş yapılır, Etiket > **📥 Gönderilen listeyi getir**.
+3. Çıkan listelerden (gönderen · saat · ürün sayısı) biri seçilir; ürünler listeye eklenir, biçim seçilip yazdırılır.
+
+Listeler tablodaki `EtiketListe` sekmesinde durur; son 30 liste saklanır. Çok uzun listeler
+(yaklaşık 150 üründen fazla) bölünerek gönderilmelidir.
