@@ -492,7 +492,10 @@
     durum.liste.unshift({
       id: kimlikNo(), barkod: u.barkod, ad: u.ad, katalogAd: u.ad, fiyat: u.fiyat, elle: !!u.elle,
       // Üretim yeri: ERP stok kartında ülke girilmişse o (esas), yoksa bu telefonda daha önce yazılan.
-      yer: u.erpYer || bil.yer || '', erpYer: u.erpYer || '', mik: bil.mik || tahmin.mik, birim: bil.birim || tahmin.birim,
+      // İkisi de yoksa ve barkod 868/869 ile başlıyorsa "Türkiye" yazılır (barkodYer işaretiyle; elle düzeltilebilir).
+      yer: u.erpYer || bil.yer || (/^86[89]/.test(u.barkod || '') ? 'Türkiye' : ''),
+      barkodYer: !u.erpYer && !bil.yer && /^86[89]/.test(u.barkod || ''),
+      erpYer: u.erpYer || '', mik: bil.mik || tahmin.mik, birim: bil.birim || tahmin.birim,
       // Fiyat tarihi: sunucu fiyatın değiştiği günü biliyorsa o, bilmiyorsa bugün.
       tarih: u.ft || bugun(), ft: u.ft || '', of: u.of || '',
       baslik: '', ozel: '', indirim: !!u.indirim, onceki: u.onceki || '', bitis: u.bitis || '', adet: 1
@@ -612,9 +615,9 @@
               '<button type="button" data-is="gcikar" data-b="' + esc(x.barkod) + '" style="padding:0 6px; font-size:12px; border:none; background:transparent; color:var(--red); flex-shrink:0;">✕</button></div>'; }).join('') +
             '<button type="button" data-is="dagit" style="margin-top:6px; padding:6px 10px; font-size:12px;">Grubu dağıt (tek ürüne dön)</button></div>' : '') +
         '<label>Etikette yazacak ürün adı</label><input data-al="ad" value="' + esc(u.ad) + '">' +
-        '<div class="satir"><div style="flex:1.5;"><label>Üretim yeri (zorunlu)' + (u.erpYer && u.yer === u.erpYer ? ' · ERP\'den' : '') + '</label><input data-al="yer" class="' + (String(u.yer || '').trim() ? '' : 'eksik') + '" value="' + esc(u.yer) + '" placeholder="örn. Türkiye, Almanya"></div>' +
+        '<div class="satir"><div style="flex:1.5;"><label>Üretim yeri (zorunlu)' + (u.erpYer && u.yer === u.erpYer ? ' · ERP\'den' : (u.barkodYer && u.yer === 'Türkiye' ? ' · barkoddan' : '')) + '</label><input data-al="yer" class="' + (String(u.yer || '').trim() ? '' : 'eksik') + '" value="' + esc(u.yer) + '" placeholder="örn. Türkiye, Almanya"></div>' +
           '<button type="button" data-is="tr" style="flex:none; padding:10px;">Türkiye</button></div>' +
-        (trBarkod && !String(u.yer || '').trim() ? '<div class="ipucu" style="margin-top:4px;">Barkod Türkiye kayıtlı bir firmaya ait; bu, ürünün Türkiye\'de üretildiğini <b>kanıtlamaz</b>. Üretim yerini ambalajdan oku.</div>' : '') +
+        (u.barkodYer && u.yer === 'Türkiye' ? '<div class="ipucu" style="margin-top:4px;">"Türkiye" barkoddan (868/869) yazıldı. Ürün ithalse ambalajdaki ülkeyi yaz.</div>' : '') +
         '<div class="satir"><div><label>Net miktar</label><input data-al="mik" type="text" inputmode="decimal" value="' + esc(String(u.mik).replace('.', ',')) + '"></div>' +
           '<div><label>Birim</label><select data-al="birim">' + BIRIMLER.map(function(b){ return '<option value="' + b[0] + '"' + (u.birim === b[0] ? ' selected' : '') + '>' + b[1] + '</option>'; }).join('') + '</select></div>' +
           '<div><label>Kaç etiket</label><input data-al="adet" type="number" inputmode="numeric" min="1" max="99" value="' + esc(u.adet) + '"></div></div>' +
