@@ -164,7 +164,8 @@
   .rAlt span{font-size:2.9em; font-weight:600; white-space:nowrap;}
   .rAlt .brk{font-family:"Courier New", monospace;}
   .rAlt .yerli{height:5.6em; width:14.2em;}
-  .rAlt .barkod{width:38em; height:5.6em; flex-shrink:0;}
+  .rAlt .rKod{font-size:1em; font-family:"Courier New", monospace;}
+  .rAlt .barkod{width:32em; height:5.6em; flex-shrink:0;}
 
   @media print{
     html,body{background:#fff !important; margin:0 !important; padding:0 !important;}
@@ -528,7 +529,9 @@
       barkodYer: !u.erpYer && !bil.yer && /^86[89]/.test(u.barkod || ''),
       erpYer: u.erpYer || '', mik: bil.mik || tahmin.mik, birim: bil.birim || tahmin.birim,
       // Fiyat tarihi: sunucu fiyatın değiştiği günü biliyorsa o, bilmiyorsa bugün.
-      tarih: u.ft || bugun(), ft: u.ft || '', of: u.of || '',
+      // Fiyat tarihi: ERP/sunucu değişiklik gününü biliyorsa o. Bilmiyorsa fiyat o kayıt
+      // başladığından beri değişmemiştir: kaydın başladığı gün yazılır (bugünün tarihi değil).
+      tarih: u.ft || (u.elle ? bugun() : (FIYAT_IZLEME || bugun())), ft: u.ft || '', of: u.of || '',
       baslik: '', ozel: '', indirim: !!u.indirim, onceki: u.onceki || '', bitis: u.bitis || '', adet: 1
     });
     if(sessiz) return;
@@ -1003,6 +1006,7 @@
     }
     return '<svg class="barkod" viewBox="0 0 ' + (n + 2 * k.bos) + ' 1" preserveAspectRatio="none" shape-rendering="crispEdges" xmlns="http://www.w3.org/2000/svg"><path d="' + d + '" fill="#000"/></svg>';
   }
+  function stokKodu(u){ if(u.grup || !u.barkod) return ''; var k = katalogHarita[String(u.barkod)]; return k && k.stockCode ? String(k.stockCode).trim() : ''; }
   function yerliHtml(u){ return (yerliMi(u) && yerliLogoVar) ? '<img class="yerli" src="' + YERLI_LOGO + '" alt="Yerli Üretim">' : ''; }
   // Grup etiketinde çeşitlerin kısa adı: ortak baş kısım ve net miktar atılır
   // ("ABC KONSANTRE YUMUŞATICI LAVANTA 1440 ML" → "Lavanta").
@@ -1039,7 +1043,7 @@
         (bf ? '<div><b>Birim fiyatı:</b> ' + para(bf.tutar) + ' ₺ / ' + bf.birim + '</div>' : '') +
         '<div><b>Üretim yeri:</b> ' + esc(String(u.yer || '').trim()) + '</div>' +
         '<div><b>' + (u.indirim ? 'İndirim tarihleri' : 'Fiyat değişiklik tarihi') + ':</b> ' + tarihTr(u.tarih) + (u.indirim && u.bitis ? ' – ' + tarihTr(u.bitis) : '') + '</div>' +
-        (u.barkod && !u.grup ? barkodSvg(u.barkod) + '<div class="brk">' + esc(u.barkod) + '</div>' : '') +
+        (u.barkod && !u.grup ? barkodSvg(u.barkod) + '<div class="brk">' + esc(u.barkod) + (stokKodu(u) ? ' &nbsp;·&nbsp; Kod: ' + esc(stokKodu(u)) : '') + '</div>' : '') +
       '</div>' + yerliHtml(u) + '</div>' +
     '</div></div>';
   }
@@ -1053,7 +1057,7 @@
         '<div><b>Üretim yeri:</b> ' + esc(String(u.yer || '').trim()) + '</div>' +
         '<div><b>' + (u.indirim ? 'İndirim:' : 'Fiyat tarihi:') + '</b> ' + (u.indirim && u.bitis ? tarihTr(u.tarih).slice(0, 5) + ' – ' + tarihTr(u.bitis) : tarihTr(u.tarih)) + '</div>' +
       '</div><div class="rFiyatKutu sig" data-em="18" data-min="8"><span class="rFiyat yazi">' + fiyatHtml(u.fiyat) + '</span></div></div>' +
-      '<div class="rAlt">' + (yerliHtml(u) || '<span>' + esc(MAGAZA_ADI) + '</span>') + (u.grup || !u.barkod ? '<span></span>' : (barkodSvg(u.barkod) || '<span class="brk">' + esc(u.barkod) + '</span>')) + '<span>KDV dâhil</span></div>' +
+      '<div class="rAlt">' + (yerliHtml(u) || '<span>' + esc(MAGAZA_ADI) + '</span>') + (u.grup || !u.barkod ? '<span></span>' : (barkodSvg(u.barkod) || '<span class="brk">' + esc(u.barkod) + '</span>')) + '<span>' + (stokKodu(u) ? '<span class="rKod">' + esc(stokKodu(u)) + '</span> · ' : '') + 'KDV dâhil</span></div>' +
     '</div>';
   }
   // Basılacak etiketler: eksiksiz ürünler, "kaç etiket" kadar tekrarlanır.
