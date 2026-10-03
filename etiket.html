@@ -95,6 +95,10 @@
   .afis{padding:6em 6.5em 5em; display:flex; flex-direction:column; height:100%;}
   .aUst{height:13em; display:flex; align-items:center; justify-content:space-between; gap:3em; flex-shrink:0;}
   .aLogo{height:11em; max-width:40em; object-fit:contain; object-position:left center; flex-shrink:0;}
+  .aLogoKutu{display:flex; flex-direction:column; align-items:flex-start; justify-content:center; flex-shrink:0; height:100%;}
+  .aLogoKutu.sloganli .aLogo{height:8.8em;}
+  .aSlogan{font-size:2.5em; font-weight:700; letter-spacing:.06em; line-height:1; margin-top:.45em; white-space:nowrap;}
+  .dar .aLogoKutu.sloganli .aLogo{height:6.6em;} .dar .aSlogan{font-size:2.2em;}
   .aBasKutu{flex:1; min-width:0; height:13em; display:flex; align-items:center; justify-content:flex-end;}
   .aBaslik{font-size:5.6em; background:#c8102e; color:#fff; font-weight:900; line-height:1; padding:.42em .7em; border-radius:.35em; letter-spacing:.02em; white-space:nowrap; display:inline-block;}
   .aAd{height:34em; margin-top:3em; flex-shrink:0; display:flex; align-items:center;}
@@ -192,6 +196,8 @@
       </div>
       <div id="boslukAyar" class="gizli" style="display:flex; align-items:center; gap:8px; margin-top:10px;"><input id="ustBosluk" type="checkbox"><label for="ustBosluk" style="margin:0; text-transform:none; letter-spacing:0; font-size:13px; color:var(--text);">Üstte 2 cm boşluk bırak (raf etiketliğine sıkıştırmak için)</label></div>
       <div style="display:flex; align-items:center; gap:8px; margin-top:10px;"><input id="logoGoster" type="checkbox"><label for="logoGoster" style="margin:0; text-transform:none; letter-spacing:0; font-size:13px; color:var(--text);">Afişlerde mağaza logosu olsun</label></div>
+      <label for="sloganYazi">Logonun altındaki yazı (boş bırakılabilir)</label>
+      <input id="sloganYazi" type="text" maxlength="28" placeholder="örn. 1987'den beri">
     </div>
 
     <div class="kart">
@@ -277,6 +283,7 @@
   if(!BICIM[durum.bicim]) durum.bicim = 'raf';
   if(durum.kesim === undefined) durum.kesim = true;
   if(durum.logo === undefined) durum.logo = true;
+  if(durum.slogan === undefined) durum.slogan = "1987'den beri";  // logonun altındaki yazı
   if(durum.bosluk === undefined) durum.bosluk = true;   // A6/A5'te üstte 2 cm boşluk
   var UST_BOSLUK_MM = 20;
   function boslukVar(){ return !!durum.bosluk && (durum.bicim === 'a6' || durum.bicim === 'a5'); }
@@ -610,6 +617,7 @@
     $('rafAyar').classList.toggle('gizli', durum.bicim !== 'raf');
     $('boslukAyar').classList.toggle('gizli', !(durum.bicim === 'a6' || durum.bicim === 'a5'));
     $('ustBosluk').checked = !!durum.bosluk;
+    if(document.activeElement !== $('sloganYazi')) $('sloganYazi').value = durum.slogan || '';
     $('rafKesim').checked = !!durum.kesim; $('rafBaslangic').value = durum.baslangic; $('logoGoster').checked = !!durum.logo;
     var B = BICIM[durum.bicim];
     $('sayfaBoyutu').textContent = '@page{ size:' + B.w + 'mm ' + B.h + 'mm; margin:0; }';
@@ -617,6 +625,7 @@
   $('bicimSecim').addEventListener('click', function(e){ var b = e.target.closest('button'); if(!b) return; durum.bicim = b.getAttribute('data-bicim'); kaydet(); bicimCiz(); ciz(); });
   $('rafKesim').addEventListener('change', function(){ durum.kesim = this.checked; kaydet(); ciz(); });
   $('logoGoster').addEventListener('change', function(){ durum.logo = this.checked; kaydet(); ciz(); });
+  $('sloganYazi').addEventListener('input', function(){ durum.slogan = this.value.trim(); kaydet(); ciz(); });
   $('ustBosluk').addEventListener('change', function(){ durum.bosluk = this.checked; kaydet(); ciz(); });
   $('rafBaslangic').addEventListener('change', function(){ durum.baslangic = Math.min(24, Math.max(1, parseInt(this.value, 10) || 1)); this.value = durum.baslangic; kaydet(); ciz(); });
 
@@ -646,7 +655,9 @@
     var dar = (B.h - bosluk) / (B.w / 100) < 126;           // kullanılabilir yükseklik (em)
     var cesit = cesitAdlari(u);
     return '<div class="sayfa' + (dar ? ' dar' : '') + (cesit.length ? ' cesitli' : '') + '" style="width:' + B.w + 'mm; height:' + B.h + 'mm; font-size:' + (B.w / 100) + 'mm; padding-top:' + bosluk + 'mm;"><div class="afis">' +
-      '<div class="aUst">' + ((durum.logo && magazaLogoVar) ? '<img class="aLogo" src="' + MAGAZA_LOGO + '" alt="">' : '<span></span>') +
+      '<div class="aUst">' + ((durum.logo && magazaLogoVar)
+          ? '<div class="aLogoKutu' + (durum.slogan ? ' sloganli' : '') + '"><img class="aLogo" src="' + MAGAZA_LOGO + '" alt="">' + (durum.slogan ? '<div class="aSlogan">' + esc(durum.slogan) + '</div>' : '') + '</div>'
+          : '<span></span>') +
         (bas ? '<div class="aBasKutu sig" data-em="5.6" data-min="2.6"><span class="aBaslik yazi">' + esc(bas) + '</span></div>' : '') + '</div>' +
       '<div class="aAd sig" data-em="9.6" data-min="4"><span class="yazi">' + esc(u.ad) + '</span></div>' +
       (cesit.length ? '<div class="aCesit sig" data-em="3.4" data-min="2"><span class="yazi"><b>Çeşitler:</b> ' + cesit.map(esc).join(' · ') + '</span></div>' : '') +
