@@ -8,7 +8,7 @@
 // bir sürüm dağıttıktan sonra /exec adresini boş açtığında burada yazan
 // numarayı görmelisin; index.html'in üstündeki "build" numarasıyla
 // eşleşecek şekilde ben her ikisini birlikte güncelliyorum.
-var GS_VERSION = 'build116';
+var GS_VERSION = 'build117';
 
 // Sheets'te "Saat" sütunu zaman biçimli olarak algılanırsa, hücre değeri düz
 // metin değil bir Date nesnesi olarak gelir ve String(...) çirkin bir çıktı
@@ -779,6 +779,7 @@ function getKatalog(callback) {
         // önceki 30 gün içindeki en düşük fiyat. Hiç değişmediyse alan gelmez.
         var ft = fiyatTarihiMetni(r[8]);
         if (ft) { e.ft = ft; if (r[9] !== '' && r[9] !== null && r[9] !== undefined) e.of = String(r[9]); }
+        if (r[10]) e.yer = String(r[10]); // üretim yeri (ERP stok kartındaki ülke)
         return e;
       });
   }
@@ -1439,7 +1440,10 @@ function koliCarpan(v) {
 // İzleme bu sürümün yüklendiği gün başlar (FIYAT_IZLEME_BASLANGIC); öncesi
 // bilinmez, o yüzden ilk 30 gün içindeki "önceki fiyat" eksik olabilir.
 // ============================================================
-var KATALOG_BASLIK = ['Ürün Adı', 'Barkod', 'Stok Kodu', 'Eski Stok', 'Fiyat', 'KDV %', 'Koli Çarpanı', 'Birim', 'Fiyat Tarihi', 'Önceki Fiyat'];
+// 11. sütun 'Üretim Yeri': ERP12 stok kartındaki ülke (dbo.ULKE.AD). Etiketteki
+// "Üretim yeri" ve yerli üretim logosu buradan gelir; ERP'de boşsa boş kalır.
+var KATALOG_BASLIK = ['Ürün Adı', 'Barkod', 'Stok Kodu', 'Eski Stok', 'Fiyat', 'KDV %', 'Koli Çarpanı', 'Birim', 'Fiyat Tarihi', 'Önceki Fiyat', 'Üretim Yeri'];
+function ulkeMetni(v) { return String(v == null ? '' : v).replace(/\s+/g, ' ').trim().substring(0, 60); }
 var FIYAT_GECMIS_SEKME = 'FiyatGecmisi';
 var FIYAT_GECMIS_BASLIK = ['Zaman', 'Barkod', 'Eski Fiyat', 'Yeni Fiyat'];
 var ONCEKI_FIYAT_GUN = 30;
@@ -1495,7 +1499,7 @@ function saveKatalogBulk(entries) {
   var sheet = ss.getSheetByName('Katalog');
   if (!sheet) sheet = ss.insertSheet('Katalog');
   var props = PropertiesService.getScriptProperties();
-  var ozet = listeOzeti(entries.map(function (e) { return [e.name || '', e.barcode || '', e.stockCode || '', cleanNum(e.oldStock), cleanNum(e.price), cleanNum(e.kdv), koliCarpan(e.carpan), String(e.birim || '')]; }));
+  var ozet = listeOzeti(entries.map(function (e) { return [e.name || '', e.barcode || '', e.stockCode || '', cleanNum(e.oldStock), cleanNum(e.price), cleanNum(e.kdv), koliCarpan(e.carpan), String(e.birim || ''), ulkeMetni(e.ulke)]; }));
   if (entries.length > 0 && ozet === props.getProperty('KATALOG_OZET') && sheet.getLastRow() === entries.length + 1) {
     return ContentService.createTextOutput(JSON.stringify({ status: 'ok', saved: 0, degisiklikYok: true })).setMimeType(ContentService.MimeType.JSON);
   }
@@ -1510,7 +1514,7 @@ function saveKatalogBulk(entries) {
   if (!props.getProperty('FIYAT_IZLEME_BASLANGIC')) props.setProperty('FIYAT_IZLEME_BASLANGIC', bugun);
   var eski = {}; // barkod -> { f: fiyat, ft: fiyat tarihi, of: önceki fiyat }
   if (sheet.getLastRow() >= 2) {
-    var gen = Math.min(Math.max(sheet.getLastColumn(), 8), KATALOG_BASLIK.length);
+    var gen = Math.min(Math.max(sheet.getLastColumn(), 8), 10); // fiyat izleme için ilk 10 sütun yeter
     sheet.getRange(2, 1, sheet.getLastRow() - 1, gen).getValues().forEach(function (r) {
       var b = String(r[1] || ''); if (!b) return;
       eski[b] = { f: cleanNum(r[4]), ft: gen > 8 ? fiyatTarihiMetni(r[8]) : '', of: gen > 9 ? cleanNum(r[9]) : '' };
@@ -1526,7 +1530,7 @@ function saveKatalogBulk(entries) {
         ft = bugun; of = o.f; // en düşük fiyat aşağıda geçmişe bakılarak düzeltilir
       }
     }
-    return [e.name || '', e.barcode || '', e.stockCode || '', cleanNum(e.oldStock), f, cleanNum(e.kdv), koliCarpan(e.carpan), String(e.birim || ''), ft, of];
+    return [e.name || '', e.barcode || '', e.stockCode || '', cleanNum(e.oldStock), f, cleanNum(e.kdv), koliCarpan(e.carpan), String(e.birim || ''), ft, of, ulkeMetni(e.ulke)];
   });
   if (degisen.length) {
     var enDusuk = fiyatGecmisEnDusuk(degisenBarkod);

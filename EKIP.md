@@ -52,7 +52,7 @@ Yıllık izinde Pazar sayılmaz; **resmî tatiller otomatik düşülmez** (gerek
 Önceden kullanılmış izinler için personelin **İzin devri** alanına (−/+) gün girilir.
 
 ## Kurulum
-1. Yeni `Code.gs` → Apps Script → yeni sürüm (build116).
+1. Yeni `Code.gs` → Apps Script → yeni sürüm (build117).
 2. Ayarlar → Şube Konumları'nda mağaza tanımlı olmalı (zaten var).
 3. Yönetici Paneli: personele **🕐 Mesai (personel)**, sorumluya **⭐ Ekip Lideri**.
 4. Ekip Lideri: 👥 Ekip → bölümleri ve personel bilgilerini girer.
