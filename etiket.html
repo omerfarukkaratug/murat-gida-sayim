@@ -89,7 +89,9 @@
      Tüm ölçüler "em": 1em = sayfa/etiket genişliğinin %1'i. Böylece aynı
      tasarım A5, A4 ve A3'te birebir aynı oranla büyür/küçülür. */
   #baski{position:absolute; left:-20000px; top:0;}
-  .sayfa{box-sizing:border-box; background:#fff; color:#000; overflow:hidden; position:relative; font-family:Arial, Helvetica, "Segoe UI", sans-serif;}
+  .dizgi{display:flex; flex-wrap:wrap; align-content:flex-start;}
+  .dizgi .parca{outline:.25mm dashed #999; outline-offset:-.125mm;}
+  .sayfa, .parca{box-sizing:border-box; background:#fff; color:#000; overflow:hidden; position:relative; font-family:Arial, Helvetica, "Segoe UI", sans-serif;}
   .sayfa *{box-sizing:border-box;}
 
   /* ÖNEMLİ: yazı boyutu verilen elemanda "em" o yazının boyutuna göre
@@ -135,7 +137,10 @@
   .aAlt{flex-shrink:0; border-top:.45em solid #000; padding-top:2.2em; display:flex; justify-content:space-between; align-items:flex-end; gap:3em;}
   .aBilgi{font-size:3.7em; line-height:1.5; font-weight:600; min-width:0;}
   .aBilgi b{font-weight:900;}
-  .aBilgi .brk{font-family:"Courier New", monospace; font-size:.78em; font-weight:400;}
+  .aBilgi .brk{font-family:"Courier New", monospace; font-size:.6em; font-weight:400; line-height:1.2; letter-spacing:.12em;}
+  .barkod{display:block;}
+  .aBilgi .barkod{width:8.6em; height:1.7em; margin-top:.3em;}
+  .dar .aBilgi .barkod{width:9.8em; height:1.6em;}
   .yerli{object-fit:contain;}
   .aAlt .yerli{height:9em; width:22.8em; flex-shrink:0;}
 
@@ -159,6 +164,8 @@
   .rAlt span{font-size:2.9em; font-weight:600; white-space:nowrap;}
   .rAlt .brk{font-family:"Courier New", monospace;}
   .rAlt .yerli{height:5.6em; width:14.2em;}
+  .rAlt .rKod{font-size:1em; font-family:"Courier New", monospace;}
+  .rAlt .barkod{width:32em; height:5.6em; flex-shrink:0;}
 
   @media print{
     html,body{background:#fff !important; margin:0 !important; padding:0 !important;}
@@ -201,6 +208,7 @@
         </div>
       </div>
       <div id="boslukAyar" class="gizli" style="display:flex; align-items:center; gap:8px; margin-top:10px;"><input id="ustBosluk" type="checkbox"><label for="ustBosluk" style="margin:0; text-transform:none; letter-spacing:0; font-size:13px; color:var(--text);">Üstte 2 cm boşluk bırak (raf etiketliğine sıkıştırmak için)</label></div>
+      <div id="dizAyar" class="gizli" style="display:flex; align-items:center; gap:8px; margin-top:10px;"><input id="a4Diz" type="checkbox"><label for="a4Diz" style="margin:0; text-transform:none; letter-spacing:0; font-size:13px; color:var(--text);">A4 kâğıda diz (yazıcıda A6/A5 kâğıt yoksa) — basınca kesik çizgiden kes</label></div>
       <div style="display:flex; align-items:center; gap:8px; margin-top:10px;"><input id="logoGoster" type="checkbox"><label for="logoGoster" style="margin:0; text-transform:none; letter-spacing:0; font-size:13px; color:var(--text);">Afişlerde mağaza logosu olsun</label></div>
       <label for="sloganYazi">Logonun altındaki yazı (boş bırakılabilir)</label>
       <input id="sloganYazi" type="text" maxlength="28" placeholder="örn. 1987'den beri">
@@ -215,6 +223,16 @@
       <div id="kamera" class="gizli"><video id="video" playsinline autoplay muted></video></div>
       <div id="sonuclar"></div>
       <button type="button" id="elleBtn" style="width:100%; margin-top:8px; border-style:dashed; font-size:13px;">➕ Katalogda olmayan ürünü elle ekle</button>
+    </div>
+
+    <!-- Basılacak etiketler: fiyatı değişip etiketi henüz basılmamış ürünler (bütün cihazlarda ortak) -->
+    <div class="kart gizli" id="kuyrukKart" style="border:2px solid var(--amber);">
+      <div class="kartBaslik">🔔 Basılacak etiketler</div>
+      <div id="kuyrukBilgi" style="font-size:14px; margin-bottom:8px;"></div>
+      <div class="satir">
+        <button type="button" id="kuyrukEkleBtn" style="flex:1.6;">Hepsini listeye ekle</button>
+        <button type="button" id="kuyrukAtlaBtn" style="flex:1; font-size:13px;">Basıldı say</button>
+      </div>
     </div>
 
     <div class="kart" id="topluKart">
@@ -244,6 +262,12 @@
       <div id="aktarKutu" class="gizli" style="margin-top:8px;"></div>
     </div>
 
+    <div class="kart" id="baskiKart">
+      <div class="kartBaslik"><span>Yazıcılar ve baskı işleri</span><button type="button" id="baskiYenileBtn" style="padding:6px 10px; font-size:12px;">Yenile</button></div>
+      <div id="baskiYazicilar" class="ipucu">Yükleniyor…</div>
+      <div id="baskiIsler" style="margin-top:8px;"></div>
+    </div>
+
     <div class="kart" id="onizleKart">
       <div class="kartBaslik"><span>4 · Önizleme</span><span id="sayfaSayi" class="ipucu"></span></div>
       <div id="onizleKutu"><div id="onizle"></div></div>
@@ -253,7 +277,8 @@
 </div>
 
 <div class="cubuk gizli" id="cubuk">
-  <button type="button" class="ana" id="yazdirBtn">🖨️ Yazdır</button>
+  <button type="button" class="ana" id="gonderBtn">📡 Yazıcıya gönder</button>
+  <button type="button" id="yazdirBtn" style="flex:.7;">🖨️ Bu cihazdan</button>
 </div>
 <div id="toast" class="gizli"></div>
 <div id="baski"></div>
@@ -302,13 +327,17 @@
   var FIYAT_IZLEME = /^\d{4}-\d{2}-\d{2}$/.test(String(sayim.fiyatIzleme || '')) ? sayim.fiyatIzleme : ''; // geçmişin tutulmaya başlandığı gün
   var INDIRIM_PENCERE_GUN = 30;   // fiyat düşüşü en fazla bu kadar gün "indirim" olarak önerilir
   var TOPLU_SINIR = 150;          // bir seferde listeye en fazla bu kadar ürün eklenir
-  var kullanici = sayim.currentUser || null;
+  // İŞ MODU: baskı programı bu sayfayı "?is=<iş no>&anahtar=<anahtar>" ile görünmez tarayıcıda açar;
+  // sayfa işi sunucudan alır, etiketleri çizer ve PDF'e basılmaya hazır olunca başlığı "HAZIR" yapar.
+  var IS_NO = (/[?&]is=([A-Za-z0-9_-]+)/.exec(location.search) || [])[1] || '';
+  var IS_ANAHTAR = decodeURIComponent((/[?&]anahtar=([^&]+)/.exec(location.search) || [])[1] || '');
+  var kullanici = IS_NO ? { name: 'baskı programı', role: 'yonetici', permissions: [] } : (sayim.currentUser || null);
   var yetkili = !!kullanici && (kullanici.role === 'yonetici' || (kullanici.permissions || []).indexOf('etiket') !== -1);
   if(!yetkili){ $('yetkiYok').classList.remove('gizli'); return; }
   $('icerik').classList.remove('gizli'); $('cubuk').classList.remove('gizli');
 
   // ---------- Kayıtlı durum ----------
-  var durum = oku(ETIKET_ANAHTAR) || {};
+  var durum = (IS_NO ? null : oku(ETIKET_ANAHTAR)) || {};
   if(!durum.urun) durum.urun = {};          // barkod -> { yer, mik, birim } (bir kez girilen bilgi hatırlanır)
   if(!Array.isArray(durum.liste)) durum.liste = [];
   if(!BICIM[durum.bicim]) durum.bicim = 'raf';
@@ -319,7 +348,10 @@
   var UST_BOSLUK_MM = 20;
   function boslukVar(){ return !!durum.bosluk && (durum.bicim === 'a6' || durum.bicim === 'a5'); }
   if(!durum.baslangic) durum.baslangic = 1;
-  function kaydet(){ if(!yaz(ETIKET_ANAHTAR, durum)) toast('Telefon hafızası dolu — liste kaydedilemedi', 'hata'); }
+  Object.keys(durum.urun).forEach(function(b){ if(/\uFFFD/.test((durum.urun[b] || {}).yer || '')) durum.urun[b].yer = ''; });
+  if(durum.a4diz === undefined) durum.a4diz = true;     // A6/A5 afişleri A4 kâğıda diz (A6: 4, A5: 2)
+  function dizVar(){ return !!durum.a4diz && (durum.bicim === 'a6' || durum.bicim === 'a5'); }
+  function kaydet(){ if(IS_NO) return; if(!yaz(ETIKET_ANAHTAR, durum)) toast('Telefon hafızası dolu — liste kaydedilemedi', 'hata'); }
 
   // ---------- Görseller (yerli üretim logosu var mı?) ----------
   var yerliLogoVar = false, magazaLogoVar = false, gorselBekleyen = 2;
@@ -337,7 +369,8 @@
         var db = r.result;
         if(!db.objectStoreNames.contains('catalog')){ db.close(); return ok([]); }
         var q = db.transaction('catalog', 'readonly').objectStore('catalog').getAll();
-        q.onsuccess = function(){ db.close(); ok(q.result || []); };
+        // Bozuk harfli ülke adı (eski gönderimden kalan "T\uFFFDrkiye" gibi) yok sayılır.
+        q.onsuccess = function(){ db.close(); var l = q.result || []; l.forEach(function(k){ if(k && /\uFFFD/.test(k.yer || '')) k.yer = ''; }); ok(l); };
         q.onerror = function(){ db.close(); ok([]); };
       };
     });
@@ -355,17 +388,19 @@
     r.forEach(function(k){ katalogHarita[String(k.barcode)] = k; });
     katalogBilgisi();
     topluBilgiCiz();
+    kuyrukYukle();
     fiyatlariTazele();
     listeCiz(); ciz();
   });
   function katalogFiyat(barkod){ var k = katalogHarita[String(barkod)]; if(!k || k.price === '') return NaN; return sayi(k.price); }
   // Liste günlerce durabilir: açılışta her ürünün fiyatını güncel katalogdan al.
   function fiyatlariTazele(){
-    var degisen = 0;
+    var degisen = 0, duzelen = false;
     durum.liste.forEach(function(u){
       if(u.elle || !u.barkod) return;
       var f = katalogFiyat(u.barkod);
       var k = katalogHarita[u.barkod];
+      if(/\uFFFD/.test(u.yer || '')){ u.yer = /^86[89]/.test(u.barkod) ? 'Türkiye' : ''; u.erpYer = ''; u.barkodYer = !!u.yer; duzelen = true; }
       if(!isNaN(f) && f > 0 && Math.abs(f - u.fiyat) > 0.004){
         u.fiyat = f; u.tarih = (k && k.ft) || bugun(); degisen++;
         // Fiyat değişti: eski indirim bilgisi artık geçersiz, yeniden onaylanmalı.
@@ -377,6 +412,7 @@
         if(k.yer && !u.grup && u.erpYer !== k.yer){ u.erpYer = k.yer; u.yer = k.yer; }
       }
     });
+    if(duzelen && !degisen) kaydet();
     if(degisen){ kaydet(); toast(degisen + ' ürünün fiyatı katalogda değişmiş — etiketler güncellendi', 'uyari'); }
   }
 
@@ -504,7 +540,9 @@
       barkodYer: !u.erpYer && !bil.yer && /^86[89]/.test(u.barkod || ''),
       erpYer: u.erpYer || '', mik: bil.mik || tahmin.mik, birim: bil.birim || tahmin.birim,
       // Fiyat tarihi: sunucu fiyatın değiştiği günü biliyorsa o, bilmiyorsa bugün.
-      tarih: u.ft || bugun(), ft: u.ft || '', of: u.of || '',
+      // Fiyat tarihi: ERP/sunucu değişiklik gününü biliyorsa o. Bilmiyorsa fiyat o kayıt
+      // başladığından beri değişmemiştir: kaydın başladığı gün yazılır (bugünün tarihi değil).
+      tarih: u.ft || (u.elle ? bugun() : (FIYAT_IZLEME || bugun())), ft: u.ft || '', of: u.of || '',
       baslik: '', ozel: '', indirim: !!u.indirim, onceki: u.onceki || '', bitis: u.bitis || '', adet: 1
     });
     if(sessiz) return;
@@ -691,7 +729,9 @@
     kaydet(); listeCiz(); ciz();
   });
   // ---------- Liste aktarma (telefon → bilgisayar) ----------
-  var SUNUCU = sayim.serverUrl || 'https://script.google.com/macros/s/AKfycbwH0hVGDXIQhdSxg2neDBNUEOxY1SNacJRz4cqf3WaP8xgAhlEnKfRv5xnlENKnh3XuYA/exec';
+  // (Yalnızca yerel denemede: ?sunucu= ile sahte sunucu adresi verilebilir.)
+  var DENEME_SUNUCU = /^(localhost|127\.0\.0\.1)$/.test(location.hostname) ? decodeURIComponent((/[?&]sunucu=([^&]+)/.exec(location.search) || [])[1] || '') : '';
+  var SUNUCU = DENEME_SUNUCU || sayim.serverUrl || 'https://script.google.com/macros/s/AKfycbwH0hVGDXIQhdSxg2neDBNUEOxY1SNacJRz4cqf3WaP8xgAhlEnKfRv5xnlENKnh3XuYA/exec';
   function kimlikBilgisi(){
     return (kullanici && sayim.savedCredentials && sayim.savedCredentials.pass) ? { user: kullanici.name, pass: sayim.savedCredentials.pass } : null;
   }
@@ -770,6 +810,173 @@
     var b = e.target.closest('button[data-liste]'); if(b) listeyiAl(b.getAttribute('data-liste'));
   });
 
+  // ---------- Telefondan yazıcıya baskı ----------
+  // İş sunucuya yazılır; yazıcının bağlı olduğu bilgisayardaki program alıp basar.
+  var baski = { yazicilar: [], isler: [], hazir: false }, izlenen = {};
+  var DURUM_AD = { onay_bekliyor: '⏳ onay bekliyor', bekliyor: '🕓 sırada', basiliyor: '🖨️ basılıyor', basildi: '✅ basıldı', hata: '❌ hata', iptal: '🚫 iptal' };
+  function yaziciBul(kimlik){ return baski.yazicilar.filter(function(y){ return y.kimlik === kimlik; })[0]; }
+  function baskiCiz(){
+    var yk = $('baskiYazicilar'), ik = $('baskiIsler'), yon = kullanici.role === 'yonetici';
+    if(!baski.hazir){ yk.textContent = 'Yazıcı bilgisi alınamadı (internet yok ya da sunucu eski sürümde).'; ik.innerHTML = ''; return; }
+    yk.innerHTML = baski.yazicilar.length ? baski.yazicilar.map(function(y){
+      return '<div style="display:flex; align-items:center; gap:8px; padding:5px 0; border-bottom:1px solid var(--line, #e5e5e5);">' +
+        '<div style="flex:1; min-width:0;"><b style="color:var(--text);">' + esc(y.ad) + '</b> ' + (y.cevrimici ? '<span style="color:var(--green);">● açık</span>' : '<span style="color:var(--red);">● kapalı</span>') +
+        '<div style="font-size:11px;">' + esc(y.bilgisayar) + ' · ' + (y.mod === 'manuel' ? 'manuel: bilgisayardaki kişi onaylar' : 'otomatik basar') + '</div></div>' +
+        (yon ? '<button type="button" data-yz="mod" data-k="' + esc(y.kimlik) + '" style="padding:5px 8px; font-size:11px;">' + (y.mod === 'manuel' ? 'Otomatik yap' : 'Manuel yap') + '</button>' +
+               '<button type="button" data-yz="ad" data-k="' + esc(y.kimlik) + '" style="padding:5px 8px; font-size:11px;">Ad</button>' : '') + '</div>';
+    }).join('') : 'Henüz yazıcı tanımlı değil. Yazıcının bağlı olduğu bilgisayara baskı programı kurulunca burada görünür.';
+    ik.innerHTML = baski.isler.slice(0, 8).map(function(i){
+      var y = yaziciBul(i.yazici), dug = '';
+      if(i.durum === 'onay_bekliyor') dug = '<button type="button" class="ana" data-bi="onayla" data-id="' + esc(i.id) + '" style="padding:6px 10px; font-size:12px;">Yazdır</button>';
+      if(i.durum === 'onay_bekliyor' || i.durum === 'bekliyor') dug += '<button type="button" data-bi="iptal" data-id="' + esc(i.id) + '" style="padding:6px 10px; font-size:12px;">İptal</button>';
+      if(i.durum === 'hata' || i.durum === 'basildi' || i.durum === 'iptal') dug = '<button type="button" data-bi="tekrar" data-id="' + esc(i.id) + '" style="padding:6px 10px; font-size:12px;">Tekrar bas</button>';
+      return '<div style="display:flex; align-items:center; gap:6px; padding:6px 0; border-bottom:1px solid var(--line, #e5e5e5); font-size:13px;">' +
+        '<div style="flex:1; min-width:0;"><b>' + esc(i.urun) + ' ürün</b> · ' + esc((BICIM[i.bicim] || {}).ad || i.bicim) + ' → ' + esc(y ? y.ad : i.yazici) +
+        '<div class="ipucu">' + esc(i.kullanici || '?') + ' · ' + esc(String(i.zaman).slice(0, 16)) + ' · ' + (DURUM_AD[i.durum] || esc(i.durum)) + (i.mesaj ? ' — ' + esc(i.mesaj) : '') + '</div></div>' + dug + '</div>';
+    }).join('');
+  }
+  function baskiYukle(sonra){
+    if(!navigator.onLine){ baskiCiz(); return; }
+    sunucuSor({ action: 'baski_durum' }, function(hata, veri){
+      if(!hata && veri && veri.status === 'ok' && Array.isArray(veri.yazicilar)){
+        baski = { yazicilar: veri.yazicilar, isler: veri.isler || [], hazir: true };
+        // Bu cihazdan gönderilen işlerin sonucu: basıldıysa kuyruğa işle, hata varsa haber ver.
+        baski.isler.forEach(function(i){
+          var z = izlenen[i.id]; if(!z || z.bitti) return;
+          if(i.durum === 'basildi'){ z.bitti = true; toast('Etiketler basıldı ✅'); basildiIsaretle(z.kuyruk); }
+          else if(i.durum === 'hata'){ z.bitti = true; toast('Yazıcı hata verdi: ' + (i.mesaj || 'bilinmeyen'), 'hata'); }
+          else if(i.durum === 'iptal'){ z.bitti = true; toast('Baskı iptal edildi', 'uyari'); }
+        });
+      }
+      baskiCiz(); if(sonra) sonra();
+    });
+  }
+  if(!IS_NO){
+    baskiYukle();
+    setInterval(function(){
+      var bekleyenVar = Object.keys(izlenen).some(function(k){ return !izlenen[k].bitti; }) || baski.isler.some(function(i){ return i.durum === 'onay_bekliyor' || i.durum === 'bekliyor' || i.durum === 'basiliyor'; });
+      if(document.visibilityState === 'visible' && bekleyenVar) baskiYukle();
+    }, 6000);
+    setInterval(function(){ if(document.visibilityState === 'visible') baskiYukle(); }, 45000);
+  }
+  $('baskiYenileBtn').addEventListener('click', function(){ baskiYukle(function(){ toast('Güncellendi'); }); });
+  $('baskiIsler').addEventListener('click', function(e){
+    var b = e.target.closest('button[data-bi]'); if(!b) return;
+    b.disabled = true;
+    sunucuSor({ action: 'baski_islem', id: b.getAttribute('data-id'), islem: b.getAttribute('data-bi') }, function(hata, veri){
+      if(hata || !veri || veri.status !== 'ok') toast('Yapılamadı: ' + aktarHata(veri, hata), 'hata');
+      baskiYukle();
+    });
+  });
+  $('baskiYazicilar').addEventListener('click', function(e){
+    var b = e.target.closest('button[data-yz]'); if(!b) return;
+    var y = yaziciBul(b.getAttribute('data-k')); if(!y) return;
+    var p = { action: 'baski_yazici_ayar', kimlik: y.kimlik };
+    if(b.getAttribute('data-yz') === 'mod') p.mod = y.mod === 'manuel' ? 'otomatik' : 'manuel';
+    else { var ad = window.prompt('Yazıcının uygulamada görünecek adı:', y.ad); if(!ad || !ad.trim()) return; p.ad = ad.trim(); }
+    sunucuSor(p, function(hata, veri){ if(hata || !veri || veri.status !== 'ok') toast('Kaydedilemedi: ' + aktarHata(veri, hata), 'hata'); baskiYukle(); });
+  });
+  function yaziciyaGonder(y){
+    var id = kimlikNo(), k = kimlikBilgisi(), kuyrukUrun = basilanKuyrukUrunleri();
+    var liste = durum.liste.filter(function(u){ return !eksikler(u).length; }).map(function(u){
+      var c = {}; Object.keys(u).forEach(function(a){ c[a] = u[a]; }); c.kod = stokKodu(u); return c;
+    });
+    var govde = { type: 'baski_is', id: id, yazici: y.kimlik, liste: liste, kaynak: 'telefon: ' + (kullanici.name || '?'),
+      ayar: { bicim: durum.bicim, kesim: durum.kesim, logo: durum.logo, slogan: durum.slogan, bosluk: durum.bosluk, a4diz: durum.a4diz, baslangic: durum.baslangic } };
+    if(JSON.stringify(govde).length > 44000){ toast('Liste çok uzun — bir kısmını basıp çıkar, sonra kalanı gönder', 'hata'); return; }
+    if(k){ govde.user = k.user; govde.pass = k.pass; }
+    toast('Gönderiliyor…');
+    fetch(SUNUCU, { method: 'POST', mode: 'no-cors', headers: { 'Content-Type': 'text/plain;charset=utf-8' }, body: JSON.stringify(govde) })
+      .then(function(){
+        izlenen[id] = { bitti: false, kuyruk: kuyrukUrun };
+        var deneme = 0;
+        var bak = function(){
+          baskiYukle(function(){
+            var bulundu = baski.isler.some(function(i){ return i.id === id; });
+            if(bulundu){ if(!izlenen[id].bitti) toast(y.mod === 'manuel' ? 'İş gönderildi — bilgisayardaki kişi onaylayınca basılacak' : (y.cevrimici ? 'İş gönderildi — birazdan basılacak' : 'İş gönderildi — bilgisayar kapalı, açılınca basılacak'), y.cevrimici ? '' : 'uyari'); return; }
+            if(++deneme < 4) return setTimeout(bak, 2500);
+            delete izlenen[id]; toast('İşin sunucuya ulaştığı doğrulanamadı — tekrar dene', 'hata');
+          });
+        };
+        setTimeout(bak, 1500);
+      })
+      .catch(function(){ toast('Sunucuya ulaşılamadı — iş gönderilemedi', 'hata'); });
+  }
+  $('gonderBtn').addEventListener('click', function(){
+    if(!durum.liste.length){ toast('Önce ürün ekle', 'uyari'); return; }
+    var eksik = durum.liste.filter(function(u){ return eksikler(u).length; });
+    if(eksik.length){ toast(eksik.length + ' üründe zorunlu bilgi eksik (' + eksikler(eksik[0])[0] + ') — tamamlamadan basılmaz', 'hata'); return; }
+    if(!navigator.onLine){ toast('İnternet yok', 'hata'); return; }
+    baskiYukle(function(){
+      if(!baski.hazir || !baski.yazicilar.length){ toast('Tanımlı yazıcı yok — "Bu cihazdan" ile yazdırabilirsin', 'uyari'); $('baskiKart').scrollIntoView({ behavior: 'smooth' }); return; }
+      var secenek = baski.yazicilar.map(function(y, n){ return (n + 1) + ') ' + y.ad + (y.cevrimici ? '' : ' (kapalı)') + (y.mod === 'manuel' ? ' — onaylı' : ''); }).join('\n');
+      var B = BICIM[durum.bicim], kagit = dizVar() ? 'A4 (dizili)' : B.kagit;
+      var sec = baski.yazicilar.length === 1 ? (window.confirm(B.ad + ' · kâğıt: ' + kagit + '\n\n"' + baski.yazicilar[0].ad + '" yazıcısına gönderilsin mi?') ? '1' : '')
+        : window.prompt(B.ad + ' · kâğıt: ' + kagit + '\n\nHangi yazıcı? Numarasını yaz:\n' + secenek, '1');
+      var y = baski.yazicilar[parseInt(sec, 10) - 1];
+      if(y) yaziciyaGonder(y);
+    });
+  });
+
+  // ---------- Basılacak etiketler kuyruğu ----------
+  // Fiyatı değişen ürün (katalogdaki fiyat tarihi) etiketi basılana kadar burada görünür.
+  // "Basıldı" bilgisi sunucuda ortak tutulur: bir cihazda basılan, diğerinde kuyruktan düşer.
+  var KUYRUK_GUN = 30;
+  var kuyruk = { hazir: false, baslangic: '', basilan: {} };
+  function kuyrukListe(){
+    if(!kuyruk.hazir) return [];
+    return degisenler(KUYRUK_GUN, false).filter(function(x){
+      return x.k.ft >= kuyruk.baslangic && kuyruk.basilan[String(x.k.barcode)] !== x.k.ft;
+    });
+  }
+  function kuyrukCiz(){
+    var l = kuyrukListe(), kart = $('kuyrukKart');
+    kart.classList.toggle('gizli', !l.length);
+    if(!l.length) return;
+    var dusen = l.filter(function(x){ return !!x.d; }).length;
+    $('kuyrukBilgi').innerHTML = '<b>' + l.length + '</b> ürünün fiyatı değişti, etiketi henüz basılmadı' + (dusen ? ' (' + dusen + ' tanesinde fiyat düştü)' : '') + '.' +
+      '<div class="ipucu" style="margin-top:4px;">' + esc(l.slice(0, 4).map(function(x){ return x.k.name; }).join(' · ')) + (l.length > 4 ? ' …' : '') + '</div>';
+  }
+  function kuyrukYukle(){
+    if(!navigator.onLine) return;
+    sunucuSor({ action: 'etiket_kuyruk' }, function(hata, veri){
+      if(hata || !veri || veri.status !== 'ok' || !veri.baslangic) return;   // eski sunucu sürümü: kuyruk görünmez
+      kuyruk = { hazir: true, baslangic: String(veri.baslangic), basilan: veri.basilan || {} };
+      kuyrukCiz();
+    });
+  }
+  // urunler: [[barkod, fiyatTarihi], ...] — sunucuya "basıldı" yazar; yerelde hemen düşer.
+  function basildiIsaretle(urunler){
+    if(!urunler.length) return;
+    urunler.forEach(function(u){ kuyruk.basilan[u[0]] = u[1]; });
+    kuyrukCiz();
+    var k = kimlikBilgisi(), govde = { type: 'etiket_basildi', urunler: urunler, kaynak: 'telefon: ' + (kullanici.name || '?') };
+    if(k){ govde.user = k.user; govde.pass = k.pass; }
+    fetch(SUNUCU, { method: 'POST', mode: 'no-cors', headers: { 'Content-Type': 'text/plain;charset=utf-8' }, body: JSON.stringify(govde) })
+      .catch(function(){ toast('İnternet yok: "basıldı" bilgisi diğer cihazlara ulaşmadı', 'uyari'); });
+  }
+  // Listedeki (basılabilir) ürünlerden kuyrukta bekleyenler.
+  function basilanKuyrukUrunleri(){
+    if(!kuyruk.hazir) return [];
+    var c = [], gorulen = {};
+    durum.liste.forEach(function(u){
+      if(eksikler(u).length) return;
+      (u.grup ? u.grup.map(function(g){ return g.barkod; }) : [u.barkod]).forEach(function(b){
+        var kt = katalogHarita[String(b)];
+        if(!b || gorulen[b] || !kt || !kt.ft || kt.ft < kuyruk.baslangic || kuyruk.basilan[String(b)] === kt.ft) return;
+        gorulen[b] = true; c.push([String(b), kt.ft]);
+      });
+    });
+    return c;
+  }
+  $('kuyrukEkleBtn').addEventListener('click', function(){ topluEkle(kuyrukListe(), false, ''); window.scrollTo(0, $('liste').getBoundingClientRect().top + window.pageYOffset - 70); });
+  $('kuyrukAtlaBtn').addEventListener('click', function(){
+    var l = kuyrukListe();
+    if(!l.length || !window.confirm(l.length + ' ürün etiketi basılmış sayılacak ve kuyruktan çıkacak (bütün cihazlarda).\n\nEtiketleri gerçekten başka yoldan bastıysan ya da gerek yoksa onayla.')) return;
+    basildiIsaretle(l.map(function(x){ return [String(x.k.barcode), x.k.ft]; }));
+    toast(l.length + ' ürün kuyruktan çıkarıldı');
+  });
+
   $('temizleBtn').addEventListener('click', function(){
     if(!durum.liste.length || !window.confirm('Listedeki ' + durum.liste.length + ' ürün çıkarılsın mı? (Üretim yeri gibi bilgiler hatırlanır.)')) return;
     durum.liste = []; kaydet(); listeCiz(); ciz();
@@ -846,16 +1053,21 @@
     $('rafAyar').classList.toggle('gizli', durum.bicim !== 'raf');
     $('boslukAyar').classList.toggle('gizli', !(durum.bicim === 'a6' || durum.bicim === 'a5'));
     $('ustBosluk').checked = !!durum.bosluk;
+    $('dizAyar').classList.toggle('gizli', !(durum.bicim === 'a6' || durum.bicim === 'a5')); $('a4Diz').checked = !!durum.a4diz;
     if(document.activeElement !== $('sloganYazi')) $('sloganYazi').value = durum.slogan || '';
     $('rafKesim').checked = !!durum.kesim; $('rafBaslangic').value = durum.baslangic; $('logoGoster').checked = !!durum.logo;
     var B = BICIM[durum.bicim];
-    $('sayfaBoyutu').textContent = '@page{ size:' + B.w + 'mm ' + B.h + 'mm; margin:0; }';
+    // Dizili baskı: A6 → dik A4'te 2×2, A5 → yatık A4'te yan yana 2.
+    $('sayfaBoyutu').textContent = dizVar() ? '@page{ size:' + (durum.bicim === 'a5' ? '297mm 210mm' : '210mm 297mm') + '; margin:0; }'
+      : '@page{ size:' + B.w + 'mm ' + B.h + 'mm; margin:0; }';
+    if(dizVar()) $('bicimAciklama').textContent = durum.bicim === 'a5' ? 'Bir A4 kâğıda yan yana 2 tane A5 afiş basılır (kâğıt yatık). Yazdırma penceresinde A4 seç; basınca ortadaki kesik çizgiden kes.' : 'Bir A4 kâğıda 4 tane A6 afiş basılır. Yazdırma penceresinde A4 seç; basınca kesik çizgilerden kes.';
   }
   $('bicimSecim').addEventListener('click', function(e){ var b = e.target.closest('button'); if(!b) return; durum.bicim = b.getAttribute('data-bicim'); kaydet(); bicimCiz(); ciz(); });
   $('rafKesim').addEventListener('change', function(){ durum.kesim = this.checked; kaydet(); ciz(); });
   $('logoGoster').addEventListener('change', function(){ durum.logo = this.checked; kaydet(); ciz(); });
   $('sloganYazi').addEventListener('input', function(){ durum.slogan = this.value.trim(); kaydet(); ciz(); });
   $('ustBosluk').addEventListener('change', function(){ durum.bosluk = this.checked; kaydet(); ciz(); });
+  $('a4Diz').addEventListener('change', function(){ durum.a4diz = this.checked; kaydet(); ciz(); });
   $('rafBaslangic').addEventListener('change', function(){ durum.baslangic = Math.min(24, Math.max(1, parseInt(this.value, 10) || 1)); this.value = durum.baslangic; kaydet(); ciz(); });
 
   // ---------- Etiket HTML'i ----------
@@ -863,6 +1075,59 @@
     var t = para(f), v = t.lastIndexOf(',');
     return '<span class="tam">' + esc(t.slice(0, v)) + '</span><span class="kurus">' + esc(t.slice(v)) + '</span><span class="tl">₺</span>';
   }
+  // ---------- Barkod çizimi (kütüphanesiz, SVG) ----------
+  // EAN-13 / EAN-8 / UPC-A geçerliyse o biçimde; değilse Code 128 olarak çizilir.
+  var EAN_L = ['0001101','0011001','0010011','0111101','0100011','0110001','0101111','0111011','0110111','0001011'];
+  var EAN_G = ['0100111','0110011','0011011','0100001','0011101','0111001','0000101','0010001','0001001','0010111'];
+  var EAN_R = ['1110010','1100110','1101100','1000010','1011100','1001110','1010000','1000100','1001000','1110100'];
+  var EAN_DIZI = ['LLLLLL','LLGLGG','LLGGLG','LLGGGL','LGLLGG','LGGLLG','LGGGLL','LGLGLG','LGLGGL','LGGLGL'];
+  var C128 = '212222 222122 222221 121223 121322 131222 122213 122312 132212 221213 221312 231212 112232 122132 122231 113222 123122 123221 223211 221132 221231 213212 223112 312131 311222 321122 321221 312212 322112 322211 212123 212321 232121 111323 131123 131321 112313 132113 132311 211313 231113 231311 112133 112331 132131 113123 113321 133121 313121 211331 231131 213113 213311 213131 311123 311321 331121 312113 312311 332111 314111 221411 431111 111224 111422 121124 121421 141122 141221 112214 112412 122114 122411 142112 142211 241211 221114 413111 241112 134111 111242 121142 121241 114212 124112 124211 411212 421112 421211 212141 214121 412121 111143 111341 131141 114113 114311 411113 411311 113141 114131 311141 411131 211412 211214 211232 2331112'.split(' ');
+  function eanGecerli(b){
+    var t = 0, n = b.length;
+    for(var i = 0; i < n - 1; i++) t += Number(b.charAt(n - 2 - i)) * (i % 2 === 0 ? 3 : 1);
+    return (10 - t % 10) % 10 === Number(b.charAt(n - 1));
+  }
+  function barkodModul(b){
+    b = String(b || '').trim();
+    var i, m;
+    if(/^\d{12}$/.test(b) && eanGecerli(b)) b = '0' + b;            // UPC-A = başına 0 eklenmiş EAN-13
+    if(/^\d{13}$/.test(b) && eanGecerli(b)){
+      var dz = EAN_DIZI[Number(b.charAt(0))]; m = '101';
+      for(i = 1; i <= 6; i++) m += (dz.charAt(i - 1) === 'L' ? EAN_L : EAN_G)[Number(b.charAt(i))];
+      m += '01010';
+      for(i = 7; i <= 12; i++) m += EAN_R[Number(b.charAt(i))];
+      return { m: m + '101', bos: 11 };
+    }
+    if(/^\d{8}$/.test(b) && eanGecerli(b)){
+      m = '101';
+      for(i = 0; i < 4; i++) m += EAN_L[Number(b.charAt(i))];
+      m += '01010';
+      for(i = 4; i < 8; i++) m += EAN_R[Number(b.charAt(i))];
+      return { m: m + '101', bos: 7 };
+    }
+    if(!b || b.length > 24 || !/^[\x20-\x7E]+$/.test(b)) return null;
+    // Code 128: çift haneli salt rakam → C takımı (daha kısa), değilse B takımı.
+    var kod = [], cift = /^\d+$/.test(b) && b.length % 2 === 0;
+    kod.push(cift ? 105 : 104);
+    if(cift){ for(i = 0; i < b.length; i += 2) kod.push(Number(b.substr(i, 2))); }
+    else { for(i = 0; i < b.length; i++) kod.push(b.charCodeAt(i) - 32); }
+    var top = kod[0]; for(i = 1; i < kod.length; i++) top += kod[i] * i;
+    kod.push(top % 103); kod.push(106);
+    m = '';
+    kod.forEach(function(k){ var g = C128[k]; for(var j = 0; j < g.length; j++) m += new Array(Number(g.charAt(j)) + 1).join(j % 2 === 0 ? '1' : '0'); });
+    return { m: m, bos: 10 };
+  }
+  function barkodSvg(b){
+    var k = barkodModul(b); if(!k) return '';
+    var d = '', i = 0, n = k.m.length;
+    while(i < n){
+      if(k.m.charAt(i) !== '1'){ i++; continue; }
+      var bas = i; while(i < n && k.m.charAt(i) === '1') i++;
+      d += 'M' + (bas + k.bos) + ' 0h' + (i - bas) + 'v1h-' + (i - bas) + 'z';
+    }
+    return '<svg class="barkod" viewBox="0 0 ' + (n + 2 * k.bos) + ' 1" preserveAspectRatio="none" shape-rendering="crispEdges" xmlns="http://www.w3.org/2000/svg"><path d="' + d + '" fill="#000"/></svg>';
+  }
+  function stokKodu(u){ if(u.grup || !u.barkod) return ''; var k = katalogHarita[String(u.barkod)]; return k && k.stockCode ? String(k.stockCode).trim() : String(u.kod || '').trim(); }
   function yerliHtml(u){ return (yerliMi(u) && yerliLogoVar) ? '<img class="yerli" src="' + YERLI_LOGO + '" alt="Yerli Üretim">' : ''; }
   // Grup etiketinde çeşitlerin kısa adı: ortak baş kısım ve net miktar atılır
   // ("ABC KONSANTRE YUMUŞATICI LAVANTA 1440 ML" → "Lavanta").
@@ -899,7 +1164,7 @@
         (bf ? '<div><b>Birim fiyatı:</b> ' + para(bf.tutar) + ' ₺ / ' + bf.birim + '</div>' : '') +
         '<div><b>Üretim yeri:</b> ' + esc(String(u.yer || '').trim()) + '</div>' +
         '<div><b>' + (u.indirim ? 'İndirim tarihleri' : 'Fiyat değişiklik tarihi') + ':</b> ' + tarihTr(u.tarih) + (u.indirim && u.bitis ? ' – ' + tarihTr(u.bitis) : '') + '</div>' +
-        (u.barkod && !u.grup ? '<div class="brk">' + esc(u.barkod) + '</div>' : '') +
+        (u.barkod && !u.grup ? barkodSvg(u.barkod) + '<div class="brk">' + esc(u.barkod) + (stokKodu(u) ? ' &nbsp;·&nbsp; Kod: ' + esc(stokKodu(u)) : '') + '</div>' : '') +
       '</div>' + yerliHtml(u) + '</div>' +
     '</div></div>';
   }
@@ -913,10 +1178,11 @@
         '<div><b>Üretim yeri:</b> ' + esc(String(u.yer || '').trim()) + '</div>' +
         '<div><b>' + (u.indirim ? 'İndirim:' : 'Fiyat tarihi:') + '</b> ' + (u.indirim && u.bitis ? tarihTr(u.tarih).slice(0, 5) + ' – ' + tarihTr(u.bitis) : tarihTr(u.tarih)) + '</div>' +
       '</div><div class="rFiyatKutu sig" data-em="18" data-min="8"><span class="rFiyat yazi">' + fiyatHtml(u.fiyat) + '</span></div></div>' +
-      '<div class="rAlt">' + (yerliHtml(u) || '<span>' + esc(MAGAZA_ADI) + '</span>') + '<span class="brk">' + esc(u.grup ? '' : (u.barkod || '')) + '</span><span>KDV dâhil</span></div>' +
+      '<div class="rAlt">' + (yerliHtml(u) || '<span>' + esc(MAGAZA_ADI) + '</span>') + (u.grup || !u.barkod ? '<span></span>' : (barkodSvg(u.barkod) || '<span class="brk">' + esc(u.barkod) + '</span>')) + '<span>' + (stokKodu(u) ? '<span class="rKod">' + esc(stokKodu(u)) + '</span> · ' : '') + 'KDV dâhil</span></div>' +
     '</div>';
   }
   // Basılacak etiketler: eksiksiz ürünler, "kaç etiket" kadar tekrarlanır.
+  function baskiSayfaSayisi(){ return $('baski').querySelectorAll('.sayfa').length; }
   function basilacaklar(){
     var c = [];
     durum.liste.slice().reverse().forEach(function(u){
@@ -946,7 +1212,11 @@
       }
       if(!et.length) html = '';
     } else {
-      html = et.map(function(u){ return afisHtml(u, B); }).join('');
+      if(dizVar()){
+        var parca = et.map(function(u){ return afisHtml(u, B).replace('<div class="sayfa', '<div class="parca'); });
+        var kac = durum.bicim === 'a5' ? 2 : 4, olcu = durum.bicim === 'a5' ? 'width:297mm; height:210mm;' : 'width:210mm; height:297mm;';
+        for(var j = 0; j < parca.length; j += kac) html += '<div class="sayfa dizgi" style="' + olcu + '">' + parca.slice(j, j + kac).join('') + '</div>';
+      } else html = et.map(function(u){ return afisHtml(u, B); }).join('');
     }
     var baski = $('baski');
     baski.innerHTML = html;
@@ -954,7 +1224,7 @@
     // Önizleme: ilk sayfanın kopyası, ekrana sığacak kadar küçültülmüş.
     var ilk = baski.querySelector('.sayfa'), on = $('onizle'), kutu = $('onizleKutu');
     var sayfaAdedi = baski.querySelectorAll('.sayfa').length;
-    $('sayfaSayi').textContent = sayfaAdedi ? sayfaAdedi + ' sayfa · ' + B.kagit : '';
+    $('sayfaSayi').textContent = sayfaAdedi ? sayfaAdedi + ' sayfa · ' + (dizVar() ? 'A4' : B.kagit) : '';
     if(!ilk){
       on.style.cssText = 'background:transparent; box-shadow:none;';
       on.innerHTML = '<div class="ipucu" style="color:#fff; padding:14px 6px; text-align:center;">' + (durum.liste.length ? 'Eksik bilgisi olan ürünler basılmaz — yukarıdaki kırmızı uyarıları tamamla.' : 'Ürün ekleyince etiket burada görünür.') + '</div>';
@@ -983,10 +1253,36 @@
     if(yerliSayi && !yerliLogoVar && !window.confirm(yerliSayi + ' ürün Türkiye\'de üretilmiş ama yerli üretim logosu dosyası yüklü değil.\nBu etiketler yönetmeliğe göre EKSİK olur.\n\nYine de yazdırılsın mı?')) return;
     kameraKapat();
     ciz();
+    var bekleyen = basilanKuyrukUrunleri(), soruldu = false;
+    var sor = function(){
+      if(soruldu || !bekleyen.length) return; soruldu = true;
+      setTimeout(function(){
+        if(window.confirm('Etiketler basıldı mı?\n\n"Tamam" dersen fiyatı değişen ' + bekleyen.length + ' ürün "basılacaklar" kuyruğundan çıkar (bütün cihazlarda). Baskı iptal olduysa ya da bozuk çıktıysa "İptal" de.')) basildiIsaretle(bekleyen);
+      }, 400);
+    };
+    window.addEventListener('afterprint', function bitti(){ window.removeEventListener('afterprint', bitti); sor(); });
     setTimeout(function(){ window.print(); }, 150);
   });
 
   listeCiz(); bicimCiz();
+
+  if(IS_NO){
+    document.title = 'BEKLIYOR';
+    sunucuSor({ action: 'baski_ajan_veri', id: IS_NO, anahtar: IS_ANAHTAR }, function(hata, veri){
+      // Çizilemeyen iş sunucuya "hata" diye yazılır; program basmadan önce buna bakar, boş kâğıt çıkmaz.
+      var isHata = function(m){ document.title = 'HATA ' + m; sunucuSor({ action: 'baski_ajan_bitti', id: IS_NO, anahtar: IS_ANAHTAR, durum: 'hata', mesaj: m }, function(){}); };
+      if(hata || !veri || veri.status !== 'ok' || !Array.isArray(veri.liste)){ isHata('iş verisi alınamadı: ' + ((veri && veri.message) || hata || '')); return; }
+      var a = veri.ayar || {};
+      durum.liste = veri.liste;
+      if(BICIM[a.bicim]) durum.bicim = a.bicim;
+      ['kesim', 'logo', 'bosluk', 'a4diz'].forEach(function(k){ if(a[k] !== undefined) durum[k] = !!a[k]; });
+      if(a.slogan !== undefined) durum.slogan = String(a.slogan);
+      durum.baslangic = Math.min(24, Math.max(1, parseInt(a.baslangic, 10) || 1));
+      // Görseller (logo, yerli üretim) yüklenince çiz; en geç 4 sn sonra yine çiz.
+      var bitir = function(){ ciz(); if(baskiSayfaSayisi()) document.title = 'HAZIR'; else isHata('basılacak etiket yok (zorunlu bilgi eksik)'); };
+      var dene = 0, bekle = setInterval(function(){ if(gorselBekleyen <= 0 || ++dene > 40){ clearInterval(bekle); bitir(); } }, 100);
+    });
+  }
 })();
 </script>
 </body>

@@ -111,3 +111,22 @@ basılamaz. Bunun yerine:
 
 Listeler tablodaki `EtiketListe` sekmesinde durur; son 30 liste saklanır. Çok uzun listeler
 (yaklaşık 150 üründen fazla) bölünerek gönderilmelidir.
+
+## A4'e dizme (build 121)
+
+Yazıcı yalnızca A4 basıyorsa A6/A5 afişler A4 kâğıda dizilir ("A4 kâğıda diz" kutusu, varsayılan açık):
+A6 → dik A4'te 4 tane, A5 → yatık A4'te yan yana 2 tane. Kesik çizgilerden kesilir.
+Yazdırma penceresinde: kâğıt A4, ölçek %100, kenar boşluğu "Yok", "Üstbilgi ve altbilgi" kapalı.
+
+## Fiyat tarihi ERP'den ve "Basılacak etiketler" kuyruğu (build 122)
+
+- **Fiyat değişiklik tarihi** ERP12'nin kendi kaydından gelir (`dbo.STOK_STOK_BIRIM_DEGISIM`:
+  FIYAT, ESKI_FIYAT, TARIH; KDV dâhil fiyat listesi). Betik her ürün-birim için son değişikliği
+  ve ondan önceki 30 günün en düşük fiyatını gönderir; Katalog sekmesinde "Fiyat Tarihi" ve
+  "Önceki Fiyat" sütunlarına yazılır. ERP kaydı olmayan ürünlerde sunucunun kendi takibi geçerlidir.
+- Bu sorgu başarısız olursa katalog yine gönderilir; günlükte "UYARI: Fiyat degisiklik tarihleri
+  alinamadi" yazar.
+- **Basılacak etiketler:** fiyatı değişen ürün, etiketi basılana kadar Etiket ekranının üstündeki
+  sarı kartta görünür. "Hepsini listeye ekle" → bas → "Etiketler basıldı mı?" sorusuna Tamam.
+  Basıldı bilgisi `EtiketBasildi` sekmesinde ortak tutulur; bir cihazda basılan diğerinde de düşer.
+  Kuyruk, sunucu build 122 olduktan sonraki ilk açılış gününden itibaren olan değişimleri sayar.
