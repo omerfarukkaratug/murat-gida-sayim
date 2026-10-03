@@ -8,7 +8,7 @@
 // bir sürüm dağıttıktan sonra /exec adresini boş açtığında burada yazan
 // numarayı görmelisin; index.html'in üstündeki "build" numarasıyla
 // eşleşecek şekilde ben her ikisini birlikte güncelliyorum.
-var GS_VERSION = 'build117';
+var GS_VERSION = 'build118';
 
 // Sheets'te "Saat" sütunu zaman biçimli olarak algılanırsa, hücre değeri düz
 // metin değil bir Date nesnesi olarak gelir ve String(...) çirkin bir çıktı
@@ -1514,10 +1514,10 @@ function saveKatalogBulk(entries) {
   if (!props.getProperty('FIYAT_IZLEME_BASLANGIC')) props.setProperty('FIYAT_IZLEME_BASLANGIC', bugun);
   var eski = {}; // barkod -> { f: fiyat, ft: fiyat tarihi, of: önceki fiyat }
   if (sheet.getLastRow() >= 2) {
-    var gen = Math.min(Math.max(sheet.getLastColumn(), 8), 10); // fiyat izleme için ilk 10 sütun yeter
+    var gen = Math.min(Math.max(sheet.getLastColumn(), 8), 11); // fiyat izleme + üretim yeri
     sheet.getRange(2, 1, sheet.getLastRow() - 1, gen).getValues().forEach(function (r) {
       var b = String(r[1] || ''); if (!b) return;
-      eski[b] = { f: cleanNum(r[4]), ft: gen > 8 ? fiyatTarihiMetni(r[8]) : '', of: gen > 9 ? cleanNum(r[9]) : '' };
+      eski[b] = { f: cleanNum(r[4]), ft: gen > 8 ? fiyatTarihiMetni(r[8]) : '', of: gen > 9 ? cleanNum(r[9]) : '', y: gen > 10 ? ulkeMetni(r[10]) : '' };
     });
   }
   var degisen = [], degisenBarkod = {};
@@ -1530,7 +1530,9 @@ function saveKatalogBulk(entries) {
         ft = bugun; of = o.f; // en düşük fiyat aşağıda geçmişe bakılarak düzeltilir
       }
     }
-    return [e.name || '', e.barcode || '', e.stockCode || '', cleanNum(e.oldStock), f, cleanNum(e.kdv), koliCarpan(e.carpan), String(e.birim || ''), ft, of, ulkeMetni(e.ulke)];
+    return [e.name || '', e.barcode || '', e.stockCode || '', cleanNum(e.oldStock), f, cleanNum(e.kdv), koliCarpan(e.carpan), String(e.birim || ''), ft, of,
+      // Ülke alanı HİÇ gelmediyse (eski ERP betiği) tablodaki üretim yeri silinmez, korunur.
+      e.ulke === undefined ? (o ? o.y : '') : ulkeMetni(e.ulke)];
   });
   if (degisen.length) {
     var enDusuk = fiyatGecmisEnDusuk(degisenBarkod);

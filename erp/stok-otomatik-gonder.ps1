@@ -71,7 +71,7 @@ function Cevap-Basarili($sonuc) {
 function Gonder-Sheets($govde, $ne, $adet) {
     for ($deneme = 1; $deneme -le 2; $deneme++) {
         try {
-            $sonuc = Invoke-RestMethod -Uri $AppsScriptUrl -Method Post -Body $govde -ContentType "application/json; charset=utf-8" -TimeoutSec 300
+            $sonuc = Invoke-RestMethod -Uri $AppsScriptUrl -Method Post -Body ([System.Text.Encoding]::UTF8.GetBytes($govde)) -ContentType "application/json; charset=utf-8" -TimeoutSec 300
             $cevapMetni = if ($sonuc -is [string]) { $sonuc.Substring(0, [Math]::Min(120, $sonuc.Length)) } else { $sonuc | ConvertTo-Json -Compress }
             if (Cevap-Basarili $sonuc) {
                 Yaz-Log "BASARILI: $adet $ne gonderildi. Sunucu yaniti: $cevapMetni"
