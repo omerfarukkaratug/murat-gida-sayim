@@ -8,7 +8,9 @@ sunucuya hiçbir şey gönderilmez; baskı telefonun yazdırma penceresiyle yap�
 | Biçim | Ölçü | Kâğıt |
 |---|---|---|
 | Raf etiketi | 70 × 37 mm, sayfada 3 × 8 = 24 | A4 (hazır 70×37 etiket kâğıdı ya da düz kâğıt + kesim çizgisi) |
-| A5 / A4 / A3 afiş | sayfanın tamamı, dikey | seçilen boyutta kâğıt |
+| A6 / A5 / A4 / A3 afiş | sayfanın tamamı, dikey | seçilen boyutta kâğıt |
+
+A6 ve A5'te **üstte 2 cm boşluk** bırakılabilir (varsayılan açık): kâğıt raf etiketliğine sıkıştırıldığında yazı kapanmaz.
 
 Yazdırırken: kâğıt boyutu seçilen biçimle aynı, ölçek **%100**, kenar boşluğu **yok**.
 
@@ -53,3 +55,5 @@ etikette topla" önerir; ad "… ÇEŞİTLERİ 1440 ML" biçiminde gelir, düzel
 Gruptaki ürünlerden birinin fiyatı sonradan değişirse etiket basılmaz; o ürün
 gruptan çıkarılır. Üretim yeri de hepsinde aynı olmalıdır — farklı olanı
 gruptan çıkarıp ayrı etiket basın.
+
+Afişlerde grup etiketinin altında kapsanan çeşitler küçük yazıyla listelenir ("Çeşitler: Lavanta · Gül · …"). Raf etiketinde yer olmadığı için liste basılmaz.
