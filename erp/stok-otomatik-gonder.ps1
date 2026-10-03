@@ -123,7 +123,8 @@ SELECT
   v.KDV_PAREKENDE AS KdvOrani,
   bb.CARPAN AS Carpan,
   sb.AD AS Birim,
-  ul.AD AS Ulke
+  ul.AD AS Ulke,
+  bb.STOK_STOK_BIRIM AS Ssb
 FROM dbo.STOK_BARKOD_BIRIM bb
 LEFT JOIN dbo.STOK_BARKOD_W w ON w.ID = bb.BARKOD
 LEFT JOIN dbo.STOK_BARKOD_FIYAT_VARSAYILAN f ON f.STOK_STOK_BIRIM = bb.STOK_STOK_BIRIM
@@ -143,6 +144,27 @@ LEFT JOIN (
   LEFT JOIN dbo.STOK_MIKTAR_BARKODLU um ON um.BARKOD = ub.BARKOD
   GROUP BY ub.STOK
 ) us ON us.STOK = bb.STOK
+"@
+
+# Fiyat degisiklik kaydi (ERP12: STOK_STOK_BIRIM_DEGISIM). Her urun-birim icin
+# KDV dahil fiyat listesindeki SON degisiklik: tarihi, o gunku yeni fiyat ve
+# degisiklikten onceki 30 gunde gecerli olmus en dusuk fiyat. Etiketteki
+# "fiyat degisiklik tarihi" ve indirimdeki "onceki fiyat" buradan gelir.
+$fiyatTarihQuery = @"
+SELECT t.STOK_STOK_BIRIM AS Ssb, t.TARIH AS Tarih, t.FIYAT AS Fiyat, MIN(d2.ESKI_FIYAT) AS EnDusuk
+FROM (
+  SELECT d.STOK_STOK_BIRIM, d.STOK_FIYAT_AD, d.TARIH, d.FIYAT,
+         ROW_NUMBER() OVER (PARTITION BY d.STOK_STOK_BIRIM ORDER BY d.TARIH DESC, d.ID_IDENT DESC) AS sira
+  FROM dbo.STOK_STOK_BIRIM_DEGISIM d
+  JOIN dbo.STOK_FIYAT_AD fa ON fa.ID = d.STOK_FIYAT_AD
+  WHERE fa.KDV_DAHILMI = 1 AND d.FIYAT <> d.ESKI_FIYAT
+) t
+LEFT JOIN dbo.STOK_STOK_BIRIM_DEGISIM d2
+  ON d2.STOK_STOK_BIRIM = t.STOK_STOK_BIRIM AND d2.STOK_FIYAT_AD = t.STOK_FIYAT_AD
+ AND d2.ESKI_FIYAT > 0 AND d2.FIYAT <> d2.ESKI_FIYAT
+ AND d2.TARIH <= t.TARIH AND d2.TARIH > DATEADD(day, -30, t.TARIH)
+WHERE t.sira = 1
+GROUP BY t.STOK_STOK_BIRIM, t.TARIH, t.FIYAT
 "@
 
 $hataVar = $false
@@ -177,6 +199,20 @@ try {
 
     Yaz-Log "$($rows.Count) satir cekildi, gonderim icin hazirlaniyor..."
 
+    # Fiyat degisiklik tarihleri: bu sorgu basarisiz olursa katalog YINE gonderilir,
+    # sadece tarih bilgisi eksik kalir (sunucu kendi takibini kullanir).
+    $fiyatTarih = @{}
+    $fiyatGecmisBasJson = ''
+    try {
+        $ftRows = Invoke-Sqlcmd -ServerInstance $SqlServer -Database $Database -Query $fiyatTarihQuery -QueryTimeout 180
+        foreach ($g in $ftRows) { $fiyatTarih[[string]$g.Ssb] = $g }
+        $ilk = Invoke-Sqlcmd -ServerInstance $SqlServer -Database $Database -QueryTimeout 60 -Query "SELECT MIN(TARIH) AS Ilk FROM dbo.STOK_STOK_BIRIM_DEGISIM"
+        if ($ilk -and $ilk.Ilk -isnot [System.DBNull]) { $fiyatGecmisBasJson = '"fiyatGecmisBas":"' + ([datetime]$ilk.Ilk).ToString('yyyy-MM-dd') + '",' }
+        Yaz-Log "Fiyat degisiklik kaydi: $($fiyatTarih.Count) urun-birim icin tarih bulundu."
+    } catch {
+        Yaz-Log "UYARI: Fiyat degisiklik tarihleri alinamadi: $($_.Exception.Message) (katalog tarihsiz gonderilecek)"
+    }
+
     $entries = foreach ($r in $rows) {
         $fiyatDeger = $null
         if ($r.Fiyat -ne $null -and $r.Fiyat -isnot [System.DBNull]) { $fiyatDeger = [double]$r.Fiyat }
@@ -189,6 +225,14 @@ try {
         if ($r.Carpan -ne $null -and $r.Carpan -isnot [System.DBNull] -and [double]$r.Carpan -gt 1) { $carpanDeger = [double]$r.Carpan }
         $ulkeDeger = ""
         if ($r.Ulke -ne $null -and $r.Ulke -isnot [System.DBNull]) { $ulkeDeger = ([string]$r.Ulke).Trim() }
+        # ERP'nin kayitli son fiyat degisikligi, SU ANKI fiyatla ayni fiyata aitse kullanilir.
+        $ftDeger = $null
+        $ofDeger = $null
+        $g = $fiyatTarih[[string]$r.Ssb]
+        if ($g -and $fiyatDeger -ne $null -and [Math]::Abs([double]$g.Fiyat - $fiyatDeger) -lt 0.005) {
+            $ftDeger = ([datetime]$g.Tarih).ToString('yyyy-MM-dd')
+            if ($g.EnDusuk -isnot [System.DBNull] -and $g.EnDusuk -ne $null) { $ofDeger = [double]$g.EnDusuk }
+        }
         [PSCustomObject]@{
             name      = [string]$r.UrunAdi
             barcode   = [string]$r.Barkod
@@ -199,12 +243,14 @@ try {
             carpan    = $carpanDeger
             birim     = [string]$r.Birim
             ulke      = $ulkeDeger
+            ft        = $ftDeger
+            of        = $ofDeger
         }
     }
 
     # Liste BİR KEZ JSON'a çevrilir, iki gönderimde de aynı metin kullanılır.
     $entriesJson = ConvertTo-Json -InputObject @($entries) -Depth 4 -Compress
-    $payload = '{"type":"katalog_bulk",' + $ErpAnahtarJson + '"entries":' + $entriesJson + '}'
+    $payload = '{"type":"katalog_bulk",' + $ErpAnahtarJson + $fiyatGecmisBasJson + '"entries":' + $entriesJson + '}'
 
     Yaz-Log "Sunucuya gonderiliyor..."
     if (-not (Gonder-Sheets $payload "urun" $entries.Count)) { $hataVar = $true }

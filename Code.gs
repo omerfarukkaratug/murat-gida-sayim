@@ -8,7 +8,7 @@
 // bir sürüm dağıttıktan sonra /exec adresini boş açtığında burada yazan
 // numarayı görmelisin; index.html'in üstündeki "build" numarasıyla
 // eşleşecek şekilde ben her ikisini birlikte güncelliyorum.
-var GS_VERSION = 'build120';
+var GS_VERSION = 'build122';
 
 // Sheets'te "Saat" sütunu zaman biçimli olarak algılanırsa, hücre değeri düz
 // metin değil bir Date nesnesi olarak gelir ve String(...) çirkin bir çıktı
@@ -48,6 +48,10 @@ function doGet(e) {
   if (P.action === 'etiket_liste') {
     k = kapi('etiket listesi okuma'); if (!k.ok) return kimlikRed(k, P.callback);
     return etiketListeGetir(P.id, P.callback);
+  }
+  if (P.action === 'etiket_kuyruk') {
+    k = kapi('etiket kuyruğu okuma'); if (!k.ok) return kimlikRed(k, P.callback);
+    return etiketKuyrukGetir(P.callback);
   }
   if (P.action === 'guvenlik_getir') return guvenlikGetir(P.user, P.pass, P.callback);
   if (P.action === 'guvenlik_kaydet') return guvenlikKaydet(P.user, P.pass, P.zorunlu, P.callback);
@@ -454,6 +458,49 @@ function etiketListeGetir(id, callback) {
   }
   var ozet = satirlar.map(function (r) { return { id: String(r[0]), zaman: zamanMetni(r[1]), kullanici: String(r[2] || ''), adet: Number(r[3]) || 0 }; }).reverse();
   return outJson({ status: 'ok', listeler: ozet }, callback);
+}
+
+// ---- BASILACAK ETİKETLER KUYRUĞU ----
+// Fiyatı değişen ürün "basılacak"tır; etiketi basılınca (barkod + o fiyatın tarihi)
+// buraya yazılır ve bütün telefonlarda kuyruktan düşer. Fiyat yeniden değişirse
+// tarih değiştiği için ürün kuyruğa yeniden girer.
+var ETIKET_BASILDI_SEKME = 'EtiketBasildi';
+var ETIKET_BASILDI_BASLIK = ['Barkod', 'Fiyat Tarihi', 'Zaman', 'Kullanıcı'];
+var ETIKET_BASILDI_SAKLA_GUN = 60;
+function etiketBasildiOku() {
+  var sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(ETIKET_BASILDI_SEKME);
+  var son = sheet ? sheet.getLastRow() : 0, m = {};
+  if (son >= 2) sheet.getRange(2, 1, son - 1, 4).getValues().forEach(function (r) {
+    var b = String(r[0] || ''); if (b) m[b] = [fiyatTarihiMetni(r[1]), String(r[2] || ''), String(r[3] || '')];
+  });
+  return m;
+}
+function etiketBasildiKaydet(urunler, gonderen) {
+  if (!Array.isArray(urunler) || !urunler.length) return jsonCikti({ status: 'error', message: 'Boş liste' });
+  var m = etiketBasildiOku();
+  var simdi = Utilities.formatDate(new Date(), fiyatTz(), 'dd.MM.yyyy HH:mm'), kim = String(gonderen || '').substring(0, 60), n = 0;
+  urunler.slice(0, 2000).forEach(function (u) {
+    var b = String((u && u[0]) || '').trim(), ft = erpFiyatTarihi(u && u[1]);
+    if (!b || !ft) return;
+    m[b] = [ft, simdi, kim]; n++;
+  });
+  // Eski kayıtlar atılır: o tarihli değişim artık kuyruk penceresinin dışında.
+  var sinir = Utilities.formatDate(new Date(Date.now() - ETIKET_BASILDI_SAKLA_GUN * 86400000), fiyatTz(), 'yyyy-MM-dd');
+  var rows = Object.keys(m).filter(function (b) { return m[b][0] >= sinir; }).map(function (b) { return [b, m[b][0], m[b][1], m[b][2]]; });
+  var ss = SpreadsheetApp.getActiveSpreadsheet();
+  var sheet = ss.getSheetByName(ETIKET_BASILDI_SEKME) || ss.insertSheet(ETIKET_BASILDI_SEKME);
+  if (sheet.getMaxRows() < rows.length + 1) sheet.insertRowsAfter(sheet.getMaxRows(), rows.length + 1 - sheet.getMaxRows());
+  sheet.getRange(1, 1, Math.max(rows.length, 1) + 1, 4).setNumberFormat('@');
+  if (rows.length) tabloyuDegistir(sheet, ETIKET_BASILDI_BASLIK, rows);
+  return jsonCikti({ status: 'ok', kaydedilen: n });
+}
+function etiketKuyrukGetir(callback) {
+  var props = PropertiesService.getScriptProperties();
+  var bas = props.getProperty('ETIKET_KUYRUK_BASLANGIC');
+  if (!bas) { bas = Utilities.formatDate(new Date(), fiyatTz(), 'yyyy-MM-dd'); props.setProperty('ETIKET_KUYRUK_BASLANGIC', bas); }
+  var m = etiketBasildiOku(), basilan = {};
+  Object.keys(m).forEach(function (b) { basilan[b] = m[b][0]; });
+  return outJson({ status: 'ok', baslangic: bas, basilan: basilan }, callback);
 }
 
 function jsonCikti(o) { return ContentService.createTextOutput(JSON.stringify(o)).setMimeType(ContentService.MimeType.JSON); }
@@ -1298,7 +1345,7 @@ function doPostIsle(e) {
     var postKapi = (topluMu && erpAnahtarDogru(data.anahtar)) ? { ok: true }
       : kimlikGerek(data.user, data.pass,
           data.type === 'katalog_bulk' ? 'katalog gönderimi' : data.type === 'cari_bulk' ? 'cari gönderimi'
-            : data.type === 'etiket_liste' ? 'etiket listesi gönderimi' : data.type === 'katalog_item' ? 'yeni ürün gönderimi' : data.type === 'mal_hareket' ? 'mal hareketi gönderimi' : 'sayım gönderimi',
+            : data.type === 'etiket_liste' ? 'etiket listesi gönderimi' : data.type === 'etiket_basildi' ? 'etiket basıldı kaydı' : data.type === 'katalog_item' ? 'yeni ürün gönderimi' : data.type === 'mal_hareket' ? 'mal hareketi gönderimi' : 'sayım gönderimi',
           topluMu ? 'ayarlar' : null);
     var gonderenAd = data.user ? String(data.user) : '';
     // Şifre ve anahtar bundan sonra HİÇBİR yere (günlük, kuyruk, veri tabanı) taşınmaz.
@@ -1312,7 +1359,11 @@ function doPostIsle(e) {
       gunlukYaz('etiket_liste', kaynak, 'Etiket listesi: ' + ((data.liste || []).length) + ' ürün', eOut.getContent().indexOf('"error"') !== -1);
       return eOut;
     }
+    if (data.type === 'etiket_basildi') return etiketBasildiKaydet(data.urunler, gonderenAd);
     if (data.type === 'katalog_bulk') {
+      // ERP'nin fiyat değişiklik kaydı ne kadar geriye gidiyorsa "geçmiş başlangıcı" o gündür.
+      var gb = erpFiyatTarihi(data.fiyatGecmisBas), gbProps = PropertiesService.getScriptProperties(), gbEski = gbProps.getProperty('FIYAT_IZLEME_BASLANGIC');
+      if (gb && (!gbEski || gb < gbEski)) gbProps.setProperty('FIYAT_IZLEME_BASLANGIC', gb);
       var kOut = saveKatalogBulk(data.entries || []);
       var kDegismedi = kOut.getContent().indexOf('degisiklikYok') !== -1;
       var kBos = kOut.getContent().indexOf('bosListe') !== -1;
@@ -1507,6 +1558,12 @@ function koliCarpan(v) {
 // 11. sütun 'Üretim Yeri': ERP12 stok kartındaki ülke (dbo.ULKE.AD). Etiketteki
 // "Üretim yeri" ve yerli üretim logosu buradan gelir; ERP'de boşsa boş kalır.
 var KATALOG_BASLIK = ['Ürün Adı', 'Barkod', 'Stok Kodu', 'Eski Stok', 'Fiyat', 'KDV %', 'Koli Çarpanı', 'Birim', 'Fiyat Tarihi', 'Önceki Fiyat', 'Üretim Yeri'];
+// ERP'den gelen fiyat tarihi: yalnızca 'yyyy-MM-dd' ve bugünden ileri olmayan değer kabul edilir.
+function erpFiyatTarihi(v) {
+  var m = /^(\d{4}-\d{2}-\d{2})$/.exec(String(v == null ? '' : v).trim());
+  if (!m) return '';
+  return m[1] <= Utilities.formatDate(new Date(), fiyatTz(), 'yyyy-MM-dd') ? m[1] : '';
+}
 function ulkeMetni(v) { return String(v == null ? '' : v).replace(/\s+/g, ' ').trim().substring(0, 60); }
 var FIYAT_GECMIS_SEKME = 'FiyatGecmisi';
 var FIYAT_GECMIS_BASLIK = ['Zaman', 'Barkod', 'Eski Fiyat', 'Yeni Fiyat'];
@@ -1563,7 +1620,7 @@ function saveKatalogBulk(entries) {
   var sheet = ss.getSheetByName('Katalog');
   if (!sheet) sheet = ss.insertSheet('Katalog');
   var props = PropertiesService.getScriptProperties();
-  var ozet = listeOzeti(entries.map(function (e) { return [e.name || '', e.barcode || '', e.stockCode || '', cleanNum(e.oldStock), cleanNum(e.price), cleanNum(e.kdv), koliCarpan(e.carpan), String(e.birim || ''), ulkeMetni(e.ulke)]; }));
+  var ozet = listeOzeti(entries.map(function (e) { return [e.name || '', e.barcode || '', e.stockCode || '', cleanNum(e.oldStock), cleanNum(e.price), cleanNum(e.kdv), koliCarpan(e.carpan), String(e.birim || ''), ulkeMetni(e.ulke), erpFiyatTarihi(e.ft), cleanNum(e.of)]; }));
   if (entries.length > 0 && ozet === props.getProperty('KATALOG_OZET') && sheet.getLastRow() === entries.length + 1) {
     return ContentService.createTextOutput(JSON.stringify({ status: 'ok', saved: 0, degisiklikYok: true })).setMimeType(ContentService.MimeType.JSON);
   }
@@ -1584,7 +1641,7 @@ function saveKatalogBulk(entries) {
       eski[b] = { f: cleanNum(r[4]), ft: gen > 8 ? fiyatTarihiMetni(r[8]) : '', of: gen > 9 ? cleanNum(r[9]) : '', y: gen > 10 ? ulkeMetni(r[10]) : '' };
     });
   }
-  var degisen = [], degisenBarkod = {};
+  var degisen = [], degisenBarkod = {}, erpli = {};
   var rows = entries.map(function (e) {
     var b = String(e.barcode || ''), f = cleanNum(e.price), o = eski[b], ft = '', of = '';
     if (o) {
@@ -1594,6 +1651,10 @@ function saveKatalogBulk(entries) {
         ft = bugun; of = o.f; // en düşük fiyat aşağıda geçmişe bakılarak düzeltilir
       }
     }
+    // ERP kendi fiyat değişiklik kaydını gönderdiyse (STOK_STOK_BIRIM_DEGISIM) o esastır:
+    // gerçek değişiklik günü ve değişiklikten önceki 30 günün en düşük fiyatı.
+    var eft = erpFiyatTarihi(e.ft);
+    if (eft) { ft = eft; var eof = cleanNum(e.of); of = (typeof eof === 'number' && eof > 0) ? eof : ''; erpli[b] = true; }
     return [e.name || '', e.barcode || '', e.stockCode || '', cleanNum(e.oldStock), f, cleanNum(e.kdv), koliCarpan(e.carpan), String(e.birim || ''), ft, of,
       // Ülke alanı HİÇ gelmediyse (eski ERP betiği) tablodaki üretim yeri silinmez, korunur.
       e.ulke === undefined ? (o ? o.y : '') : ulkeMetni(e.ulke)];
@@ -1602,7 +1663,7 @@ function saveKatalogBulk(entries) {
     var enDusuk = fiyatGecmisEnDusuk(degisenBarkod);
     rows.forEach(function (r) {
       var b = String(r[1]);
-      if (degisenBarkod[b] && enDusuk[b] !== undefined && typeof r[9] === 'number' && enDusuk[b] < r[9]) r[9] = enDusuk[b];
+      if (degisenBarkod[b] && !erpli[b] && enDusuk[b] !== undefined && typeof r[9] === 'number' && enDusuk[b] < r[9]) r[9] = enDusuk[b];
     });
   }
 

@@ -224,6 +224,16 @@
       <button type="button" id="elleBtn" style="width:100%; margin-top:8px; border-style:dashed; font-size:13px;">➕ Katalogda olmayan ürünü elle ekle</button>
     </div>
 
+    <!-- Basılacak etiketler: fiyatı değişip etiketi henüz basılmamış ürünler (bütün cihazlarda ortak) -->
+    <div class="kart gizli" id="kuyrukKart" style="border:2px solid var(--amber);">
+      <div class="kartBaslik">🔔 Basılacak etiketler</div>
+      <div id="kuyrukBilgi" style="font-size:14px; margin-bottom:8px;"></div>
+      <div class="satir">
+        <button type="button" id="kuyrukEkleBtn" style="flex:1.6;">Hepsini listeye ekle</button>
+        <button type="button" id="kuyrukAtlaBtn" style="flex:1; font-size:13px;">Basıldı say</button>
+      </div>
+    </div>
+
     <div class="kart" id="topluKart">
       <div class="kartBaslik">Toplu ekle</div>
       <div id="topluBilgi" class="ipucu" style="margin-bottom:8px;"></div>
@@ -366,6 +376,7 @@
     r.forEach(function(k){ katalogHarita[String(k.barcode)] = k; });
     katalogBilgisi();
     topluBilgiCiz();
+    kuyrukYukle();
     fiyatlariTazele();
     listeCiz(); ciz();
   });
@@ -783,6 +794,65 @@
     var b = e.target.closest('button[data-liste]'); if(b) listeyiAl(b.getAttribute('data-liste'));
   });
 
+  // ---------- Basılacak etiketler kuyruğu ----------
+  // Fiyatı değişen ürün (katalogdaki fiyat tarihi) etiketi basılana kadar burada görünür.
+  // "Basıldı" bilgisi sunucuda ortak tutulur: bir cihazda basılan, diğerinde kuyruktan düşer.
+  var KUYRUK_GUN = 30;
+  var kuyruk = { hazir: false, baslangic: '', basilan: {} };
+  function kuyrukListe(){
+    if(!kuyruk.hazir) return [];
+    return degisenler(KUYRUK_GUN, false).filter(function(x){
+      return x.k.ft >= kuyruk.baslangic && kuyruk.basilan[String(x.k.barcode)] !== x.k.ft;
+    });
+  }
+  function kuyrukCiz(){
+    var l = kuyrukListe(), kart = $('kuyrukKart');
+    kart.classList.toggle('gizli', !l.length);
+    if(!l.length) return;
+    var dusen = l.filter(function(x){ return !!x.d; }).length;
+    $('kuyrukBilgi').innerHTML = '<b>' + l.length + '</b> ürünün fiyatı değişti, etiketi henüz basılmadı' + (dusen ? ' (' + dusen + ' tanesinde fiyat düştü)' : '') + '.' +
+      '<div class="ipucu" style="margin-top:4px;">' + esc(l.slice(0, 4).map(function(x){ return x.k.name; }).join(' · ')) + (l.length > 4 ? ' …' : '') + '</div>';
+  }
+  function kuyrukYukle(){
+    if(!navigator.onLine) return;
+    sunucuSor({ action: 'etiket_kuyruk' }, function(hata, veri){
+      if(hata || !veri || veri.status !== 'ok' || !veri.baslangic) return;   // eski sunucu sürümü: kuyruk görünmez
+      kuyruk = { hazir: true, baslangic: String(veri.baslangic), basilan: veri.basilan || {} };
+      kuyrukCiz();
+    });
+  }
+  // urunler: [[barkod, fiyatTarihi], ...] — sunucuya "basıldı" yazar; yerelde hemen düşer.
+  function basildiIsaretle(urunler){
+    if(!urunler.length) return;
+    urunler.forEach(function(u){ kuyruk.basilan[u[0]] = u[1]; });
+    kuyrukCiz();
+    var k = kimlikBilgisi(), govde = { type: 'etiket_basildi', urunler: urunler, kaynak: 'telefon: ' + (kullanici.name || '?') };
+    if(k){ govde.user = k.user; govde.pass = k.pass; }
+    fetch(SUNUCU, { method: 'POST', mode: 'no-cors', headers: { 'Content-Type': 'text/plain;charset=utf-8' }, body: JSON.stringify(govde) })
+      .catch(function(){ toast('İnternet yok: "basıldı" bilgisi diğer cihazlara ulaşmadı', 'uyari'); });
+  }
+  // Listedeki (basılabilir) ürünlerden kuyrukta bekleyenler.
+  function basilanKuyrukUrunleri(){
+    if(!kuyruk.hazir) return [];
+    var c = [], gorulen = {};
+    durum.liste.forEach(function(u){
+      if(eksikler(u).length) return;
+      (u.grup ? u.grup.map(function(g){ return g.barkod; }) : [u.barkod]).forEach(function(b){
+        var kt = katalogHarita[String(b)];
+        if(!b || gorulen[b] || !kt || !kt.ft || kt.ft < kuyruk.baslangic || kuyruk.basilan[String(b)] === kt.ft) return;
+        gorulen[b] = true; c.push([String(b), kt.ft]);
+      });
+    });
+    return c;
+  }
+  $('kuyrukEkleBtn').addEventListener('click', function(){ topluEkle(kuyrukListe(), false, ''); window.scrollTo(0, $('liste').getBoundingClientRect().top + window.pageYOffset - 70); });
+  $('kuyrukAtlaBtn').addEventListener('click', function(){
+    var l = kuyrukListe();
+    if(!l.length || !window.confirm(l.length + ' ürün etiketi basılmış sayılacak ve kuyruktan çıkacak (bütün cihazlarda).\n\nEtiketleri gerçekten başka yoldan bastıysan ya da gerek yoksa onayla.')) return;
+    basildiIsaretle(l.map(function(x){ return [String(x.k.barcode), x.k.ft]; }));
+    toast(l.length + ' ürün kuyruktan çıkarıldı');
+  });
+
   $('temizleBtn').addEventListener('click', function(){
     if(!durum.liste.length || !window.confirm('Listedeki ' + durum.liste.length + ' ürün çıkarılsın mı? (Üretim yeri gibi bilgiler hatırlanır.)')) return;
     durum.liste = []; kaydet(); listeCiz(); ciz();
@@ -1057,6 +1127,14 @@
     if(yerliSayi && !yerliLogoVar && !window.confirm(yerliSayi + ' ürün Türkiye\'de üretilmiş ama yerli üretim logosu dosyası yüklü değil.\nBu etiketler yönetmeliğe göre EKSİK olur.\n\nYine de yazdırılsın mı?')) return;
     kameraKapat();
     ciz();
+    var bekleyen = basilanKuyrukUrunleri(), soruldu = false;
+    var sor = function(){
+      if(soruldu || !bekleyen.length) return; soruldu = true;
+      setTimeout(function(){
+        if(window.confirm('Etiketler basıldı mı?\n\n"Tamam" dersen fiyatı değişen ' + bekleyen.length + ' ürün "basılacaklar" kuyruğundan çıkar (bütün cihazlarda). Baskı iptal olduysa ya da bozuk çıktıysa "İptal" de.')) basildiIsaretle(bekleyen);
+      }, 400);
+    };
+    window.addEventListener('afterprint', function bitti(){ window.removeEventListener('afterprint', bitti); sor(); });
     setTimeout(function(){ window.print(); }, 150);
   });
 
