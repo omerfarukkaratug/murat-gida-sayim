@@ -308,6 +308,7 @@
 <div id="secim" class="gizli">
   <div id="secimUst">
     <div style="display:flex; justify-content:space-between; align-items:center; gap:8px;"><b id="secimBaslik" style="font-size:16px;"></b><button type="button" id="secimKapat" style="padding:6px 12px;">✕ Kapat</button></div>
+    <input id="secimAra" type="search" class="gizli" placeholder="Ürün adı, barkod ya da stok kodu ile ara" autocomplete="off" style="margin-top:10px;">
     <label style="display:flex; align-items:center; gap:10px; margin-top:10px; text-transform:none; letter-spacing:0; font-size:14px; color:var(--text);"><input id="secimTumu" type="checkbox" style="width:22px; height:22px;"> <span id="secimSayi"></span></label>
   </div>
   <div id="secimListe"></div>
@@ -782,7 +783,9 @@
             '<div class="ipucu" style="margin-bottom:4px;"><b>Bu etiketin kapsadığı ürünler</b> — fiyatı ya da üretim yeri farklı olanı, alakasız ürünü çıkar:</div>' +
             u.grup.map(function(x){ return '<div style="display:flex; justify-content:space-between; gap:8px; font-size:12.5px; padding:3px 0;"><span>' + esc(x.ad) + '</span>' +
               '<button type="button" data-is="gcikar" data-b="' + esc(x.barkod) + '" style="padding:0 6px; font-size:12px; border:none; background:transparent; color:var(--red); flex-shrink:0;">✕</button></div>'; }).join('') +
-            '<button type="button" data-is="dagit" style="margin-top:6px; padding:6px 10px; font-size:12px;">Grubu dağıt (tek ürüne dön)</button></div>' : '') +
+            '<div style="display:flex; gap:6px; margin-top:6px; flex-wrap:wrap;"><button type="button" data-is="grupEkle" style="padding:6px 10px; font-size:12px;">➕ Bu etikete ürün ekle</button>' +
+            '<button type="button" data-is="dagit" style="padding:6px 10px; font-size:12px;">Grubu dağıt (tek ürüne dön)</button></div></div>'
+          : (ac && !u.elle && u.barkod ? '<button type="button" data-is="grupEkle" style="width:100%; margin-top:8px; font-size:13px; border-style:dashed; text-align:left;">➕ Aynı fiyatlı başka ürünleri bu etikete ekle (listeden seç)</button>' : '')) +
         // --- Özet: en çok gereken bilgiler; ayrıntı "Düzenle" ile açılır ---
         (!String(u.yer || '').trim() && !ac
           ? '<div class="satir" style="margin-top:8px;"><div style="flex:1.5;"><input data-al="yer" class="eksik" list="ulkeler" value="" placeholder="Üretim yeri (ülke seç ya da yaz)"></div><button type="button" data-is="tr" style="flex:none; padding:10px;">Türkiye</button></div>'
@@ -865,6 +868,7 @@
       if(u.grup.length <= 1){ var tek = u.grup[0]; if(tek){ u.barkod = tek.barkod; u.ad = tek.ad; u.katalogAd = tek.ad; } u.grup = null; }
       else if(cb === u.barkod){ u.barkod = u.grup[0].barkod; u.katalogAd = u.grup[0].ad; }
     }
+    else if(b.getAttribute('data-is') === 'grupEkle'){ grupSecimAc(u); return; }
     else if(b.getAttribute('data-is') === 'dagit'){ u.grup = null; u.ad = u.katalogAd || u.ad; }
     kaydet(); listeCiz(); ciz();
   });
@@ -1187,19 +1191,89 @@
     secimSay();
     $('secim').classList.remove('gizli');
   }
-  function secimKapat(){ $('secim').classList.add('gizli'); }
+  // ---- Gruba ürün ekleme: katalogdan, fiyat-gör gibi fiyatlı liste. Yalnızca AYNI fiyatlı ürün seçilebilir. ----
+  var GRUP_LISTE_SINIR = 150;
+  function grupSecimCiz(){
+    var u = secim.hedef, q = normTr($('secimAra').value).trim(), parca = q.split(/\s+/).filter(Boolean), satir = [], n = 0;
+    var icinde = {}; (u.grup || [{ barkod: u.barkod }]).forEach(function(x){ icinde[String(x.barkod)] = true; });
+    var gorulen = {};
+    for(var i = 0; i < katalog.length && n < GRUP_LISTE_SINIR; i++){
+      var k = katalog[i], b = String(k.barcode);
+      if(icinde[b] || k.price === '' || Number(k.carpan) > 1) continue;
+      var f = sayi(k.price); if(isNaN(f) || f <= 0) continue;
+      var ayni = Math.abs(f - u.fiyat) <= 0.004;
+      if(!parca.length && !ayni) continue;                       // arama yokken yalnızca aynı fiyatlılar
+      if(parca.length){
+        var metin = normTr(k.name) + ' ' + b + ' ' + normTr(k.stockCode || '');
+        if(!parca.every(function(p){ return metin.indexOf(p) !== -1; })) continue;
+      }
+      var ad = normTr(k.name); if(gorulen[ad]) continue; gorulen[ad] = true;   // aynı ürünün ikinci barkodu
+      n++;
+      satir.push({ k: k, b: b, f: f, ayni: ayni });
+    }
+    // Aynı fiyatlılar üstte; farklı fiyatlılar altta, seçilemez.
+    satir.sort(function(a, c){ return (c.ayni ? 1 : 0) - (a.ayni ? 1 : 0) || String(a.k.name).localeCompare(String(c.k.name), 'tr'); });
+    $('secimListe').innerHTML = satir.length ? satir.map(function(x){
+      return '<label class="secSatir" style="text-transform:none; letter-spacing:0; margin:0;' + (x.ayni ? '' : ' opacity:.5;') + '">' +
+        '<input type="checkbox" data-g="' + esc(x.b) + '"' + (x.ayni ? (secim.isaret[x.b] ? ' checked' : '') : ' disabled') + '>' +
+        '<div style="flex:1; min-width:0;"><div style="font-weight:700; font-size:14px; color:var(--text);">' + esc(x.k.name) + '</div>' +
+        '<div class="ipucu">' + esc(x.b) + (x.k.stockCode ? ' · ' + esc(x.k.stockCode) : '') + (x.ayni ? '' : ' · <b style="color:var(--red);">fiyatı farklı, eklenemez</b>') + '</div></div>' +
+        '<div style="font-family:var(--mono); font-weight:800; font-size:16px; color:' + (x.ayni ? 'var(--green)' : 'var(--muted)') + '; white-space:nowrap;">' + para(x.f) + ' ₺</div></label>';
+    }).join('') + (n >= GRUP_LISTE_SINIR ? '<div class="ipucu" style="padding:10px;">Çok ürün var — aramayı daralt.</div>' : '')
+      : '<div class="ipucu" style="padding:14px;">' + (parca.length ? 'Aramaya uyan ürün yok.' : 'Bu fiyatta başka ürün yok. Başka fiyattaki ürün aynı etikete eklenemez.') + '</div>';
+    grupSecimSay();
+  }
+  function grupSecimSay(){
+    var n = Object.keys(secim.isaret).filter(function(b){ return secim.isaret[b]; }).length;
+    $('secimSayi').textContent = n + ' ürün seçili · etiket fiyatı ' + para(secim.hedef.fiyat) + ' ₺';
+  }
+  function grupSecimAc(u){
+    secim = { mod: 'grup', hedef: u, isaret: {}, liste: [] };
+    $('secimBaslik').textContent = 'Etikete ürün ekle';
+    $('secimAra').value = ''; $('secimAra').classList.remove('gizli');
+    $('secimTumu').parentNode.firstElementChild.classList.add('gizli');
+    $('secimBasBtn').classList.add('gizli'); $('secimEkleBtn').textContent = 'Seçilenleri etikete ekle';
+    grupSecimCiz();
+    $('secim').classList.remove('gizli');
+  }
+  var grupAraZ = null;
+  $('secimAra').addEventListener('input', function(){ clearTimeout(grupAraZ); grupAraZ = setTimeout(grupSecimCiz, 200); });
+  function grupSecimUygula(){
+    var u = secim.hedef, yeni = Object.keys(secim.isaret).filter(function(b){ return secim.isaret[b]; });
+    if(!yeni.length){ toast('Hiç ürün seçilmedi', 'uyari'); return; }
+    var uyeler = u.grup ? u.grup.slice() : [{ barkod: u.barkod, ad: u.katalogAd || u.ad }], eklenen = 0;
+    yeni.forEach(function(b){
+      var k = katalogHarita[b]; if(!k || Math.abs(sayi(k.price) - u.fiyat) > 0.004) return;   // fiyat bir kez daha doğrulanır
+      if(uyeler.some(function(x){ return x.barkod === b; })) return;
+      uyeler.push({ barkod: b, ad: k.name }); eklenen++;
+    });
+    var ilkKez = !u.grup;
+    u.grup = uyeler; if(ilkKez) u.ad = grupAdiOner(uyeler);
+    benzerOnbellek = {};
+    secimKapat(); kaydet(); listeCiz(); ciz();
+    toast(eklenen + ' ürün etikete eklendi' + (ilkKez ? ' — etiket adını kontrol et' : ''));
+  }
+  function secimKapat(){
+    $('secim').classList.add('gizli');
+    // Pencere bir sonraki açılış için normal haline döner.
+    $('secimAra').classList.add('gizli'); $('secimTumu').parentNode.firstElementChild.classList.remove('gizli');
+    $('secimBasBtn').classList.remove('gizli'); $('secimEkleBtn').textContent = 'Listeye ekle';
+  }
   function secimUygula(){
     var l = secim.liste.filter(function(x){ return secim.isaret[String(x.k.barcode)]; });
     if(!l.length){ toast('Hiç ürün seçilmedi', 'uyari'); return false; }
     secimKapat(); topluEkle(l, secim.indirimli, secim.bitis); return true;
   }
   $('secimKapat').addEventListener('click', secimKapat);
-  $('secimListe').addEventListener('change', function(e){ var b = e.target.getAttribute('data-b'); if(b){ secim.isaret[b] = e.target.checked; secimSay(); } });
+  $('secimListe').addEventListener('change', function(e){
+    var g = e.target.getAttribute('data-g'); if(g){ secim.isaret[g] = e.target.checked; grupSecimSay(); return; }
+    var b = e.target.getAttribute('data-b'); if(b){ secim.isaret[b] = e.target.checked; secimSay(); }
+  });
   $('secimTumu').addEventListener('change', function(){
     var v = this.checked; secim.liste.forEach(function(x){ secim.isaret[String(x.k.barcode)] = v; });
     Array.prototype.forEach.call($('secimListe').querySelectorAll('input[data-b]'), function(c){ c.checked = v; }); secimSay();
   });
-  $('secimEkleBtn').addEventListener('click', function(){ secimUygula(); });
+  $('secimEkleBtn').addEventListener('click', function(){ if(secim.mod === 'grup') grupSecimUygula(); else secimUygula(); });
   $('secimBasBtn').addEventListener('click', function(){
     if(!secimUygula()) return;
     // Yazıcı tanımlıysa yazıcıya gönder, değilse bu cihazdan yazdır. Eksik bilgi varsa orada uyarır.
