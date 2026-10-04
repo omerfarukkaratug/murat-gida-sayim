@@ -314,6 +314,12 @@
 </div>
 
 <datalist id="ulkeler"></datalist>
+<div id="yaziciSec" class="gizli" style="position:fixed; inset:0; z-index:60; background:rgba(0,0,0,.45); display:flex; align-items:flex-end;">
+  <div style="width:100%; max-height:80dvh; overflow-y:auto; background:var(--panel); border-radius:18px 18px 0 0; padding:16px 14px calc(16px + env(safe-area-inset-bottom));">
+    <div style="display:flex; justify-content:space-between; align-items:center; gap:8px;"><div><b style="font-size:16px;">Hangi yazıcıya gönderilsin?</b><div id="ysBaslik" class="ipucu"></div></div><button type="button" id="ysKapat" style="padding:6px 12px;">✕</button></div>
+    <div id="ysListe"></div>
+  </div>
+</div>
 <div id="secim" class="gizli">
   <div id="secimUst">
     <div style="display:flex; justify-content:space-between; align-items:center; gap:8px;"><b id="secimBaslik" style="font-size:16px;"></b><button type="button" id="secimKapat" style="padding:6px 12px;">✕ Kapat</button></div>
@@ -1136,17 +1142,38 @@
   // İş sunucuya yazılır; yazıcının bağlı olduğu bilgisayardaki program alıp basar.
   var baski = { yazicilar: [], isler: [], hazir: false }, izlenen = {};
   var DURUM_AD = { onay_bekliyor: '⏳ onay bekliyor', bekliyor: '🕓 sırada', basiliyor: '🖨️ basılıyor', basildi: '✅ basıldı', hata: '❌ hata', iptal: '🚫 iptal' };
+  var yaziciDuzen = '';   // düzenlemesi açık yazıcı
+  function bicimYazi(y){ return y.bicimler && y.bicimler.length ? y.bicimler.map(function(b){ return (BICIM[b] || {}).ad || b; }).join(', ') : 'her biçim'; }
+  function yaziciBasar(y){ return !y.gizli && (!y.bicimler || !y.bicimler.length || y.bicimler.indexOf(durum.bicim) !== -1); }
   function yaziciBul(kimlik){ return baski.yazicilar.filter(function(y){ return y.kimlik === kimlik; })[0]; }
   function baskiCiz(){
     var yk = $('baskiYazicilar'), ik = $('baskiIsler'), yon = kullanici.role === 'yonetici';
     if(!baski.hazir){ yk.textContent = 'Yazıcı bilgisi alınamadı (internet yok ya da sunucu eski sürümde).'; ik.innerHTML = ''; return; }
-    yk.innerHTML = baski.yazicilar.length ? baski.yazicilar.map(function(y){
-      return '<div style="display:flex; align-items:center; gap:8px; padding:5px 0; border-bottom:1px solid var(--line, #e5e5e5);">' +
-        '<div style="flex:1; min-width:0;"><b style="color:var(--text);">' + esc(y.ad) + '</b> ' + (y.cevrimici ? '<span style="color:var(--green);">● açık</span>' : '<span style="color:var(--red);">● kapalı</span>') +
-        '<div style="font-size:11px;">' + esc(y.bilgisayar) + ' · ' + (y.mod === 'manuel' ? 'manuel: bilgisayardaki kişi onaylar' : 'otomatik basar') + '</div></div>' +
-        (yon ? '<button type="button" data-yz="mod" data-k="' + esc(y.kimlik) + '" style="padding:5px 8px; font-size:11px;">' + (y.mod === 'manuel' ? 'Otomatik yap' : 'Manuel yap') + '</button>' +
-               '<button type="button" data-yz="ad" data-k="' + esc(y.kimlik) + '" style="padding:5px 8px; font-size:11px;">Ad</button>' : '') + '</div>';
-    }).join('') : 'Henüz yazıcı tanımlı değil. Yazıcının bağlı olduğu bilgisayara baskı programı kurulunca burada görünür.';
+    var gorunen = baski.yazicilar.filter(function(y){ return yon || !y.gizli; });
+    var konumlar = []; gorunen.forEach(function(y){ var k = y.konum || ''; if(konumlar.indexOf(k) === -1) konumlar.push(k); });
+    konumlar.sort(function(a, b){ return (a === '') - (b === '') || a.localeCompare(b, 'tr'); });
+    yk.innerHTML = gorunen.length ? konumlar.map(function(k){
+      return (konumlar.length > 1 || k ? '<div style="font-size:11px; font-weight:800; letter-spacing:.06em; text-transform:uppercase; margin:10px 0 2px; color:var(--muted);">' + esc(k || 'Konumu yazılmamış') + '</div>' : '') +
+        gorunen.filter(function(y){ return (y.konum || '') === k; }).map(function(y){
+          var acik = yaziciDuzen === y.kimlik;
+          return '<div style="padding:6px 0; border-bottom:1px solid var(--line, #e5e5e5);">' +
+            '<div style="display:flex; align-items:center; gap:8px;"><div style="flex:1; min-width:0;"><b style="color:var(--text);">' + esc(y.ad) + '</b> ' +
+              (y.cevrimici ? '<span style="color:var(--green);">● açık</span>' : '<span style="color:var(--red);">● kapalı</span>') + (y.gizli ? ' <span style="color:var(--amber);">(gizli)</span>' : '') +
+              '<div style="font-size:11px;">' + esc(bicimYazi(y)) + ' · ' + (y.mod === 'manuel' ? 'onaylı (manuel)' : 'otomatik') + ' · ' + esc(y.bilgisayar) + '</div></div>' +
+              (yon ? '<button type="button" data-yz="duzen" data-k="' + esc(y.kimlik) + '" style="padding:6px 10px; font-size:12px;">' + (acik ? 'Kapat' : 'Düzenle') + '</button>' : '') + '</div>' +
+            (acik ? '<div style="margin-top:8px; padding:10px; border:1px dashed var(--line); border-radius:12px;">' +
+              '<label>Uygulamada görünecek ad</label><input id="yzAd" value="' + esc(y.ad) + '" maxlength="40">' +
+              '<label>Konum (kat, bölüm ya da şube)</label><input id="yzKonum" value="' + esc(y.konum || '') + '" maxlength="40" list="yzKonumlar" placeholder="örn. Alt kat, Üst kat, Merkez, Şube 2">' +
+              '<datalist id="yzKonumlar">' + konumlar.filter(Boolean).map(function(x){ return '<option value="' + esc(x) + '">'; }).join('') + '</datalist>' +
+              '<label>Bu yazıcı hangi biçimleri basar? (hiçbiri işaretli değilse hepsi)</label><div style="display:flex; flex-wrap:wrap; gap:6px 14px; font-size:13.5px;">' +
+                ['raf', 'a6', 'a5', 'a4', 'a3'].map(function(b){ return '<label style="display:flex; align-items:center; gap:6px; margin:0; text-transform:none; letter-spacing:0; color:var(--text);"><input type="checkbox" data-yzb="' + b + '"' + (y.bicimler.indexOf(b) !== -1 ? ' checked' : '') + ' style="width:20px; height:20px;">' + esc(BICIM[b].ad) + '</label>'; }).join('') + '</div>' +
+              '<div class="satir"><div><label>Baskı</label><select id="yzMod"><option value="otomatik"' + (y.mod !== 'manuel' ? ' selected' : '') + '>Otomatik bassın</option><option value="manuel"' + (y.mod === 'manuel' ? ' selected' : '') + '>Bilgisayardaki kişi onaylasın</option></select></div></div>' +
+              '<label style="display:flex; align-items:center; gap:8px; margin-top:10px; text-transform:none; letter-spacing:0; font-size:13.5px; color:var(--text);"><input id="yzGizli" type="checkbox"' + (y.gizli ? ' checked' : '') + ' style="width:20px; height:20px;">Yazıcı listesinde gösterme (kullanılmayan yazıcı)</label>' +
+              '<div class="satir" style="margin-top:10px;"><button type="button" class="ana" data-yz="kaydet" data-k="' + esc(y.kimlik) + '" style="flex:1.5;">Kaydet</button>' +
+              '<button type="button" data-yz="sil" data-k="' + esc(y.kimlik) + '" style="flex:1; color:var(--red);">Sil</button></div>' +
+              '<div class="ipucu" style="margin-top:4px;">Windows adı: ' + esc(y.windowsAdi) + '. Silinen yazıcı, bilgisayarındaki program çalışıyorsa yeniden görünür; kalıcı kaldırmak için "gösterme"yi işaretle.</div></div>' : '') + '</div>';
+        }).join('');
+    }).join('') : 'Henüz yazıcı tanımlı değil. Yazıcının bağlı olduğu bilgisayara baskı programı kurulunca burada kendiliğinden görünür; sonra adını, konumunu ve bastığı biçimleri buradan ayarlarsın.';
     ik.innerHTML = baski.isler.slice(0, 8).map(function(i){
       var y = yaziciBul(i.yazici), dug = '';
       if(i.durum === 'onay_bekliyor') dug = '<button type="button" class="ana" data-bi="onayla" data-id="' + esc(i.id) + '" style="padding:6px 10px; font-size:12px;">Yazdır</button>';
@@ -1177,9 +1204,9 @@
     baskiYukle();
     setInterval(function(){
       var bekleyenVar = Object.keys(izlenen).some(function(k){ return !izlenen[k].bitti; }) || baski.isler.some(function(i){ return i.durum === 'onay_bekliyor' || i.durum === 'bekliyor' || i.durum === 'basiliyor'; });
-      if(document.visibilityState === 'visible' && bekleyenVar) baskiYukle();
+      if(document.visibilityState === 'visible' && bekleyenVar && !yaziciDuzen) baskiYukle();
     }, 6000);
-    setInterval(function(){ if(document.visibilityState === 'visible') baskiYukle(); }, 45000);
+    setInterval(function(){ if(document.visibilityState === 'visible' && !yaziciDuzen) baskiYukle(); }, 45000);   // yazıcı düzenlenirken yenileme yazılanı silmesin
   }
   $('baskiYenileBtn').addEventListener('click', function(){ baskiYukle(function(){ toast('Güncellendi'); }); });
   $('baskiIsler').addEventListener('click', function(e){
@@ -1192,11 +1219,48 @@
   });
   $('baskiYazicilar').addEventListener('click', function(e){
     var b = e.target.closest('button[data-yz]'); if(!b) return;
-    var y = yaziciBul(b.getAttribute('data-k')); if(!y) return;
+    var y = yaziciBul(b.getAttribute('data-k')), is = b.getAttribute('data-yz'); if(!y) return;
+    if(is === 'duzen'){ yaziciDuzen = yaziciDuzen === y.kimlik ? '' : y.kimlik; baskiCiz(); return; }
     var p = { action: 'baski_yazici_ayar', kimlik: y.kimlik };
-    if(b.getAttribute('data-yz') === 'mod') p.mod = y.mod === 'manuel' ? 'otomatik' : 'manuel';
-    else { var ad = window.prompt('Yazıcının uygulamada görünecek adı:', y.ad); if(!ad || !ad.trim()) return; p.ad = ad.trim(); }
-    sunucuSor(p, function(hata, veri){ if(hata || !veri || veri.status !== 'ok') toast('Kaydedilemedi: ' + aktarHata(veri, hata), 'hata'); baskiYukle(); });
+    if(is === 'sil'){
+      if(!window.confirm('"' + y.ad + '" yazıcı listesinden silinsin mi?')) return;
+      p.sil = 'evet';
+    } else {
+      var ad = $('yzAd').value.trim(); if(!ad){ toast('Yazıcıya bir ad ver', 'uyari'); return; }
+      p.ad = ad; p.konum = $('yzKonum').value.trim(); p.mod = $('yzMod').value; p.gizli = $('yzGizli').checked ? 'evet' : 'hayir';
+      p.bicimler = Array.prototype.filter.call(document.querySelectorAll('[data-yzb]'), function(c){ return c.checked; }).map(function(c){ return c.getAttribute('data-yzb'); }).join(',');
+    }
+    b.disabled = true;
+    sunucuSor(p, function(hata, veri){
+      if(hata || !veri || veri.status !== 'ok') toast('Kaydedilemedi: ' + aktarHata(veri, hata), 'hata'); else { yaziciDuzen = ''; toast(is === 'sil' ? 'Yazıcı silindi' : 'Yazıcı kaydedildi'); }
+      baskiYukle();
+    });
+  });
+  // Yazıcı seçme penceresi: seçili biçimi basabilen yazıcılar, konuma göre gruplu.
+  function yaziciSecAc(){
+    var uygun = baski.yazicilar.filter(yaziciBasar), B = BICIM[durum.bicim], son = (durum.yaziciSon || {})[durum.bicim];
+    if(!uygun.length){
+      toast(baski.yazicilar.length ? '"' + B.ad + '" basan yazıcı tanımlı değil — yazıcı ayarlarından biçimi ekle ya da "Bu cihazdan" yazdır' : 'Tanımlı yazıcı yok — "Bu cihazdan" ile yazdırabilirsin', 'uyari');
+      $('baskiKart').scrollIntoView({ behavior: 'smooth' }); return;
+    }
+    uygun.sort(function(a, b){ return (b.kimlik === son) - (a.kimlik === son) || (a.konum || '').localeCompare(b.konum || '', 'tr') || a.ad.localeCompare(b.ad, 'tr'); });
+    $('ysBaslik').textContent = B.ad + ' · kâğıt: ' + (dizVar() ? 'A4 (dizili)' : B.kagit);
+    $('ysListe').innerHTML = uygun.map(function(y){
+      return '<button type="button" data-ys="' + esc(y.kimlik) + '" style="width:100%; text-align:left; margin-top:8px; padding:12px; display:flex; align-items:center; gap:10px;">' +
+        '<span style="font-size:22px;">🖨️</span><span style="flex:1; min-width:0;"><b style="font-size:15px;">' + esc(y.ad) + '</b>' + (y.kimlik === son ? ' <span class="ipucu">· son kullanılan</span>' : '') +
+        '<span class="ipucu" style="display:block;">' + esc(y.konum || 'konum yazılmamış') + ' · ' + (y.mod === 'manuel' ? 'onaylı' : 'otomatik') + '</span></span>' +
+        (y.cevrimici ? '<span style="color:var(--green); font-size:12px; font-weight:700;">● açık</span>' : '<span style="color:var(--red); font-size:12px; font-weight:700;">● kapalı</span>') + '</button>';
+    }).join('') + (baski.yazicilar.length > uygun.length ? '<div class="ipucu" style="margin-top:10px;">' + (baski.yazicilar.length - uygun.length) + ' yazıcı bu biçimi basmadığı ya da gizli olduğu için gösterilmiyor.</div>' : '');
+    $('yaziciSec').classList.remove('gizli');
+  }
+  $('ysKapat').addEventListener('click', function(){ $('yaziciSec').classList.add('gizli'); });
+  $('ysListe').addEventListener('click', function(e){
+    var b = e.target.closest('button[data-ys]'); if(!b) return;
+    var y = yaziciBul(b.getAttribute('data-ys')); if(!y) return;
+    $('yaziciSec').classList.add('gizli');
+    if(!durum.yaziciSon) durum.yaziciSon = {};
+    durum.yaziciSon[durum.bicim] = y.kimlik; kaydet();
+    yaziciyaGonder(y);
   });
   function yaziciyaGonder(y){
     var id = kimlikNo(), k = kimlikBilgisi(), kuyrukUrun = basilanKuyrukUrunleri();
@@ -1230,15 +1294,7 @@
     var eksik = durum.liste.filter(function(u){ return eksikler(u).length; });
     if(eksik.length){ toast(eksik.length + ' üründe zorunlu bilgi eksik (' + eksikler(eksik[0])[0] + ') — tamamlamadan basılmaz', 'hata'); return; }
     if(!navigator.onLine){ toast('İnternet yok', 'hata'); return; }
-    baskiYukle(function(){
-      if(!baski.hazir || !baski.yazicilar.length){ toast('Tanımlı yazıcı yok — "Bu cihazdan" ile yazdırabilirsin', 'uyari'); $('baskiKart').scrollIntoView({ behavior: 'smooth' }); return; }
-      var secenek = baski.yazicilar.map(function(y, n){ return (n + 1) + ') ' + y.ad + (y.cevrimici ? '' : ' (kapalı)') + (y.mod === 'manuel' ? ' — onaylı' : ''); }).join('\n');
-      var B = BICIM[durum.bicim], kagit = dizVar() ? 'A4 (dizili)' : B.kagit;
-      var sec = baski.yazicilar.length === 1 ? (window.confirm(B.ad + ' · kâğıt: ' + kagit + '\n\n"' + baski.yazicilar[0].ad + '" yazıcısına gönderilsin mi?') ? '1' : '')
-        : window.prompt(B.ad + ' · kâğıt: ' + kagit + '\n\nHangi yazıcı? Numarasını yaz:\n' + secenek, '1');
-      var y = baski.yazicilar[parseInt(sec, 10) - 1];
-      if(y) yaziciyaGonder(y);
-    });
+    baskiYukle(function(){ if(!baski.hazir){ toast('Yazıcı bilgisi alınamadı — "Bu cihazdan" ile yazdırabilirsin', 'uyari'); return; } yaziciSecAc(); });
   });
 
   // ---------- Basılacak etiketler kuyruğu ----------
