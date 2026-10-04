@@ -130,3 +130,23 @@ Yazdırma penceresinde: kâğıt A4, ölçek %100, kenar boşluğu "Yok", "Üstb
   sarı kartta görünür. "Hepsini listeye ekle" → bas → "Etiketler basıldı mı?" sorusuna Tamam.
   Basıldı bilgisi `EtiketBasildi` sekmesinde ortak tutulur; bir cihazda basılan diğerinde de düşer.
   Kuyruk, sunucu build 122 olduktan sonraki ilk açılış gününden itibaren olan değişimleri sayar.
+
+## Ortak bilgi, kendiliğinden yenilenen katalog, baskı kaydı (build 126–127)
+
+- **Çeşit grupları:** marka + aynı fiyat yeter; gramajı farklı olanlar da aynı etikette toplanabilir (her gramajın
+  birim fiyatı ayrı yazılır). Gruba katalogdan ürün eklenebilir; yalnızca etiketle aynı fiyattaki ürün seçilir.
+  Grup etiketinde çeşitlerden birinin barkodu basılır (rafta fiyat kontrolü için).
+- **Ortak etiket bilgisi (`EtiketBilgi` sekmesi):** bir cihazda girilen üretim yeri, net miktar ve paket/koli adedi
+  sunucuya yazılır, bütün cihazlara gelir. ERP'de ülke yazılıysa yine o esastır.
+- **Katalog:** Etiket sayfası açılınca sunucudaki sürümü kontrol eder; daha yenisi varsa kendisi indirir.
+- **Baskı kaydı (`EtiketBaskiKaydi` sekmesi):** basılan her etiket için zaman, kullanıcı, barkod, ürün, fiyat,
+  fiyat tarihi, biçim, indirim/önceki fiyat/bitiş, adet ve baskı yolu yazılır (son 30.000 satır saklanır).
+
+## Çeşitli etikette bir ürünün fiyatı değişirse (build 128)
+
+Birden çok ürünü kapsayan etiket basılınca grup `EtiketGrup` sekmesine kaydedilir (ürünler + fiyat).
+Gruptaki bir ürünün katalog fiyatı etiketteki fiyattan farklılaşınca "Basılacak etiketler" kartında
+"N çeşitli etikette fiyat değişti" uyarısı çıkar. "Çeşitli etiketleri düzelt" denince ürünler şimdiki
+fiyatlarına göre yeniden gruplanır: aynı fiyatta kalanlar tek etikette, fiyatı ayrılan ürün kendi
+etiketinde listeye gelir. Basılınca yeni gruplar kaydedilir, eski grup silinir. Çeşitli etikette barkod
+basılmaz; tek ürünlü etikette barkod ve ayrı bir "Stok kodu" kutusu vardır.
