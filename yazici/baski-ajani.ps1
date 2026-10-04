@@ -105,6 +105,98 @@ function Pdf-Uret($id, $pdf) {
     return $false
 }
 
+# ---------- Zebra (rulo etiket): PDF yerine goruntu ----------
+# SumatraPDF yatik etiket sayfasini cevirdigi ve kagit boyunu sayfadan aldigi icin rulo etikette kullanilmaz.
+# Etiket sayfasi "goruntu kipi"nde acilir (1 mm = 8 nokta, etiketler alt alta, bos yer kirmizi),
+# ekran goruntusu alinir ve her etiket yaziciya kendi boyunda tek sayfa olarak cizilir.
+Add-Type -AssemblyName System.Drawing
+$ZebraParcaBoy = 40      # bir goruntudeki en fazla etiket (etiket.html PARCA_BOY ile ayni olmali)
+
+function Goruntu-Uret($id, $png, $parca, $genPx, $yukPx) {
+    $url = $SayfaUrl + "?is=" + $id + "&anahtar=" + [uri]::EscapeDataString($Anahtar) + "&goruntu=1&parca=" + $parca + "&t=" + (Get-Date).Ticks
+    foreach ($bassiz in @("--headless=new", "--headless")) {
+        if (Test-Path $png) { Remove-Item $png -Force }
+        $arg = @($bassiz, "--disable-gpu", "--no-first-run", "--do-not-de-elevate", "--hide-scrollbars", "--force-device-scale-factor=1", "--disable-lcd-text",
+                 "--user-data-dir=$Profil", "--virtual-time-budget=25000", "--window-size=$genPx,$yukPx", "--screenshot=$png", "`"$url`"")
+        $p = Start-Process -FilePath $Tarayici -ArgumentList $arg -PassThru -WindowStyle Hidden
+        if (-not $p.WaitForExit(120000)) { try { $p.Kill() } catch {} }
+        $son = -1
+        for ($bekle = 0; $bekle -lt 60; $bekle++) {
+            if (Test-Path $png) {
+                $boyut = (Get-Item $png).Length
+                if ($boyut -gt 800 -and $boyut -eq $son) { return $true }
+                $son = $boyut
+            }
+            Start-Sleep -Seconds 1
+        }
+        Yaz-Log "UYARI: $bassiz ile goruntu olusmadi (tarayici cikis kodu: $($p.ExitCode))."
+    }
+    return $false
+}
+
+# Goruntudeki etiketleri yaziciya basar; basilan etiket sayisini dondurur (0 = goruntude etiket yok).
+function Zebra-Bas($png, $yazici, $wMm, $hMm) {
+    $script:zbBmp = New-Object System.Drawing.Bitmap($png)
+    $doc = $null
+    try {
+        $script:zbW = [int]($wMm * 8); $script:zbH = [int]($hMm * 8)
+        # Etiket say: her etiket diliminin sol kenari beyazdir, etiket olmayan yer kirmizidir.
+        $n = 0
+        while ((($n + 1) * $script:zbH) -le $script:zbBmp.Height) {
+            $nokta = $script:zbBmp.GetPixel(2, ($n * $script:zbH + [int]($script:zbH / 2)))
+            if ($nokta.R -gt 200 -and $nokta.G -lt 80 -and $nokta.B -lt 80) { break }
+            $n++
+        }
+        if ($n -eq 0) { return 0 }
+        $script:zbAdet = $n; $script:zbSira = 0; $script:zbWmm = [single]$wMm; $script:zbHmm = [single]$hMm
+        $doc = New-Object System.Drawing.Printing.PrintDocument
+        $doc.PrinterSettings.PrinterName = $yazici
+        if (-not $doc.PrinterSettings.IsValid) { throw "Yazici acilamadi: $yazici" }
+        $doc.DocumentName = "MK Etiket"
+        $doc.PrintController = New-Object System.Drawing.Printing.StandardPrintController   # "yazdiriliyor" penceresi cikmasin
+        $doc.OriginAtMargins = $false
+        # Kagit boyu yazicinin kendi ayarindan (Yazdirma Varsayilanlari) gelir; burada degistirilmez.
+        $doc.add_PrintPage({
+            param($gonderen, $e)
+            $kaynak = New-Object System.Drawing.RectangleF(0, ($script:zbSira * $script:zbH), $script:zbW, $script:zbH)
+            $hedef = New-Object System.Drawing.RectangleF(0, 0, $script:zbWmm, $script:zbHmm)
+            $e.Graphics.PageUnit = [System.Drawing.GraphicsUnit]::Millimeter
+            $e.Graphics.InterpolationMode = [System.Drawing.Drawing2D.InterpolationMode]::NearestNeighbor
+            $e.Graphics.PixelOffsetMode = [System.Drawing.Drawing2D.PixelOffsetMode]::Half
+            $e.Graphics.DrawImage($script:zbBmp, $hedef, $kaynak, [System.Drawing.GraphicsUnit]::Pixel)
+            $script:zbSira++
+            $e.HasMorePages = ($script:zbSira -lt $script:zbAdet)
+        })
+        $doc.Print()
+        return $n
+    } finally {
+        if ($doc) { $doc.Dispose() }
+        $script:zbBmp.Dispose()
+    }
+}
+
+function Zebra-Is($is, $id, $yazici) {
+    $w = 80.0; $h = 34.0
+    try { if ($is.ayar -and $is.ayar.zebra) { if ([double]$is.ayar.zebra.w -gt 0) { $w = [double]$is.ayar.zebra.w }; if ([double]$is.ayar.zebra.h -gt 0) { $h = [double]$is.ayar.zebra.h } } } catch {}
+    $genPx = [int]($w * 8); $yukPx = [int]($h * 8) * $ZebraParcaBoy
+    $toplam = 0
+    for ($parca = 0; $parca -lt 50; $parca++) {
+        $png = Join-Path $IsKlasoru ($id + "-" + $parca + ".png")
+        if (-not (Goruntu-Uret $id $png $parca $genPx $yukPx)) { Bitti $id "hata" "Etiket sayfasi hazirlanamadi (tarayici/Internet)"; Yaz-Log "HATA: goruntu uretilemedi."; return }
+        if ($parca -eq 0) {
+            try { $k = Sor @{ action = "baski_ajan_bitti"; anahtar = $Anahtar; id = $id; durum = "kontrol" } } catch { $k = $null }
+            if (-not $k -or $k.status -ne "ok") { Yaz-Log "Is basilmadi: sayfa hata bildirdi ya da is iptal edildi."; return }
+        }
+        try { $n = [int](Zebra-Bas $png $yazici $w $h) }
+        catch { Bitti $id "hata" ("Yazici isi kabul etmedi: " + $_.Exception.Message); Yaz-Log "HATA: Zebra baski: $($_.Exception.Message)"; return }
+        $toplam += $n
+        if ($n -lt $ZebraParcaBoy) { break }
+    }
+    if ($toplam -eq 0) { Bitti $id "hata" "Etiket goruntusu bos cikti"; Yaz-Log "HATA: goruntude etiket yok."; return }
+    Bitti $id "basildi" ""
+    Yaz-Log "Yaziciya gonderildi: $id (rulo etiket, $toplam adet)"
+}
+
 function Bas($is) {
     $id = [string]$is.id
     $yazici = [string]$is.windowsAdi
@@ -113,6 +205,7 @@ function Bas($is) {
     Yaz-Log "Is alindi: $id ($bicim) -> $yazici"
 
     if (-not (Yazici-Adlari | Where-Object { $_ -eq $yazici })) { Bitti $id "hata" "Yazici bu bilgisayarda bulunamadi: $yazici"; Yaz-Log "HATA: yazici yok: $yazici"; return }
+    if ($bicim -eq "zebra") { Zebra-Is $is $id $yazici; return }
     if (-not (Pdf-Uret $id $pdf)) { Bitti $id "hata" "Etiket sayfasi hazirlanamadi (tarayici/Internet)"; Yaz-Log "HATA: PDF uretilemedi."; return }
 
     # Sayfa etiketleri cizemediyse isi kendisi "hata" yapar; o zaman bos kagit basilmaz.
@@ -157,6 +250,6 @@ while ($true) {
         $hataSayisi++
     }
     # 2 gunden eski PDF'ler silinir.
-    try { Get-ChildItem $IsKlasoru -Filter *.pdf | Where-Object { $_.LastWriteTime -lt (Get-Date).AddDays(-2) } | Remove-Item -Force } catch {}
+    try { Get-ChildItem $IsKlasoru -Include *.pdf, *.png -File -Recurse | Where-Object { $_.LastWriteTime -lt (Get-Date).AddDays(-2) } | Remove-Item -Force } catch {}
     Start-Sleep -Seconds $BeklemeSn
 }

@@ -222,6 +222,9 @@
   .rAlt .rSag small{font-size:.82em; font-weight:400;}
   .rAlt .barkod{width:32em; height:5.6em; flex-shrink:0;}
 
+  html.goruntu, html.goruntu body{background:#f00 !important; margin:0 !important; padding:0 !important;}
+  html.goruntu #ekran, html.goruntu .cubuk, html.goruntu #toast{display:none !important;}
+  html.goruntu #baski{position:static !important; left:auto !important;}
   @media print{
     html,body{background:#fff !important; margin:0 !important; padding:0 !important;}
     #ekran, .cubuk, #toast{display:none !important;}
@@ -435,6 +438,11 @@
   // İŞ MODU: baskı programı bu sayfayı "?is=<iş no>&anahtar=<anahtar>" ile görünmez tarayıcıda açar;
   // sayfa işi sunucudan alır, etiketleri çizer ve PDF'e basılmaya hazır olunca başlığı "HAZIR" yapar.
   var IS_NO = (/[?&]is=([A-Za-z0-9_-]+)/.exec(location.search) || [])[1] || '';
+  // Görüntü kipi (?goruntu=1): baskı programı Zebra etiketini PDF yerine ekran görüntüsü olarak alır.
+  // Etiketler alt alta, 1 mm = 8 nokta (yazıcı 203 dpi); etiket olmayan yer kırmızıdır, program oradan sayar.
+  var GORUNTU = !!IS_NO && /[?&]goruntu=1/.test(location.search);
+  var PARCA = Math.max(0, parseInt((/[?&]parca=(\d+)/.exec(location.search) || [])[1], 10) || 0), PARCA_BOY = 40;
+  if(GORUNTU) document.documentElement.className += ' goruntu';
   var IS_ANAHTAR = decodeURIComponent((/[?&]anahtar=([^&]+)/.exec(location.search) || [])[1] || '');
   var kullanici = IS_NO ? { name: 'baskı programı', role: 'yonetici', permissions: [] } : (sayim.currentUser || null);
   var yetkili = !!kullanici && (kullanici.role === 'yonetici' || (kullanici.permissions || []).indexOf('etiket') !== -1);
@@ -1737,7 +1745,7 @@
     '</div></div>';
   }
   // Zebra rulo etiketi (varsayılan 80×34 mm). Ölçüler mm; 1em = 1mm. Fiyat, ruloda hazır basılı sarı kutuya oturur.
-  function zebraKare(){ return !!IS_NO && durum.zebra.w > durum.zebra.h; }
+  function zebraKare(){ return !!IS_NO && !GORUNTU && durum.zebra.w > durum.zebra.h; }
   function zebraHtml(u){
     var Z = durum.zebra, bas = baslikMetni(u), onceki = sayi(u.onceki), yerli = yerliMi(u), cesit = cesitAdlari(u);
     var solEn = Math.max(10, Z.kx - 3), solUst = Math.max(4, Z.ky - 2.4);
@@ -1746,7 +1754,8 @@
     var kay = IS_NO ? 'left:' + (Z.ox || 0) + 'em; top:' + (Z.oy || 0) + 'em;' : 'left:0; top:0;';
     // Aşağı kaydırılan baskıda etiketin en altındaki "oy" mm sayfanın dışında kalır; sol sütun o kadar kısaltılır ki alt satır kesilmesin.
     var kullanH = Z.h - (IS_NO ? Math.max(0, Z.oy || 0) : 0);
-    return '<div class="sayfa zeb" style="width:' + Z.w + 'mm; height:' + Z.h + 'mm; font-size:1mm;"><div style="position:absolute; ' + kay + ' width:' + Z.w + 'em; height:' + Z.h + 'em;">' +
+    var dis = GORUNTU ? 'width:' + (Z.w * 8) + 'px; height:' + (Z.h * 8) + 'px; font-size:8px;' : 'width:' + Z.w + 'mm; height:' + Z.h + 'mm; font-size:1mm;';
+    return '<div class="sayfa zeb" style="' + dis + '"><div style="position:absolute; ' + kay + ' width:' + Z.w + 'em; height:' + Z.h + 'em;">' +
       '<div class="zAd sig" data-em="3.7" data-min="2" style="left:2em; top:1em; width:' + (Z.w - 4) + 'em; height:' + Math.max(3, Z.ky - 4) + 'em;"><span class="yazi">' + esc(u.ad) + '</span></div>' +
       '<div class="zTarih" style="left:' + Z.kx + 'em; top:' + (Z.ky - 2.7) + 'em; width:' + Z.kw + 'em;">' +
         '<span>' + (u.indirim ? '<b>İNDİRİM</b> ' + tarihTr(u.tarih).slice(0, 5) + '–' + tarihTr(u.bitis) : 'Fiyat değişim tarihi: ' + tarihTr(u.tarih)) + '</span></div>' +
@@ -1813,7 +1822,7 @@
     } else {
       if(durum.bicim === 'zebra'){
         var ZK = durum.zebra;
-        html = et.map(function(u){
+        html = (GORUNTU ? et.slice(PARCA * PARCA_BOY, (PARCA + 1) * PARCA_BOY) : et).map(function(u){
           var h = zebraHtml(u);
           if(!zebraKare()) return h;
           return '<div class="sayfa" style="width:' + ZK.w + 'mm; height:' + ZK.w + 'mm; background:#fff; overflow:hidden;">' +
@@ -1897,7 +1906,7 @@
       bicimCiz();
       durum.baslangic = Math.min(24, Math.max(1, parseInt(a.baslangic, 10) || 1));
       // Görseller (logo, yerli üretim) yüklenince çiz; en geç 4 sn sonra yine çiz.
-      var bitir = function(){ ciz(); if(baskiSayfaSayisi()) document.title = 'HAZIR'; else isHata('basılacak etiket yok (zorunlu bilgi eksik)'); };
+      var bitir = function(){ ciz(); if(baskiSayfaSayisi() || (GORUNTU && PARCA > 0)) document.title = 'HAZIR'; else isHata('basılacak etiket yok (zorunlu bilgi eksik)'); };
       var dene = 0, bekle = setInterval(function(){ if(gorselBekleyen <= 0 || ++dene > 40){ clearInterval(bekle); bitir(); } }, 100);
     });
   }
