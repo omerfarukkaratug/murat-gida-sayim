@@ -193,7 +193,7 @@
   .rAlt .yerli{height:5.6em; width:14.2em;}
   /* Zebra rulo etiketi: 1em = 1mm */
   .zeb{position:relative; overflow:hidden; line-height:1.15;}
-  .zeb > div{position:absolute;}
+  .zeb > div, .zeb > div > div{position:absolute;}
   .zAd{font-weight:900; overflow:hidden; display:flex; align-items:flex-start;}
   .zAd .yazi{display:block; line-height:1.05;}
   .zTarih{text-align:right; white-space:nowrap; overflow:hidden; height:2.4em;}
@@ -275,6 +275,11 @@
           <div><label>Kutu: soldan (mm)</label><input data-zb="kx" type="number" inputmode="decimal" step="0.5"></div>
           <div><label>Kutu: üstten (mm)</label><input data-zb="ky" type="number" inputmode="decimal" step="0.5"></div>
         </div>
+        <div class="satir">
+          <div><label>Baskıyı sağa kaydır (mm)</label><input data-zb="ox" type="number" inputmode="decimal" step="0.5"></div>
+          <div><label>Baskıyı aşağı kaydır (mm)</label><input data-zb="oy" type="number" inputmode="decimal" step="0.5"></div>
+        </div>
+        <div class="ipucu" style="margin-top:4px;">Yazıcıdan çıkan etikette her şey birlikte kaymışsa buradan düzelt. Sola ya da yukarı için eksi yaz (örnek: -2). Yalnızca "Yazıcıya gönder" baskısında uygulanır.</div>
         <div style="display:flex; align-items:center; gap:8px; margin-top:10px;"><input id="zebraCerceve" type="checkbox"><label for="zebraCerceve" style="margin:0; text-transform:none; letter-spacing:0; font-size:13px; color:var(--text);">Deneme çerçevesi bas (sarı kutunun yerini çizgiyle gösterir; ayar oturunca kapat)</label></div>
       </div>
       <div id="boslukAyar" class="gizli" style="display:flex; align-items:center; gap:8px; margin-top:10px;"><input id="ustBosluk" type="checkbox"><label for="ustBosluk" style="margin:0; text-transform:none; letter-spacing:0; font-size:13px; color:var(--text);">Üstte 2 cm boşluk bırak (raf etiketliğine sıkıştırmak için)</label></div>
@@ -449,7 +454,7 @@
   if(!durum.baslangic) durum.baslangic = 1;
   Object.keys(durum.urun).forEach(function(b){ if(/\uFFFD/.test((durum.urun[b] || {}).yer || '')) durum.urun[b].yer = ''; });
   // Zebra rulo etiketi: ölçüler ve hazır basılı sarı fiyat kutusunun yeri (mm). Varsayılan: 80×34, kutu 35×20.
-  var ZEBRA_VARSAYILAN = { w: 80, h: 34, kw: 35, kh: 20, kx: 43, ky: 8, cerceve: false };
+  var ZEBRA_VARSAYILAN = { w: 80, h: 34, kw: 35, kh: 20, kx: 43, ky: 8, ox: 0, oy: 0, cerceve: false };
   if(!durum.zebra) durum.zebra = {};
   Object.keys(ZEBRA_VARSAYILAN).forEach(function(k){ if(durum.zebra[k] === undefined) durum.zebra[k] = ZEBRA_VARSAYILAN[k]; });
   if(durum.a4diz === undefined) durum.a4diz = true;     // A6/A5 afişleri A4 kâğıda diz (A6: 4, A5: 2)
@@ -1619,7 +1624,8 @@
   $('ustBosluk').addEventListener('change', function(){ durum.bosluk = this.checked; kaydet(); ciz(); });
   $('zebraAyar').addEventListener('change', function(e){
     var k = e.target.getAttribute('data-zb');
-    if(k){ var v = sayi(e.target.value); if(!isNaN(v) && v >= 0 && v <= 300) durum.zebra[k] = v; }
+    if(k === 'ox' || k === 'oy'){ var kv = parseFloat(String(e.target.value).replace(',', '.')); durum.zebra[k] = isNaN(kv) ? 0 : Math.max(-30, Math.min(30, kv)); }
+    else if(k){ var v = sayi(e.target.value); if(!isNaN(v) && v >= 0 && v <= 300) durum.zebra[k] = v; }
     else if(e.target.id === 'zebraCerceve') durum.zebra.cerceve = e.target.checked;
     kaydet(); ciz();
   });
@@ -1735,7 +1741,9 @@
     var Z = durum.zebra, bas = baslikMetni(u), onceki = sayi(u.onceki), yerli = yerliMi(u), cesit = cesitAdlari(u);
     var solEn = Math.max(10, Z.kx - 3), solUst = Math.max(4, Z.ky - 2.4);
     var bfm = grupBoylari(u).length ? grupBoylari(u).filter(function(b){ return b.bf; }).slice(0, 2).map(function(b){ return boyYazi(b) + ': ' + para(b.bf.tutar) + ' ₺/' + b.bf.birim; }).join(' · ') : birimFiyatMetni(u, '/');
-    return '<div class="sayfa zeb" style="width:' + Z.w + 'mm; height:' + Z.h + 'mm; font-size:1mm;">' +
+    // Baskı kaydırması yalnızca baskı programı işinde uygulanır (yazıcının kendi kayması için).
+    var kay = IS_NO ? 'left:' + (Z.ox || 0) + 'em; top:' + (Z.oy || 0) + 'em;' : 'left:0; top:0;';
+    return '<div class="sayfa zeb" style="width:' + Z.w + 'mm; height:' + Z.h + 'mm; font-size:1mm;"><div style="position:absolute; ' + kay + ' width:' + Z.w + 'em; height:' + Z.h + 'em;">' +
       '<div class="zAd sig" data-em="3.7" data-min="2" style="left:2em; top:1em; width:' + (Z.w - 4) + 'em; height:' + Math.max(3, Z.ky - 4) + 'em;"><span class="yazi">' + esc(u.ad) + '</span></div>' +
       '<div class="zTarih" style="left:' + Z.kx + 'em; top:' + (Z.ky - 2.7) + 'em; width:' + Z.kw + 'em;">' +
         '<span>' + (u.indirim ? '<b>İNDİRİM</b> ' + tarihTr(u.tarih).slice(0, 5) + '–' + tarihTr(u.bitis) : 'Fiyat değişim tarihi: ' + tarihTr(u.tarih)) + '</span></div>' +
@@ -1753,7 +1761,7 @@
         (bfm ? '<div class="zBirim">Birim fiyatı: ' + bfm + '</div>' : '') +
         '<div class="zKdv">FİYATLAR KDV DAHİLDİR</div>' +
       '</div>' +
-    '</div>';
+    '</div></div>';
   }
   function rafHtml(u){
     var bf = birimFiyat(u), bas = baslikMetni(u), onceki = sayi(u.onceki);
@@ -1883,7 +1891,7 @@
       if(a.slogan !== undefined) durum.slogan = String(a.slogan);
       // Telefonda ayarlanan Zebra ölçüleri (etiket ve sarı kutu) işle birlikte gelir.
       if(a.zebra && typeof a.zebra === 'object') Object.keys(ZEBRA_VARSAYILAN).forEach(function(k){
-        var v = a.zebra[k]; if(typeof ZEBRA_VARSAYILAN[k] === 'boolean') durum.zebra[k] = !!v; else if(typeof v === 'number' && v >= 0 && v <= 300) durum.zebra[k] = v; });
+        var v = a.zebra[k]; if(typeof ZEBRA_VARSAYILAN[k] === 'boolean') durum.zebra[k] = !!v; else if(typeof v === 'number' && v >= (k === 'ox' || k === 'oy' ? -30 : 0) && v <= 300) durum.zebra[k] = v; });
       bicimCiz();
       durum.baslangic = Math.min(24, Math.max(1, parseInt(a.baslangic, 10) || 1));
       // Görseller (logo, yerli üretim) yüklenince çiz; en geç 4 sn sonra yine çiz.
