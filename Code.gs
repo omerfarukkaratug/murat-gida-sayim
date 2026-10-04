@@ -596,7 +596,7 @@ var BASKI_IS_SEKME = 'BaskiIsleri';
 var BASKI_IS_BASLIK = ['Id', 'Zaman', 'Kullanıcı', 'Yazıcı', 'Biçim', 'Ürün', 'Durum', 'Mesaj', 'Güncelleme', 'Veri'];
 var BASKI_YAZICI_SEKME = 'Yazicilar';
 var BASKI_YAZICI_BASLIK = ['Kimlik', 'Ad', 'Bilgisayar', 'Windows Adı', 'Mod', 'Son Görülme', 'Konum', 'Biçimler', 'Gizli'];
-var BASKI_BICIMLER = ['raf', 'a6', 'a5', 'a4', 'a3'];
+var BASKI_BICIMLER = ['zebra', 'raf', 'a6', 'a5', 'a4', 'a3'];
 var BASKI_IS_SAKLA = 40;
 var BASKI_CEVRIMICI_SN = 90;   // program bu kadar saniyedir sormadıysa bilgisayar kapalı sayılır
 function baskiSayfa(ad, baslik) {

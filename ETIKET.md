@@ -150,3 +150,11 @@ Gruptaki bir ürünün katalog fiyatı etiketteki fiyattan farklılaşınca "Bas
 fiyatlarına göre yeniden gruplanır: aynı fiyatta kalanlar tek etikette, fiyatı ayrılan ürün kendi
 etiketinde listeye gelir. Basılınca yeni gruplar kaydedilir, eski grup silinir. Çeşitli etikette barkod
 basılmaz; tek ürünlü etikette barkod ve ayrı bir "Stok kodu" kutusu vardır.
+
+## Zebra rulo etiketi (build 129)
+
+"Zebra etiket" biçimi rulo etikete tek tek basar (varsayılan 80 × 34 mm; sarı fiyat kutusu 35 × 20 mm, soldan 43 mm,
+üstten 8 mm). Ölçüler biçim ayarlarından değiştirilir. "Deneme çerçevesi" sarı kutunun yerini kesik çizgiyle basar:
+çizgi kutuya oturana kadar "soldan/üstten" değerlerini düzelt, sonra çerçeveyi kapat.
+Windows'ta Zebra sürücüsünün "Yazdırma tercihleri"nde etiket boyutu ruloyla aynı (80 × 34 mm) olmalıdır.
+Dizili A5, tarayıcıdan baskıda dik A4 sayfanın içinde 90° çevrilmiş basılır (kâğıt yatık seçmeye gerek yok).
