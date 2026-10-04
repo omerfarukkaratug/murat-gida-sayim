@@ -141,3 +141,12 @@ Yazdırma penceresinde: kâğıt A4, ölçek %100, kenar boşluğu "Yok", "Üstb
 - **Katalog:** Etiket sayfası açılınca sunucudaki sürümü kontrol eder; daha yenisi varsa kendisi indirir.
 - **Baskı kaydı (`EtiketBaskiKaydi` sekmesi):** basılan her etiket için zaman, kullanıcı, barkod, ürün, fiyat,
   fiyat tarihi, biçim, indirim/önceki fiyat/bitiş, adet ve baskı yolu yazılır (son 30.000 satır saklanır).
+
+## Çeşitli etikette bir ürünün fiyatı değişirse (build 128)
+
+Birden çok ürünü kapsayan etiket basılınca grup `EtiketGrup` sekmesine kaydedilir (ürünler + fiyat).
+Gruptaki bir ürünün katalog fiyatı etiketteki fiyattan farklılaşınca "Basılacak etiketler" kartında
+"N çeşitli etikette fiyat değişti" uyarısı çıkar. "Çeşitli etiketleri düzelt" denince ürünler şimdiki
+fiyatlarına göre yeniden gruplanır: aynı fiyatta kalanlar tek etikette, fiyatı ayrılan ürün kendi
+etiketinde listeye gelir. Basılınca yeni gruplar kaydedilir, eski grup silinir. Çeşitli etikette barkod
+basılmaz; tek ürünlü etikette barkod ve ayrı bir "Stok kodu" kutusu vardır.

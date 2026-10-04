@@ -8,7 +8,7 @@
 // bir sürüm dağıttıktan sonra /exec adresini boş açtığında burada yazan
 // numarayı görmelisin; index.html'in üstündeki "build" numarasıyla
 // eşleşecek şekilde ben her ikisini birlikte güncelliyorum.
-var GS_VERSION = 'build127';
+var GS_VERSION = 'build128';
 
 // Sheets'te "Saat" sütunu zaman biçimli olarak algılanırsa, hücre değeri düz
 // metin değil bir Date nesnesi olarak gelir ve String(...) çirkin bir çıktı
@@ -48,6 +48,10 @@ function doGet(e) {
   if (P.action === 'etiket_liste') {
     k = kapi('etiket listesi okuma'); if (!k.ok) return kimlikRed(k, P.callback);
     return etiketListeGetir(P.id, P.callback);
+  }
+  if (P.action === 'etiket_grup') {
+    k = kapi('etiket grubu okuma'); if (!k.ok) return kimlikRed(k, P.callback);
+    return etiketGrupGetir(P.callback);
   }
   if (P.action === 'etiket_bilgi') {
     k = kapi('etiket bilgisi okuma'); if (!k.ok) return kimlikRed(k, P.callback);
@@ -515,6 +519,51 @@ function etiketBilgiKaydet(urunler, gonderen) {
   tabloyuDegistir(sheet, ETIKET_BILGI_BASLIK, rows);
   return jsonCikti({ status: 'ok', kaydedilen: n });
 }
+// ---- BASILMIŞ ÇEŞİT GRUPLARI ----
+// Birden çok ürünü kapsayan etiket basılınca grup burada saklanır: hangi ürünler, hangi fiyatla.
+// Böylece (1) grup bütün cihazlarda hazır gelir, (2) gruptaki bir ürünün fiyatı değişince
+// uygulama "raftaki çeşit etiketi artık yanlış" diye uyarabilir.
+var ETIKET_GRUP_SEKME = 'EtiketGrup';
+var ETIKET_GRUP_BASLIK = ['Id', 'Ad', 'Fiyat', 'Ürünler', 'Zaman', 'Kullanıcı'];
+function etiketGrupOku() {
+  var sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(ETIKET_GRUP_SEKME);
+  var son = sheet ? sheet.getLastRow() : 0, l = [];
+  if (son >= 2) sheet.getRange(2, 1, son - 1, 6).getValues().forEach(function (r) {
+    var uyeler = []; try { uyeler = JSON.parse(String(r[3] || '[]')); } catch (e) { uyeler = []; }
+    if (r[0] && Array.isArray(uyeler) && uyeler.length > 1) l.push({ id: String(r[0]), ad: String(r[1] || ''), fiyat: cleanNum(r[2]), uyeler: uyeler, zaman: String(r[4] || ''), kullanici: String(r[5] || '') });
+  });
+  return l;
+}
+function etiketGrupGetir(callback) {
+  return outJson({ status: 'ok', gruplar: etiketGrupOku().map(function (g) { return { id: g.id, ad: g.ad, fiyat: g.fiyat, uyeler: g.uyeler }; }) }, callback);
+}
+// gruplar: yeni basılan gruplar. dagit: artık tek başına basılan (gruptan ayrılan) ürünlerin barkodları.
+// Yeni grupla ya da "dagit" ile ortak ürünü olan eski gruplar silinir: bir ürün tek bir grupta olur.
+function etiketGrupKaydet(gruplar, dagit, gonderen) {
+  gruplar = Array.isArray(gruplar) ? gruplar.slice(0, 100) : [];
+  dagit = Array.isArray(dagit) ? dagit.slice(0, 500).map(String) : [];
+  if (!gruplar.length && !dagit.length) return jsonCikti({ status: 'error', message: 'Boş liste' });
+  var eski = etiketGrupOku(), cikan = {};
+  dagit.forEach(function (b) { cikan[b] = true; });
+  var simdi = Utilities.formatDate(new Date(), fiyatTz(), 'dd.MM.yyyy HH:mm'), kim = String(gonderen || '').substring(0, 60), yeni = [];
+  gruplar.forEach(function (g) {
+    var uyeler = (Array.isArray(g && g.uyeler) ? g.uyeler : []).slice(0, 80).map(function (x) { return { barkod: String((x && x.barkod) || '').substring(0, 40), ad: String((x && x.ad) || '').substring(0, 120) }; })
+      .filter(function (x) { return x.barkod; });
+    var f = cleanNum(g && g.fiyat);
+    if (uyeler.length < 2 || typeof f !== 'number' || !(f > 0)) return;
+    uyeler.forEach(function (x) { cikan[x.barkod] = true; });
+    yeni.push({ id: Utilities.getUuid().substring(0, 12), ad: String(g.ad || '').substring(0, 120), fiyat: f, uyeler: uyeler, zaman: simdi, kullanici: kim });
+  });
+  var kalan = eski.filter(function (g) { return !g.uyeler.some(function (x) { return cikan[String(x.barkod)]; }); });
+  var rows = kalan.concat(yeni).map(function (g) { return [g.id, g.ad, String(g.fiyat), JSON.stringify(g.uyeler), g.zaman, g.kullanici]; });
+  var ss = SpreadsheetApp.getActiveSpreadsheet();
+  var sheet = ss.getSheetByName(ETIKET_GRUP_SEKME) || ss.insertSheet(ETIKET_GRUP_SEKME);
+  if (sheet.getMaxRows() < rows.length + 1) sheet.insertRowsAfter(sheet.getMaxRows(), rows.length + 1 - sheet.getMaxRows());
+  sheet.getRange(1, 1, Math.max(rows.length, 1) + 1, 6).setNumberFormat('@');
+  tabloyuDegistir(sheet, ETIKET_GRUP_BASLIK, rows);
+  return jsonCikti({ status: 'ok', grup: rows.length });
+}
+
 // ---- ETİKET BASKI KAYDI ----
 // Hangi ürüne, hangi fiyatla, ne zaman, kim etiket bastı. İndirim etiketinde önceki
 // fiyat ve bitiş tarihi de yazılır: denetimde "neye göre indirim yazdınız" sorusunun kaydı.
@@ -1561,7 +1610,7 @@ function doPostIsle(e) {
     var postKapi = (topluMu && erpAnahtarDogru(data.anahtar)) ? { ok: true }
       : kimlikGerek(data.user, data.pass,
           data.type === 'katalog_bulk' ? 'katalog gönderimi' : data.type === 'cari_bulk' ? 'cari gönderimi'
-            : data.type === 'etiket_liste' ? 'etiket listesi gönderimi' : data.type === 'etiket_basildi' ? 'etiket basıldı kaydı' : data.type === 'baski_is' ? 'baskı işi gönderimi' : (data.type === 'etiket_bilgi' || data.type === 'etiket_baski_kaydi') ? 'etiket bilgisi gönderimi' : data.type === 'katalog_item' ? 'yeni ürün gönderimi' : data.type === 'mal_hareket' ? 'mal hareketi gönderimi' : 'sayım gönderimi',
+            : data.type === 'etiket_liste' ? 'etiket listesi gönderimi' : data.type === 'etiket_basildi' ? 'etiket basıldı kaydı' : data.type === 'baski_is' ? 'baskı işi gönderimi' : (data.type === 'etiket_bilgi' || data.type === 'etiket_baski_kaydi' || data.type === 'etiket_grup') ? 'etiket bilgisi gönderimi' : data.type === 'katalog_item' ? 'yeni ürün gönderimi' : data.type === 'mal_hareket' ? 'mal hareketi gönderimi' : 'sayım gönderimi',
           topluMu ? 'ayarlar' : null);
     var gonderenAd = data.user ? String(data.user) : '';
     // Şifre ve anahtar bundan sonra HİÇBİR yere (günlük, kuyruk, veri tabanı) taşınmaz.
@@ -1575,6 +1624,7 @@ function doPostIsle(e) {
       gunlukYaz('etiket_liste', kaynak, 'Etiket listesi: ' + ((data.liste || []).length) + ' ürün', eOut.getContent().indexOf('"error"') !== -1);
       return eOut;
     }
+    if (data.type === 'etiket_grup') return etiketGrupKaydet(data.gruplar, data.dagit, gonderenAd);
     if (data.type === 'etiket_bilgi') return etiketBilgiKaydet(data.urunler, gonderenAd);
     if (data.type === 'etiket_baski_kaydi') return etiketBaskiKaydi(data.satirlar, gonderenAd);
     if (data.type === 'baski_is') return baskiIsEkle(data, gonderenAd);

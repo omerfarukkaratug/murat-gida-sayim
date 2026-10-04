@@ -162,6 +162,10 @@
   .aBilgi b{font-weight:900;}
   .aBilgi .brk{font-family:"Courier New", monospace; font-size:.6em; font-weight:400; line-height:1.2; letter-spacing:.12em;}
   .barkod{display:block;}
+  .brkSatir{display:flex; align-items:flex-end; gap:1.4em; margin-top:.3em;}
+  .brkSatir .barkod{margin-top:0 !important;}
+  .kodKutu{font-size:.58em; line-height:1.25; font-weight:400; white-space:nowrap; padding-bottom:.1em;}
+  .kodKutu b{display:block; font-size:1.3em; font-weight:800;}
   .aBilgi .barkod{width:8.6em; height:1.7em; margin-top:.3em;}
   .dar .aBilgi .barkod{width:9.8em; height:1.6em;}
   .yerli{object-fit:contain;}
@@ -187,7 +191,8 @@
   .rAlt span{font-size:2.9em; font-weight:600; white-space:nowrap;}
   .rAlt .brk{font-family:"Courier New", monospace;}
   .rAlt .yerli{height:5.6em; width:14.2em;}
-  .rAlt .rKod{font-size:1em; font-family:"Courier New", monospace;}
+  .rAlt .rSag{line-height:1.08; text-align:right;}
+  .rAlt .rSag small{font-size:.82em; font-weight:400;}
   .rAlt .barkod{width:32em; height:5.6em; flex-shrink:0;}
 
   @media print{
@@ -256,6 +261,10 @@
     <!-- Basılacak etiketler: fiyatı değişip etiketi henüz basılmamış ürünler (bütün cihazlarda ortak) -->
     <div class="kart gizli" id="kuyrukKart" style="border:2px solid var(--amber);">
       <div class="kartBaslik">🔔 Basılacak etiketler</div>
+      <div id="kuyrukGrupKutu" class="gizli" style="margin-bottom:10px;">
+        <div id="kuyrukGrupBilgi" style="font-size:14px; margin-bottom:8px;"></div>
+        <button type="button" id="kuyrukGrupBtn" class="ana" style="width:100%;">Çeşitli etiketleri düzelt ve listeye ekle</button>
+      </div>
       <div id="kuyrukBilgi" style="font-size:14px; margin-bottom:8px;"></div>
       <div class="satir">
         <button type="button" id="kuyrukEkleBtn" style="flex:1.6;">Listeyi aç</button>
@@ -446,7 +455,7 @@
   katalogYukle().then(function(r){
     katalogKur(r);
     kuyrukYukle();
-    if(!IS_NO){ bilgiCek(); katalogTazele(); }
+    if(!IS_NO){ bilgiCek(); grupCek(); katalogTazele(); }
   });
   function katalogFiyat(barkod){ var k = katalogHarita[String(barkod)]; if(!k || k.price === '') return NaN; return sayi(k.price); }
   // Liste günlerce durabilir: açılışta her ürünün fiyatını güncel katalogdan al.
@@ -783,6 +792,7 @@
           '<button type="button" data-is="sil" style="padding:3px 8px; font-size:12px; margin-top:4px; border:none; background:transparent; color:var(--red);">✕ çıkar</button></div></div>' +
         (eks.length ? '<div class="uyari kirmizi" style="margin:8px 0 0;">Eksik: ' + esc(eks.join(', ')) + '</div>' : '') +
         (benzer.length ? '<button type="button" data-is="grup" style="width:100%; margin-top:10px; font-size:13px; border-style:dashed; text-align:left; line-height:1.4;">🧩 Aynı fiyatlı <b>' + benzer.length + ' çeşidi</b> daha var — hepsini tek etikette topla</button>' : '') +
+        (!u.grup && u.barkod && grupHarita[String(u.barkod)] ? '<button type="button" data-is="grupKayitli" class="ana" style="width:100%; margin-top:10px; font-size:13px; text-align:left; line-height:1.4;">🧩 Bu ürün daha önce <b>' + esc(grupHarita[String(u.barkod)].ad) + '</b> etiketinde basılmış (' + grupHarita[String(u.barkod)].uyeler.length + ' çeşit) — aynı etiketi getir</button>' : '') +
         (genis.length > benzer.length ? '<button type="button" data-is="grupGenis" style="width:100%; margin-top:8px; font-size:13px; border-style:dashed; text-align:left; line-height:1.4;">🧩 Farklı gramajlarla birlikte <b>' + genis.length + ' çeşit</b> aynı fiyatta — hepsini tek etikette topla</button>' : '') +
         (u.grup ? '<div style="margin-top:10px; border:1px dashed var(--line); border-radius:12px; padding:8px 10px;">' +
             '<div class="ipucu" style="margin-bottom:4px;"><b>Bu etiketin kapsadığı ürünler</b> — fiyatı ya da üretim yeri farklı olanı, alakasız ürünü çıkar:</div>' +
@@ -909,6 +919,62 @@
       };
     });
   }
+  // ---------- Basılmış çeşit grupları (bütün cihazlarda ortak) ----------
+  var kayitliGruplar = [], grupHarita = {};
+  function grupHaritaKur(){ grupHarita = {}; kayitliGruplar.forEach(function(g){ g.uyeler.forEach(function(x){ grupHarita[String(x.barkod)] = g; }); }); }
+  function grupCek(){
+    if(!navigator.onLine) return;
+    sunucuSor({ action: 'etiket_grup' }, function(hata, veri){
+      if(hata || !veri || veri.status !== 'ok' || !Array.isArray(veri.gruplar)) return;
+      kayitliGruplar = veri.gruplar; grupHaritaKur(); listeCiz(); kuyrukCiz();
+    });
+  }
+  // Raftaki çeşit etiketi artık yanlış olan gruplar: bir ürünün katalog fiyatı etiketteki fiyattan farklı.
+  function bozukGruplar(){
+    return kayitliGruplar.filter(function(g){
+      return g.uyeler.some(function(x){ var f = katalogFiyat(x.barkod); return !isNaN(f) && f > 0 && Math.abs(f - Number(g.fiyat)) > 0.004; });
+    });
+  }
+  function grupOgesiEkle(uyeler, ad){
+    var k = katalogHarita[String(uyeler[0].barkod)]; if(!k) return false;
+    urunEkle({ barkod: String(k.barcode), ad: k.name, fiyat: sayi(k.price), elle: false, ft: k.ft || '', of: k.of || '', erpYer: k.yer || '' }, true);
+    if(uyeler.length > 1){ var o = durum.liste[0]; o.grup = uyeler; o.ad = ad || grupAdiOner(uyeler); }
+    return true;
+  }
+  // Bozulan grupları düzelt: ürünler şimdiki fiyatlarına göre yeniden gruplanır;
+  // aynı fiyatta kalanlar tek etikette, fiyatı ayrılan ürün kendi etiketinde listeye eklenir.
+  function gruplariDuzelt(){
+    var eklenen = 0;
+    bozukGruplar().forEach(function(g){
+      var kova = {};
+      g.uyeler.forEach(function(x){
+        var f = katalogFiyat(x.barkod); if(isNaN(f) || !(f > 0) || listedeMi(String(x.barkod))) return;
+        var a = f.toFixed(2); (kova[a] || (kova[a] = [])).push({ barkod: String(x.barkod), ad: (katalogHarita[String(x.barkod)] || {}).name || x.ad });
+      });
+      Object.keys(kova).forEach(function(a){ if(grupOgesiEkle(kova[a], kova[a].length === g.uyeler.length ? g.ad : '')) eklenen++; });
+    });
+    kaydet(); listeCiz(); ciz();
+    toast(eklenen ? eklenen + ' etiket listeye eklendi — kontrol edip bas' : 'Eklenecek etiket yok (ürünler zaten listede olabilir)', eklenen ? '' : 'uyari');
+  }
+  // Baskıdan sonra: basılan gruplar kaydedilir; tek başına basılan ürün eski grubundan ayrılır.
+  function grupKaydiGonder(){
+    if(IS_NO) return;
+    var gruplar = [], dagit = [];
+    durum.liste.forEach(function(u){
+      if(eksikler(u).length) return;
+      if(u.grup && u.grup.length > 1) gruplar.push({ ad: u.ad, fiyat: u.fiyat, uyeler: u.grup.map(function(x){ return { barkod: String(x.barkod), ad: x.ad }; }) });
+      else if(u.barkod && grupHarita[String(u.barkod)]) dagit.push(String(u.barkod));
+    });
+    if(!gruplar.length && !dagit.length) return;
+    // Yerelde hemen uygula (sunucudaki kuralla aynı): ortak ürünü olan eski gruplar silinir.
+    var cikan = {}; dagit.forEach(function(b){ cikan[b] = true; });
+    gruplar.forEach(function(g){ g.uyeler.forEach(function(x){ cikan[x.barkod] = true; }); });
+    kayitliGruplar = kayitliGruplar.filter(function(g){ return !g.uyeler.some(function(x){ return cikan[String(x.barkod)]; }); }).concat(gruplar);
+    grupHaritaKur(); kuyrukCiz();
+    var k = kimlikBilgisi(), govde = { type: 'etiket_grup', gruplar: gruplar, dagit: dagit, kaynak: 'telefon: ' + (kullanici.name || '?') };
+    if(k){ govde.user = k.user; govde.pass = k.pass; }
+    fetch(SUNUCU, { method: 'POST', mode: 'no-cors', headers: { 'Content-Type': 'text/plain;charset=utf-8' }, body: JSON.stringify(govde) }).catch(function(){});
+  }
   // ---------- Baskı kaydı ----------
   // Basılan her etiket sunucuya yazılır (kim, ne zaman, hangi fiyatla; indirimde önceki fiyat ve bitiş).
   function baskiKaydiGonder(yol){
@@ -918,6 +984,7 @@
         indirim: !!u.indirim, onceki: u.indirim ? String(u.onceki || '') : '', bitis: u.indirim ? (u.bitis || '') : '', adet: Math.max(1, parseInt(u.adet, 10) || 1), yol: yol };
     });
     if(!satirlar.length) return;
+    grupKaydiGonder();
     var k = kimlikBilgisi(), govde = { type: 'etiket_baski_kaydi', satirlar: satirlar, kaynak: 'telefon: ' + (kullanici.name || '?') };
     if(k){ govde.user = k.user; govde.pass = k.pass; }
     fetch(SUNUCU, { method: 'POST', mode: 'no-cors', headers: { 'Content-Type': 'text/plain;charset=utf-8' }, body: JSON.stringify(govde) }).catch(function(){});
@@ -972,6 +1039,14 @@
       else if(cb === u.barkod){ u.barkod = u.grup[0].barkod; u.katalogAd = u.grup[0].ad; }
     }
     else if(b.getAttribute('data-is') === 'grupEkle'){ grupSecimAc(u); return; }
+    else if(b.getAttribute('data-is') === 'grupKayitli'){
+      var kg = grupHarita[String(u.barkod)]; if(!kg) return;
+      // Yalnızca fiyatı hâlâ bu ürünle aynı olan çeşitler alınır.
+      var uy = kg.uyeler.filter(function(x){ return Math.abs(katalogFiyat(x.barkod) - u.fiyat) <= 0.004; }).map(function(x){ return { barkod: String(x.barkod), ad: (katalogHarita[String(x.barkod)] || {}).name || x.ad }; });
+      if(uy.length < 2){ toast('Gruptaki diğer ürünlerin fiyatı artık farklı — bu ürün tek etikette kalıyor', 'uyari'); return; }
+      u.grup = uy; u.ad = uy.length === kg.uyeler.length ? kg.ad : grupAdiOner(uy);
+      toast(uy.length + ' çeşit tek etikette' + (uy.length < kg.uyeler.length ? ' (' + (kg.uyeler.length - uy.length) + ' ürünün fiyatı değiştiği için dışarıda kaldı)' : ''));
+    }
     else if(b.getAttribute('data-is') === 'dagit'){ u.grup = null; u.ad = u.katalogAd || u.ad; }
     kaydet(); listeCiz(); ciz();
   });
@@ -1174,12 +1249,16 @@
   function kuyrukListe(){
     if(!kuyruk.hazir) return [];
     return degisenler(KUYRUK_GUN, false).filter(function(x){
-      return x.k.ft >= kuyruk.baslangic && kuyruk.basilan[String(x.k.barcode)] !== x.k.ft;
+      return x.k.ft >= kuyruk.baslangic && kuyruk.basilan[String(x.k.barcode)] !== x.k.ft && !grupHarita[String(x.k.barcode)];
     });
   }
   function kuyrukCiz(){
-    var l = kuyrukListe(), kart = $('kuyrukKart');
-    kart.classList.toggle('gizli', !l.length);
+    var l = kuyrukListe(), kart = $('kuyrukKart'), bg = bozukGruplar();
+    kart.classList.toggle('gizli', !l.length && !bg.length);
+    $('kuyrukGrupKutu').classList.toggle('gizli', !bg.length);
+    if(bg.length) $('kuyrukGrupBilgi').innerHTML = '<b>' + bg.length + '</b> çeşitli etikette fiyat değişti: ' + esc(bg.slice(0, 3).map(function(g){ return g.ad; }).join(' · ')) + (bg.length > 3 ? ' …' : '') +
+      '<div class="ipucu" style="margin-top:2px;">Raftaki etiket artık yanlış. Ürünler şimdiki fiyatlarına göre yeniden gruplanır; fiyatı ayrılan ürün kendi etiketini alır.</div>';
+    $('kuyrukEkleBtn').parentNode.classList.toggle('gizli', !l.length); $('kuyrukBilgi').classList.toggle('gizli', !l.length);
     if(!l.length) return;
     var dusen = l.filter(function(x){ return !!x.d; }).length;
     $('kuyrukBilgi').innerHTML = '<b>' + l.length + '</b> ürünün fiyatı değişti, etiketi henüz basılmadı' + (dusen ? ' (' + dusen + ' tanesinde fiyat düştü)' : '') + '.' +
@@ -1218,6 +1297,7 @@
     return c;
   }
   $('kuyrukEkleBtn').addEventListener('click', function(){ secimAc(kuyrukListe(), 'Basılacak etiketler', false, ''); });
+  $('kuyrukGrupBtn').addEventListener('click', function(){ gruplariDuzelt(); });
   $('kuyrukAtlaBtn').addEventListener('click', function(){
     var l = kuyrukListe();
     if(!l.length || !window.confirm(l.length + ' ürün etiketi basılmış sayılacak ve kuyruktan çıkacak (bütün cihazlarda).\n\nEtiketleri gerçekten başka yoldan bastıysan ya da gerek yoksa onayla.')) return;
@@ -1526,7 +1606,8 @@
         (birimFiyatMetni(u, ' / ') ? '<div><b>Birim fiyatı:</b> ' + birimFiyatMetni(u, ' / ') + '</div>' : '') +
         '<div><b>Üretim yeri:</b> ' + esc(String(u.yer || '').trim()) + (koliYazi(u) ? ' &nbsp;·&nbsp; <b>' + koliYazi(u) + '</b>' : '') + '</div>' +
         '<div><b>' + (u.indirim ? 'İndirim tarihleri' : 'Fiyat değişiklik tarihi') + ':</b> ' + tarihTr(u.tarih) + (u.indirim && u.bitis ? ' – ' + tarihTr(u.bitis) : '') + '</div>' +
-        (u.barkod ? barkodSvg(u.barkod) + '<div class="brk">' + esc(u.barkod) + (u.grup ? ' &nbsp;·&nbsp; çeşitlerden biri' : (stokKodu(u) ? ' &nbsp;·&nbsp; Kod: ' + esc(stokKodu(u)) : '')) + '</div>' : '') +
+        (u.barkod && !u.grup ? '<div class="brkSatir"><div>' + barkodSvg(u.barkod) + '<div class="brk">' + esc(u.barkod) + '</div></div>' +
+          (stokKodu(u) ? '<div class="kodKutu">Stok kodu<b>' + esc(stokKodu(u)) + '</b></div>' : '') + '</div>' : '') +
       '</div>' + yerliHtml(u) + '</div>' +
     '</div></div>';
   }
@@ -1542,7 +1623,7 @@
         '<div><b>Üretim yeri:</b> ' + esc(String(u.yer || '').trim()) + (koliYazi(u) ? ' · ' + koliYazi(u) : '') + '</div>' +
         '<div><b>' + (u.indirim ? 'İndirim:' : 'Fiyat tarihi:') + '</b> ' + (u.indirim && u.bitis ? tarihTr(u.tarih).slice(0, 5) + ' – ' + tarihTr(u.bitis) : tarihTr(u.tarih)) + '</div>' +
       '</div><div class="rFiyatKutu sig" data-em="18" data-min="8"><span class="rFiyat yazi">' + fiyatHtml(u.fiyat) + '</span></div></div>' +
-      '<div class="rAlt">' + (yerliHtml(u) || '<span>' + esc(MAGAZA_ADI) + '</span>') + (!u.barkod ? '<span></span>' : (barkodSvg(u.barkod) || '<span class="brk">' + esc(u.barkod) + '</span>')) + '<span>' + (stokKodu(u) ? '<span class="rKod">' + esc(stokKodu(u)) + '</span> · ' : '') + 'KDV dâhil</span></div>' +
+      '<div class="rAlt">' + (yerliHtml(u) || '<span>' + esc(MAGAZA_ADI) + '</span>') + (u.grup || !u.barkod ? '<span></span>' : (barkodSvg(u.barkod) || '<span class="brk">' + esc(u.barkod) + '</span>')) + '<span class="rSag">KDV dâhil' + (stokKodu(u) ? '<br><small>Stok kodu: ' + esc(stokKodu(u)) + '</small>' : '') + '</span></div>' +
     '</div>';
   }
   // Basılacak etiketler: eksiksiz ürünler, "kaç etiket" kadar tekrarlanır.
