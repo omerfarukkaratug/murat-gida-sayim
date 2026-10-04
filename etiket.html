@@ -1315,7 +1315,7 @@
       var c = {}; Object.keys(u).forEach(function(a){ c[a] = u[a]; }); c.kod = stokKodu(u); return c;
     });
     var govde = { type: 'baski_is', id: id, yazici: y.kimlik, liste: liste, kaynak: 'telefon: ' + (kullanici.name || '?'),
-      ayar: { bicim: durum.bicim, kesim: durum.kesim, logo: durum.logo, slogan: durum.slogan, bosluk: durum.bosluk, a4diz: durum.a4diz, baslangic: durum.baslangic } };
+      ayar: { bicim: durum.bicim, kesim: durum.kesim, logo: durum.logo, slogan: durum.slogan, bosluk: durum.bosluk, a4diz: durum.a4diz, baslangic: durum.baslangic, zebra: durum.zebra } };
     if(JSON.stringify(govde).length > 44000){ toast('Liste çok uzun — bir kısmını basıp çıkar, sonra kalanı gönder', 'hata'); return; }
     if(k){ govde.user = k.user; govde.pass = k.pass; }
     toast('Gönderiliyor…');
@@ -1604,7 +1604,9 @@
     // Dizili baskı: A6 → dik A4'te 2×2. A5 → yan yana 2 tane; baskı programı için yatık A4 sayfa,
     // tarayıcıdan baskıda ise dik A4 sayfanın içinde 90° çevrilmiş olarak (her tarayıcı yatık sayfayı uygulamıyor).
     var Z = durum.zebra;
-    $('sayfaBoyutu').textContent = durum.bicim === 'zebra' ? '@page{ size:' + Z.w + 'mm ' + Z.h + 'mm; margin:0; }'
+    // Baskı programı (SumatraPDF) yatık sayfayı sürücü "portrait" iken 90° çevirir. Bu yüzden iş kipinde
+    // Zebra sayfası kare yapılır, etiket dikeyde ortalanır: kare sayfa çevrilmez, kâğıda ortalanınca etiket yerine oturur.
+    $('sayfaBoyutu').textContent = durum.bicim === 'zebra' ? '@page{ size:' + Z.w + 'mm ' + (zebraKare() ? Z.w : Z.h) + 'mm; margin:0; }'
       : dizVar() ? '@page{ size:' + (durum.bicim === 'a5' && IS_NO ? '297mm 210mm' : '210mm 297mm') + '; margin:0; }'
       : '@page{ size:' + B.w + 'mm ' + B.h + 'mm; margin:0; }';
     if(dizVar()) $('bicimAciklama').textContent = durum.bicim === 'a5' ? 'Bir A4 kâğıda 2 tane A5 afiş basılır (kâğıtta yan dönmüş çıkar). Yazdırma penceresinde A4 ve dikey seç; basınca ortadaki kesik çizgiden kes.' : 'Bir A4 kâğıda 4 tane A6 afiş basılır. Yazdırma penceresinde A4 seç; basınca kesik çizgilerden kes.';
@@ -1727,6 +1729,7 @@
     '</div></div>';
   }
   // Zebra rulo etiketi (varsayılan 80×34 mm). Ölçüler mm; 1em = 1mm. Fiyat, ruloda hazır basılı sarı kutuya oturur.
+  function zebraKare(){ return !!IS_NO && durum.zebra.w > durum.zebra.h; }
   function zebraHtml(u){
     var Z = durum.zebra, bas = baslikMetni(u), onceki = sayi(u.onceki), yerli = yerliMi(u), cesit = cesitAdlari(u);
     var solEn = Math.max(10, Z.kx - 3), solUst = Math.max(4, Z.ky - 2.4);
@@ -1797,7 +1800,15 @@
       }
       if(!et.length) html = '';
     } else {
-      if(durum.bicim === 'zebra'){ html = et.map(zebraHtml).join(''); }
+      if(durum.bicim === 'zebra'){
+        var ZK = durum.zebra;
+        html = et.map(function(u){
+          var h = zebraHtml(u);
+          if(!zebraKare()) return h;
+          return '<div class="sayfa" style="width:' + ZK.w + 'mm; height:' + ZK.w + 'mm; padding-top:' + ((ZK.w - ZK.h) / 2) + 'mm; background:#fff; overflow:hidden;">' +
+            h.replace('font-size:1mm;', 'font-size:1mm; break-after:auto; page-break-after:auto;') + '</div>';
+        }).join('');
+      }
       else if(dizVar()){
         var parca = et.map(function(u){ return afisHtml(u, B).replace('<div class="sayfa', '<div class="parca'); });
         var kac = durum.bicim === 'a5' ? 2 : 4;
@@ -1869,6 +1880,10 @@
       if(BICIM[a.bicim]) durum.bicim = a.bicim;
       ['kesim', 'logo', 'bosluk', 'a4diz'].forEach(function(k){ if(a[k] !== undefined) durum[k] = !!a[k]; });
       if(a.slogan !== undefined) durum.slogan = String(a.slogan);
+      // Telefonda ayarlanan Zebra ölçüleri (etiket ve sarı kutu) işle birlikte gelir.
+      if(a.zebra && typeof a.zebra === 'object') Object.keys(ZEBRA_VARSAYILAN).forEach(function(k){
+        var v = a.zebra[k]; if(typeof ZEBRA_VARSAYILAN[k] === 'boolean') durum.zebra[k] = !!v; else if(typeof v === 'number' && v >= 0 && v <= 300) durum.zebra[k] = v; });
+      bicimCiz();
       durum.baslangic = Math.min(24, Math.max(1, parseInt(a.baslangic, 10) || 1));
       // Görseller (logo, yerli üretim) yüklenince çiz; en geç 4 sn sonra yine çiz.
       var bitir = function(){ ciz(); if(baskiSayfaSayisi()) document.title = 'HAZIR'; else isHata('basılacak etiket yok (zorunlu bilgi eksik)'); };
