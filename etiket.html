@@ -1744,11 +1744,13 @@
     var bfm = grupBoylari(u).length ? grupBoylari(u).filter(function(b){ return b.bf; }).slice(0, 2).map(function(b){ return boyYazi(b) + ': ' + para(b.bf.tutar) + ' ₺/' + b.bf.birim; }).join(' · ') : birimFiyatMetni(u, '/');
     // Baskı kaydırması yalnızca baskı programı işinde uygulanır (yazıcının kendi kayması için).
     var kay = IS_NO ? 'left:' + (Z.ox || 0) + 'em; top:' + (Z.oy || 0) + 'em;' : 'left:0; top:0;';
+    // Aşağı kaydırılan baskıda etiketin en altındaki "oy" mm sayfanın dışında kalır; sol sütun o kadar kısaltılır ki alt satır kesilmesin.
+    var kullanH = Z.h - (IS_NO ? Math.max(0, Z.oy || 0) : 0);
     return '<div class="sayfa zeb" style="width:' + Z.w + 'mm; height:' + Z.h + 'mm; font-size:1mm;"><div style="position:absolute; ' + kay + ' width:' + Z.w + 'em; height:' + Z.h + 'em;">' +
       '<div class="zAd sig" data-em="3.7" data-min="2" style="left:2em; top:1em; width:' + (Z.w - 4) + 'em; height:' + Math.max(3, Z.ky - 4) + 'em;"><span class="yazi">' + esc(u.ad) + '</span></div>' +
       '<div class="zTarih" style="left:' + Z.kx + 'em; top:' + (Z.ky - 2.7) + 'em; width:' + Z.kw + 'em;">' +
         '<span>' + (u.indirim ? '<b>İNDİRİM</b> ' + tarihTr(u.tarih).slice(0, 5) + '–' + tarihTr(u.bitis) : 'Fiyat değişim tarihi: ' + tarihTr(u.tarih)) + '</span></div>' +
-      '<div class="zSol" style="left:2em; top:' + solUst + 'em; width:' + solEn + 'em; height:' + (Z.h - solUst - 1) + 'em;">' +
+      '<div class="zSol" style="left:2em; top:' + solUst + 'em; width:' + solEn + 'em; height:' + Math.max(8, kullanH - solUst - 1) + 'em;">' +
         (cesit.length ? '<div class="zCesit">' + esc(cesit.join(' · ')) + '</div>'
           : (u.barkod ? '<div>' + barkodSvg(u.barkod) + '<div class="zBrk">' + esc(u.barkod) + '</div></div>' : '<div></div>')) +
         '<div class="zLogolar">' + (yerli && yerliLogoVar ? '<img class="yerli" src="' + YERLI_LOGO + '" alt="">' : '') +
