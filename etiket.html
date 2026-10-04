@@ -208,7 +208,8 @@
   .zMagazaYazi{font-size:2.2em; font-weight:900;}
   .zYer{font-size:1.9em; font-weight:600; white-space:nowrap;}
   .zAlt{font-size:1.65em; white-space:nowrap; overflow:hidden;}
-  .zKutu{display:flex; flex-direction:column; align-items:center; justify-content:center; text-align:center; overflow:hidden; padding:.6em .8em;}
+  /* Alt 3.6 mm boş: ruloda sarı kutunun altında hazır basılı "FİYATLARIMIZA KDV DAHİLDİR" yazısı var. */
+  .zKutu{display:flex; flex-direction:column; align-items:center; justify-content:center; text-align:center; overflow:hidden; padding:.6em .8em 3.6em;}
   .zKutu.cerceve{outline:.25em dashed #000; outline-offset:-.25em;}
   .zFiyatKutu{flex:1; min-height:0; width:100%; display:flex; align-items:center; justify-content:center; overflow:hidden;}
   .zFiyat{font-weight:900; white-space:nowrap; line-height:.9; letter-spacing:-.02em;}
@@ -454,7 +455,7 @@
   if(!durum.baslangic) durum.baslangic = 1;
   Object.keys(durum.urun).forEach(function(b){ if(/\uFFFD/.test((durum.urun[b] || {}).yer || '')) durum.urun[b].yer = ''; });
   // Zebra rulo etiketi: ölçüler ve hazır basılı sarı fiyat kutusunun yeri (mm). Varsayılan: 80×34, kutu 35×20.
-  var ZEBRA_VARSAYILAN = { w: 80, h: 34, kw: 35, kh: 20, kx: 43, ky: 8, ox: 0, oy: 0, cerceve: false };
+  var ZEBRA_VARSAYILAN = { w: 80, h: 34, kw: 35, kh: 20, kx: 42, ky: 10, ox: 0, oy: 0, cerceve: false };
   if(!durum.zebra) durum.zebra = {};
   Object.keys(ZEBRA_VARSAYILAN).forEach(function(k){ if(durum.zebra[k] === undefined) durum.zebra[k] = ZEBRA_VARSAYILAN[k]; });
   if(durum.a4diz === undefined) durum.a4diz = true;     // A6/A5 afişleri A4 kâğıda diz (A6: 4, A5: 2)
@@ -1759,7 +1760,6 @@
         (u.indirim && onceki > u.fiyat ? '<div class="zOnceki">' + para(onceki) + ' ₺</div>' : (bas ? '<div class="zBaslik">' + esc(bas) + '</div>' : '')) +
         '<div class="zFiyatKutu sig" data-em="11" data-min="5"><span class="zFiyat yazi">' + fiyatHtml(u.fiyat) + '</span></div>' +
         (bfm ? '<div class="zBirim">Birim fiyatı: ' + bfm + '</div>' : '') +
-        '<div class="zKdv">FİYATLAR KDV DAHİLDİR</div>' +
       '</div>' +
     '</div></div>';
   }
