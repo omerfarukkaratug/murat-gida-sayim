@@ -84,12 +84,23 @@ function Pdf-Uret($id, $pdf) {
     # Yeni Chrome/Edge "--headless=new" ister; eski surum icin ikinci deneme "--headless".
     foreach ($bassiz in @("--headless=new", "--headless")) {
         if (Test-Path $pdf) { Remove-Item $pdf -Force }
-        $arg = @($bassiz, "--disable-gpu", "--no-first-run", "--no-pdf-header-footer", "--print-to-pdf-no-header",
+        # --do-not-de-elevate: program yonetici olarak calisiyorsa Chrome kendini yeniden baslatip
+        # ilk islemi hemen kapatir; bu bayrak onu engeller.
+        $arg = @($bassiz, "--disable-gpu", "--no-first-run", "--do-not-de-elevate", "--no-pdf-header-footer", "--print-to-pdf-no-header",
                  "--user-data-dir=$Profil", "--virtual-time-budget=25000", "--print-to-pdf=$pdf", "`"$url`"")
         $p = Start-Process -FilePath $Tarayici -ArgumentList $arg -PassThru -WindowStyle Hidden
-        if (-not $p.WaitForExit(120000)) { try { $p.Kill() } catch {}; continue }
-        Start-Sleep -Milliseconds 500
-        if ((Test-Path $pdf) -and (Get-Item $pdf).Length -gt 800) { return $true }
+        if (-not $p.WaitForExit(120000)) { try { $p.Kill() } catch {} }
+        # Tarayici islemi erken kapansa bile PDF arka planda yaziliyor olabilir: dosya gelene kadar beklenir.
+        $son = -1
+        for ($bekle = 0; $bekle -lt 60; $bekle++) {
+            if (Test-Path $pdf) {
+                $boyut = (Get-Item $pdf).Length
+                if ($boyut -gt 800 -and $boyut -eq $son) { return $true }   # boyut artik degismiyor: yazma bitti
+                $son = $boyut
+            }
+            Start-Sleep -Seconds 1
+        }
+        Yaz-Log "UYARI: $bassiz ile PDF olusmadi (tarayici cikis kodu: $($p.ExitCode))."
     }
     return $false
 }
