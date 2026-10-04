@@ -255,7 +255,10 @@ try {
     Yaz-Log "Sunucuya gonderiliyor..."
     if (-not (Gonder-Sheets $payload "urun" $entries.Count)) { $hataVar = $true }
 
-    Gonder-VeriTabani "katalog_yukle" ('{"p_kaynak":"ERP12 otomatik","p_urunler":' + $entriesJson + '}') "$($entries.Count) urun"
+    # Veri tabanina fiyat tarihi/onceki fiyat alanlari GONDERILMEZ (orada kullanilmiyor);
+    # govde eski boyutunda kalir. Alanlar JSON metninden cikarilir, liste yeniden cevrilmez.
+    $dbJson = $entriesJson -replace ',"ft":(null|"[0-9-]*")', '' -replace ',"of":(null|-?[0-9][0-9.eE+-]*)', ''
+    Gonder-VeriTabani "katalog_yukle" ('{"p_kaynak":"ERP12 otomatik","p_urunler":' + $dbJson + '}') "$($entries.Count) urun"
 
     # ---------------------------------------------------------------
     # CARI (tedarikci/musteri) listesi + bakiye
