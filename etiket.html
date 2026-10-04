@@ -493,12 +493,32 @@
   // Örn. "ABC KONSANTRE YUMUŞATICI LAVANTA 1440 ML", "... GÜL 1440 ML" → tek etiket:
   // "ABC KONSANTRE YUMUŞATICI ÇEŞİTLERİ 1440 ML". Şart: fiyat, net miktar ve
   // (kullanıcının gireceği) üretim yeri hepsinde AYNI olmalı.
+  // Gruptaki farklı net miktarlar: [{ mik, birim, bf }] — tek boy varsa boş dizi.
+  function grupBoylari(u){
+    if(!u.grup || u.grup.length < 2) return [];
+    var g = {}, l = [];
+    u.grup.forEach(function(x){
+      var m = miktarBul(x.ad), a = m.mik + '|' + m.birim; if(g[a] || !(m.mik > 0)) return; g[a] = true;
+      l.push({ mik: m.mik, birim: m.birim, bf: birimFiyat({ fiyat: u.fiyat, mik: m.mik, birim: m.birim }) });
+    });
+    l.sort(function(a, b){ return a.mik - b.mik; });
+    return l.length > 1 ? l : [];
+  }
+  function boyYazi(b){ return String(b.mik).replace('.', ',') + ' ' + (b.birim === 'l' ? 'L' : b.birim); }
+  // Etikete yazılacak birim fiyat metni. Karma grupta her gramajın birim fiyatı ayrı yazılır.
+  function birimFiyatMetni(u, ayrac){
+    var boy = grupBoylari(u);
+    if(boy.length) return boy.filter(function(b){ return b.bf; }).map(function(b){ return '<span style="white-space:nowrap;">' + boyYazi(b) + ': ' + para(b.bf.tutar) + ' ₺/' + b.bf.birim + '</span>'; }).join(' · ');
+    var bf = birimFiyat(u);
+    return bf ? para(bf.tutar) + ' ₺' + ayrac + bf.birim : '';
+  }
   function sozcukler(ad){ return String(ad || '').trim().toLocaleUpperCase('tr-TR').split(/\s+/).filter(Boolean); }
   function ortakOnEk(a, b){ var n = 0; while(n < a.length && n < b.length && a[n] === b[n]) n++; return n; }
   var benzerOnbellek = {};
-  function benzerBul(u){
+  // farkliBoy: true ise net miktarı farklı olanlar da (ör. 70 g ve 80 g) alınır.
+  function benzerBul(u, farkliBoy){
     if(u.elle || !u.barkod || u.grup) return [];
-    var anahtar = u.barkod + '|' + u.fiyat;
+    var anahtar = u.barkod + '|' + u.fiyat + (farkliBoy ? '|karma' : '');
     if(benzerOnbellek[anahtar]) return benzerOnbellek[anahtar];
     var ben = katalogHarita[u.barkod]; if(!ben) return [];
     var s0 = sozcukler(ben.name), m0 = miktarBul(ben.name), gorulen = {}, cikan = [];
@@ -509,7 +529,7 @@
       if(Math.abs(sayi(k.price) - u.fiyat) > 0.004) continue;            // fiyat birebir aynı
       if(Number(k.carpan) > 1) continue;                                 // koli barkodu değil
       if(ortakOnEk(s0, sozcukler(k.name)) < 1) continue;                 // adın ilk sözcüğü (marka) aynı: HARIBO SOLUCAN / HARIBO ALTIN AYICIK
-      var m = miktarBul(k.name); if(m.mik !== m0.mik || m.birim !== m0.birim) continue; // net miktar aynı
+      var m = miktarBul(k.name); if(!farkliBoy && (m.mik !== m0.mik || m.birim !== m0.birim)) continue; // net miktar aynı
       if(ben.yer && k.yer && normTr(ben.yer) !== normTr(k.yer)) continue;  // üretim yeri (ERP'de biliniyorsa) aynı
       var n = normTr(k.name); if(gorulen[n]) continue; gorulen[n] = true;  // aynı ürünün ikinci barkodu
       cikan.push({ barkod: String(k.barcode), ad: k.name });
@@ -523,7 +543,8 @@
     uyeler.forEach(function(x){ ort = ort.slice(0, ortakOnEk(ort, sozcukler(x.ad))); });
     var boyut = /(\d+\s*[xX*]\s*)?\d+(?:[.,]\d+)?\s*(KG|GR|G|LT|L|ML|CL|MT|M|CM)(?![A-ZÇĞİÖŞÜ])/.exec(String(uyeler[0].ad).toLocaleUpperCase('tr-TR'));
     var ad = ort.join(' ') + ' ÇEŞİTLERİ';
-    if(boyut && ort.join(' ').indexOf(boyut[0]) === -1) ad += ' ' + boyut[0];
+    var boylar = {}; uyeler.forEach(function(x){ var m = miktarBul(x.ad); boylar[m.mik + '|' + m.birim] = true; });
+    if(boyut && Object.keys(boylar).length === 1 && ort.join(' ').indexOf(boyut[0]) === -1) ad += ' ' + boyut[0];
     return ad;
   }
   // Gruptaki her ürünün katalog fiyatı hâlâ etiket fiyatıyla aynı mı?
@@ -746,18 +767,19 @@
     kutu.innerHTML = durum.liste.map(function(u){
       var bf = birimFiyat(u), eks = eksikler(u);
       var trBarkod = /^86[89]/.test(u.barkod);
-      var benzer = benzerBul(u);
+      var benzer = benzerBul(u), genis = benzerBul(u, true);
       var dusus = (!u.elle && u.barkod && !u.grup) ? dususBilgisi({ ft: u.ft, of: u.of }, u.fiyat) : null;
       var ac = !!acik[u.id];
       return '<div class="urun" data-id="' + esc(u.id) + '">' +
         '<div class="urunUst"><div style="min-width:0;"><div class="urunAd">' + esc(u.ad) + '</div>' +
-          '<div class="urunMeta">' + (u.grup ? u.grup.length + ' çeşit, tek etiket' : (u.barkod ? esc(u.barkod) : 'elle eklendi')) + (bf ? ' · birim fiyat ' + para(bf.tutar) + ' ₺/' + bf.birim : '') + '</div></div>' +
+          '<div class="urunMeta">' + (u.grup ? u.grup.length + ' çeşit, tek etiket' : (u.barkod ? esc(u.barkod) : 'elle eklendi')) + (birimFiyatMetni(u, '/') ? ' · birim fiyat ' + birimFiyatMetni(u, '/').replace(/<[^>]+>/g, '') : '') + '</div></div>' +
           '<div style="text-align:right;"><div class="urunFiyat">' + para(u.fiyat) + ' ₺</div>' +
           '<button type="button" data-is="sil" style="padding:3px 8px; font-size:12px; margin-top:4px; border:none; background:transparent; color:var(--red);">✕ çıkar</button></div></div>' +
         (eks.length ? '<div class="uyari kirmizi" style="margin:8px 0 0;">Eksik: ' + esc(eks.join(', ')) + '</div>' : '') +
         (benzer.length ? '<button type="button" data-is="grup" style="width:100%; margin-top:10px; font-size:13px; border-style:dashed; text-align:left; line-height:1.4;">🧩 Aynı fiyatlı <b>' + benzer.length + ' çeşidi</b> daha var — hepsini tek etikette topla</button>' : '') +
+        (genis.length > benzer.length ? '<button type="button" data-is="grupGenis" style="width:100%; margin-top:8px; font-size:13px; border-style:dashed; text-align:left; line-height:1.4;">🧩 Farklı gramajlarla birlikte <b>' + genis.length + ' çeşit</b> aynı fiyatta — hepsini tek etikette topla</button>' : '') +
         (u.grup ? '<div style="margin-top:10px; border:1px dashed var(--line); border-radius:12px; padding:8px 10px;">' +
-            '<div class="ipucu" style="margin-bottom:4px;"><b>Bu etiketin kapsadığı ürünler</b> — fiyatı, net miktarı ve üretim yeri aynı olmayanı çıkar:</div>' +
+            '<div class="ipucu" style="margin-bottom:4px;"><b>Bu etiketin kapsadığı ürünler</b> — fiyatı ya da üretim yeri farklı olanı, alakasız ürünü çıkar:</div>' +
             u.grup.map(function(x){ return '<div style="display:flex; justify-content:space-between; gap:8px; font-size:12.5px; padding:3px 0;"><span>' + esc(x.ad) + '</span>' +
               '<button type="button" data-is="gcikar" data-b="' + esc(x.barkod) + '" style="padding:0 6px; font-size:12px; border:none; background:transparent; color:var(--red); flex-shrink:0;">✕</button></div>'; }).join('') +
             '<button type="button" data-is="dagit" style="margin-top:6px; padding:6px 10px; font-size:12px;">Grubu dağıt (tek ürüne dön)</button></div>' : '') +
@@ -765,7 +787,7 @@
         (!String(u.yer || '').trim() && !ac
           ? '<div class="satir" style="margin-top:8px;"><div style="flex:1.5;"><input data-al="yer" class="eksik" list="ulkeler" value="" placeholder="Üretim yeri (ülke seç ya da yaz)"></div><button type="button" data-is="tr" style="flex:none; padding:10px;">Türkiye</button></div>'
           : '<div class="ozet">Üretim yeri: <b>' + esc(String(u.yer || '').trim() || '—') + '</b>' + (u.barkodYer && u.yer === 'Türkiye' ? ' (barkoddan)' : '') +
-            ' · Net: <b>' + esc(String(u.mik).replace('.', ',')) + ' ' + esc(u.birim) + '</b> · Fiyat tarihi: <b>' + tarihTr(u.tarih) + '</b>' + (koliYazi(u) ? ' · <b>' + koliYazi(u) + '</b>' : '') +
+            ' · Net: <b>' + (grupBoylari(u).length ? grupBoylari(u).map(boyYazi).join(', ') : esc(String(u.mik).replace('.', ',')) + ' ' + esc(u.birim)) + '</b> · Fiyat tarihi: <b>' + tarihTr(u.tarih) + '</b>' + (koliYazi(u) ? ' · <b>' + koliYazi(u) + '</b>' : '') +
             (u.indirim ? ' · <b style="color:var(--red);">İNDİRİM</b>' : '') + '</div>') +
         (dusus && !u.indirim ? '<div style="margin-top:8px; border:1.5px solid var(--accent); border-radius:12px; padding:8px 10px; display:flex; align-items:center; gap:8px;">' +
             '<div style="flex:1; font-size:13px; line-height:1.4;">📉 ' + tarihTr(dusus.tarih) + ' günü <b>' + para(dusus.onceki) + ' → ' + para(u.fiyat) + ' ₺</b> (%' + dusus.oran + ')' +
@@ -832,8 +854,8 @@
       var dz = dususBilgisi({ ft: u.ft, of: u.of }, u.fiyat);
       if(dz){ u.indirim = true; u.onceki = String(dz.onceki).replace('.', ','); u.tarih = dz.tarih; if(!u.bitis) u.bitis = $('topluBitis').value || ''; }
     }
-    else if(b.getAttribute('data-is') === 'grup'){
-      var uyeler = [{ barkod: u.barkod, ad: u.katalogAd || u.ad }].concat(benzerBul(u));
+    else if(b.getAttribute('data-is') === 'grup' || b.getAttribute('data-is') === 'grupGenis'){
+      var uyeler = [{ barkod: u.barkod, ad: u.katalogAd || u.ad }].concat(benzerBul(u, b.getAttribute('data-is') === 'grupGenis'));
       u.grup = uyeler; u.ad = grupAdiOner(uyeler);
       toast(uyeler.length + ' çeşit tek etikette toplandı — listeyi ve adı kontrol et');
     }
@@ -1294,9 +1316,12 @@
     if(!u.grup || u.grup.length < 2) return [];
     var ort = sozcukler(u.grup[0].ad);
     u.grup.forEach(function(x){ ort = ort.slice(0, ortakOnEk(ort, sozcukler(x.ad))); });
+    var karma = grupBoylari(u).length > 0;
     return u.grup.map(function(x){
-      var kalan = sozcukler(x.ad).slice(ort.length).join(' ')
-        .replace(/(\d+\s*[X*]\s*)?\d+(?:[.,]\d+)?\s*(KG|GR|G|LT|L|ML|CL|MT|M|CM)(?![A-ZÇĞİÖŞÜ])/g, ' ').replace(/\s+/g, ' ').trim();
+      var kalan = sozcukler(x.ad).slice(ort.length).join(' ');
+      if(!karma) kalan = kalan
+        .replace(/(\d+\s*[X*]\s*)?\d+(?:[.,]\d+)?\s*(KG|GR|G|LT|L|ML|CL|MT|M|CM)(?![A-ZÇĞİÖŞÜ])/g, ' ');
+      kalan = kalan.replace(/\s+/g, ' ').trim();
       if(!kalan) kalan = String(x.ad).trim().toLocaleUpperCase('tr-TR');
       return kalan.toLocaleLowerCase('tr-TR').replace(/(^|\s)(\S)/g, function(m, a, b){ return a + b.toLocaleUpperCase('tr-TR'); });
     });
@@ -1320,7 +1345,7 @@
         '<div class="aKdv">KDV dâhil satış fiyatı</div>' +
       '</div>' +
       '<div class="aAlt"><div class="aBilgi">' +
-        (bf ? '<div><b>Birim fiyatı:</b> ' + para(bf.tutar) + ' ₺ / ' + bf.birim + '</div>' : '') +
+        (birimFiyatMetni(u, ' / ') ? '<div><b>Birim fiyatı:</b> ' + birimFiyatMetni(u, ' / ') + '</div>' : '') +
         '<div><b>Üretim yeri:</b> ' + esc(String(u.yer || '').trim()) + (koliYazi(u) ? ' &nbsp;·&nbsp; <b>' + koliYazi(u) + '</b>' : '') + '</div>' +
         '<div><b>' + (u.indirim ? 'İndirim tarihleri' : 'Fiyat değişiklik tarihi') + ':</b> ' + tarihTr(u.tarih) + (u.indirim && u.bitis ? ' – ' + tarihTr(u.bitis) : '') + '</div>' +
         (u.barkod && !u.grup ? barkodSvg(u.barkod) + '<div class="brk">' + esc(u.barkod) + (stokKodu(u) ? ' &nbsp;·&nbsp; Kod: ' + esc(stokKodu(u)) : '') + '</div>' : '') +
@@ -1333,7 +1358,9 @@
       '<div class="rUst"><div class="rAd sig" data-em="5.6" data-min="3.2"><span class="yazi">' + esc(u.ad) + '</span></div>' + (bas ? '<div class="rBaslik">' + esc(bas) + '</div>' : '') + '</div>' +
       '<div class="rOrta"><div class="rBilgi">' +
         (u.indirim && onceki > u.fiyat ? '<div>Önceki: <span class="eski">' + para(onceki) + ' ₺</span></div>' : '') +
-        (bf ? '<div><b>Birim fiyatı:</b> ' + para(bf.tutar) + ' ₺/' + bf.birim + '</div>' : '') +
+        // Raf etiketi dar: karma grupta her gramajın birim fiyatı kendi satırında.
+        (grupBoylari(u).length ? grupBoylari(u).filter(function(b){ return b.bf; }).slice(0, 3).map(function(b){ return '<div><b>' + boyYazi(b) + ':</b> ' + para(b.bf.tutar) + ' ₺/' + b.bf.birim + '</div>'; }).join('')
+          : (birimFiyatMetni(u, '/') ? '<div><b>Birim fiyatı:</b> ' + birimFiyatMetni(u, '/') + '</div>' : '')) +
         '<div><b>Üretim yeri:</b> ' + esc(String(u.yer || '').trim()) + (koliYazi(u) ? ' · ' + koliYazi(u) : '') + '</div>' +
         '<div><b>' + (u.indirim ? 'İndirim:' : 'Fiyat tarihi:') + '</b> ' + (u.indirim && u.bitis ? tarihTr(u.tarih).slice(0, 5) + ' – ' + tarihTr(u.bitis) : tarihTr(u.tarih)) + '</div>' +
       '</div><div class="rFiyatKutu sig" data-em="18" data-min="8"><span class="rFiyat yazi">' + fiyatHtml(u.fiyat) + '</span></div></div>' +
