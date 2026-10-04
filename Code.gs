@@ -8,7 +8,7 @@
 // bir sürüm dağıttıktan sonra /exec adresini boş açtığında burada yazan
 // numarayı görmelisin; index.html'in üstündeki "build" numarasıyla
 // eşleşecek şekilde ben her ikisini birlikte güncelliyorum.
-var GS_VERSION = 'build124';
+var GS_VERSION = 'build127';
 
 // Sheets'te "Saat" sütunu zaman biçimli olarak algılanırsa, hücre değeri düz
 // metin değil bir Date nesnesi olarak gelir ve String(...) çirkin bir çıktı
@@ -48,6 +48,10 @@ function doGet(e) {
   if (P.action === 'etiket_liste') {
     k = kapi('etiket listesi okuma'); if (!k.ok) return kimlikRed(k, P.callback);
     return etiketListeGetir(P.id, P.callback);
+  }
+  if (P.action === 'etiket_bilgi') {
+    k = kapi('etiket bilgisi okuma'); if (!k.ok) return kimlikRed(k, P.callback);
+    return etiketBilgiGetir(P.callback);
   }
   if (P.action === 'etiket_kuyruk') {
     k = kapi('etiket kuyruğu okuma'); if (!k.ok) return kimlikRed(k, P.callback);
@@ -473,6 +477,66 @@ function etiketListeGetir(id, callback) {
   }
   var ozet = satirlar.map(function (r) { return { id: String(r[0]), zaman: zamanMetni(r[1]), kullanici: String(r[2] || ''), adet: Number(r[3]) || 0 }; }).reverse();
   return outJson({ status: 'ok', listeler: ozet }, callback);
+}
+
+// ---- ORTAK ETİKET BİLGİSİ ----
+// Bir cihazda girilen üretim yeri, net miktar ve paket/koli adedi burada tutulur;
+// bütün cihazlar aynı bilgiyi kullanır (ERP'de ülke yazılıysa etikette yine o esastır).
+var ETIKET_BILGI_SEKME = 'EtiketBilgi';
+var ETIKET_BILGI_BASLIK = ['Barkod', 'Üretim Yeri', 'Net Miktar', 'Birim', 'Koli Adedi', 'Koli Adı', 'Zaman', 'Kullanıcı'];
+function etiketBilgiOku() {
+  var sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(ETIKET_BILGI_SEKME);
+  var son = sheet ? sheet.getLastRow() : 0, m = {};
+  if (son >= 2) sheet.getRange(2, 1, son - 1, 8).getValues().forEach(function (r) {
+    var b = String(r[0] || ''); if (b) m[b] = [String(r[1] || ''), String(r[2] === 0 ? 0 : (r[2] || '')), String(r[3] || ''), String(r[4] || ''), String(r[5] || ''), String(r[6] || ''), String(r[7] || '')];
+  });
+  return m;
+}
+function etiketBilgiGetir(callback) {
+  var m = etiketBilgiOku(), bilgi = {};
+  Object.keys(m).forEach(function (b) { bilgi[b] = m[b].slice(0, 5); });
+  return outJson({ status: 'ok', bilgi: bilgi }, callback);
+}
+function etiketBilgiKaydet(urunler, gonderen) {
+  if (!Array.isArray(urunler) || !urunler.length) return jsonCikti({ status: 'error', message: 'Boş liste' });
+  var m = etiketBilgiOku(), simdi = Utilities.formatDate(new Date(), fiyatTz(), 'dd.MM.yyyy HH:mm'), kim = String(gonderen || '').substring(0, 60), n = 0;
+  urunler.slice(0, 500).forEach(function (u) {
+    var b = String((u && u.b) || '').trim(); if (!b || b.length > 40) return;
+    var mik = cleanNum(u.mik), koli = parseInt(u.koli, 10);
+    m[b] = [ulkeMetni(u.yer), (typeof mik === 'number' && mik > 0) ? String(mik) : '', String(u.birim || '').substring(0, 8),
+      koli > 1 ? String(koli) : '', String(u.koliAd || '').substring(0, 20), simdi, kim];
+    n++;
+  });
+  var rows = Object.keys(m).map(function (b) { return [b].concat(m[b]); });
+  var ss = SpreadsheetApp.getActiveSpreadsheet();
+  var sheet = ss.getSheetByName(ETIKET_BILGI_SEKME) || ss.insertSheet(ETIKET_BILGI_SEKME);
+  if (sheet.getMaxRows() < rows.length + 1) sheet.insertRowsAfter(sheet.getMaxRows(), rows.length + 1 - sheet.getMaxRows());
+  sheet.getRange(1, 1, rows.length + 1, 8).setNumberFormat('@');
+  tabloyuDegistir(sheet, ETIKET_BILGI_BASLIK, rows);
+  return jsonCikti({ status: 'ok', kaydedilen: n });
+}
+// ---- ETİKET BASKI KAYDI ----
+// Hangi ürüne, hangi fiyatla, ne zaman, kim etiket bastı. İndirim etiketinde önceki
+// fiyat ve bitiş tarihi de yazılır: denetimde "neye göre indirim yazdınız" sorusunun kaydı.
+var ETIKET_KAYIT_SEKME = 'EtiketBaskiKaydi';
+var ETIKET_KAYIT_BASLIK = ['Zaman', 'Kullanıcı', 'Barkod', 'Ürün', 'Fiyat', 'Fiyat Tarihi', 'Biçim', 'İndirim', 'Önceki Fiyat', 'Bitiş', 'Adet', 'Yol'];
+var ETIKET_KAYIT_SINIR = 30000;
+function etiketBaskiKaydi(satirlar, gonderen) {
+  if (!Array.isArray(satirlar) || !satirlar.length) return jsonCikti({ status: 'error', message: 'Boş kayıt' });
+  var ss = SpreadsheetApp.getActiveSpreadsheet();
+  var sheet = ss.getSheetByName(ETIKET_KAYIT_SEKME);
+  if (!sheet) { sheet = ss.insertSheet(ETIKET_KAYIT_SEKME); sheet.getRange(1, 1, 1, ETIKET_KAYIT_BASLIK.length).setValues([ETIKET_KAYIT_BASLIK]); }
+  var simdi = Utilities.formatDate(new Date(), fiyatTz(), 'dd.MM.yyyy HH:mm:ss'), kim = String(gonderen || '').substring(0, 60);
+  var met = function (v, n) { return String(v == null ? '' : v).substring(0, n); };
+  var rows = satirlar.slice(0, 400).map(function (x) {
+    return [simdi, kim, met(x.b, 200), met(x.ad, 120), met(x.fiyat, 16), met(x.ft, 10), met(x.bicim, 8), x.indirim ? 'EVET' : '', met(x.onceki, 16), met(x.bitis, 10), met(x.adet, 4), met(x.yol, 60)];
+  });
+  var son = sheet.getLastRow();
+  if (sheet.getMaxRows() < son + rows.length) sheet.insertRowsAfter(sheet.getMaxRows(), son + rows.length - sheet.getMaxRows());
+  sheet.getRange(son + 1, 1, rows.length, 12).setNumberFormat('@').setValues(rows);
+  var fazla = sheet.getLastRow() - 1 - ETIKET_KAYIT_SINIR;
+  if (fazla > 0) sheet.deleteRows(2, fazla);
+  return jsonCikti({ status: 'ok', kaydedilen: rows.length });
 }
 
 // ---- TELEFONDAN YAZICIYA BASKI ----
@@ -1497,7 +1561,7 @@ function doPostIsle(e) {
     var postKapi = (topluMu && erpAnahtarDogru(data.anahtar)) ? { ok: true }
       : kimlikGerek(data.user, data.pass,
           data.type === 'katalog_bulk' ? 'katalog gönderimi' : data.type === 'cari_bulk' ? 'cari gönderimi'
-            : data.type === 'etiket_liste' ? 'etiket listesi gönderimi' : data.type === 'etiket_basildi' ? 'etiket basıldı kaydı' : data.type === 'baski_is' ? 'baskı işi gönderimi' : data.type === 'katalog_item' ? 'yeni ürün gönderimi' : data.type === 'mal_hareket' ? 'mal hareketi gönderimi' : 'sayım gönderimi',
+            : data.type === 'etiket_liste' ? 'etiket listesi gönderimi' : data.type === 'etiket_basildi' ? 'etiket basıldı kaydı' : data.type === 'baski_is' ? 'baskı işi gönderimi' : (data.type === 'etiket_bilgi' || data.type === 'etiket_baski_kaydi') ? 'etiket bilgisi gönderimi' : data.type === 'katalog_item' ? 'yeni ürün gönderimi' : data.type === 'mal_hareket' ? 'mal hareketi gönderimi' : 'sayım gönderimi',
           topluMu ? 'ayarlar' : null);
     var gonderenAd = data.user ? String(data.user) : '';
     // Şifre ve anahtar bundan sonra HİÇBİR yere (günlük, kuyruk, veri tabanı) taşınmaz.
@@ -1511,6 +1575,8 @@ function doPostIsle(e) {
       gunlukYaz('etiket_liste', kaynak, 'Etiket listesi: ' + ((data.liste || []).length) + ' ürün', eOut.getContent().indexOf('"error"') !== -1);
       return eOut;
     }
+    if (data.type === 'etiket_bilgi') return etiketBilgiKaydet(data.urunler, gonderenAd);
+    if (data.type === 'etiket_baski_kaydi') return etiketBaskiKaydi(data.satirlar, gonderenAd);
     if (data.type === 'baski_is') return baskiIsEkle(data, gonderenAd);
     if (data.type === 'etiket_basildi') return etiketBasildiKaydet(data.urunler, gonderenAd);
     if (data.type === 'katalog_bulk') {
