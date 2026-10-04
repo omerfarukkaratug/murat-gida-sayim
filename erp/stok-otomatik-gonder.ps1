@@ -91,6 +91,7 @@ function Gonder-Sheets($govde, $ne, $adet) {
 # -UserAgent şart: Supabase, tarayıcıya benzeyen istemcide gizli anahtarı 401 ile reddeder.
 function Gonder-VeriTabani($fonksiyon, $govde, $ne) {
     if (-not (Test-Path $DbAnahtarDosyasi)) { return }
+    $baytlar = $null
     try {
         $anahtar = (Get-Content -Path $DbAnahtarDosyasi -TotalCount 1).Trim()
         if (-not $anahtar) { return }
@@ -107,9 +108,21 @@ function Gonder-VeriTabani($fonksiyon, $govde, $ne) {
         }
     } catch {
         # Sunucunun hata aciklamasi (hangi alan/satir) da gunluge yazilir.
+        $hata = $_
         $ayrinti = ''
-        if ($_.ErrorDetails -and $_.ErrorDetails.Message) { $ayrinti = ' Ayrinti: ' + $_.ErrorDetails.Message }
-        Yaz-Log "VERI TABANI HATA: $ne gonderilemedi: $($_.Exception.Message)$ayrinti (Sheets etkilenmedi)"
+        if ($hata.ErrorDetails -and $hata.ErrorDetails.Message) { $ayrinti = $hata.ErrorDetails.Message }
+        elseif ($hata.Exception.Response) {
+            # PowerShell 5 hata govdesini her zaman vermez; yanit akisindan okunur.
+            try {
+                $akis = $hata.Exception.Response.GetResponseStream()
+                if ($akis.CanSeek) { $akis.Position = 0 }
+                $ayrinti = (New-Object System.IO.StreamReader($akis)).ReadToEnd()
+            } catch {}
+        }
+        if ($ayrinti) { $ayrinti = ' Ayrinti: ' + $ayrinti.Substring(0, [Math]::Min(500, $ayrinti.Length)) }
+        $boyut = ''
+        if ($baytlar) { $boyut = ' Govde: ' + [Math]::Round($baytlar.Length / 1MB, 2) + ' MB.' }
+        Yaz-Log "VERI TABANI HATA: $ne gonderilemedi: $($hata.Exception.Message)$boyut$ayrinti (Sheets etkilenmedi)"
     }
 }
 
