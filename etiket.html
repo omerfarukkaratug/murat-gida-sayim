@@ -1605,7 +1605,8 @@
     // tarayıcıdan baskıda ise dik A4 sayfanın içinde 90° çevrilmiş olarak (her tarayıcı yatık sayfayı uygulamıyor).
     var Z = durum.zebra;
     // Baskı programı (SumatraPDF) yatık sayfayı sürücü "portrait" iken 90° çevirir. Bu yüzden iş kipinde
-    // Zebra sayfası kare yapılır, etiket dikeyde ortalanır: kare sayfa çevrilmez, kâğıda ortalanınca etiket yerine oturur.
+    // Zebra sayfası kare yapılır, etiket en üstte durur: kare sayfa çevrilmez; program sayfayı kâğıdın sol üstünden
+    // basar, 34 mm'lik kâğıda sığmayan boş alt kısım basılmaz.
     $('sayfaBoyutu').textContent = durum.bicim === 'zebra' ? '@page{ size:' + Z.w + 'mm ' + (zebraKare() ? Z.w : Z.h) + 'mm; margin:0; }'
       : dizVar() ? '@page{ size:' + (durum.bicim === 'a5' && IS_NO ? '297mm 210mm' : '210mm 297mm') + '; margin:0; }'
       : '@page{ size:' + B.w + 'mm ' + B.h + 'mm; margin:0; }';
@@ -1805,7 +1806,7 @@
         html = et.map(function(u){
           var h = zebraHtml(u);
           if(!zebraKare()) return h;
-          return '<div class="sayfa" style="width:' + ZK.w + 'mm; height:' + ZK.w + 'mm; padding-top:' + ((ZK.w - ZK.h) / 2) + 'mm; background:#fff; overflow:hidden;">' +
+          return '<div class="sayfa" style="width:' + ZK.w + 'mm; height:' + ZK.w + 'mm; background:#fff; overflow:hidden;">' +
             h.replace('font-size:1mm;', 'font-size:1mm; break-after:auto; page-break-after:auto;') + '</div>';
         }).join('');
       }
