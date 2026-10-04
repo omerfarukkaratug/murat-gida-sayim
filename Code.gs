@@ -8,7 +8,7 @@
 // bir sürüm dağıttıktan sonra /exec adresini boş açtığında burada yazan
 // numarayı görmelisin; index.html'in üstündeki "build" numarasıyla
 // eşleşecek şekilde ben her ikisini birlikte güncelliyorum.
-var GS_VERSION = 'build128';
+var GS_VERSION = 'build129';
 
 // Sheets'te "Saat" sütunu zaman biçimli olarak algılanırsa, hücre değeri düz
 // metin değil bir Date nesnesi olarak gelir ve String(...) çirkin bir çıktı
@@ -74,7 +74,7 @@ function doGet(e) {
     if (P.action === 'baski_durum') return baskiDurum(P.callback);
     if (P.action === 'baski_islem') return baskiIslem(P.id, P.islem, P.callback);
     if (!k.auth || k.auth.role !== 'yonetici') return outJson({ status: 'error', message: 'Yazıcı ayarını yalnızca yönetici değiştirir' }, P.callback);
-    return baskiYaziciAyar(P.kimlik, P.ad, P.mod, P.callback);
+    return baskiYaziciAyar(P, P.callback);
   }
   if (P.action === 'guvenlik_getir') return guvenlikGetir(P.user, P.pass, P.callback);
   if (P.action === 'guvenlik_kaydet') return guvenlikKaydet(P.user, P.pass, P.zorunlu, P.callback);
@@ -595,7 +595,8 @@ function etiketBaskiKaydi(satirlar, gonderen) {
 var BASKI_IS_SEKME = 'BaskiIsleri';
 var BASKI_IS_BASLIK = ['Id', 'Zaman', 'Kullanıcı', 'Yazıcı', 'Biçim', 'Ürün', 'Durum', 'Mesaj', 'Güncelleme', 'Veri'];
 var BASKI_YAZICI_SEKME = 'Yazicilar';
-var BASKI_YAZICI_BASLIK = ['Kimlik', 'Ad', 'Bilgisayar', 'Windows Adı', 'Mod', 'Son Görülme'];
+var BASKI_YAZICI_BASLIK = ['Kimlik', 'Ad', 'Bilgisayar', 'Windows Adı', 'Mod', 'Son Görülme', 'Konum', 'Biçimler', 'Gizli'];
+var BASKI_BICIMLER = ['zebra', 'raf', 'a6', 'a5', 'a4', 'a3'];
 var BASKI_IS_SAKLA = 40;
 var BASKI_CEVRIMICI_SN = 90;   // program bu kadar saniyedir sormadıysa bilgisayar kapalı sayılır
 function baskiSayfa(ad, baslik) {
@@ -611,10 +612,15 @@ function baskiSatirlar(sheet, n) {
 function baskiZaman() { return Utilities.formatDate(new Date(), fiyatTz(), 'dd.MM.yyyy HH:mm:ss'); }
 function baskiYazicilar() {
   var simdi = Date.now();
-  return baskiSatirlar(baskiSayfa(BASKI_YAZICI_SEKME, BASKI_YAZICI_BASLIK), 6).map(function (r) {
+  var sheet = baskiSayfa(BASKI_YAZICI_SEKME, BASKI_YAZICI_BASLIK);
+  // Eski sürümde açılmış sekmede yeni başlıklar (Konum, Biçimler, Gizli) yoksa eklenir.
+  if (String(sheet.getRange(1, 7).getValue()) !== 'Konum') sheet.getRange(1, 1, 1, BASKI_YAZICI_BASLIK.length).setValues([BASKI_YAZICI_BASLIK]);
+  return baskiSatirlar(sheet, 9).map(function (r) {
     var gorulme = Number(r[5]) || 0;
+    // Biçimler boşsa yazıcı her biçimi basar; doluysa yalnızca yazılanları (ör. "raf" ya da "a4,a5,a6").
+    var bicimler = String(r[7] || '').split(',').map(function (x) { return x.trim(); }).filter(function (x) { return BASKI_BICIMLER.indexOf(x) !== -1; });
     return { kimlik: String(r[0]), ad: String(r[1] || r[3]), bilgisayar: String(r[2]), windowsAdi: String(r[3]), mod: String(r[4]) === 'manuel' ? 'manuel' : 'otomatik',
-      cevrimici: simdi - gorulme < BASKI_CEVRIMICI_SN * 1000 };
+      cevrimici: simdi - gorulme < BASKI_CEVRIMICI_SN * 1000, konum: String(r[6] || ''), bicimler: bicimler, gizli: String(r[8]) === 'evet' };
   });
 }
 function baskiIsOzet(r) {
@@ -667,12 +673,18 @@ function baskiIslem(id, islem, callback) {
     return outJson(ok ? { status: 'ok' } : { status: 'error', message: 'İşin durumu değişmiş — listeyi yenile' }, callback);
   } finally { lock.releaseLock(); }
 }
-function baskiYaziciAyar(kimlik, ad, mod, callback) {
+// p: { kimlik, ad, mod, konum, bicimler ("raf,a4"), gizli ("evet"/"hayir"), sil ("evet") } — verilmeyen alan değişmez.
+function baskiYaziciAyar(p, callback) {
   var sheet = baskiSayfa(BASKI_YAZICI_SEKME, BASKI_YAZICI_BASLIK), satirlar = baskiSatirlar(sheet, 6);
   for (var i = 0; i < satirlar.length; i++) {
-    if (String(satirlar[i][0]) !== String(kimlik)) continue;
-    if (ad !== undefined && String(ad).trim()) sheet.getRange(i + 2, 2).setNumberFormat('@').setValue(String(ad).trim().substring(0, 40));
-    if (mod === 'manuel' || mod === 'otomatik') sheet.getRange(i + 2, 5).setValue(mod);
+    if (String(satirlar[i][0]) !== String(p.kimlik)) continue;
+    // Silinen yazıcı, bilgisayarındaki program çalışıyorsa bir sonraki sorguda yeniden kaydolur (kalıcı gizlemek için "gizli").
+    if (p.sil === 'evet') { sheet.deleteRows(i + 2, 1); return outJson({ status: 'ok' }, callback); }
+    if (p.ad !== undefined && String(p.ad).trim()) sheet.getRange(i + 2, 2).setNumberFormat('@').setValue(String(p.ad).trim().substring(0, 40));
+    if (p.mod === 'manuel' || p.mod === 'otomatik') sheet.getRange(i + 2, 5).setValue(p.mod);
+    if (p.konum !== undefined) sheet.getRange(i + 2, 7).setNumberFormat('@').setValue(String(p.konum).trim().substring(0, 40));
+    if (p.bicimler !== undefined) sheet.getRange(i + 2, 8).setNumberFormat('@').setValue(String(p.bicimler).split(',').map(function (x) { return x.trim(); }).filter(function (x) { return BASKI_BICIMLER.indexOf(x) !== -1; }).join(','));
+    if (p.gizli === 'evet' || p.gizli === 'hayir') sheet.getRange(i + 2, 9).setValue(p.gizli);
     return outJson({ status: 'ok' }, callback);
   }
   return outJson({ status: 'error', message: 'Yazıcı bulunamadı' }, callback);

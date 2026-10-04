@@ -15,12 +15,23 @@ seçilen yazıcıya basar. Bilgisayarın başında kimsenin bir şey yapması ge
 ## Kurulum (bir kez)
 
 1. `C:\MKBaski` adında klasör aç.
-2. Depodaki `yazici/baski-ajani.ps1` ve `yazici/kur.ps1` dosyalarını bu klasöre indir.
+2. Depodaki `yazici/` klasöründeki dört dosyayı (`baski-ajani.ps1`, `kur.ps1`, `KUR.bat`, `DENE.bat`) bu klasöre indir.
 3. sumatrapdfreader.org adresinden **portable** SumatraPDF'i indir, adını `SumatraPDF.exe` yapıp aynı klasöre koy.
-4. `kur.ps1` dosyasına sağ tık > **PowerShell ile çalıştır**. Anahtar sorarsa uygulamadaki ERP anahtarını yapıştır
+4. `KUR.bat` dosyasına **çift tıkla** (Windows "bilinmeyen yayımcı" derse "Ek bilgi" > "Yine de çalıştır"). Anahtar sorarsa uygulamadaki ERP anahtarını yapıştır
    (Ayarlar > Veri Güvenliği; ERP bilgisayarındaki `erp-anahtar.txt` ile aynı anahtar).
+   Sorun ararken `DENE.bat` programı görünür pencerede çalıştırır; ne yaptığı ekranda yazar.
 5. Uygulamada Etiket > **Yazıcılar ve baskı işleri** kartına bak: bu bilgisayarın yazıcıları "● açık" görünmeli.
-6. Yönetici olarak yazıcılara ad ver ("Ad" düğmesi; ör. "Zebra raf etiketi", "Depo A3") ve istersen "Manuel yap".
+6. Yönetici olarak her yazıcıda **Düzenle**'ye bas: uygulamada görünecek adı, **konumu** (kat, bölüm ya da şube),
+   bastığı **biçimleri** (ör. Zebra için yalnızca "Raf etiketi"; A4 yazıcı için A6/A5/A4) ve otomatik mi onaylı mı
+   basacağını ayarla. Kullanılmayan yazıcıyı "gösterme" ile gizle.
+
+## Birden çok yazıcı, kat ya da şube
+
+- Yazıcı hangi bilgisayara bağlıysa baskı programı **o bilgisayara** kurulur; her bilgisayar kendi yazıcılarını bildirir.
+  Üst kattaki ve alt kattaki yazıcılar ayrı bilgisayarlardaysa ikisine de kurulur (aynı anahtarla).
+- Uygulamada yazıcılar konuma göre gruplanır. Telefonda "Yazıcıya gönder" denince yalnızca seçili biçimi basabilen
+  yazıcılar listelenir; en son kullanılan en üstte gelir.
+- İleride şube açılırsa şubedeki bilgisayara aynı kurulum yapılır, konuma şube adı yazılır.
 
 ## Kullanım
 

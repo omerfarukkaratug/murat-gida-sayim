@@ -115,6 +115,8 @@ function Bas($is) {
     if (-not $dizili) { if ($bicim -eq "a3") { $kagit = "A3" } elseif ($bicim -eq "a5") { $kagit = "A5" } elseif ($bicim -eq "a6") { $kagit = "A6" } }
     $ayar = "noscale,paper=$kagit"
     if ($dizili -and $bicim -eq "a5") { $ayar += ",landscape" } else { $ayar += ",portrait" }
+    # Zebra (rulo etiket): kagit boyutu yazicinin kendi ayarindan gelir, yalnizca olcek korunur.
+    if ($bicim -eq "zebra") { $ayar = "noscale"; $kagit = "rulo etiket" }
 
     $p = Start-Process -FilePath $Sumatra -ArgumentList @("-print-to", "`"$yazici`"", "-print-settings", "`"$ayar`"", "-silent", "`"$pdf`"") -PassThru -WindowStyle Hidden
     if (-not $p.WaitForExit(120000)) { try { $p.Kill() } catch {}; Bitti $id "hata" "Yaziciya gonderme zaman asimina ugradi"; Yaz-Log "HATA: SumatraPDF zaman asimi."; return }
