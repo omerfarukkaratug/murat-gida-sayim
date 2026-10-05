@@ -832,16 +832,29 @@
     if(akis){ kameraKapat(); return; }
     if(!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia){ toast('Bu cihazda kamera kullanılamıyor', 'hata'); return; }
     $('kamera').classList.remove('gizli');
-    navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment', width: { ideal: 1920 }, height: { ideal: 1080 } } }).then(function(s){
-      akis = s; $('video').srcObject = s;
-      try { var yet = s.getVideoTracks()[0].getCapabilities ? s.getVideoTracks()[0].getCapabilities() : {}; if(yet && yet.torch) $('kamFener').classList.remove('gizli'); } catch(e){}
-      return okuyucuYukle();
-    }).then(function(BD){
-      okuyucu = new BD({ formats: ['ean_13', 'ean_8', 'upc_a', 'upc_e', 'code_128', 'code_39', 'itf'] });
-      tara();
-    }).catch(function(){
-      kameraKapat(); toast('Kamera açılamadı — izinleri kontrol et ya da barkodu yaz', 'hata');
-    });
+    // Hata nedeni açık yazılır (izin mi, kamera mı, okuyucu mu): "açılmadı" demek sorunu bulmaya yetmiyor.
+    var kamHata = function(e){
+      var n = (e && e.name) || '', m = (e && e.message) || '';
+      kameraKapat();
+      if(e && e.okuyucu) toast('Barkod okuyucu yüklenemedi — internet var mı? (' + (m || n || '?') + ')', 'hata');
+      else if(n === 'NotAllowedError' || n === 'SecurityError') toast('Kamera izni yok. iPhone: Ayarlar > Uygulamalar > Safari > Kamera > "İzin Ver"; sonra uygulamayı kapatıp aç', 'hata');
+      else if(n === 'NotReadableError' || n === 'AbortError') toast('Kamera şu an kullanılamıyor (başka uygulamada açık olabilir) — uygulamayı kapatıp aç', 'hata');
+      else toast('Kamera açılamadı (' + (n || m || 'bilinmeyen neden') + ') — barkodu elle yazabilirsin', 'hata');
+    };
+    var ac = function(kisit){ return navigator.mediaDevices.getUserMedia(kisit); };
+    // Önce yüksek çözünürlük istenir; cihaz bunu veremezse sade istekle bir kez daha denenir.
+    ac({ video: { facingMode: 'environment', width: { ideal: 1920 }, height: { ideal: 1080 } } })
+      .catch(function(e){ if(e && (e.name === 'OverconstrainedError' || e.name === 'NotFoundError' || e.name === 'TypeError')) return ac({ video: true }); throw e; })
+      .then(function(s){
+        akis = s; $('video').srcObject = s;
+        try { var oyn = $('video').play(); if(oyn && oyn.catch) oyn.catch(function(){}); } catch(e0){}
+        try { var yet = s.getVideoTracks()[0].getCapabilities ? s.getVideoTracks()[0].getCapabilities() : {}; if(yet && yet.torch) $('kamFener').classList.remove('gizli'); } catch(e){}
+        return okuyucuYukle().then(function(BD){
+          try { okuyucu = new BD({ formats: ['ean_13', 'ean_8', 'upc_a', 'upc_e', 'code_128', 'code_39', 'itf'] }); }
+          catch(e1){ okuyucu = new BD({ formats: ['ean_13', 'ean_8', 'code_128'] }); }
+          tara();
+        }).catch(function(e){ var h = new Error((e && e.message) || 'okuyucu'); h.okuyucu = true; throw h; });
+      }).catch(kamHata);
   });
 
   // ---------- Liste (her ürünün etiket bilgileri) ----------
