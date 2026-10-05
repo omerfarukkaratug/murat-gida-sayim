@@ -244,3 +244,17 @@ Basılan ürün listede "basıldı HH:MM" olarak işaretlenir ve bir sonraki gö
 "tekrar bas" ile yeniden sıraya alınır, "Basılanları listeden çıkar" ile temizlenir.
 Durum baskı işi bazındadır (sayfa bazında değil): ajan sayfa sayfa bilgi vermiyor.
 Sunucu (Code.gs) ve baskı ajanı değişmedi.
+
+## Build 141 — deneme etiketi, liste paylaşma, sürüm uyarısı, kendiliğinden başlayan baskı programı
+
+- **1 deneme etiketi** (Yazdır > Zebra satırı): bekleyen ilk üründen tek etiket basar; ürün "basıldı"
+  işaretlenmez, baskı kaydı yazılmaz. Rulo değişince hizayı görmek için.
+- Baskı işi durumu "basıldı" yerine **"yazıcıya gönderildi"** der: program işi Windows'a teslim etmiştir,
+  kâğıdın çıktığını bilemez.
+- **Listeyi paylaş / Hazır listeyi getir**: "getir" etiket yetkisi olan herkese açık; "paylaş" için
+  `etiket_duzenle` ya da `etiket_yazici` gerekir. Yönetici listeyi hazırlayıp paylaşır, personel getirip basar.
+- Yöneticiye uyarı: sunucu yanıt veriyor ama `etiket_ayar` isteğini tanımıyorsa (Code.gs build 139 öncesi)
+  sayfanın üstünde kırmızı uyarı çıkar.
+- `yazici/CALISTIR.bat` + `yazici/OTOMATIK-BASLAT.bat`: baski programı oturum açılınca küçültülmüş
+  pencerede başlar, kapanırsa 15 sn sonra yeniden başlar. Eski gizli pencereli başlatıcı ve zamanlanmış
+  görev kaldırılır. Kurulum: iki dosyayı `C:\MKBaski` içine koy, `OTOMATIK-BASLAT.bat`'a çift tıkla.

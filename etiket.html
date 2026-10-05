@@ -397,10 +397,10 @@
       <div id="liste"><div class="ipucu">Henüz ürün eklenmedi.</div></div>
       <!-- Liste aktarma: telefonda hazırla, yazıcının bağlı olduğu bilgisayarda getirip bas. -->
       <div class="satir" style="margin-top:12px;">
-        <button type="button" id="listeGonderBtn" style="flex:1; font-size:13px;">📤 Listeyi gönder</button>
-        <button type="button" id="listeGetirBtn" style="flex:1; font-size:13px;">📥 Gönderilen listeyi getir</button>
+        <button type="button" id="listeGonderBtn" style="flex:1; font-size:13px;">📤 Listeyi paylaş</button>
+        <button type="button" id="listeGetirBtn" style="flex:1; font-size:13px;">📥 Hazır listeyi getir</button>
       </div>
-      <div class="ipucu" style="margin-top:4px;">Yazıcı bilgisayara bağlıysa: telefonda "gönder", bilgisayarda bu sayfayı açıp "getir".</div>
+      <div class="ipucu" style="margin-top:4px;">Liste bu cihazda durur. Başka telefonda ya da bilgisayarda basılacaksa "paylaş"; öbür cihazda "hazır listeyi getir".</div>
       <div id="aktarKutu" class="gizli" style="margin-top:8px;"></div>
     </div>
 
@@ -1497,6 +1497,7 @@
     var z = setTimeout(function(){ son('zaman aşımı'); }, zamanAsimi || 30000);
     window[ad] = function(veri){ son(null, veri); };
     sc.onerror = function(){ son('sunucuya ulaşılamadı'); };
+    sc.onload = function(){ setTimeout(function(){ son('sunucu bu isteği tanımıyor'); }, 300); };   // yanıt geldi ama veri değil
     sc.src = SUNUCU + '?' + Object.keys(params).map(function(a){ return encodeURIComponent(a) + '=' + encodeURIComponent(params[a]); }).join('&') + '&callback=' + ad;
     document.body.appendChild(sc);
   }
@@ -1513,12 +1514,12 @@
     var metin = JSON.stringify(govde);
     if(JSON.stringify(durum.liste).length > 44000){ toast('Liste çok uzun — bir kısmını basıp çıkar, sonra kalanı gönder', 'hata'); return; }
     btn.disabled = true; btn.textContent = '📤 Gönderiliyor…';
-    var bitir = function(m, tur){ btn.disabled = false; btn.textContent = '📤 Listeyi gönder'; toast(m, tur); };
+    var bitir = function(m, tur){ btn.disabled = false; btn.textContent = '📤 Listeyi paylaş'; toast(m, tur); };
     // Gönderim yanıtı okunamaz (no-cors); listenin sunucuya ulaştığı ayrıca sorularak doğrulanır.
     var deneme = 0;
     var dogrula = function(){
       sunucuSor({ action: 'etiket_liste', id: id }, function(hata, veri){
-        if(!hata && veri && veri.status === 'ok' && !veri.yok) return bitir(durum.liste.length + ' ürünlük liste gönderildi — bilgisayarda "getir" de');
+        if(!hata && veri && veri.status === 'ok' && !veri.yok) return bitir(durum.liste.length + ' ürünlük liste paylaşıldı — öbür cihazda "Hazır listeyi getir" de');
         if(veri && veri.status === 'error') return bitir('Gönderilemedi: ' + aktarHata(veri, hata), 'hata');
         if(++deneme < 4) return setTimeout(dogrula, 2500);
         bitir('Listenin ulaştığı doğrulanamadı — tekrar dene', 'hata');
@@ -1552,7 +1553,7 @@
     sunucuSor({ action: 'etiket_liste' }, function(hata, veri){
       if(hata || !veri || veri.status !== 'ok'){ kutu.innerHTML = '<div class="uyari kirmizi">Listeler alınamadı: ' + esc(aktarHata(veri, hata)) + '</div>'; return; }
       var l = (veri.listeler || []).slice(0, 8);
-      if(!l.length){ kutu.innerHTML = '<div class="ipucu">Gönderilmiş liste yok. Önce telefonda "Listeyi gönder" de.</div>'; return; }
+      if(!l.length){ kutu.innerHTML = '<div class="ipucu">Paylaşılmış liste yok. Önce listeyi hazırlayan cihazda "Listeyi paylaş" de.</div>'; return; }
       kutu.innerHTML = l.map(function(x){
         return '<button type="button" data-liste="' + esc(x.id) + '" style="width:100%; margin-top:6px; text-align:left; font-size:13px;">' +
           esc(x.kullanici || '?') + ' · ' + esc(x.zaman) + ' · <b>' + esc(x.adet) + ' ürün</b></button>';
@@ -1629,7 +1630,7 @@
         if(degisti){ kaydet(); listeCiz(); ciz(); }
         baski.isler.forEach(function(i){
           var z = izlenen[i.id]; if(!z || z.bitti) return;
-          if(i.durum === 'basildi'){ z.bitti = true; toast('Etiketler basıldı ✅'); basildiIsaretle(z.kuyruk); }
+          if(i.durum === 'basildi'){ z.bitti = true; toast('Yazıcıya gönderildi ✅ — çıkanı kontrol et'); basildiIsaretle(z.kuyruk); }
           else if(i.durum === 'hata'){ z.bitti = true; toast('Basılmadı: ' + (i.mesaj || 'bilinmeyen hata'), 'hata'); if(/katalog/i.test(i.mesaj || '')) katalogTazele(); }
           else if(i.durum === 'iptal'){ z.bitti = true; toast('Baskı iptal edildi', 'uyari'); }
         });
@@ -1702,13 +1703,16 @@
     if(ysYalnizSec){ ysYalnizSec = false; yazdirCiz(); return; }
     yaziciyaGonder(y);
   });
+  var denemeKip = false;   // deneme: ilk üründen tek etiket; liste "basıldı" işaretlenmez, baskı kaydı yazılmaz
   function yaziciyaGonder(y){
-    var id = kimlikNo(), k = kimlikBilgisi(), kuyrukUrun = basilanKuyrukUrunleri();
+    var dnm = denemeKip; denemeKip = false;
+    var id = kimlikNo(), k = kimlikBilgisi(), kuyrukUrun = dnm ? [] : basilanKuyrukUrunleri();
     var gonderilen = aktifListe().filter(function(u){ return !eksikler(u).length; }), gBicim = durum.bicim;
     if(!gonderilen.length){ toast('Bu biçimde basılacak ürün yok', 'uyari'); return; }
+    if(dnm) gonderilen = gonderilen.slice(0, 1);
     var liste = gonderilen.map(function(u){
       var c = {}; Object.keys(u).forEach(function(a){ c[a] = u[a]; }); c.kod = stokKodu(u); if(u.grup && u.grup.length > 1) c.gKod = grupKodu(u);
-      var ka = kendiAmbalaj(u); c.kaN = ka ? ka.n : 0; c.kaAd = ka ? ka.ad : ''; return c;
+      var ka = kendiAmbalaj(u); c.kaN = ka ? ka.n : 0; c.kaAd = ka ? ka.ad : ''; if(dnm) c.adet = 1; return c;
     });
     var govde = { type: 'baski_is', id: id, yazici: y.kimlik, liste: liste, kaynak: 'telefon: ' + (kullanici.name || '?'),
       ayar: { bicim: durum.bicim, kesim: durum.kesim, logo: durum.logo, slogan: durum.slogan, bosluk: durum.bosluk, a4diz: durum.a4diz, baslangic: durum.baslangic, zebra: durum.zebra } };
@@ -1717,8 +1721,8 @@
     toast('Gönderiliyor…');
     fetch(SUNUCU, { method: 'POST', mode: 'no-cors', headers: { 'Content-Type': 'text/plain;charset=utf-8' }, body: JSON.stringify(govde) })
       .then(function(){
-        izlenen[id] = { bitti: false, kuyruk: kuyrukUrun };
-        durum.isDurum[gBicim] = { id: id, adet: gonderilen.reduce(function(t, u){ return t + Math.max(1, parseInt(u.adet, 10) || 1); }, 0), zaman: Date.now(), durum: 'gonderildi', mesaj: '', yazici: y.ad, idler: gonderilen.map(function(u){ return u.id; }) };
+        izlenen[id] = { bitti: false, kuyruk: kuyrukUrun, kayit: dnm };
+        if(!dnm) durum.isDurum[gBicim] = { id: id, adet: gonderilen.reduce(function(t, u){ return t + Math.max(1, parseInt(u.adet, 10) || 1); }, 0), zaman: Date.now(), durum: 'gonderildi', mesaj: '', yazici: y.ad, idler: gonderilen.map(function(u){ return u.id; }) };
         kaydet(); yazdirCiz();
         var deneme = 0;
         var bak = function(){
@@ -2026,7 +2030,7 @@
     return o;
   }
   var IS_DURUM_YAZI = { gonderildi: '📡 gönderiliyor…', bekliyor: '⏳ sırada — birazdan basılacak', onay_bekliyor: '✋ bilgisayarda onay bekliyor', basiliyor: '🖨️ basılıyor…',
-    basildi: '✅ basıldı', hata: '❌ basılmadı', iptal: '⚠️ iptal edildi', ulasmadi: '❌ sunucuya ulaşmadı — tekrar dene' };
+    basildi: '✅ yazıcıya gönderildi', hata: '❌ basılmadı', iptal: '⚠️ iptal edildi', ulasmadi: '❌ sunucuya ulaşmadı — tekrar dene' };
   function yazdirCiz(){
     if(IS_NO) return;
     var kutu = $('yazdirOzet'); if(!kutu) return;
@@ -2049,9 +2053,11 @@
               (d.durum === 'hata' && d.mesaj ? '<br>' + esc(d.mesaj) : '') + '</div>' : '') +
           '<div class="yzDugme">' + (g.adet ? '<button type="button" class="ana" data-yz="bas" data-f="' + f + '">🖨️ Yazdır</button>' : '') +
             '<button type="button" data-yz="onizle" data-f="' + f + '">Önizle</button>' +
+            (g.adet && f === 'zebra' ? '<button type="button" data-yz="deneme" data-f="' + f + '">1 deneme etiketi</button>' : '') +
             (g.adet && yt('etiket_yazici') ? '<button type="button" data-yz="cihaz" data-f="' + f + '">Bu cihazdan</button>' : '') + '</div>' +
         '</div>';
       }).join('') +
+      '<div class="ipucu" style="margin-top:8px;">"Yazıcıya gönderildi" işin yazıcıya teslim edildiğini gösterir. Etiket ya da kâğıt bittiyse çıkmamış olabilir — çıkanı say.</div>' +
       (topBasilan ? '<button type="button" data-yz="temizle" style="width:100%; margin-top:10px; font-size:13px;">Basılan ' + topBasilan + ' ürünü listeden çıkar</button>' : '');
   }
   $('yazdirOzet').addEventListener('click', function(e){
@@ -2065,6 +2071,7 @@
     baskiYukle(function(){
       if(!baski.hazir){ toast('Yazıcı bilgisi alınamadı — biraz sonra tekrar dene', 'uyari'); return; }
       if(is === 'bas'){ bicimGonder(f); return; }
+      if(is === 'deneme'){ denemeKip = true; if(!bicimGonder(f)) denemeKip = false; return; }
       var o = grupOzet(), n = 0;                      // hepsi: her biçim kendi yazıcısına
       BICIM_SIRA.forEach(function(x){ if(o[x] && o[x].adet > 0 && bicimGonder(x, true)) n++; });
       if(n) toast(n + ' ayrı baskı işi gönderildi');
@@ -2106,7 +2113,8 @@
       ['rafAyar', 'zebraAyar', 'boslukAyar', 'dizAyar', 'sloganYazi'].forEach(function(id){ gizle($(id)); });
       gizle($('logoGoster').parentNode); gizle($('sloganYazi').previousElementSibling);
     }
-    if(!yt('etiket_yazici')){ gizle($('baskiKart')); gizle($('listeGonderBtn').parentNode); }
+    if(!yt('etiket_yazici')){ gizle($('baskiKart')); }
+    if(!yt('etiket_yazici') && !yt('etiket_duzenle')) gizle($('listeGonderBtn'));
     if(!yt('etiket_kuyruk')){ gizle($('kuyrukKart')); gizle($('topluKart')); }
     $('baskiAcBtn').addEventListener('click', function(){
       var kapali = $('baskiIcerik').classList.toggle('gizli'); $('baskiAcOk').textContent = kapali ? '▼' : '▲';
@@ -2120,6 +2128,15 @@
   function ayarCek(){
     if(IS_NO || !navigator.onLine) return;
     sunucuSor({ action: 'etiket_ayar' }, function(hata, veri){
+      if(hata && hata !== 'zaman aşımı' && YONETICI && !$('surumUyari')){
+        // Sunucu yanıt veriyor ama bu isteği tanımıyorsa Code.gs eskidir (build 139 öncesi).
+        sunucuSor({ action: 'etiket_kuyruk' }, function(h2, v2){
+          if(h2 || !v2 || v2.status !== 'ok' || $('surumUyari')) return;
+          var su = document.createElement('div'); su.id = 'surumUyari'; su.className = 'uyari kirmizi'; su.style.marginBottom = '8px';
+          su.textContent = 'Sunucudaki Code.gs eski sürüm (build 139 yüklü değil): fiyat/barkod koruması ve yazıcı yetkisi sunucuda çalışmıyor. Code.gs dosyasını Apps Script\'e yapıştırıp yeni sürüm olarak dağıt.';
+          $('icerik').insertBefore(su, $('icerik').firstChild);
+        });
+      }
       if(hata || !veri || veri.status !== 'ok') return;          // eski sunucu sürümü: cihazdaki ayarla devam
       ayarGeldi = true;
       var a = veri.ayar;
