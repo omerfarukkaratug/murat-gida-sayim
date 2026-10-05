@@ -182,13 +182,13 @@
   .aFiyat .kurus{font-size:.42em; line-height:1.05; letter-spacing:0; margin-left:.06em;}
   .aFiyat .tl{font-size:.34em; line-height:1.25; letter-spacing:0; margin-left:.12em; font-weight:800;}
   /* A5 yatay koli afişi (210 × 148 mm; 1em = 0,5 mm): solda büyük koli fiyatı, sağda tek/koli adet karşılaştırması */
-  .kAfis{position:relative; display:flex; flex-direction:column; height:100%; padding:12em 14em 10em; box-sizing:border-box; --kk:#e30613;}
+  .kAfis{position:relative; display:flex; flex-direction:column; height:100%; padding:12em 14em 10em; box-sizing:border-box; --kk:#000;}
   .kBas{display:flex; align-items:center; gap:8em; height:32em; flex-shrink:0;}
   .kBas .aLogo{height:30em; width:44em; object-fit:contain; object-position:left center; flex-shrink:0;}
   .kTur{background:#000; color:#fff; font-size:9em; font-weight:900; letter-spacing:.06em; padding:.45em 1.2em; border-radius:3em; white-space:nowrap;}
   .kDaire{position:absolute; top:9em; right:12em; width:66em; height:66em; border-radius:50%; background:var(--kk); color:#fff; display:flex; flex-direction:column; align-items:center; justify-content:center; transform:rotate(8deg);}
   .kDaire b{font-size:27em; font-weight:900; line-height:.95; letter-spacing:-.03em;}
-  .kDaire span{font-size:8.6em; font-weight:900; letter-spacing:.05em;}
+  .kDaire span{font-size:7.4em; font-weight:900; letter-spacing:.04em; text-align:center; line-height:1.05;}
   .kAd{height:56em; flex-shrink:0; display:flex; align-items:center; margin-top:4em; padding-right:74em;}
   .kAfis.duz .kAd{padding-right:0;}
   .kAd .yazi{display:block; width:100%; font-weight:900; line-height:1.04; text-transform:uppercase; overflow-wrap:anywhere; text-wrap:balance;}
@@ -2541,19 +2541,20 @@
   // Zebra rulo etiketi (varsayılan 80×34 mm). Ölçüler mm; 1em = 1mm. Fiyat, ruloda hazır basılı sarı kutuya oturur.
   // A5 yatay koli afişi. Mantık: koli fiyatı büyük; yanında tek alınca ve kolide adet fiyatı karşılaştırılır,
   // indirim yüzdesi ve kolideki toplam kazanç gösterilir. Fiyatlar katalogdan gelir; yüzde ve kazanç onlardan
-  // hesaplanır (yüzde aşağı yuvarlanır).
+  // hesaplanır (yüzde aşağı yuvarlanır). Siyah-beyazdır ve "indirim" sözü KULLANILMAZ: indirimli satış iddiası
+  // önceki fiyat ve tarih göstermeyi gerektirir; burada yalnızca aynı afişteki iki adet fiyatı karşılaştırılır.
   function koliAfisHtml(u){
     var kt = koliTeklif(u) || { n: 0, ad: 'Koli', fiyat: NaN, adet: NaN }, bfm = birimFiyatMetni(u, ' / '), tek = sayi(u.fiyat);
     var yuzde = Math.floor((1 - kt.adet / tek) * 100 + 1e-6), kazanc = Math.round((tek * kt.n - kt.fiyat) * 100) / 100, AD = esc(kt.ad.toLocaleUpperCase('tr-TR'));
     var satir = function(etk, f, sinif){ return '<div class="kSatir' + (sinif ? ' ' + sinif : '') + '"><span>' + etk + '</span><b>' + para(f) + '<i>₺</i></b></div>'; };
     return '<div class="sayfa" style="width:210mm; height:148mm; font-size:.5mm;"><div class="kAfis' + (yuzde >= 1 ? '' : ' duz') + '">' +
       '<div class="kBas">' + (durum.logo && magazaLogoVar ? '<img class="aLogo" src="' + MAGAZA_LOGO + '" alt="">' : '') + '<div class="kTur">' + AD + ' FİYATI</div></div>' +
-      (yuzde >= 1 ? '<div class="kDaire"><b>%' + yuzde + '</b><span>İNDİRİM</span></div>' : '') +
+      (yuzde >= 1 ? '<div class="kDaire"><b>%' + yuzde + '</b><span>' + AD + 'DE<br>DAHA UCUZ</span></div>' : '') +
       '<div class="kAd sig" data-em="24" data-min="10"><span class="yazi">' + adHtml(u) + '</span></div>' +
       '<div class="kOrta"><div class="kSol"><div class="kSolEtk">' + kt.n + ' ADETLİ ' + AD + '<small>KDV dâhil</small></div>' +
           '<div class="kFiyatKutu sig" data-em="120" data-min="40"><span class="kFiyat yazi">' + fiyatHtml(kt.fiyat) + '</span></div></div>' +
         '<div class="kSag">' + satir('TEK ALIRSAN ADEDİ', tek, '') + satir(AD + ' ALIRSAN ADEDİ', kt.adet, 'vurgu') +
-          (kazanc > 0 ? '<div class="kKazanc">' + esc(kt.ad) + ' başına ' + para(kazanc) + ' ₺ kazanç</div>' : '') + '</div></div>' +
+          (kazanc > 0 ? '<div class="kKazanc">Tek tek almaya göre ' + para(kazanc) + ' ₺ ucuz</div>' : '') + '</div></div>' +
       '<div class="kAlt"><div class="kBilgi">' +
         '<div>' + (bfm ? '<b>Birim fiyatı:</b> ' + bfm + ' &nbsp;·&nbsp; ' : '') + '<b>Üretim yeri:</b> ' + esc(String(u.yer || '').trim()) + '</div>' +
         '<div><b>Fiyat değişiklik tarihi:</b> ' + tarihTr(u.tarih) + (stokKodu(u) ? ' &nbsp;·&nbsp; Stok kodu: <b>' + esc(stokKodu(u)) + '</b>' : '') + '</div>' +
