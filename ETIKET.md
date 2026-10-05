@@ -258,3 +258,30 @@ Sunucu (Code.gs) ve baskı ajanı değişmedi.
 - `yazici/CALISTIR.bat` + `yazici/OTOMATIK-BASLAT.bat`: baski programı oturum açılınca küçültülmüş
   pencerede başlar, kapanırsa 15 sn sonra yeniden başlar. Eski gizli pencereli başlatıcı ve zamanlanmış
   görev kaldırılır. Kurulum: iki dosyayı `C:\MKBaski` içine koy, `OTOMATIK-BASLAT.bat`'a çift tıkla.
+
+## Build 143 — birim fiyat kuralı, koli fiyatlı etiket
+
+- **Birim fiyat** artık kendiliğinden yalnızca şunlarda yazılır: kg / litre / metre ile ölçülen ürünler ve adı
+  bez, tuvalet kâğıdı, kâğıt havlu, peçete içeren çoklu paketler. Birim fiyat satış fiyatıyla aynıysa yazılmaz.
+  Ürün kartında "Birim fiyatı" seçimiyle ürün bazında "her zaman yaz" / "yazma" denebilir (`bfKip`).
+- **A5 yatay koli afişi** (`a5y`): aynı stok kodunun koli/paket barkodu katalogda adet başına tekli fiyattan
+  ucuzsa ürün kartında "A5 yatay · koli" biçimi çıkar. Afişte üç kutu: tek adet fiyatı, koli fiyatı, kolide adet
+  fiyatı. Yalnızca A5 yatay; bir A4'e alt alta 2 tane basılır. Üç fiyat da katalogdan gelir, elle yazılamaz.
+  Baskı işine `ayar.bicim='a5'`, `ayar.yatay=true` ve ürün başına `kvN/kvAd/kvFiyat` olarak gider (sunucu ve
+  baskı programı değişmedi). Sınır: koli fiyatı değişince "fiyatı değişenler" bu afişi göstermez; sunucu koli
+  fiyatını katalogla karşılaştırmaz.
+
+## Build 144 — kasanın miktar indirimi (ERP promosyonu) koli afişinde
+
+ERP12'de koli barkodu olmayan ürünlerde kasa, "24 adet girilince %10" gibi kuralları `POS_PROMASYON`
+tablosundan uygular (ürüne, stok grubuna ya da markaya bağlı; tarihli). Artık:
+
+- `erp/stok-otomatik-gonder.ps1` geçerli kuralları okur (AKTIF, INDIRIMMI, tarih aralığında, ADET = P_ADET,
+  %0–100 arası, hedef = kendisi) ve tekli barkodlara `pr = "ADET:YÜZDE:BİTİŞ"` alanını yazar
+  (öncelik ürün > grup > marka; aynı hedefte en az adetli kural). "2 al 1 bedava" türü kurallar alınmaz.
+- `Code.gs` (build144) Katalog sayfasına 12. sütun "Promosyon"u yazar ve katalogla birlikte verir.
+- Etiket sayfası: koli barkodu fiyatı yoksa bu kuraldan koli fiyatını hesaplar (adet × fiyat × (1 − %)),
+  "A5 yatay · koli" biçimi çıkar. Bitiş tarihi geçmiş kural sayılmaz.
+- `erp/kesif-koli-fiyat.ps1` + `KESIF-KOLI.bat`: bu tabloyu bulmak için kullanılan salt-okunur keşif aracı.
+
+Kurulum sırası: önce Code.gs (yeni sürüm olarak dağıt), sonra ERP bilgisayarında stok-otomatik-gonder.ps1.
