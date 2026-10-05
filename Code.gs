@@ -8,7 +8,7 @@
 // bir sürüm dağıttıktan sonra /exec adresini boş açtığında burada yazan
 // numarayı görmelisin; index.html'in üstündeki "build" numarasıyla
 // eşleşecek şekilde ben her ikisini birlikte güncelliyorum.
-var GS_VERSION = 'build135';
+var GS_VERSION = 'build138';
 
 // Sheets'te "Saat" sütunu zaman biçimli olarak algılanırsa, hücre değeri düz
 // metin değil bir Date nesnesi olarak gelir ve String(...) çirkin bir çıktı
@@ -555,7 +555,14 @@ function etiketGrupKaydet(gruplar, dagit, gonderen) {
     uyeler.forEach(function (x) { cikan[x.barkod] = true; });
     yeni.push({ id: Utilities.getUuid().substring(0, 12), ad: String(g.ad || '').substring(0, 120), fiyat: f, uyeler: uyeler, zaman: simdi, kullanici: kim, kod: /^\d{5}$/.test(String((g && g.kod) || '')) ? String(g.kod) : '' });
   });
-  var kalan = eski.filter(function (g) { return !g.uyeler.some(function (x) { return cikan[String(x.barkod)]; }); });
+  // Yeni grupla ortak ürünü olan eski grup silinir (yerine yenisi basıldı). "dagit"teki ürün ise yalnızca
+  // grubundan düşülür; geriye 2'den az ürün kalırsa grup silinir. (build 138: eskiden bütün grup siliniyordu.)
+  var yeniUye = {}, ayrilan = {};
+  yeni.forEach(function (g) { g.uyeler.forEach(function (x) { yeniUye[x.barkod] = true; }); });
+  dagit.forEach(function (b) { ayrilan[b] = true; });
+  var kalan = eski.filter(function (g) { return !g.uyeler.some(function (x) { return yeniUye[String(x.barkod)]; }); })
+    .map(function (g) { g.uyeler = g.uyeler.filter(function (x) { return !ayrilan[String(x.barkod)]; }); return g; })
+    .filter(function (g) { return g.uyeler.length > 1; });
   var rows = kalan.concat(yeni).map(function (g) { return [g.id, g.ad, String(g.fiyat), JSON.stringify(g.uyeler), g.zaman, g.kullanici, g.kod || '']; });
   var ss = SpreadsheetApp.getActiveSpreadsheet();
   var sheet = ss.getSheetByName(ETIKET_GRUP_SEKME) || ss.insertSheet(ETIKET_GRUP_SEKME);
