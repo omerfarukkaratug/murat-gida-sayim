@@ -100,6 +100,17 @@ if ($stok) {
     } else { Yaz "  FIS_DETAY'da miktar sutunu bulunamadi: $($mk -join ', ')" }
 } else { Yaz "  Urun bulunamadigi icin atlandi." }
 
+Yaz ""; Yaz "== 7) KASA PROMOSYON KURALLARI (POS_PROMASYON, tamami) =="
+Dok (@(Sor $db "SELECT * FROM dbo.POS_PROMASYON ORDER BY ID"))
+
+Yaz ""; Yaz "== 8) BU URUNUN stok kartindaki iskonto / grup / marka alanlari =="
+if ($stok) {
+    $sk = @((Sor $db "SELECT COLUMN_NAME AS c FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_NAME = 'STOK' AND (COLUMN_NAME LIKE '%ISKONTO%' OR COLUMN_NAME LIKE '%INDIRIM%' OR COLUMN_NAME LIKE '%GRUP%' OR COLUMN_NAME LIKE '%MARKA%' OR COLUMN_NAME IN ('ID', 'KOD'))") | ForEach-Object { "[" + [string]$_.c + "]" })
+    if ($sk.Count -gt 0) { Dok (@(Sor $db ("SELECT " + ($sk -join ", ") + " FROM dbo.STOK WHERE ID = '$stok'"))) }
+    Yaz "  -- STOK_GRUP (iskontosu olanlar):"
+    Dok (@(Sor $db "SELECT * FROM dbo.STOK_GRUP WHERE ISNULL(CAST(ISKONTO AS nvarchar(50)), '') NOT IN ('', '0', '0.00')"))
+}
+
 [System.IO.File]::WriteAllText($Cikti, $sb.ToString(), [System.Text.Encoding]::UTF8)
 Write-Host ""; Write-Host "Bitti. Dosya: $Cikti"
 Read-Host "Kapatmak icin Enter"
