@@ -94,9 +94,9 @@ if ($stok) {
     $m = @("MIKTAR_FIS", "MIKTAR", "MIKTAR1", "ADET") | Where-Object { $mk -contains $_ } | Select-Object -First 1
     if ($m) {
         Yaz "  -- 6 adet ve uzeri:"
-        Dok (@(Sor $db "SELECT TOP 8 f.FIS_TURU, f.FIS_TARIHI, d.* FROM dbo.FIS_DETAY d JOIN dbo.FIS f ON f.ID = d.FIS WHERE d.STOK = '$stok' AND d.$m >= 6 AND f.FIS_TURU IN (2, 6, 11, 12) ORDER BY f.FIS_TARIHI DESC"))
+        Dok (@(Sor $db "SELECT TOP 8 f.FIS_TURU AS F_TUR, f.FIS_TARIHI AS F_TARIH, d.* FROM dbo.FIS_DETAY d JOIN dbo.FIS f ON f.ID = d.FIS WHERE d.STOK = '$stok' AND d.$m >= 6 AND f.FIS_TURU IN (2, 6, 11, 12) ORDER BY f.FIS_TARIHI DESC"))
         Yaz "  -- 1 adet (karsilastirma):"
-        Dok (@(Sor $db "SELECT TOP 3 f.FIS_TURU, f.FIS_TARIHI, d.* FROM dbo.FIS_DETAY d JOIN dbo.FIS f ON f.ID = d.FIS WHERE d.STOK = '$stok' AND d.$m = 1 AND f.FIS_TURU IN (2, 6, 11, 12) ORDER BY f.FIS_TARIHI DESC"))
+        Dok (@(Sor $db "SELECT TOP 3 f.FIS_TURU AS F_TUR, f.FIS_TARIHI AS F_TARIH, d.* FROM dbo.FIS_DETAY d JOIN dbo.FIS f ON f.ID = d.FIS WHERE d.STOK = '$stok' AND d.$m = 1 AND f.FIS_TURU IN (2, 6, 11, 12) ORDER BY f.FIS_TARIHI DESC"))
     } else { Yaz "  FIS_DETAY'da miktar sutunu bulunamadi: $($mk -join ', ')" }
 } else { Yaz "  Urun bulunamadigi icin atlandi." }
 
