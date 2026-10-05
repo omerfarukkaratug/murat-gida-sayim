@@ -105,6 +105,16 @@
   .secSatir input{width:22px; height:22px; flex:none;}
   #secimAlt{padding:10px 14px calc(10px + env(safe-area-inset-bottom)); background:var(--panel); border-top:1px solid var(--line); display:flex; gap:8px;}
   #kamera video{width:100%; height:100%; object-fit:cover;}
+  #kamera.tam{position:fixed; inset:0; height:auto; z-index:250; border-radius:0; margin:0;}
+  #kamera.tam .kamCerceve{inset:16% 14% 44% 14%;}
+  #kamFlas.kirmizi{background:rgba(200,40,40,.6);}
+  #dgBaslik{position:absolute; top:18px; left:14px; z-index:7; color:#fff; font-weight:800; font-size:15px; text-shadow:0 1px 3px #000;}
+  #dgPanel{position:absolute; left:0; right:0; bottom:0; z-index:8; padding:14px 16px calc(16px + env(safe-area-inset-bottom)); background:#26241c; color:#fff; border-top:4px solid #777; min-height:30%;}
+  #dgPanel.iyi{background:#1f6b3a; border-top-color:#8fe0ac;} #dgPanel.kotu{background:#a52222; border-top-color:#ffb3b3;} #dgPanel.uyari{background:#8a5a12; border-top-color:#ffcf8f;}
+  #dgDurum{font-size:21px; font-weight:900; line-height:1.2;}
+  #dgAyrinti{font-size:14.5px; line-height:1.4; margin-top:6px; opacity:.95;}
+  #dgEkle{margin-top:10px; width:100%; font-weight:800;}
+  #dgAlt{display:flex; justify-content:space-between; align-items:center; gap:10px; margin-top:12px; font-size:12.5px; opacity:.9;}
 
   /* ================= BASKI ALANI =================
      Ekranda görünmez (sayfanın dışında durur ama ölçülebilir kalır: yazıların
@@ -164,6 +174,8 @@
   .barkod{display:block;}
   .brkSatir{display:flex; align-items:flex-end; gap:1.4em; margin-top:.3em;}
   .brkSatir .barkod{margin-top:0 !important;}
+  .aSag{display:flex; align-items:flex-end; gap:2.4em; flex-shrink:0;}
+  .aSag .qr{width:10em; height:10em;} .dar .aSag .qr{width:8.6em; height:8.6em;}
   .kodKutu{font-size:.58em; line-height:1.25; font-weight:400; white-space:nowrap; padding-bottom:.1em;}
   .kodKutu b{display:block; font-size:1.3em; font-weight:800;}
   .aBilgi .barkod{width:8.6em; height:1.7em; margin-top:.3em;}
@@ -200,8 +212,8 @@
   .zTarih span{font-size:1.75em;}
   .zSol{display:flex; flex-direction:column; justify-content:space-between; overflow:hidden;}
   .zSol .barkod{width:100%; max-width:36em; height:8em;}
-  .zSol .zGrupBrk .barkod{height:4.6em; max-width:30em;}
-  .zCesit + .zGrupBrk{margin-top:.3em;}
+  .zBrkSatir{display:flex; align-items:flex-start; justify-content:space-between; gap:.6em;}
+  .qr{display:block;}
   .zBrk{font-family:"Courier New", monospace; font-size:2.1em; letter-spacing:.14em; line-height:1.1;}
   .zCesit{font-size:1.9em; font-weight:700; line-height:1.15; max-height:11em; overflow:hidden;}
   .zLogolar{display:flex; align-items:center; gap:2em; height:4.6em;}
@@ -250,6 +262,11 @@
   <div id="icerik" class="gizli">
     <div id="logoUyari" class="uyari kirmizi gizli">⚠️ <b>Yerli üretim logosu dosyası yok.</b> Türkiye'de üretilen ürünlerin etiketinde Bakanlığın resmî yerli üretim logosu zorunlu. Logoyu Ticaret Bakanlığı'nın sitesinden indirip uygulamanın klasörüne <b>yerli-uretim.png</b> adıyla ekleyince etiketlerde kendiliğinden çıkar. O zamana kadar basılan yerli ürün etiketleri <b>eksik</b> olur.</div>
     <div id="katalogBilgi" class="ipucu" style="margin:0 2px 10px;"></div>
+
+    <div class="kart" style="padding-top:12px; padding-bottom:12px;">
+      <button type="button" id="dogrulaBtn" style="width:100%; font-weight:800;">✅ QR etiket doğrulama</button>
+      <div class="ipucu" style="margin-top:6px;">Raftaki etiketin QR kodunu okut: etikette yazan fiyat güncel mi, anında yeşil/kırmızı görürsün.</div>
+    </div>
 
     <div class="kart">
       <div class="kartBaslik">1 · Biçim</div>
@@ -306,6 +323,13 @@
         <button type="button" id="kamFener" class="kamDugme gizli" style="right:62px;" title="Fener">⚡</button>
         <button type="button" id="kamKapat" class="kamDugme" style="right:12px;" title="Kapat">✕</button>
         <div id="kamBant"></div>
+        <div id="dgBaslik" class="gizli">QR etiket doğrulama</div>
+        <div id="dgPanel" class="gizli">
+          <div id="dgDurum"></div>
+          <div id="dgAyrinti"></div>
+          <button type="button" id="dgEkle" class="gizli">Yenisini baskı listesine ekle</button>
+          <div id="dgAlt"><span id="dgSayac"></span><label style="margin:0; text-transform:none; letter-spacing:0; font-size:12.5px; color:inherit; display:flex; align-items:center; gap:6px;"><input id="dgOto" type="checkbox" style="width:auto;"> hatalıları listeye ekle</label></div>
+        </div>
       </div>
       <div id="sonuclar"></div>
       <button type="button" id="elleBtn" style="width:100%; margin-top:8px; border-style:dashed; font-size:13px;">➕ Katalogda olmayan ürünü elle ekle</button>
@@ -785,6 +809,7 @@
     $('kamFener').classList.remove('acik'); $('kamFener').classList.add('gizli'); $('kamBant').className = '';
     if(akis){ akis.getTracks().forEach(function(t){ t.stop(); }); akis = null; }
     $('kamera').classList.add('gizli');
+    dogrulaKip = false; $('kamera').classList.remove('tam'); $('dgPanel').classList.add('gizli'); $('dgBaslik').classList.add('gizli');
   }
   // Okutma sonucu: ekran yanıp söner, altta ürün adı/uyarı bandı çıkar (sayım ekranındaki gibi).
   var fenerAcik = false, bantZ = null;
@@ -795,6 +820,98 @@
     clearTimeout(bantZ); bantZ = setTimeout(function(){ b.className = tamam ? 'tamam' : 'uyar'; }, 2200);
   }
   $('kamKapat').addEventListener('click', function(){ kameraKapat(); });
+
+  // ---------- QR ETİKET DOĞRULAMA (ayrı ekran; baskı listesinden bağımsız) ----------
+  // Raftaki etiketin QR'ı okutulur: etikette yazan fiyat = katalogdaki güncel fiyat mı? Yeşil / kırmızı.
+  var dogrulaKip = false, dg = { kontrol: 0, hatali: 0, gorulen: {}, son: null, sonKod: '', sonZaman: 0 }, sesBag = null;
+  function dgSes(iyi){
+    try {
+      if(!sesBag) return;
+      var cal = function(frekans, bas, sure){
+        var o = sesBag.createOscillator(), g = sesBag.createGain();
+        o.frequency.value = frekans; o.connect(g); g.connect(sesBag.destination);
+        g.gain.setValueAtTime(.25, sesBag.currentTime + bas); g.gain.exponentialRampToValueAtTime(.001, sesBag.currentTime + bas + sure);
+        o.start(sesBag.currentTime + bas); o.stop(sesBag.currentTime + bas + sure);
+      };
+      if(iyi) cal(1320, 0, .09); else { cal(330, 0, .16); cal(250, .2, .22); }
+    } catch(e){}
+  }
+  function dogrulaSonuc(kod){
+    var q = qrCoz(kod), bg = bugun(), gk = q ? q.gKod : grupKodCoz(kod);
+    if(gk){
+      var g = null; kayitliGruplar.forEach(function(x){ if(String(x.kod || '') === gk) g = x; });
+      if(!g) return { anahtar: 'C' + gk, tur: 'uyari', baslik: 'KAYIT YOK · ' + grupKodYazi(gk), ayrinti: ['Bu çeşitli etiket sistemde kayıtlı değil (eski etiket olabilir).'].concat(q ? ['Etikette yazan: ' + para(q.fiyat) + ' ₺'] : []) };
+      var ef = q ? q.fiyat : Number(g.fiyat), ust = grupKodYazi(gk) + ' · ' + g.ad;
+      var farkli = g.uyeler.map(function(x){
+        var f = katalogFiyat(x.barkod); return (!isNaN(f) && f > 0 && Math.abs(f - ef) > 0.004) ? ((katalogHarita[String(x.barkod)] || {}).name || x.ad) + ' → ' + para(f) + ' ₺' : '';
+      }).filter(Boolean);
+      if(farkli.length) return { anahtar: 'C' + gk, tur: 'kotu', baslik: 'YANLIŞ · etikette ' + para(ef) + ' ₺', ayrinti: [ust].concat(farkli.slice(0, 4)), grup: g };
+      if(q && q.bitis && q.bitis < bg) return { anahtar: 'C' + gk, tur: 'kotu', baslik: 'İNDİRİM BİTMİŞ · ' + tarihTr(q.bitis), ayrinti: [ust], grup: g };
+      return { anahtar: 'C' + gk, tur: 'iyi', baslik: 'DOĞRU · ' + para(ef) + ' ₺', ayrinti: [ust] };
+    }
+    var barkod = q ? q.barkod : kod, k = katalogHarita[barkod];
+    if(!k) return { anahtar: barkod, tur: 'uyari', baslik: 'KATALOGDA YOK', ayrinti: [barkod] };
+    var f = sayi(k.price), fiyatVar = !(k.price === '' || isNaN(f) || !(f > 0));
+    if(!q) return { anahtar: barkod, tur: 'uyari', baslik: 'QR YOK · gözle karşılaştır', ayrinti: [k.name, fiyatVar ? 'Şimdiki fiyat: ' + para(f) + ' ₺' : 'Katalogda fiyatı yok'], barkod: fiyatVar ? barkod : '' };
+    if(!fiyatVar) return { anahtar: barkod, tur: 'uyari', baslik: 'FİYATI YOK', ayrinti: [k.name, 'Etikette yazan: ' + para(q.fiyat) + ' ₺'] };
+    if(Math.abs(f - q.fiyat) > 0.004) return { anahtar: barkod, tur: 'kotu', baslik: 'YANLIŞ · etikette ' + para(q.fiyat) + ' → şimdi ' + para(f) + ' ₺', ayrinti: [k.name], barkod: barkod };
+    if(q.bitis && q.bitis < bg) return { anahtar: barkod, tur: 'kotu', baslik: 'İNDİRİM BİTMİŞ · ' + tarihTr(q.bitis), ayrinti: [k.name, 'Fiyat: ' + para(f) + ' ₺'], barkod: barkod };
+    return { anahtar: barkod, tur: 'iyi', baslik: 'DOĞRU · ' + para(f) + ' ₺', ayrinti: [k.name] };
+  }
+  // Hatalı etiketin yenisini baskı listesine koyar. Döner: 'eklendi' | 'zaten' | 'olmadi'
+  function dogrulaEkle(s){
+    if(s.grup){
+      if(s.grup.uyeler.some(function(x){ return listedeMi(String(x.barkod)); })) return 'zaten';
+      if(grupBozukMu(s.grup)){ gruplariDuzelt(s.grup); return 'eklendi'; }
+      var uy = s.grup.uyeler.map(function(x){ return { barkod: String(x.barkod), ad: (katalogHarita[String(x.barkod)] || {}).name || x.ad }; });
+      if(!grupOgesiEkle(uy, s.grup.ad, s.grup.kod)) return 'olmadi';
+      kaydet(); listeCiz(); ciz(); return 'eklendi';
+    }
+    if(!s.barkod) return 'olmadi';
+    if(listedeMi(s.barkod)) return 'zaten';
+    return barkodEkle(s.barkod) === 'eklendi' ? 'eklendi' : 'olmadi';
+  }
+  function dogrulaCiz(){
+    var s = dg.son, p = $('dgPanel');
+    $('dgSayac').textContent = 'Kontrol edilen: ' + dg.kontrol + ' · Hatalı: ' + dg.hatali;
+    if(!s){ p.className = ''; $('dgDurum').textContent = 'Etiketin QR kodunu okut'; $('dgAyrinti').innerHTML = ''; $('dgEkle').classList.add('gizli'); return; }
+    p.className = s.tur;
+    $('dgDurum').textContent = (s.tur === 'iyi' ? '✅ ' : s.tur === 'kotu' ? '❌ ' : '⚠️ ') + s.baslik;
+    $('dgAyrinti').innerHTML = s.ayrinti.map(esc).join('<br>') + (s.ekNot ? '<br><b>' + esc(s.ekNot) + '</b>' : '');
+    $('dgEkle').classList.toggle('gizli', !(s.tur !== 'iyi' && (s.barkod || s.grup) && !s.ekNot));
+  }
+  function dogrulaOku(kod){
+    // Aynı etiket kameranın önünde dururken tekrar tekrar sayılmasın.
+    if(kod === dg.sonKod && Date.now() - dg.sonZaman < 2500){ dg.sonZaman = Date.now(); return; }
+    dg.sonKod = kod; dg.sonZaman = Date.now();
+    var s = dogrulaSonuc(kod), ilk = !dg.gorulen[s.anahtar];
+    if(ilk){ dg.gorulen[s.anahtar] = true; dg.kontrol++; if(s.tur === 'kotu') dg.hatali++; }
+    if(s.tur === 'kotu' && durum.dgOto !== false){
+      var e = dogrulaEkle(s); s.ekNot = e === 'eklendi' ? 'Yenisi baskı listesine eklendi' : e === 'zaten' ? 'Zaten baskı listesinde' : '';
+    }
+    dg.son = s; dogrulaCiz();
+    var f = $('kamFlas'); f.className = s.tur === 'iyi' ? 'yesil' : s.tur === 'kotu' ? 'kirmizi' : 'turuncu'; f.style.opacity = '1'; setTimeout(function(){ f.style.opacity = '0'; }, 220);
+    if(navigator.vibrate) navigator.vibrate(s.tur === 'iyi' ? 30 : [90, 60, 90]);
+    dgSes(s.tur === 'iyi');
+  }
+  function dogrulaAc(){
+    if(akis) kameraKapat();
+    try { if(!sesBag){ var SB = window.AudioContext || window.webkitAudioContext; if(SB) sesBag = new SB(); } if(sesBag && sesBag.state === 'suspended') sesBag.resume(); } catch(e){}
+    dg = { kontrol: 0, hatali: 0, gorulen: {}, son: null, sonKod: '', sonZaman: 0 };
+    dogrulaKip = true;
+    $('kamera').classList.add('tam'); $('dgPanel').classList.remove('gizli'); $('dgBaslik').classList.remove('gizli');
+    $('dgOto').checked = durum.dgOto !== false;
+    dogrulaCiz();
+    kameraAc();
+    if($('kamera').classList.contains('gizli')) kameraKapat();   // cihazda kamera yoksa kip de kapanır
+  }
+  $('dogrulaBtn').addEventListener('click', dogrulaAc);
+  $('dgOto').addEventListener('change', function(){ durum.dgOto = this.checked; kaydet(); });
+  $('dgEkle').addEventListener('click', function(){
+    var s = dg.son; if(!s) return;
+    var e = dogrulaEkle(s); s.ekNot = e === 'eklendi' ? 'Yenisi baskı listesine eklendi' : e === 'zaten' ? 'Zaten baskı listesinde' : 'Eklenemedi';
+    dogrulaCiz();
+  });
   $('kamFener').addEventListener('click', function(){
     var iz = akis && akis.getVideoTracks()[0]; if(!iz) return;
     fenerAcik = !fenerAcik;
@@ -808,7 +925,10 @@
     okuyucu.detect(v).then(function(k){
       if(k && k.length && k[0].rawValue){
         var kod = String(k[0].rawValue).trim();
+        if(dogrulaKip){ dogrulaOku(kod); taraZ = setTimeout(tara, 350); return; }
         if(navigator.vibrate) navigator.vibrate(30);
+        // Etiketteki doğrulama QR'ı normal okutmada ürünün barkodu (ya da çeşitli etiket kodu) gibi davranır.
+        var qk = qrCoz(kod); if(qk) kod = qk.gKod ? grupKodBarkod(qk.gKod) : qk.barkod;
         // Kamera AÇIK kalır: personel ürünleri art arda okutur. Aynı barkod 3 sn
         // içinde tekrar görülürse yok sayılır (çift ekleme olmasın).
         if(!(kod === sonKod && Date.now() - sonKodZaman < 3000)){
@@ -828,8 +948,7 @@
       sonra();
     }).catch(sonra);
   }
-  $('kameraBtn').addEventListener('click', function(){
-    if(akis){ kameraKapat(); return; }
+  function kameraAc(){
     if(!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia){ toast('Bu cihazda kamera kullanılamıyor', 'hata'); return; }
     $('kamera').classList.remove('gizli');
     // Hata nedeni açık yazılır (izin mi, kamera mı, okuyucu mu): "açılmadı" demek sorunu bulmaya yetmiyor.
@@ -850,12 +969,13 @@
         try { var oyn = $('video').play(); if(oyn && oyn.catch) oyn.catch(function(){}); } catch(e0){}
         try { var yet = s.getVideoTracks()[0].getCapabilities ? s.getVideoTracks()[0].getCapabilities() : {}; if(yet && yet.torch) $('kamFener').classList.remove('gizli'); } catch(e){}
         return okuyucuYukle().then(function(BD){
-          try { okuyucu = new BD({ formats: ['ean_13', 'ean_8', 'upc_a', 'upc_e', 'code_128', 'code_39', 'itf'] }); }
-          catch(e1){ okuyucu = new BD({ formats: ['ean_13', 'ean_8', 'code_128'] }); }
+          try { okuyucu = new BD({ formats: ['qr_code', 'ean_13', 'ean_8', 'upc_a', 'upc_e', 'code_128', 'code_39', 'itf'] }); }
+          catch(e1){ okuyucu = new BD({ formats: ['qr_code', 'ean_13', 'ean_8', 'code_128'] }); }
           tara();
         }).catch(function(e){ var h = new Error((e && e.message) || 'okuyucu'); h.okuyucu = true; throw h; });
       }).catch(kamHata);
-  });
+  }
+  $('kameraBtn').addEventListener('click', function(){ if(akis){ kameraKapat(); return; } kameraAc(); });
 
   // ---------- Liste (her ürünün etiket bilgileri) ----------
   function eksikler(u){
@@ -1765,6 +1885,163 @@
     var t = para(f), v = t.lastIndexOf(',');
     return '<span class="tam">' + esc(t.slice(0, v)) + '</span><span class="kurus">' + esc(t.slice(v)) + '</span><span class="tl">₺</span>';
   }
+  // ---------- QR üretimi (kütüphanesiz; alfasayısal kip, hata düzeltme M, sürüm 1–5) ----------
+  // Yalnızca etiket doğrulama kodu için: içerik 0-9 A-Z boşluk $%*+-./: karakterlerinden oluşur.
+  var QR_ALFA = '0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ $%*+-./:';
+  // sürüm: [toplam kod sözcüğü, blok başına düzeltme sözcüğü, blok sayısı, alfasayısal kapasite]
+  var QR_SURUM = { 1: [26, 10, 1, 20], 2: [44, 16, 1, 38], 3: [70, 26, 1, 61], 4: [100, 18, 2, 90], 5: [134, 24, 2, 122] };
+  function qrMatris(metin){
+    metin = String(metin || '');
+    for(var ci = 0; ci < metin.length; ci++) if(QR_ALFA.indexOf(metin.charAt(ci)) === -1) return null;
+    var surum = 0; for(var sv = 1; sv <= 5; sv++){ if(metin.length <= QR_SURUM[sv][3]){ surum = sv; break; } }
+    if(!surum) return null;
+    var S = QR_SURUM[surum], n = 17 + 4 * surum, veriAdet = S[0] - S[1] * S[2];
+    // --- veri bitleri
+    var bit = [];
+    var ekle = function(deger, uzunluk){ for(var i = uzunluk - 1; i >= 0; i--) bit.push((deger >>> i) & 1); };
+    ekle(2, 4); ekle(metin.length, 9);
+    for(var i = 0; i + 1 < metin.length; i += 2) ekle(QR_ALFA.indexOf(metin.charAt(i)) * 45 + QR_ALFA.indexOf(metin.charAt(i + 1)), 11);
+    if(metin.length % 2) ekle(QR_ALFA.indexOf(metin.charAt(metin.length - 1)), 6);
+    var kap = veriAdet * 8;
+    ekle(0, Math.min(4, kap - bit.length));
+    while(bit.length % 8) bit.push(0);
+    for(var dolgu = 0xEC; bit.length < kap; dolgu ^= 0xEC ^ 0x11) ekle(dolgu, 8);
+    var veri = [];
+    for(i = 0; i < bit.length; i += 8){ var b = 0; for(var j = 0; j < 8; j++) b = (b << 1) | bit[i + j]; veri.push(b); }
+    // --- Reed–Solomon (GF(256), ilkel polinom 0x11D)
+    var us = [], lg = [], x = 1;
+    for(i = 0; i < 255; i++){ us[i] = x; lg[x] = i; x <<= 1; if(x & 0x100) x ^= 0x11D; }
+    var carp = function(a, c){ return (a === 0 || c === 0) ? 0 : us[(lg[a] + lg[c]) % 255]; };
+    var ecAdet = S[1], uretec = [1];
+    for(i = 0; i < ecAdet; i++){
+      var yeni = []; for(j = 0; j <= uretec.length; j++) yeni[j] = 0;
+      for(j = 0; j < uretec.length; j++){ yeni[j] ^= uretec[j]; yeni[j + 1] ^= carp(uretec[j], us[i]); }
+      uretec = yeni;
+    }
+    var bloklar = [], ecler = [], blokBoy = veriAdet / S[2];
+    for(var bl = 0; bl < S[2]; bl++){
+      var d = veri.slice(bl * blokBoy, (bl + 1) * blokBoy), kalan = d.slice();
+      for(j = 0; j < ecAdet; j++) kalan.push(0);
+      for(i = 0; i < d.length; i++){ var kat = kalan[i]; if(kat) for(j = 1; j < uretec.length; j++) kalan[i + j] ^= carp(uretec[j], kat); }
+      bloklar.push(d); ecler.push(kalan.slice(d.length));
+    }
+    var hepsi = [];
+    for(i = 0; i < blokBoy; i++) for(bl = 0; bl < S[2]; bl++) hepsi.push(bloklar[bl][i]);
+    for(i = 0; i < ecAdet; i++) for(bl = 0; bl < S[2]; bl++) hepsi.push(ecler[bl][i]);
+    // --- matris: sabit desenler
+    var m = [], sabit = [];
+    for(i = 0; i < n; i++){ m[i] = []; sabit[i] = []; for(j = 0; j < n; j++){ m[i][j] = 0; sabit[i][j] = false; } }
+    var koy = function(sat, sut, koyu){ if(sat < 0 || sut < 0 || sat >= n || sut >= n) return; m[sat][sut] = koyu ? 1 : 0; sabit[sat][sut] = true; };
+    var bulucu = function(sat, sut){
+      for(var a = -1; a <= 7; a++) for(var c = -1; c <= 7; c++){
+        var ic = a >= 0 && a <= 6 && c >= 0 && c <= 6;
+        koy(sat + a, sut + c, ic && (a === 0 || a === 6 || c === 0 || c === 6 || (a >= 2 && a <= 4 && c >= 2 && c <= 4)));
+      }
+    };
+    bulucu(0, 0); bulucu(0, n - 7); bulucu(n - 7, 0);
+    if(surum >= 2){ var h = n - 7; for(var a2 = -2; a2 <= 2; a2++) for(var c2 = -2; c2 <= 2; c2++) koy(h + a2, h + c2, Math.max(Math.abs(a2), Math.abs(c2)) !== 1); }
+    for(i = 8; i < n - 8; i++){ koy(6, i, i % 2 === 0); koy(i, 6, i % 2 === 0); }
+    koy(n - 8, 8, true);
+    // biçim bilgisi yerleri ayrılır (sonra yazılır)
+    for(i = 0; i <= 8; i++){ if(!sabit[8][i]) koy(8, i, false); if(!sabit[i][8]) koy(i, 8, false); }
+    for(i = 0; i < 8; i++){ koy(8, n - 1 - i, false); koy(n - 1 - i, 8, false); }
+    // --- veri yerleşimi (zikzak)
+    var sira = 0, toplamBit = hepsi.length * 8;
+    for(var sag = n - 1; sag >= 1; sag -= 2){
+      if(sag === 6) sag = 5;
+      for(var dikey = 0; dikey < n; dikey++){
+        for(j = 0; j < 2; j++){
+          var sut = sag - j, yukari = ((sag + 1) & 2) === 0, sat = yukari ? n - 1 - dikey : dikey;
+          if(!sabit[sat][sut] && sira < toplamBit){ m[sat][sut] = (hepsi[sira >>> 3] >>> (7 - (sira & 7))) & 1; sira++; }
+        }
+      }
+    }
+    // --- maske seçimi (ceza puanı en düşük olan)
+    var maskeler = [
+      function(r, c){ return (r + c) % 2 === 0; }, function(r){ return r % 2 === 0; }, function(r, c){ return c % 3 === 0; },
+      function(r, c){ return (r + c) % 3 === 0; }, function(r, c){ return (Math.floor(r / 2) + Math.floor(c / 3)) % 2 === 0; },
+      function(r, c){ return (r * c) % 2 + (r * c) % 3 === 0; }, function(r, c){ return ((r * c) % 2 + (r * c) % 3) % 2 === 0; },
+      function(r, c){ return ((r + c) % 2 + (r * c) % 3) % 2 === 0; }];
+    var bicimYaz = function(mat, maske){
+      var veriB = (0 << 3) | maske, kal = veriB;            // hata düzeltme M = 00
+      for(var q = 0; q < 10; q++) kal = (kal << 1) ^ ((kal >>> 9) * 0x537);
+      var bitler = ((veriB << 10) | kal) ^ 0x5412;
+      var al = function(k){ return (bitler >>> k) & 1; };
+      for(var k = 0; k <= 5; k++) mat[k][8] = al(k);
+      mat[7][8] = al(6); mat[8][8] = al(7); mat[8][7] = al(8);
+      for(k = 9; k < 15; k++) mat[8][14 - k] = al(k);
+      for(k = 0; k < 8; k++) mat[8][n - 1 - k] = al(k);
+      for(k = 8; k < 15; k++) mat[n - 15 + k][8] = al(k);
+      mat[n - 8][8] = 1;
+    };
+    var ceza = function(mat){
+      var p = 0, r, c, k, koyu = 0;
+      for(r = 0; r < n; r++){
+        for(var yon = 0; yon < 2; yon++){
+          var kosu = 1, onceki = yon ? mat[0][r] : mat[r][0];
+          for(c = 1; c < n; c++){
+            var v = yon ? mat[c][r] : mat[r][c];
+            if(v === onceki){ kosu++; if(kosu === 5) p += 3; else if(kosu > 5) p++; } else { kosu = 1; onceki = v; }
+          }
+          // 1:1:3:1:1 deseni (yanında 4 açık modül)
+          var dizi = ''; for(c = 0; c < n; c++) dizi += yon ? mat[c][r] : mat[r][c];
+          for(k = 0; k + 11 <= n; k++){ var par = dizi.substr(k, 11); if(par === '10111010000' || par === '00001011101') p += 40; }
+        }
+      }
+      for(r = 0; r < n - 1; r++) for(c = 0; c < n - 1; c++){ var t = mat[r][c]; if(t === mat[r][c + 1] && t === mat[r + 1][c] && t === mat[r + 1][c + 1]) p += 3; }
+      for(r = 0; r < n; r++) for(c = 0; c < n; c++) koyu += mat[r][c];
+      p += Math.floor(Math.abs(koyu * 20 - n * n * 10) / (n * n)) * 10;
+      return p;
+    };
+    var eniyi = null, eniyiCeza = Infinity;
+    for(var mk = 0; mk < 8; mk++){
+      var kopya = m.map(function(satir){ return satir.slice(); });
+      for(var r2 = 0; r2 < n; r2++) for(var c3 = 0; c3 < n; c3++) if(!sabit[r2][c3] && maskeler[mk](r2, c3)) kopya[r2][c3] ^= 1;
+      bicimYaz(kopya, mk);
+      var cz = ceza(kopya);
+      if(cz < eniyiCeza){ eniyiCeza = cz; eniyi = kopya; }
+    }
+    return eniyi;
+  }
+  // SVG: her koyu modül koşusu bir dikdörtgen; "bosluk" kadar modül sessiz bölge bırakılır.
+  function qrSvg(metin, bosluk){
+    var m = qrMatris(metin); if(!m) return '';
+    var n = m.length, q = bosluk === undefined ? 2 : bosluk, d = '';
+    for(var r = 0; r < n; r++){
+      var c = 0;
+      while(c < n){
+        if(!m[r][c]){ c++; continue; }
+        var bas = c; while(c < n && m[r][c]) c++;
+        d += 'M' + (bas + q) + ' ' + (r + q) + 'h' + (c - bas) + 'v1h-' + (c - bas) + 'z';
+      }
+    }
+    return '<svg class="qr" viewBox="0 0 ' + (n + 2 * q) + ' ' + (n + 2 * q) + '" shape-rendering="crispEdges" xmlns="http://www.w3.org/2000/svg"><path d="' + d + '" fill="#000"/></svg>';
+  }
+
+  // ---------- Etiket doğrulama QR'ı (build 137) ----------
+  // Etikete, üstünde yazan fiyatı taşıyan küçük bir QR basılır: M1*<barkod | C+etiket kodu>*<fiyat kuruş>*<tarih YYAAGG>*<indirim bitişi>
+  // "QR etiket doğrulama" ekranı bunu okuyup katalogdaki güncel fiyatla karşılaştırır; kayıt/sunucu gerekmez.
+  function qrTarih(t){ t = String(t || ''); return /^\d{4}-\d{2}-\d{2}$/.test(t) ? t.slice(2, 4) + t.slice(5, 7) + t.slice(8, 10) : ''; }
+  function qrIcerik(u){
+    var kimlik = (u.grup && u.grup.length > 1) ? (grupKodu(u) ? 'C' + grupKodu(u) : '') : (u.elle ? '' : String(u.barkod || '').trim());
+    var f = sayi(u.fiyat);
+    if(!kimlik || isNaN(f) || !(f > 0) || !/^[0-9A-Z.\-]+$/.test(kimlik)) return '';
+    return 'M1*' + kimlik + '*' + Math.round(f * 100) + '*' + qrTarih(u.tarih) + '*' + (u.indirim ? qrTarih(u.bitis) : '');
+  }
+  function qrCoz(metin){
+    var a = /^M1\*([0-9A-Z.\-]+)\*(\d{1,9})\*(\d{6})?\*(\d{6})?$/.exec(String(metin || '').trim()); if(!a) return null;
+    var tar = function(x){ return x ? '20' + x.slice(0, 2) + '-' + x.slice(2, 4) + '-' + x.slice(4, 6) : ''; };
+    var g = /^C(\d{5})$/.exec(a[1]);
+    return { gKod: g ? g[1] : '', barkod: g ? '' : a[1], fiyat: Number(a[2]) / 100, tarih: tar(a[3]), bitis: tar(a[4]) };
+  }
+  // Zebra'da QR: modül başına tam 3 yazıcı noktası (0,375 mm); kenar uzunluğu em (= mm) olarak döner.
+  function zebraQrKenar(u){ var ic = qrIcerik(u), m = ic ? qrMatris(ic) : null; return m ? (m.length + 2) * 3 / 8 : 0; }
+  function zebraQr(u){
+    var k = zebraQrKenar(u); if(!k) return '';
+    return qrSvg(qrIcerik(u), 1).replace('<svg class="qr"', '<svg class="qr" style="width:' + k + 'em; height:' + k + 'em; flex:none;"');
+  }
+  function afisQr(u){ var ic = qrIcerik(u); return ic ? qrSvg(ic, 2) : ''; }
+
   // ---------- Barkod çizimi (kütüphanesiz, SVG) ----------
   // EAN-13 / EAN-8 / UPC-A geçerliyse o biçimde; değilse Code 128 olarak çizilir.
   var EAN_L = ['0001101','0011001','0010011','0111101','0100011','0110001','0101111','0111011','0110111','0001011'];
@@ -1870,9 +2147,8 @@
         '<div><b>' + (u.indirim ? 'İndirim tarihleri' : 'Fiyat değişiklik tarihi') + ':</b> ' + tarihTr(u.tarih) + (u.indirim && u.bitis ? ' – ' + tarihTr(u.bitis) : '') + '</div>' +
         (u.barkod && !u.grup ? '<div class="brkSatir"><div>' + barkodSvg(u.barkod) + '<div class="brk">' + esc(u.barkod) + '</div></div>' +
           (stokKodu(u) ? '<div class="kodKutu">Stok kodu<b>' + esc(stokKodu(u)) + '</b></div>' : '') + '</div>'
-          : (grupKodu(u) ? '<div class="brkSatir"><div>' + barkodSvg(grupKodBarkod(grupKodu(u))) + '<div class="brk">' + grupKodBarkod(grupKodu(u)) + '</div></div>' +
-              '<div class="kodKutu">Etiket kodu<b>' + grupKodYazi(grupKodu(u)) + '</b></div></div>' : '')) +
-      '</div>' + yerliHtml(u) + '</div>' +
+          : (grupKodu(u) ? '<div class="brkSatir"><div class="kodKutu">Etiket kodu<b>' + grupKodYazi(grupKodu(u)) + '</b></div></div>' : '')) +
+      '</div><div class="aSag">' + afisQr(u) + yerliHtml(u) + '</div></div>' +
     '</div></div>';
   }
   // Zebra rulo etiketi (varsayılan 80×34 mm). Ölçüler mm; 1em = 1mm. Fiyat, ruloda hazır basılı sarı kutuya oturur.
@@ -1895,8 +2171,8 @@
       '<div class="zTarih" style="left:' + Z.kx + 'em; top:' + (Z.ky - 2.7) + 'em; width:' + Z.kw + 'em;">' +
         '<span>' + (u.indirim ? '<b>İNDİRİM</b> ' + tarihTr(u.tarih).slice(0, 5) + '–' + tarihTr(u.bitis) : 'Fiyat değişim tarihi: ' + tarihTr(u.tarih)) + '</span></div>' +
       '<div class="zSol" style="left:2em; top:' + solUst + 'em; width:' + solEn + 'em; height:' + Math.max(8, kullanH - solUst - 1) + 'em;">' +
-        (cesit.length ? '<div class="zCesit">' + esc(cesit.join(' · ')) + '</div>' + (grupKodu(u) ? '<div class="zGrupBrk">' + zebraBarkod(grupKodBarkod(grupKodu(u)), solEn) + '</div>' : '')
-          : (u.barkod ? '<div>' + zebraBarkod(u.barkod, solEn) + '<div class="zBrk">' + esc(u.barkod) + '</div></div>' : '<div></div>')) +
+        (cesit.length ? '<div class="zBrkSatir"><div class="zCesit" style="flex:1; min-width:0;">' + esc(cesit.join(' · ')) + '</div>' + zebraQr(u) + '</div>'
+          : (u.barkod ? '<div class="zBrkSatir"><div>' + zebraBarkod(u.barkod, solEn - zebraQrKenar(u)) + '<div class="zBrk">' + esc(u.barkod) + '</div></div>' + zebraQr(u) + '</div>' : '<div></div>')) +
         '<div class="zLogolar">' + (yerli && yerliLogoVar ? '<img class="yerli" src="' + YERLI_LOGO + '" alt="">' : '') +
           (durum.logo && magazaLogoVar ? '<img class="zMagaza" src="' + MAGAZA_LOGO + '" alt="">' : '<span class="zMagazaYazi">' + esc(MAGAZA_ADI) + '</span>') + '</div>' +
         '<div class="zYer">' + (yerli ? 'Bu ürün Türkiye\'de üretilmiştir.' : 'Üretim yeri: ' + esc(String(u.yer || '').trim())) + '</div>' +
@@ -2023,6 +2299,7 @@
 
   listeCiz(); bicimCiz();
 
+  if(!IS_NO && /[?&]dogrula=1/.test(location.search) && !$('icerik').classList.contains('gizli')) setTimeout(dogrulaAc, 400);
   if(IS_NO){
     document.title = 'BEKLIYOR';
     sunucuSor({ action: 'baski_ajan_veri', id: IS_NO, anahtar: IS_ANAHTAR }, function(hata, veri){

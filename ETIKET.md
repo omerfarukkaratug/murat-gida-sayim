@@ -173,3 +173,17 @@ Dizili A5, tarayıcıdan baskıda dik A4 sayfanın içinde 90° çevrilmiş bas�
 - **Dizili A5:** baskı programında da dik A4 sayfa (afişler içinde çevrili); `baski-ajani.ps1` yenilenmeli.
 - **Zebra barkodu:** çizgiler tam yazıcı noktasına (modül başına 2–3 nokta) oturtulur.
 - Sunucu: `Code.gs` → `GS_VERSION = build135` (Apps Script'e yeniden yüklenmeli).
+
+## QR etiket doğrulama (build 137)
+
+- **Etikette QR:** Zebra etiketinde (ürün barkodunun sağında) ve afişlerde (sağ altta) küçük bir QR basılır.
+  İçeriği: `M1*<barkod ya da C+etiket kodu>*<fiyat, kuruş>*<fiyat tarihi YYAAGG>*<indirim bitişi YYAAGG>`.
+  Ürün barkodu etikette kalır (kasa ve el terminali için); çeşitli etiketlerde çizgili kod yerine QR basılır.
+  24'lü raf etiketinde (A4) yer olmadığı için QR yoktur; orada çeşitli etiket kodu çizgili barkod olarak kalır.
+- **Doğrulama ekranı:** ana menüde "QR Etiket Doğrulama" ya da etiket sayfasının en üstündeki düğme. Tam ekran
+  kamera açılır; okutulan her etiket için etikette yazan fiyat katalogdaki güncel fiyatla karşılaştırılır:
+  ✅ DOĞRU · ❌ YANLIŞ (etikette X → şimdi Y) · ❌ İNDİRİM BİTMİŞ · ⚠️ QR YOK / KAYIT YOK / KATALOGDA YOK.
+  Sunucu ve baskı kaydı gerekmez (çeşitli etiketlerde grup kaydı kullanılır); internet olmadan da çalışır.
+- "Hatalıları listeye ekle" işaretliyse yanlış çıkan etiketin yenisi kendiliğinden baskı listesine girer.
+- Normal ürün ekleme kamerasında QR okutulursa ürünün barkodu okutulmuş gibi davranır.
+- QR üretimi sayfanın içindedir (kütüphane indirilmez): alfasayısal kip, hata düzeltme M, sürüm 1–5.

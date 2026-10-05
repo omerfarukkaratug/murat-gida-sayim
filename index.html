@@ -351,7 +351,7 @@
   <header style="border:none; padding:0 0 16px; background:transparent; display:flex; align-items:flex-start; justify-content:space-between;">
     <div>
       <h1><img src="logo-header.png" alt="Murat Gıda" style="height:30px; width:auto; display:block;"></h1>
-      <div class="sub">MK ERP · Murat Gıda • offline • Android • build 136</div>
+      <div class="sub">MK ERP · Murat Gıda • offline • Android • build 137</div>
     </div>
     <button type="button" id="themeToggleBtn" title="Tema seç" style="background:var(--panel2); border:1.5px solid var(--line); color:var(--text); width:34px; height:34px; border-radius:50%; font-size:15px; padding:0; display:flex; align-items:center; justify-content:center; flex-shrink:0;">🎨</button>
   </header>
@@ -390,6 +390,7 @@
       <button type="button" class="menuBtn" id="menuMalCikisBtn"><span class="menuIcon">📤</span><span>Mal Çıkış<span class="menuSub">Fatura/irsaliye ile stok çıkışı</span></span></button>
       <button type="button" class="menuBtn" id="menuFiyatBtn"><span class="menuIcon">💰</span><span>Fiyat &amp; Stok Sorgula<span class="menuSub">Barkod okut, fiyatı ve stoğu gör</span></span></button>
       <button type="button" class="menuBtn hidden" id="menuEtiketBtn"><span class="menuIcon">🏷️</span><span>Etiket Yazdır<span class="menuSub">Raf etiketi, A5 / A4 / A3 fiyat afişi</span></span></button>
+      <button type="button" class="menuBtn hidden" id="menuDogrulaBtn"><span class="menuIcon">✅</span><span>QR Etiket Doğrulama<span class="menuSub">Raftaki etiketin fiyatı güncel mi, okutup gör</span></span></button>
       <button type="button" class="menuBtn hidden" id="menuMesaiBtn"><span class="menuIcon">🕐</span><span>Mesai<span class="menuSub">Giriş/çıkış, vardiya, izin, duyuru</span></span></button>
       <button type="button" class="menuBtn hidden" id="menuHareketBtn"><span class="menuIcon">🔁</span><span>Ürün Hareketleri<span class="menuSub">Kimden kaça geldi, kime satıldı</span></span></button>
     </div>
@@ -1653,6 +1654,8 @@
       document.getElementById('menuFiyatBtn').classList.toggle('hidden', !canSeePrice() && !canSeeStock());
       document.getElementById('menuHareketBtn').classList.toggle('hidden', !canSeeHareket());
       document.getElementById('menuEtiketBtn').classList.toggle('hidden', !canSeeEtiket());
+    document.getElementById('menuDogrulaBtn').classList.toggle('hidden', !canSeeEtiket());
+      document.getElementById('menuDogrulaBtn').classList.toggle('hidden', !canSeeEtiket());
     }
     if(typeof hareketKonumKontrol === 'function') hareketKonumKontrol();
     if(listEl) renderList(); // sayfa açılışında liste henüz hazır değilse atla
@@ -1787,6 +1790,7 @@
   // Etiket ayrı sayfada açılır (telefonun yazdırma penceresi tam sayfa ister).
   // Sayım kayıtları telefonda saklı; "Uygulamaya dön" ile kaldığın yere gelirsin.
   document.getElementById('menuEtiketBtn').addEventListener('click', function(){ try { save(); } catch(e){} window.location.href = 'etiket.html'; });
+  document.getElementById('menuDogrulaBtn').addEventListener('click', function(){ try { save(); } catch(e){} window.location.href = 'etiket.html?dogrula=1'; });
   document.getElementById('mesaiCloseBtn').addEventListener('click', closeMesaiScreen);
   document.getElementById('hareketCloseBtn').addEventListener('click', closeHareketScreen);
   document.getElementById('hareketAdBtn').addEventListener('click', function(){ openNameSearch('hareket'); });
