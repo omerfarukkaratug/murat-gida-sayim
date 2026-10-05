@@ -158,3 +158,18 @@ basılmaz; tek ürünlü etikette barkod ve ayrı bir "Stok kodu" kutusu vardır
 çizgi kutuya oturana kadar "soldan/üstten" değerlerini düzelt, sonra çerçeveyi kapat.
 Windows'ta Zebra sürücüsünün "Yazdırma tercihleri"nde etiket boyutu ruloyla aynı (80 × 34 mm) olmalıdır.
 Dizili A5, tarayıcıdan baskıda dik A4 sayfanın içinde 90° çevrilmiş basılır (kâğıt yatık seçmeye gerek yok).
+
+## Çeşitli etiket kodu, koli ürünleri, dizili A5 (build 135)
+
+- **Etiket kodu:** çok ürünlü (çeşitli) etikete 5 haneli kod verilir, `Ç-12345` olarak yazılır ve mağaza içi
+  EAN-13 (`2400000` + kod + kontrol hanesi) olarak barkodu basılır. Kod, grup kaydıyla birlikte sunucuda
+  (`EtiketGrup` sayfası, `Kod` sütunu) tutulur.
+- **Kontrol:** kodu kamerayla okut ya da arama kutusuna `Ç-12345` yaz → grubun ürünleri, şimdiki fiyatları ve
+  etiketin geçerli/geçersiz olduğu görünür. Geçersizse "Düzelt ve listeye ekle": fiyatı aynı kalanlar aynı kodla
+  tek etikette kalır, fiyatı değişen ürün kendi etiketini alır.
+- **Basılacak etiketler** kutusunda geçersiz çeşitli etiketler kodu ve değişen fiyatıyla (`55,00 → 60,00`) listelenir.
+- **Koli/paket barkodu:** okutulan barkod koli ya da paketse ad `… 200 ML × 24 ADET` olur, altta yalnız
+  `Koli: 24 adet` yazar, birim fiyat koli adedine bölünür (net miktar tek parçanınki girilmelidir).
+- **Dizili A5:** baskı programında da dik A4 sayfa (afişler içinde çevrili); `baski-ajani.ps1` yenilenmeli.
+- **Zebra barkodu:** çizgiler tam yazıcı noktasına (modül başına 2–3 nokta) oturtulur.
+- Sunucu: `Code.gs` → `GS_VERSION = build135` (Apps Script'e yeniden yüklenmeli).
