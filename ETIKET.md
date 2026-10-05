@@ -187,3 +187,12 @@ Dizili A5, tarayıcıdan baskıda dik A4 sayfanın içinde 90° çevrilmiş bas�
 - "Hatalıları listeye ekle" işaretliyse yanlış çıkan etiketin yenisi kendiliğinden baskı listesine girer.
 - Normal ürün ekleme kamerasında QR okutulursa ürünün barkodu okutulmuş gibi davranır.
 - QR üretimi sayfanın içindedir (kütüphane indirilmez): alfasayısal kip, hata düzeltme M, sürüm 1–5.
+
+## Çeşitli etiket kaydı düzeltmeleri (build 138)
+
+- Gruptaki bir ürünün **tek etiketini basmak** artık çeşitli etiketin kaydını silmez. Yalnızca gruptan bilerek
+  ayrılan ürün ("ayır" düğmesi ya da fiyatı değiştiği için düzeltme) grubundan düşülür; geriye 2'den az ürün
+  kalırsa grup silinir. Sunucu: `Code.gs` → `GS_VERSION = build138` (yeniden yüklenmeli).
+- Etiketi basan cihaz, çeşitli etiketin ürün listesini kendi hafızasında da tutar (sunucuya ulaşamasa da doğrular).
+- Doğrulama ekranı açılırken katalog ve çeşit grupları tazelenir; gruplar inmeden okutulan çeşitli etiket
+  "BEKLE" der ve gruplar inince kendiliğinden sonuçlanır.

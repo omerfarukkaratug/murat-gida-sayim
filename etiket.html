@@ -839,8 +839,9 @@
   function dogrulaSonuc(kod){
     var q = qrCoz(kod), bg = bugun(), gk = q ? q.gKod : grupKodCoz(kod);
     if(gk){
-      var g = null; kayitliGruplar.forEach(function(x){ if(String(x.kod || '') === gk) g = x; });
-      if(!g) return { anahtar: 'C' + gk, tur: 'uyari', baslik: 'KAYIT YOK · ' + grupKodYazi(gk), ayrinti: ['Bu çeşitli etiket sistemde kayıtlı değil (eski etiket olabilir).'].concat(q ? ['Etikette yazan: ' + para(q.fiyat) + ' ₺'] : []) };
+      var g = grupBul(gk);
+      if(!g && !grupHazir && navigator.onLine) return { anahtar: 'C' + gk, tur: 'uyari', bekle: kod, baslik: 'BEKLE · ' + grupKodYazi(gk), ayrinti: ['Çeşit grupları sunucudan iniyor; birkaç saniye içinde sonuç kendiliğinden gelir.'] };
+      if(!g) return { anahtar: 'C' + gk, tur: 'uyari', baslik: 'KAYIT YOK · ' + grupKodYazi(gk), ayrinti: ['Bu çeşitli etiketin kaydı yok: yerine yenisi basılmış, kaydı silinmiş ya da eski sürümle basılmış olabilir. Etiketi yeniden basınca doğrulanabilir.'].concat(q ? ['Etikette yazan: ' + para(q.fiyat) + ' ₺'] : []) };
       var ef = q ? q.fiyat : Number(g.fiyat), ust = grupKodYazi(gk) + ' · ' + g.ad;
       var farkli = g.uyeler.map(function(x){
         var f = katalogFiyat(x.barkod); return (!isNaN(f) && f > 0 && Math.abs(f - ef) > 0.004) ? ((katalogHarita[String(x.barkod)] || {}).name || x.ad) + ' → ' + para(f) + ' ₺' : '';
@@ -885,6 +886,7 @@
     if(kod === dg.sonKod && Date.now() - dg.sonZaman < 2500){ dg.sonZaman = Date.now(); return; }
     dg.sonKod = kod; dg.sonZaman = Date.now();
     var s = dogrulaSonuc(kod), ilk = !dg.gorulen[s.anahtar];
+    if(s.bekle){ dg.bekleyen = s.bekle; dg.son = s; dogrulaCiz(); return; }
     if(ilk){ dg.gorulen[s.anahtar] = true; dg.kontrol++; if(s.tur === 'kotu') dg.hatali++; }
     if(s.tur === 'kotu' && durum.dgOto !== false){
       var e = dogrulaEkle(s); s.ekNot = e === 'eklendi' ? 'Yenisi baskı listesine eklendi' : e === 'zaten' ? 'Zaten baskı listesinde' : '';
@@ -902,6 +904,7 @@
     $('kamera').classList.add('tam'); $('dgPanel').classList.remove('gizli'); $('dgBaslik').classList.remove('gizli');
     $('dgOto').checked = durum.dgOto !== false;
     dogrulaCiz();
+    katalogTazele(); grupCek();   // fiyatlar ve çeşit grupları güncel olsun
     kameraAc();
     if($('kamera').classList.contains('gizli')) kameraKapat();   // cihazda kamera yoksa kip de kapanır
   }
@@ -1144,7 +1147,7 @@
     });
   }
   // ---------- Basılmış çeşit grupları (bütün cihazlarda ortak) ----------
-  var kayitliGruplar = [], grupHarita = {};
+  var kayitliGruplar = [], grupHarita = {}, grupHazir = false;   // grupHazir: sunucudaki çeşit grupları bu açılışta indi mi
   // ---------- Çeşitli etiket kodu (build 135) ----------
   // Çok ürünlü etiketin üstünde ürün barkodu olmaz; yerine 5 haneli bir "etiket kodu" basılır (Ç-12345) ve
   // mağaza içi EAN-13 (2400000 + kod + kontrol hanesi) olarak barkodu çıkar. Okutunca grubun durumu gelir.
@@ -1177,6 +1180,29 @@
     u.gKod = kod; kaydet();
     return kod;
   }
+  // Kodla grup bulma: önce sunucudan gelen kayıtlar, yoksa bu cihazın bastığı çeşitli etiketlerin yerel kaydı.
+  // (Sunucu eski sürümdeyse kodu saklamaz; o durumda da etiketi basan cihaz doğrulayabilsin.)
+  function grupBul(kod){
+    var g = null; kayitliGruplar.forEach(function(x){ if(String(x.kod || '') === String(kod)) g = x; });
+    if(g) return g;
+    var y = durum.gYerel && durum.gYerel[String(kod)];
+    return y ? { kod: String(kod), ad: y.ad, fiyat: y.fiyat, uyeler: y.uyeler, yerel: true } : null;
+  }
+  function grupYerelYaz(gruplar){
+    if(!durum.gYerel) durum.gYerel = {};
+    gruplar.forEach(function(g){ if(g.kod) durum.gYerel[String(g.kod)] = { ad: g.ad, fiyat: g.fiyat, uyeler: g.uyeler, z: Date.now() }; });
+    var kodlar = Object.keys(durum.gYerel);
+    if(kodlar.length > 300) kodlar.sort(function(a, b){ return durum.gYerel[a].z - durum.gYerel[b].z; }).slice(0, kodlar.length - 300).forEach(function(k){ delete durum.gYerel[k]; });
+  }
+  // Sunucudan kodsuz gelen grup, aynı ürünleri taşıyan yerel kayıttan kodunu alır.
+  function grupKodTamamla(){
+    var y = durum.gYerel || {};
+    kayitliGruplar.forEach(function(g){
+      if(g.kod) return;
+      var imza = g.uyeler.map(function(x){ return String(x.barkod); }).sort().join(',');
+      Object.keys(y).forEach(function(k){ if(!g.kod && y[k].uyeler.map(function(x){ return String(x.barkod); }).sort().join(',') === imza) g.kod = k; });
+    });
+  }
   function grupBozukMu(g){ return g.uyeler.some(function(x){ var f = katalogFiyat(x.barkod); return !isNaN(f) && f > 0 && Math.abs(f - Number(g.fiyat)) > 0.004; }); }
   // Gruptaki fiyatı değişen ürünler: "Ad 55,00 → 60,00"
   function grupFarklari(g){
@@ -1187,7 +1213,7 @@
   }
   // Etiket kodu okutulunca/yazılınca: grubun ürünleri, şimdiki fiyatları ve etiketin geçerli olup olmadığı.
   function grupDurumGoster(kod){
-    var g = null; kayitliGruplar.forEach(function(x){ if(String(x.kod || '') === kod) g = x; });
+    var g = grupBul(kod);
     if(!g){ toast(grupKodYazi(kod) + ' kayıtlı değil — etiket eski olabilir ya da gruplar henüz inmedi', 'uyari'); return false; }
     var bozuk = grupBozukMu(g), kutu = $('grupDurum');
     if(!kutu){
@@ -1230,7 +1256,9 @@
     if(!navigator.onLine) return;
     sunucuSor({ action: 'etiket_grup' }, function(hata, veri){
       if(hata || !veri || veri.status !== 'ok' || !Array.isArray(veri.gruplar)) return;
-      kayitliGruplar = veri.gruplar; grupHaritaKur(); listeCiz(); kuyrukCiz();
+      kayitliGruplar = veri.gruplar; grupHazir = true; grupKodTamamla(); grupHaritaKur(); listeCiz(); kuyrukCiz();
+      // Doğrulama ekranında gruplar inmeden okutulan çeşitli etiket şimdi yeniden değerlendirilir.
+      if(dogrulaKip && dg.bekleyen){ var bk = dg.bekleyen; dg.bekleyen = ''; dg.sonKod = ''; dogrulaOku(bk); }
     });
   }
   // Raftaki çeşit etiketi artık yanlış olan gruplar: bir ürünün katalog fiyatı etiketteki fiyattan farklı.
@@ -1241,6 +1269,7 @@
     var k = katalogHarita[String(uyeler[0].barkod)]; if(!k) return false;
     urunEkle({ barkod: String(k.barcode), ad: k.name, fiyat: sayi(k.price), elle: false, ft: k.ft || '', of: k.of || '', erpYer: k.yer || '' }, true);
     if(uyeler.length > 1){ var o = durum.liste[0]; o.grup = uyeler; o.ad = ad || grupAdiOner(uyeler); if(kod) o.gKod = String(kod); }
+    else durum.liste[0].ayrildi = true;   // çeşitli etiketten bilerek ayrılan ürün
     return true;
   }
   // Bozulan grupları düzelt: ürünler şimdiki fiyatlarına göre yeniden gruplanır;
@@ -1267,13 +1296,20 @@
     durum.liste.forEach(function(u){
       if(eksikler(u).length) return;
       if(u.grup && u.grup.length > 1) gruplar.push({ ad: u.ad, fiyat: u.fiyat, kod: grupKodu(u), uyeler: u.grup.map(function(x){ return { barkod: String(x.barkod), ad: x.ad }; }) });
-      else if(u.barkod && grupHarita[String(u.barkod)]) dagit.push(String(u.barkod));
+      // Yalnızca gruptan BİLEREK ayrılan ürün gruptan düşülür. Gruptaki bir ürünün tek etiketini basmak
+      // (ör. ikinci bir raf için) raftaki çeşitli etiketin kaydını bozmaz.
+      else if(u.barkod && u.ayrildi && grupHarita[String(u.barkod)]) dagit.push(String(u.barkod));
     });
     if(!gruplar.length && !dagit.length) return;
+    grupYerelYaz(gruplar); kaydet();
     // Yerelde hemen uygula (sunucudaki kuralla aynı): ortak ürünü olan eski gruplar silinir.
     var cikan = {}; dagit.forEach(function(b){ cikan[b] = true; });
     gruplar.forEach(function(g){ g.uyeler.forEach(function(x){ cikan[x.barkod] = true; }); });
-    kayitliGruplar = kayitliGruplar.filter(function(g){ return !g.uyeler.some(function(x){ return cikan[String(x.barkod)]; }); }).concat(gruplar);
+    // Sunucudaki kuralla aynı: yeni grupla ortak ürünü olan eski grup silinir; ayrılan ürün grubundan düşülür (2'den az kalırsa grup silinir).
+    var yeniUye = {}; gruplar.forEach(function(g){ g.uyeler.forEach(function(x){ yeniUye[x.barkod] = true; }); });
+    kayitliGruplar = kayitliGruplar.filter(function(g){ return !g.uyeler.some(function(x){ return yeniUye[String(x.barkod)]; }); })
+      .map(function(g){ return { id: g.id, ad: g.ad, fiyat: g.fiyat, kod: g.kod, uyeler: g.uyeler.filter(function(x){ return dagit.indexOf(String(x.barkod)) === -1; }) }; })
+      .filter(function(g){ return g.uyeler.length > 1; }).concat(gruplar);
     grupHaritaKur(); kuyrukCiz();
     var k = kimlikBilgisi(), govde = { type: 'etiket_grup', gruplar: gruplar, dagit: dagit, kaynak: 'telefon: ' + (kullanici.name || '?') };
     if(k){ govde.user = k.user; govde.pass = k.pass; }
@@ -1351,7 +1387,7 @@
       u.grup = uy; u.ad = uy.length === kg.uyeler.length ? kg.ad : grupAdiOner(uy);
       toast(uy.length + ' çeşit tek etikette' + (uy.length < kg.uyeler.length ? ' (' + (kg.uyeler.length - uy.length) + ' ürünün fiyatı değiştiği için dışarıda kaldı)' : ''));
     }
-    else if(b.getAttribute('data-is') === 'dagit'){ u.grup = null; u.gKod = ''; u.ad = u.katalogAd || u.ad; }
+    else if(b.getAttribute('data-is') === 'dagit'){ u.grup = null; u.gKod = ''; u.ayrildi = true; u.ad = u.katalogAd || u.ad; }
     kaydet(); listeCiz(); ciz();
   });
   // ---------- Liste aktarma (telefon → bilgisayar) ----------
