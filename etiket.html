@@ -248,7 +248,7 @@
   /* Alt 3.6 mm boş: ruloda sarı kutunun altında hazır basılı "FİYATLARIMIZA KDV DAHİLDİR" yazısı var. */
   .zKutu{display:flex; flex-direction:column; align-items:center; justify-content:center; text-align:center; overflow:hidden; padding:.6em .8em 3.6em;}
   .zKutu.cerceve{outline:.25em dashed #000; outline-offset:-.25em;}
-  .zFiyatKutu{flex:1; min-height:0; width:100%; display:flex; align-items:center; justify-content:center; overflow:hidden;}
+  .zFiyatKutu{flex:1; min-height:0; width:calc(100% - 4em); margin:0 auto; display:flex; align-items:center; justify-content:center; overflow:hidden;}
   .zFiyat{font-weight:900; white-space:nowrap; line-height:.9; letter-spacing:-.02em;}
   .zFiyat .kurus, .zFiyat .tl{font-size:.5em; vertical-align:.75em;}
   .zOnceki{font-size:2.2em; font-weight:700; text-decoration:line-through;}
@@ -648,12 +648,13 @@
 
   // ---------- Net miktarı ürün adından tahmin et (birim fiyat için) ----------
   // "AYSU 500 ML", "ABANT SU 5 LT", "6X200 ML", "1,5 KG" gibi. Tahmindir; kullanıcı düzeltebilir.
+  // Uzunluk (cm, m) addan TAHMİN EDİLMEZ: "26 CM" çoğu zaman ürünün ölçüsüdür (tencere, tava), satılan miktar değil.
   function miktarBul(ad){
     var s = normTr(ad).replace(/,/g, '.');
     var cev = { kg:'kg', gr:'g', g:'g', lt:'l', l:'l', ml:'ml', cl:'cl', mt:'m', m:'m', cm:'cm' };
-    var m = /(\d+)\s*[x*]\s*(\d+(?:\.\d+)?)\s*(kg|gr|g|lt|l|ml|cl|mt|m|cm)\b/.exec(s);
+    var m = /(\d+)\s*[x*]\s*(\d+(?:\.\d+)?)\s*(kg|gr|g|lt|l|ml|cl)\b/.exec(s);
     if(m) return { mik: Math.round(Number(m[1]) * Number(m[2]) * 1000) / 1000, birim: cev[m[3]] };
-    var re = /(\d+(?:\.\d+)?)\s*(kg|gr|g|lt|l|ml|cl|mt|m|cm)\b/g, son = null, x;
+    var re = /(\d+(?:\.\d+)?)\s*(kg|gr|g|lt|l|ml|cl)\b/g, son = null, x;
     while((x = re.exec(s))) son = x;
     if(son) return { mik: Number(son[1]), birim: cev[son[2]] };
     // "100 LÜ", "24'LÜ", "6 LI": paketteki adet → birim fiyat adet başına.
