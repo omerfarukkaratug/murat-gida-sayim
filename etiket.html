@@ -59,6 +59,7 @@
   button{font-family:inherit; font-size:15px; font-weight:800; border-radius:12px; padding:11px 14px; border:1.5px solid var(--line); background:var(--panel2); color:var(--text); cursor:pointer;}
   button.ana{background:linear-gradient(135deg, var(--accent2), var(--accent)); color:#fff; border:none;}
   button:disabled{opacity:.5;}
+  .yetkiGizli{display:none !important;}
   .gizli{display:none !important;}
   .satir{display:flex; gap:8px; align-items:flex-end;}
   .satir > div{flex:1; min-width:0;}
@@ -376,10 +377,13 @@
       <div id="aktarKutu" class="gizli" style="margin-top:8px;"></div>
     </div>
 
-    <div class="kart" id="baskiKart">
-      <div class="kartBaslik"><span>Yazıcılar ve baskı işleri</span><button type="button" id="baskiYenileBtn" style="padding:6px 10px; font-size:12px;">Yenile</button></div>
-      <div id="baskiYazicilar" class="ipucu">Yükleniyor…</div>
-      <div id="baskiIsler" style="margin-top:8px;"></div>
+    <div class="kart" id="baskiKart" style="padding-top:12px; padding-bottom:12px;">
+      <button type="button" id="baskiAcBtn" style="width:100%; display:flex; justify-content:space-between; align-items:center;"><span>🖨️ Yazıcılar ve baskı işleri</span><span id="baskiAcOk">▼</span></button>
+      <div id="baskiIcerik" class="gizli" style="margin-top:10px;">
+        <div style="text-align:right; margin-bottom:6px;"><button type="button" id="baskiYenileBtn" style="padding:6px 10px; font-size:12px;">Yenile</button></div>
+        <div id="baskiYazicilar" class="ipucu">Yükleniyor…</div>
+        <div id="baskiIsler" style="margin-top:8px;"></div>
+      </div>
     </div>
 
     <div class="kart" id="onizleKart">
@@ -474,6 +478,17 @@
   var yetkili = !!kullanici && (kullanici.role === 'yonetici' || (kullanici.permissions || []).indexOf('etiket') !== -1);
   if(!yetkili){ $('yetkiYok').classList.remove('gizli'); return; }
   $('icerik').classList.remove('gizli'); $('cubuk').classList.remove('gizli');
+  // ---------- Etiket yetkileri (build 139) ----------
+  // etiket_duzenle: ad / üretim yeri / net miktar… · etiket_indirim · etiket_cesit (çok ürünlü etiket) ·
+  // etiket_ayar (ölçü, logo, yazı) · etiket_yazici (yazıcı seçme, işleri yönetme, bu cihazdan basma) ·
+  // etiket_kuyruk (fiyatı değişenler, "basıldı say"). FİYAT, STOK KODU ve BARKOD hiçbir yetkiyle değiştirilemez:
+  // yalnızca katalogdan gelir; sunucu da baskı işini katalogla karşılaştırır.
+  var YONETICI = kullanici.role === 'yonetici';
+  function yt(ad){ return YONETICI || (kullanici.permissions || []).indexOf(ad) !== -1; }
+  var ALAN_YETKI = { ad: 'etiket_duzenle', yer: 'etiket_duzenle', mik: 'etiket_duzenle', birim: 'etiket_duzenle', koli: 'etiket_duzenle', tarih: 'etiket_duzenle',
+    baslik: 'etiket_duzenle', ozel: 'etiket_duzenle', indirim: 'etiket_indirim', bitis: 'etiket_indirim', onceki: '#yonetici' };
+  var IS_YETKI = { tr: 'etiket_duzenle', grup: 'etiket_cesit', grupGenis: 'etiket_cesit', grupEkle: 'etiket_cesit', grupKayitli: 'etiket_cesit', dagit: 'etiket_cesit', gcikar: 'etiket_cesit', indirimYaz: 'etiket_indirim' };
+  function yetkiVar(kural){ return !kural || (kural === '#yonetici' ? YONETICI : yt(kural)); }
 
   // ---------- Kayıtlı durum ----------
   var durum = (IS_NO ? null : oku(ETIKET_ANAHTAR)) || {};
@@ -494,7 +509,7 @@
   Object.keys(ZEBRA_VARSAYILAN).forEach(function(k){ if(durum.zebra[k] === undefined) durum.zebra[k] = ZEBRA_VARSAYILAN[k]; });
   if(durum.a4diz === undefined) durum.a4diz = true;     // A6/A5 afişleri A4 kâğıda diz (A6: 4, A5: 2)
   function dizVar(){ return !!durum.a4diz && (durum.bicim === 'a6' || durum.bicim === 'a5'); }
-  function kaydet(){ if(IS_NO) return; if(!yaz(ETIKET_ANAHTAR, durum)) toast('Telefon hafızası dolu — liste kaydedilemedi', 'hata'); }
+  function kaydet(){ if(IS_NO) return; if(!yaz(ETIKET_ANAHTAR, durum)) toast('Telefon hafızası dolu — liste kaydedilemedi', 'hata'); if(typeof ayarGonder === 'function') ayarGonder(); }
 
   // ---------- Görseller (yerli üretim logosu var mı?) ----------
   var yerliLogoVar = false, magazaLogoVar = false, gorselBekleyen = 2;
@@ -548,8 +563,20 @@
   katalogYukle().then(function(r){
     katalogKur(r);
     kuyrukYukle();
-    if(!IS_NO){ bilgiCek(); grupCek(); katalogTazele(); }
+    if(!IS_NO){ bilgiCek(); grupCek(); katalogTazele(); ayarCek(); }
   });
+  // Listedeki ürünlerin fiyatı her zaman katalogdaki fiyattır. Katalog yenilendiyse fark burada kapanır.
+  // Döner: fiyatı güncellenen ürün sayısı.
+  function fiyatlariEsitle(){
+    var n = 0;
+    durum.liste.forEach(function(u){
+      if(u.elle || !u.barkod || u.grup) return;        // grupta fark "eksik" olarak gösterilir (ürün gruptan çıkarılır)
+      var f = katalogFiyat(u.barkod);
+      if(!isNaN(f) && f > 0 && Math.abs(f - sayi(u.fiyat)) > 0.004){ u.fiyat = f; n++; }
+    });
+    if(n){ kaydet(); listeCiz(); ciz(); }
+    return n;
+  }
   function katalogFiyat(barkod){ var k = katalogHarita[String(barkod)]; if(!k || k.price === '') return NaN; return sayi(k.price); }
   // Liste günlerce durabilir: açılışta her ürünün fiyatını güncel katalogdan al.
   function fiyatlariTazele(){
@@ -774,7 +801,9 @@
     kaydet(); listeCiz(); ciz();
     toast('Eklendi: ' + u.ad);
   }
+  if(!YONETICI) $('elleBtn').classList.add('yetkiGizli');
   $('elleBtn').addEventListener('click', function(){
+    if(!YONETICI){ toast('Katalogda olmayan ürünü yalnızca yönetici ekleyebilir', 'uyari'); return; }
     var ad = (window.prompt('Ürün adı (etikete aynen yazılır):') || '').trim(); if(!ad) return;
     var f = sayi(window.prompt('Satış fiyatı (KDV dâhil, ₺):') || ''); if(isNaN(f) || f <= 0){ toast('Geçerli bir fiyat gir', 'hata'); return; }
     urunEkle({ barkod: '', ad: ad, fiyat: Math.round(f * 100) / 100, elle: true });
@@ -983,6 +1012,7 @@
   // ---------- Liste (her ürünün etiket bilgileri) ----------
   function eksikler(u){
     var e = [];
+    if(u.elle && !YONETICI) e.push('katalogda olmayan ürünü yalnızca yönetici basabilir');
     if(!String(u.yer || '').trim()) e.push('üretim yeri');
     if(!u.tarih) e.push('fiyat tarihi');
     var mik = sayi(u.mik); if(isNaN(mik) || mik <= 0) e.push('net miktar');
@@ -1064,6 +1094,8 @@
         '</div>' +
       '</div>';
     }).join('');
+    Array.prototype.forEach.call(kutu.querySelectorAll('[data-al]'), function(el){ if(!yetkiVar(ALAN_YETKI[el.getAttribute('data-al')])){ el.disabled = true; el.title = 'Bu alanı değiştirme yetkin yok'; } });
+    Array.prototype.forEach.call(kutu.querySelectorAll('button[data-is]'), function(el){ if(!yetkiVar(IS_YETKI[el.getAttribute('data-is')])) el.classList.add('yetkiGizli'); });
   }
   function urunBul(el){ var k = el.closest('.urun'); if(!k) return null; var id = k.getAttribute('data-id'); return durum.liste.filter(function(u){ return u.id === id; })[0] || null; }
   // ---------- Ortak etiket bilgisi (bütün cihazlar) ----------
@@ -1118,7 +1150,8 @@
           if(kv.fiyatIzleme && /^\d{4}-\d{2}-\d{2}$/.test(kv.fiyatIzleme)) FIYAT_IZLEME = kv.fiyatIzleme;
           yeni.forEach(function(k){ if(k && /\uFFFD/.test(k.yer || '')) k.yer = ''; });
           katalogIniyor = false; katalogKur(yeni);
-          toast('Fiyatlar yenilendi');
+          var esit = fiyatlariEsitle();
+          toast(esit ? 'Fiyatlar yenilendi — listedeki ' + esit + ' ürünün fiyatı güncellendi' : 'Fiyatlar yenilendi', esit ? 'uyari' : '');
         }).catch(function(){ katalogIniyor = false; katalogBilgisi(); });
       }, 120000);
     });
@@ -1341,6 +1374,7 @@
   }
   function alanDegisti(el, yenidenCiz){
     var u = urunBul(el); if(!u) return;
+    if(!yetkiVar(ALAN_YETKI[el.getAttribute('data-al')])) return;
     var al = el.getAttribute('data-al'), v = el.type === 'checkbox' ? el.checked : el.value;
     if(al === 'mik'){ var m = sayi(v); u.mik = isNaN(m) ? v : m; }
     else if(al === 'adet'){ u.adet = Math.min(99, Math.max(1, parseInt(v, 10) || 1)); }
@@ -1358,6 +1392,7 @@
   $('liste').addEventListener('click', function(e){
     var b = e.target.closest('button[data-is]'); if(!b) return;
     var u = urunBul(b); if(!u) return;
+    if(!yetkiVar(IS_YETKI[b.getAttribute('data-is')])){ toast('Bu işlem için yetkin yok', 'uyari'); return; }
     if(b.getAttribute('data-is') === 'sil'){ durum.liste = durum.liste.filter(function(x){ return x.id !== u.id; }); }
     else if(b.getAttribute('data-is') === 'tr'){ u.yer = 'Türkiye'; bilgiHatirla(u); }
     else if(b.getAttribute('data-is') === 'ac'){ acik[u.id] = !acik[u.id]; listeCiz(); return; }
@@ -1527,7 +1562,7 @@
         baski.isler.forEach(function(i){
           var z = izlenen[i.id]; if(!z || z.bitti) return;
           if(i.durum === 'basildi'){ z.bitti = true; toast('Etiketler basıldı ✅'); basildiIsaretle(z.kuyruk); }
-          else if(i.durum === 'hata'){ z.bitti = true; toast('Yazıcı hata verdi: ' + (i.mesaj || 'bilinmeyen'), 'hata'); }
+          else if(i.durum === 'hata'){ z.bitti = true; toast('Basılmadı: ' + (i.mesaj || 'bilinmeyen hata'), 'hata'); if(/katalog/i.test(i.mesaj || '')) katalogTazele(); }
           else if(i.durum === 'iptal'){ z.bitti = true; toast('Baskı iptal edildi', 'uyari'); }
         });
       }
@@ -1610,11 +1645,12 @@
     fetch(SUNUCU, { method: 'POST', mode: 'no-cors', headers: { 'Content-Type': 'text/plain;charset=utf-8' }, body: JSON.stringify(govde) })
       .then(function(){
         izlenen[id] = { bitti: false, kuyruk: kuyrukUrun };
-        baskiKaydiGonder('yazıcı: ' + y.ad);
         var deneme = 0;
         var bak = function(){
           baskiYukle(function(){
-            var bulundu = baski.isler.some(function(i){ return i.id === id; });
+            var isim = baski.isler.filter(function(i){ return i.id === id; })[0], bulundu = !!isim;
+            // Baskı ve çeşit kaydı yalnızca sunucu işi KABUL ettiyse yazılır (reddedilen iş "hata" olarak görünür).
+            if(bulundu && isim.durum !== 'hata' && !izlenen[id].kayit){ izlenen[id].kayit = true; baskiKaydiGonder('yazıcı: ' + y.ad); }
             if(bulundu){ if(!izlenen[id].bitti) toast(y.mod === 'manuel' ? 'İş gönderildi — bilgisayardaki kişi onaylayınca basılacak' : (y.cevrimici ? 'İş gönderildi — birazdan basılacak' : 'İş gönderildi — bilgisayar kapalı, açılınca basılacak'), y.cevrimici ? '' : 'uyari'); return; }
             if(++deneme < 4) return setTimeout(bak, 2500);
             delete izlenen[id]; toast('İşin sunucuya ulaştığı doğrulanamadı — tekrar dene', 'hata');
@@ -1629,7 +1665,17 @@
     var eksik = durum.liste.filter(function(u){ return eksikler(u).length; });
     if(eksik.length){ toast(eksik.length + ' üründe zorunlu bilgi eksik (' + eksikler(eksik[0])[0] + ') — tamamlamadan basılmaz', 'hata'); return; }
     if(!navigator.onLine){ toast('İnternet yok', 'hata'); return; }
-    baskiYukle(function(){ if(!baski.hazir){ toast('Yazıcı bilgisi alınamadı — "Bu cihazdan" ile yazdırabilirsin', 'uyari'); return; } yaziciSecAc(); });
+    if(!kimlikBilgisi()){ toast('Oturum bilgisi yok — ana uygulamada çıkış yapıp yeniden giriş yap', 'hata'); return; }
+    if(fiyatlariEsitle()){ toast('Katalogda fiyatı değişen ürünler güncellendi — kontrol edip tekrar gönder', 'uyari'); return; }
+    baskiYukle(function(){
+      if(!baski.hazir){ toast('Yazıcı bilgisi alınamadı' + (yt('etiket_yazici') ? ' — "Bu cihazdan" ile yazdırabilirsin' : ' — biraz sonra tekrar dene'), 'uyari'); return; }
+      if(yt('etiket_yazici')) return yaziciSecAc();
+      // Yazıcı seçme yetkisi yok: bu biçim için tanımlı yazıcıya gider (önce açık olan, sonra biçimi özellikle tanımlı olan).
+      var uygun = baski.yazicilar.filter(yaziciBasar);
+      if(!uygun.length){ toast('Bu biçim için yazıcı tanımlı değil — yöneticiye söyle', 'hata'); return; }
+      uygun.sort(function(a, b){ return (b.cevrimici - a.cevrimici) || ((b.bicimler || []).length > 0) - ((a.bicimler || []).length > 0); });
+      if(window.confirm(basilacaklar().length + ' etiket "' + uygun[0].ad + '" yazıcısına gönderilsin mi?')) yaziciyaGonder(uygun[0]);
+    });
   });
 
   // ---------- Basılacak etiketler kuyruğu ----------
@@ -1665,11 +1711,11 @@
     });
   }
   // urunler: [[barkod, fiyatTarihi], ...] — sunucuya "basıldı" yazar; yerelde hemen düşer.
-  function basildiIsaretle(urunler){
+  function basildiIsaretle(urunler, elle){
     if(!urunler.length) return;
     urunler.forEach(function(u){ kuyruk.basilan[u[0]] = u[1]; });
     kuyrukCiz();
-    var k = kimlikBilgisi(), govde = { type: 'etiket_basildi', urunler: urunler, kaynak: 'telefon: ' + (kullanici.name || '?') };
+    var k = kimlikBilgisi(), govde = { type: 'etiket_basildi', urunler: urunler, elle: !!elle, kaynak: 'telefon: ' + (kullanici.name || '?') };
     if(k){ govde.user = k.user; govde.pass = k.pass; }
     fetch(SUNUCU, { method: 'POST', mode: 'no-cors', headers: { 'Content-Type': 'text/plain;charset=utf-8' }, body: JSON.stringify(govde) })
       .catch(function(){ toast('İnternet yok: "basıldı" bilgisi diğer cihazlara ulaşmadı', 'uyari'); });
@@ -1693,7 +1739,7 @@
   $('kuyrukAtlaBtn').addEventListener('click', function(){
     var l = kuyrukListe();
     if(!l.length || !window.confirm(l.length + ' ürün etiketi basılmış sayılacak ve kuyruktan çıkacak (bütün cihazlarda).\n\nEtiketleri gerçekten başka yoldan bastıysan ya da gerek yoksa onayla.')) return;
-    basildiIsaretle(l.map(function(x){ return [String(x.k.barcode), x.k.ft]; }));
+    basildiIsaretle(l.map(function(x){ return [String(x.k.barcode), x.k.ft]; }), true);
     toast(l.length + ' ürün kuyruktan çıkarıldı');
   });
 
@@ -1877,6 +1923,49 @@
   });
 
   // ---------- Biçim seçimi ----------
+  // ---------- Yetkiye göre ekran ----------
+  (function(){
+    var gizle = function(el){ if(el) el.classList.add('yetkiGizli'); };
+    if(!yt('etiket_ayar')){
+      ['rafAyar', 'zebraAyar', 'boslukAyar', 'dizAyar', 'sloganYazi'].forEach(function(id){ gizle($(id)); });
+      gizle($('logoGoster').parentNode); gizle($('sloganYazi').previousElementSibling);
+    }
+    if(!yt('etiket_yazici')){ gizle($('baskiKart')); gizle($('listeGonderBtn').parentNode); }
+    if(!yt('etiket_kuyruk')){ gizle($('kuyrukKart')); gizle($('topluKart')); }
+    $('baskiAcBtn').addEventListener('click', function(){
+      var kapali = $('baskiIcerik').classList.toggle('gizli'); $('baskiAcOk').textContent = kapali ? '▼' : '▲';
+      if(!kapali) baskiYukle();
+    });
+  })();
+  // ---------- Ortak ayarlar: Zebra ölçüleri, logo, yazı… bütün cihazlarda aynı ----------
+  // Ayar yetkisi olan değiştirince sunucuya yazılır; herkes açılışta sunucudakini alır.
+  var AYAR_ALAN = ['kesim', 'logo', 'bosluk', 'a4diz', 'slogan'], ayarSon = '', ayarZ = null, ayarGeldi = false;
+  function ayarOzet(){ var o = { zebra: durum.zebra }; AYAR_ALAN.forEach(function(k){ o[k] = durum[k]; }); return o; }
+  function ayarCek(){
+    if(IS_NO || !navigator.onLine) return;
+    sunucuSor({ action: 'etiket_ayar' }, function(hata, veri){
+      if(hata || !veri || veri.status !== 'ok') return;          // eski sunucu sürümü: cihazdaki ayarla devam
+      ayarGeldi = true;
+      var a = veri.ayar;
+      if(a){
+        AYAR_ALAN.forEach(function(k){ if(a[k] !== undefined) durum[k] = k === 'slogan' ? String(a[k]) : !!a[k]; });
+        if(a.zebra) Object.keys(ZEBRA_VARSAYILAN).forEach(function(k){ if(a.zebra[k] !== undefined) durum.zebra[k] = a.zebra[k]; });
+        ayarSon = JSON.stringify(ayarOzet());
+        kaydet(); bicimCiz(); ciz();
+      } else if(yt('etiket_ayar') && JSON.stringify(durum.zebra) !== JSON.stringify(ZEBRA_VARSAYILAN)) ayarGonder(true);   // ilk kurulum: ayarlanmış cihaz sunucuya yazar
+    });
+  }
+  function ayarGonder(hemen){
+    if(IS_NO || !yt('etiket_ayar') || !ayarGeldi) return;
+    var simdi = JSON.stringify(ayarOzet()); if(simdi === ayarSon) return;
+    clearTimeout(ayarZ);
+    ayarZ = setTimeout(function(){
+      var k = kimlikBilgisi(); if(!k) return;
+      ayarSon = JSON.stringify(ayarOzet());
+      fetch(SUNUCU, { method: 'POST', mode: 'no-cors', headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+        body: JSON.stringify({ type: 'etiket_ayar', ayar: ayarOzet(), user: k.user, pass: k.pass, kaynak: 'telefon: ' + (kullanici.name || '?') }) }).catch(function(){ ayarSon = ''; });
+    }, hemen ? 0 : 1500);
+  }
   function bicimCiz(){
     Array.prototype.forEach.call(document.querySelectorAll('#bicimSecim button'), function(b){ b.classList.toggle('aktif', b.getAttribute('data-bicim') === durum.bicim); });
     $('bicimAciklama').textContent = BICIM[durum.bicim].aciklama;
@@ -2309,8 +2398,11 @@
   window.addEventListener('resize', function(){ ciz(); });
 
   // ---------- Yazdır ----------
+  if(!yt('etiket_yazici')) $('yazdirBtn').classList.add('yetkiGizli');
   $('yazdirBtn').addEventListener('click', function(){
+    if(!yt('etiket_yazici')){ toast('Bu cihazdan basma yetkin yok', 'uyari'); return; }
     if(!durum.liste.length){ toast('Önce ürün ekle', 'uyari'); return; }
+    if(fiyatlariEsitle()){ toast('Katalogda fiyatı değişen ürünler güncellendi — kontrol edip tekrar yazdır', 'uyari'); return; }
     var eksik = durum.liste.filter(function(u){ return eksikler(u).length; });
     if(eksik.length){
       toast(eksik.length + ' üründe zorunlu bilgi eksik (' + eksikler(eksik[0])[0] + ') — tamamlamadan basılmaz', 'hata');

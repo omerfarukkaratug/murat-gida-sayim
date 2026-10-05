@@ -8,7 +8,7 @@
 // bir sürüm dağıttıktan sonra /exec adresini boş açtığında burada yazan
 // numarayı görmelisin; index.html'in üstündeki "build" numarasıyla
 // eşleşecek şekilde ben her ikisini birlikte güncelliyorum.
-var GS_VERSION = 'build138';
+var GS_VERSION = 'build139';
 
 // Sheets'te "Saat" sütunu zaman biçimli olarak algılanırsa, hücre değeri düz
 // metin değil bir Date nesnesi olarak gelir ve String(...) çirkin bir çıktı
@@ -47,18 +47,27 @@ function doGet(e) {
   }
   if (P.action === 'etiket_liste') {
     k = kapi('etiket listesi okuma'); if (!k.ok) return kimlikRed(k, P.callback);
+    if (!etiketYetki(k.auth)) return etiketRed(k.auth, P.callback);
     return etiketListeGetir(P.id, P.callback);
   }
   if (P.action === 'etiket_grup') {
     k = kapi('etiket grubu okuma'); if (!k.ok) return kimlikRed(k, P.callback);
+    if (!etiketYetki(k.auth)) return etiketRed(k.auth, P.callback);
     return etiketGrupGetir(P.callback);
   }
   if (P.action === 'etiket_bilgi') {
     k = kapi('etiket bilgisi okuma'); if (!k.ok) return kimlikRed(k, P.callback);
+    if (!etiketYetki(k.auth)) return etiketRed(k.auth, P.callback);
     return etiketBilgiGetir(P.callback);
+  }
+  if (P.action === 'etiket_ayar') {
+    k = kapi('etiket ayarı okuma'); if (!k.ok) return kimlikRed(k, P.callback);
+    if (!etiketYetki(k.auth)) return etiketRed(k.auth, P.callback);
+    return etiketAyarGetir(P.callback);
   }
   if (P.action === 'etiket_kuyruk') {
     k = kapi('etiket kuyruğu okuma'); if (!k.ok) return kimlikRed(k, P.callback);
+    if (!etiketYetki(k.auth)) return etiketRed(k.auth, P.callback);
     return etiketKuyrukGetir(P.callback);
   }
   // ---- Baskı programı (yazıcının bağlı olduğu bilgisayar) : ERP anahtarıyla ----
@@ -71,8 +80,12 @@ function doGet(e) {
   // ---- Baskı işleri: giriş yapmış kullanıcı ----
   if (P.action === 'baski_durum' || P.action === 'baski_islem' || P.action === 'baski_yazici_ayar') {
     k = kapi('baskı işleri'); if (!k.ok) return kimlikRed(k, P.callback);
+    if (!etiketYetki(k.auth)) return etiketRed(k.auth, P.callback);
     if (P.action === 'baski_durum') return baskiDurum(P.callback);
-    if (P.action === 'baski_islem') return baskiIslem(P.id, P.islem, P.callback);
+    if (P.action === 'baski_islem') {
+      if (!etiketYetki(k.auth, 'etiket_yazici')) return outJson({ status: 'error', message: 'Baskı işlerini yönetme yetkin yok' }, P.callback);
+      return baskiIslem(P.id, P.islem, P.callback);
+    }
     if (!k.auth || k.auth.role !== 'yonetici') return outJson({ status: 'error', message: 'Yazıcı ayarını yalnızca yönetici değiştirir' }, P.callback);
     return baskiYaziciAyar(P, P.callback);
   }
@@ -523,6 +536,55 @@ function etiketBilgiKaydet(urunler, gonderen) {
 // Birden çok ürünü kapsayan etiket basılınca grup burada saklanır: hangi ürünler, hangi fiyatla.
 // Böylece (1) grup bütün cihazlarda hazır gelir, (2) gruptaki bir ürünün fiyatı değişince
 // uygulama "raftaki çeşit etiketi artık yanlış" diye uyarabilir.
+// ============================================================
+// ETİKET GÜVENLİĞİ (build 139) — etiket müşterinin gördüğü fiyattır.
+//  * Etiket işlemleri "Kimlik zorunlu" ayarından BAĞIMSIZ olarak giriş ister: kimliksiz istek her zaman reddedilir.
+//  * Yetkiler: etiket (ekrana giriş, basma) · etiket_duzenle (ad, üretim yeri, net miktar…) · etiket_indirim ·
+//    etiket_cesit (çok ürünlü etiket) · etiket_ayar (ölçü, logo, yazı) · etiket_yazici (yazıcı seçme, işleri yönetme) ·
+//    etiket_kuyruk (fiyatı değişenler listesi, "basıldı say"). Yönetici hepsine sahiptir.
+//  * FİYAT, STOK KODU ve BARKOD etikete yalnızca katalogdan (ERP) gelir: baskı işi sunucuda katalogla
+//    karşılaştırılır; uyuşmayan iş basılmaz. Katalogda olmayan (elle) ürünü yalnızca yönetici basabilir.
+// ============================================================
+var ETIKET_POST_TURLERI = { etiket_liste: 1, etiket_grup: 1, etiket_bilgi: 1, etiket_baski_kaydi: 1, baski_is: 1, etiket_basildi: 1, etiket_ayar: 1 };
+function etiketYetki(auth, ek) {
+  if (!auth || !auth.ok) return false;
+  if (auth.role === 'yonetici') return true;
+  var p = auth.permissions || [];
+  return p.indexOf('etiket') !== -1 && (!ek || p.indexOf(ek) !== -1);
+}
+function etiketRed(auth, callback) {
+  return outJson({ status: 'error', kimlik: !(auth && auth.ok), message: (auth && auth.ok) ? 'Bu etiket işlemi için yetkin yok' : 'Giriş gerekli — çıkış yapıp tekrar giriş yap' }, callback);
+}
+// Katalog: barkod -> { ad, kod, fiyat }
+function etiketKatalogHarita() {
+  var sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName('Katalog'), m = {};
+  if (!sheet || sheet.getLastRow() < 2) return m;
+  sheet.getRange(2, 1, sheet.getLastRow() - 1, 5).getValues().forEach(function (r) {
+    var b = String(r[1] || '').trim(); if (!b) return;
+    m[b] = { ad: String(r[0] || ''), kod: String(r[2] || '').trim(), fiyat: cleanNum(r[4]) };
+  });
+  return m;
+}
+// Ortak etiket ayarları (Zebra ölçüleri, logo, yazı…): bütün cihazlar aynı ayarla basar.
+var ETIKET_AYAR_OZELLIK = 'ETIKET_AYAR';
+function etiketAyarGetir(callback) {
+  var v = null; try { v = JSON.parse(PropertiesService.getScriptProperties().getProperty(ETIKET_AYAR_OZELLIK) || 'null'); } catch (e) { v = null; }
+  return outJson({ status: 'ok', ayar: v }, callback);
+}
+function etiketAyarKaydet(ayar, gonderen) {
+  if (!ayar || typeof ayar !== 'object') return jsonCikti({ status: 'error', message: 'Boş ayar' });
+  var t = {}, z = ayar.zebra || {};
+  ['kesim', 'logo', 'bosluk', 'a4diz'].forEach(function (k) { if (ayar[k] !== undefined) t[k] = !!ayar[k]; });
+  if (ayar.slogan !== undefined) t.slogan = String(ayar.slogan).substring(0, 28);
+  t.zebra = {};
+  ['w', 'h', 'kw', 'kh', 'kx', 'ky', 'ox', 'oy'].forEach(function (k) { var n = Number(z[k]); if (isFinite(n) && n >= -30 && n <= 300) t.zebra[k] = n; });
+  t.zebra.cerceve = !!z.cerceve;
+  t.zaman = Utilities.formatDate(new Date(), fiyatTz(), 'dd.MM.yyyy HH:mm'); t.kullanici = String(gonderen || '').substring(0, 60);
+  PropertiesService.getScriptProperties().setProperty(ETIKET_AYAR_OZELLIK, JSON.stringify(t));
+  gunlukYaz('etiket_ayar', t.kullanici, 'Etiket ayarları değişti', false);
+  return jsonCikti({ status: 'ok' });
+}
+
 var ETIKET_GRUP_SEKME = 'EtiketGrup';
 var ETIKET_GRUP_BASLIK = ['Id', 'Ad', 'Fiyat', 'Ürünler', 'Zaman', 'Kullanıcı', 'Kod'];   // Kod: etikete basılan 5 haneli çeşitli etiket kodu
 function etiketGrupOku() {
@@ -636,11 +698,52 @@ function baskiIsOzet(r) {
   return { id: String(r[0]), zaman: String(r[1]), kullanici: String(r[2]), yazici: String(r[3]), bicim: String(r[4]), urun: Number(r[5]) || 0, durum: String(r[6]), mesaj: String(r[7] || '') };
 }
 // Telefon: yeni iş. Yazıcı "manuel" ise onay bekler, değilse doğrudan sıraya girer.
-function baskiIsEkle(data, gonderen) {
+// Reddedilen iş de "hata" durumuyla listeye yazılır: telefon neden basılmadığını oradan görür.
+function baskiIsRed(id, gonderen, yaziciKimlik, bicim, adet, mesaj) {
+  try {
+    var sheet = baskiSayfa(BASKI_IS_SEKME, BASKI_IS_BASLIK), z = baskiZaman();
+    sheet.getRange(sheet.getLastRow() + 1, 1, 1, 10).setNumberFormat('@').setValues([[id, z, String(gonderen || '').substring(0, 60), String(yaziciKimlik || ''), String(bicim || ''), String(adet || 0), 'hata', String(mesaj).substring(0, 300), z, '{"liste":[],"ayar":{}}']]);
+  } catch (e) { /* kayıt yazılamasa da iş reddedilir */ }
+  gunlukYaz('hata', String(gonderen || ''), 'Baskı işi reddedildi: ' + String(mesaj).substring(0, 200), true);
+  return jsonCikti({ status: 'error', message: mesaj });
+}
+function baskiIsEkle(data, gonderen, auth) {
   var id = String(data.id || '').replace(/[^A-Za-z0-9_-]/g, '').substring(0, 40);
   if (!id || !Array.isArray(data.liste) || !data.liste.length) return jsonCikti({ status: 'error', message: 'Boş baskı işi' });
   var yz = baskiYazicilar().filter(function (y) { return y.kimlik === String(data.yazici); })[0];
   if (!yz) return jsonCikti({ status: 'error', message: 'Yazıcı bulunamadı' });
+  var bicimAd = String((data.ayar && data.ayar.bicim) || ''), yonetici = !!auth && auth.role === 'yonetici';
+  var red = function (m) { return baskiIsRed(id, gonderen, yz.kimlik, bicimAd, data.liste.length, m); };
+  // Yazıcı seçme yetkisi olmayan kişi yalnızca o biçimi basan, gizlenmemiş yazıcıya gönderebilir.
+  if (!etiketYetki(auth, 'etiket_yazici') && (yz.gizli || (yz.bicimler.length && yz.bicimler.indexOf(bicimAd) === -1))) return red('Bu yazıcıya gönderme yetkin yok');
+  // FİYAT / STOK KODU / BARKOD yalnızca katalogdan: her ürün katalogla karşılaştırılır.
+  var kat = etiketKatalogHarita(), para2 = function (n) { return (Math.round(n * 100) / 100).toFixed(2).replace('.', ','); };
+  var adDegisen = [];
+  for (var u = 0; u < data.liste.length; u++) {
+    var x = data.liste[u] || {}, f = cleanNum(x.fiyat), ad = String(x.ad || '').substring(0, 120);
+    if (typeof f !== 'number' || !(f > 0)) return red('Fiyatı olmayan ürün basılamaz: ' + ad);
+    var uyeler = (Array.isArray(x.grup) && x.grup.length > 1) ? x.grup.map(function (g) { return String((g && g.barkod) || '').trim(); }) : null;
+    if (uyeler) {
+      if (!etiketYetki(auth, 'etiket_cesit')) return red('Çok ürünlü etiket basma yetkin yok: ' + ad);
+      for (var g2 = 0; g2 < uyeler.length; g2++) {
+        var ku = kat[uyeler[g2]];
+        if (!ku) return red('Katalogda olmayan ürün: ' + uyeler[g2] + ' (' + ad + ')');
+        if (typeof ku.fiyat !== 'number' || Math.abs(ku.fiyat - f) > 0.005) return red('Fiyat katalogla uyuşmuyor: ' + ku.ad + ' (etikette ' + para2(f) + ', katalogda ' + (typeof ku.fiyat === 'number' ? para2(ku.fiyat) : 'yok') + ') — kataloğu yenileyip tekrar gönder');
+      }
+      continue;
+    }
+    var b = String(x.barkod || '').trim();
+    if (x.elle || !b) { if (!yonetici) return red('Katalogda olmayan (elle eklenen) ürünü yalnızca yönetici basabilir: ' + ad); continue; }
+    var k = kat[b];
+    if (!k) return red('Katalogda olmayan ürün: ' + b + ' (' + ad + ')');
+    if (typeof k.fiyat !== 'number' || Math.abs(k.fiyat - f) > 0.005) return red('Fiyat katalogla uyuşmuyor: ' + k.ad + ' (etikette ' + para2(f) + ', katalogda ' + (typeof k.fiyat === 'number' ? para2(k.fiyat) : 'yok') + ') — kataloğu yenileyip tekrar gönder');
+    x.kod = k.kod;                                   // stok kodu her zaman katalogdaki
+    if (ad.trim() !== k.ad.trim()) {
+      if (!etiketYetki(auth, 'etiket_duzenle')) x.ad = k.ad;          // yetkisi yoksa katalogdaki ad basılır
+      else adDegisen.push('"' + k.ad + '" → "' + ad + '" (' + b + ')');
+    }
+  }
+  if (adDegisen.length) gunlukYaz('etiket_ad', String(gonderen || ''), 'Etikette ürün adı değiştirildi: ' + adDegisen.slice(0, 5).join(' · ').substring(0, 400), false);
   var veri = JSON.stringify({ liste: data.liste, ayar: data.ayar || {} });
   if (veri.length > ETIKET_LISTE_SINIR) return jsonCikti({ status: 'error', buyuk: true, message: 'Liste çok uzun — bölerek gönderin' });
   var sheet = baskiSayfa(BASKI_IS_SEKME, BASKI_IS_BASLIK), satirlar = baskiSatirlar(sheet, 1);
@@ -1634,8 +1737,21 @@ function doPostIsle(e) {
             : data.type === 'etiket_liste' ? 'etiket listesi gönderimi' : data.type === 'etiket_basildi' ? 'etiket basıldı kaydı' : data.type === 'baski_is' ? 'baskı işi gönderimi' : (data.type === 'etiket_bilgi' || data.type === 'etiket_baski_kaydi' || data.type === 'etiket_grup') ? 'etiket bilgisi gönderimi' : data.type === 'katalog_item' ? 'yeni ürün gönderimi' : data.type === 'mal_hareket' ? 'mal hareketi gönderimi' : 'sayım gönderimi',
           topluMu ? 'ayarlar' : null);
     var gonderenAd = data.user ? String(data.user) : '';
+    // Etiket işlemleri: geçiş dönemi ayarından bağımsız, her zaman giriş + yetki ister.
+    var etiketAuth = null, etiketRedMesaj = '';
+    if (ETIKET_POST_TURLERI[data.type]) {
+      etiketAuth = kimlikOnbellek(data.user, data.pass);
+      var ekYetki = data.type === 'etiket_ayar' ? 'etiket_ayar'
+        : (data.type === 'etiket_grup' && Array.isArray(data.gruplar) && data.gruplar.length) ? 'etiket_cesit'
+        : (data.type === 'etiket_basildi' && data.elle) ? 'etiket_kuyruk' : null;
+      if (!etiketYetki(etiketAuth, ekYetki)) etiketRedMesaj = etiketAuth.ok ? 'Bu etiket işlemi için yetkin yok' : 'Giriş gerekli — çıkış yapıp tekrar giriş yap';
+    }
     // Şifre ve anahtar bundan sonra HİÇBİR yere (günlük, kuyruk, veri tabanı) taşınmaz.
     delete data.user; delete data.pass; delete data.anahtar;
+    if (etiketRedMesaj) {
+      guvenlikNot('guvenlik_red', 'etiket ' + data.type, 'Etiket isteği REDDEDİLDİ (' + (gonderenAd || 'kimliksiz').substring(0, 60) + '): ' + etiketRedMesaj, true);
+      return ContentService.createTextOutput(JSON.stringify({ status: 'error', kimlik: !(etiketAuth && etiketAuth.ok), message: etiketRedMesaj })).setMimeType(ContentService.MimeType.JSON);
+    }
     if (!postKapi.ok) {
       return ContentService.createTextOutput(JSON.stringify({ status: 'error', kimlik: !!postKapi.kimlik, message: postKapi.message })).setMimeType(ContentService.MimeType.JSON);
     }
@@ -1648,7 +1764,8 @@ function doPostIsle(e) {
     if (data.type === 'etiket_grup') return etiketGrupKaydet(data.gruplar, data.dagit, gonderenAd);
     if (data.type === 'etiket_bilgi') return etiketBilgiKaydet(data.urunler, gonderenAd);
     if (data.type === 'etiket_baski_kaydi') return etiketBaskiKaydi(data.satirlar, gonderenAd);
-    if (data.type === 'baski_is') return baskiIsEkle(data, gonderenAd);
+    if (data.type === 'baski_is') return baskiIsEkle(data, gonderenAd, etiketAuth);
+    if (data.type === 'etiket_ayar') return etiketAyarKaydet(data.ayar, gonderenAd);
     if (data.type === 'etiket_basildi') return etiketBasildiKaydet(data.urunler, gonderenAd);
     if (data.type === 'katalog_bulk') {
       // ERP'nin fiyat değişiklik kaydı ne kadar geriye gidiyorsa "geçmiş başlangıcı" o gündür.
