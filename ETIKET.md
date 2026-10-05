@@ -285,3 +285,11 @@ tablosundan uygular (ürüne, stok grubuna ya da markaya bağlı; tarihli). Art�
 - `erp/kesif-koli-fiyat.ps1` + `KESIF-KOLI.bat`: bu tabloyu bulmak için kullanılan salt-okunur keşif aracı.
 
 Kurulum sırası: önce Code.gs (yeni sürüm olarak dağıt), sonra ERP bilgisayarında stok-otomatik-gonder.ps1.
+
+## Build 145 — çeşitli etikette koli afişi, ürün bazında üst boşluk
+
+- Çeşitli (çok ürünlü) etikette de "A5 yatay · koli" çıkar; şart: bütün çeşitlerin koli teklifi aynı olmalı
+  (aynı adet, aynı koli fiyatı). Biri farklıysa kartta hangi çeşidin engel olduğu yazılır. Afişte çeşit adları
+  ve barkod yerine etiket kodu basılır.
+- "Üstte 2 cm boşluk bırak" artık ürün kartında, bütün afiş biçimlerinde (A6, A5, A5 yatay koli, A4, A3)
+  ürün ürün işaretlenir (`ustBosluk`). Hiç dokunulmamış üründe eski genel ayar geçerlidir (yalnız A6/A5).
