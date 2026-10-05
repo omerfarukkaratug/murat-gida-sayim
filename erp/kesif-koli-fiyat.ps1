@@ -10,6 +10,7 @@ $SqlServer = "SERVER\ERP12"
 $Cikti     = "C:\Scripts\kesif-koli.txt"
 $Barkod    = Read-Host "Kasada miktar girince indirim uygulanan bir urunun TEKLI barkodunu yaz (orn. Dimes 200 ml)"
 $Barkod    = $Barkod.Trim()
+$stok = $null
 
 Import-Module SqlServer -ErrorAction SilentlyContinue
 $sb = New-Object System.Text.StringBuilder
@@ -65,6 +66,40 @@ else {
         }
     } else { Yaz "  Bu barkod STOK_BARKOD_BIRIM'de yok." }
 }
+Yaz ""; Yaz "== 4) ADINDA iskonto / indirim / kampanya / promosyon gecen SUTUNLAR (dolu tablolar) =="
+$sut = @(Sor $db @"
+SELECT c.TABLE_NAME AS t, c.COLUMN_NAME AS c, x.satir
+FROM INFORMATION_SCHEMA.COLUMNS c
+JOIN (SELECT t.name, SUM(p.rows) AS satir FROM sys.tables t JOIN sys.partitions p ON p.object_id = t.object_id AND p.index_id IN (0,1) GROUP BY t.name) x ON x.name = c.TABLE_NAME
+WHERE x.satir > 0 AND (c.COLUMN_NAME LIKE '%ISKONTO%' OR c.COLUMN_NAME LIKE '%INDIRIM%' OR c.COLUMN_NAME LIKE '%KAMPANYA%' OR c.COLUMN_NAME LIKE '%PROMOSYON%')
+ORDER BY c.TABLE_NAME, c.ORDINAL_POSITION
+"@)
+foreach ($r in $sut) { Yaz "  $($r.t).$($r.c)  [$($r.satir) satir]" }
+
+Yaz ""; Yaz "== 5) ADINDA pos / kosul / aksiyon / hediye / paket / set gecen DOLU tablolar =="
+$t2 = @(Sor $db @"
+SELECT t.name AS ad, SUM(p.rows) AS satir
+FROM sys.tables t JOIN sys.partitions p ON p.object_id = t.object_id AND p.index_id IN (0,1)
+WHERE t.name LIKE '%POS%' OR t.name LIKE '%KOSUL%' OR t.name LIKE '%AKSIYON%' OR t.name LIKE '%HEDIYE%' OR t.name LIKE '%PAKET%' OR t.name LIKE '%[_]SET%' OR t.name LIKE '%KADEME%' OR t.name LIKE '%BAREM%'
+GROUP BY t.name HAVING SUM(p.rows) > 0 ORDER BY t.name
+"@)
+foreach ($t in $t2) {
+    $kol = @(Sor $db "SELECT COLUMN_NAME AS c FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_NAME = '$($t.ad)' ORDER BY ORDINAL_POSITION")
+    Yaz ("  $($t.ad)  [$($t.satir) satir]: " + (($kol | ForEach-Object { [string]$_.c }) -join ", "))
+}
+
+Yaz ""; Yaz "== 6) BU URUNUN cok adetli son SATIS satirlari (indirim satista nasil gorunuyor) =="
+if ($stok) {
+    $mk = @((Sor $db "SELECT COLUMN_NAME AS c FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_NAME = 'FIS_DETAY'") | ForEach-Object { [string]$_.c })
+    $m = @("MIKTAR_FIS", "MIKTAR", "MIKTAR1", "ADET") | Where-Object { $mk -contains $_ } | Select-Object -First 1
+    if ($m) {
+        Yaz "  -- 6 adet ve uzeri:"
+        Dok (@(Sor $db "SELECT TOP 8 f.FIS_TURU, f.FIS_TARIHI, d.* FROM dbo.FIS_DETAY d JOIN dbo.FIS f ON f.ID = d.FIS WHERE d.STOK = '$stok' AND d.$m >= 6 AND f.FIS_TURU IN (2, 6, 11, 12) ORDER BY f.FIS_TARIHI DESC"))
+        Yaz "  -- 1 adet (karsilastirma):"
+        Dok (@(Sor $db "SELECT TOP 3 f.FIS_TURU, f.FIS_TARIHI, d.* FROM dbo.FIS_DETAY d JOIN dbo.FIS f ON f.ID = d.FIS WHERE d.STOK = '$stok' AND d.$m = 1 AND f.FIS_TURU IN (2, 6, 11, 12) ORDER BY f.FIS_TARIHI DESC"))
+    } else { Yaz "  FIS_DETAY'da miktar sutunu bulunamadi: $($mk -join ', ')" }
+} else { Yaz "  Urun bulunamadigi icin atlandi." }
+
 [System.IO.File]::WriteAllText($Cikti, $sb.ToString(), [System.Text.Encoding]::UTF8)
 Write-Host ""; Write-Host "Bitti. Dosya: $Cikti"
 Read-Host "Kapatmak icin Enter"
