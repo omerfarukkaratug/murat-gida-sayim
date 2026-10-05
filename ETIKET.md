@@ -226,3 +226,21 @@ Etiket müşterinin gördüğü fiyattır; bu sürümle kurallar sunucuda da den
 - "Yazıcılar ve baskı işleri" kutusu kapalı gelir; düğmeye basınca açılır.
 - Baskı ve çeşit kaydı yalnızca sunucu işi kabul ettiyse yazılır.
 - Sunucu: `Code.gs` → `GS_VERSION = build139` (yeniden yüklenmeli).
+
+## Build 140 — sekmeli etiket ekranı, ürün başına biçim
+
+Etiket sayfası alttaki çubukla dört sekmeye ayrıldı:
+
+- **Ürünler** — ürün ekleme (arama / kamera) ve liste. Her ürünün kartında biçim çipleri var
+  (Zebra · A6 · A5 · A4 · A3); aynı listede bir ürün Zebra, öbürü A5 olabilir. Üstteki
+  "Yeni eklenen ürün" satırı yeni eklenenlerin hangi biçimle gireceğini belirler.
+- **Yazdır** — biçim başına bir satır: kaç adet bekliyor, hangi yazıcıya gidecek (açık/kapalı),
+  son baskı işinin durumu (sırada / basılıyor / basıldı / basılmadı + hata yazısı). Her satırda
+  "Yazdır"; birden çok biçim bekliyorsa en üstte "Hepsini yazdır" (her biçim kendi yazıcısına ayrı iş).
+- **Kontrol** — QR doğrulama, fiyatı değişenler, toplu işlemler.
+- **Ayarlar** — ölçüler, logo, yazıcılar ve baskı işleri (yalnız `etiket_ayar` / `etiket_yazici` yetkisi olan görür).
+
+Basılan ürün listede "basıldı HH:MM" olarak işaretlenir ve bir sonraki gönderime girmez;
+"tekrar bas" ile yeniden sıraya alınır, "Basılanları listeden çıkar" ile temizlenir.
+Durum baskı işi bazındadır (sayfa bazında değil): ajan sayfa sayfa bilgi vermiyor.
+Sunucu (Code.gs) ve baskı ajanı değişmedi.
