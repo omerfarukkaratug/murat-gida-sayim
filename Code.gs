@@ -8,7 +8,7 @@
 // bir sürüm dağıttıktan sonra /exec adresini boş açtığında burada yazan
 // numarayı görmelisin; index.html'in üstündeki "build" numarasıyla
 // eşleşecek şekilde ben her ikisini birlikte güncelliyorum.
-var GS_VERSION = 'build139';
+var GS_VERSION = 'build144';
 
 // Sheets'te "Saat" sütunu zaman biçimli olarak algılanırsa, hücre değeri düz
 // metin değil bir Date nesnesi olarak gelir ve String(...) çirkin bir çıktı
@@ -1274,6 +1274,7 @@ function getKatalog(callback) {
         var ft = fiyatTarihiMetni(r[8]);
         if (ft) { e.ft = ft; if (r[9] !== '' && r[9] !== null && r[9] !== undefined) e.of = String(r[9]); }
         if (r[10]) e.yer = String(r[10]); // üretim yeri (ERP stok kartındaki ülke)
+        if (r[11]) { var pr = promosyonMetni(r[11]); if (pr) e.pr = pr; } // kasanın miktar indirimi
         return e;
       });
   }
@@ -1964,7 +1965,9 @@ function koliCarpan(v) {
 // ============================================================
 // 11. sütun 'Üretim Yeri': ERP12 stok kartındaki ülke (dbo.ULKE.AD). Etiketteki
 // "Üretim yeri" ve yerli üretim logosu buradan gelir; ERP'de boşsa boş kalır.
-var KATALOG_BASLIK = ['Ürün Adı', 'Barkod', 'Stok Kodu', 'Eski Stok', 'Fiyat', 'KDV %', 'Koli Çarpanı', 'Birim', 'Fiyat Tarihi', 'Önceki Fiyat', 'Üretim Yeri'];
+var KATALOG_BASLIK = ['Ürün Adı', 'Barkod', 'Stok Kodu', 'Eski Stok', 'Fiyat', 'KDV %', 'Koli Çarpanı', 'Birim', 'Fiyat Tarihi', 'Önceki Fiyat', 'Üretim Yeri', 'Promosyon'];
+// Promosyon: kasanın miktar indirimi (ERP12 POS_PROMASYON) — "ADET:YÜZDE:BİTİŞ" (örn. "24:10:2029-12-28").
+function promosyonMetni(v) { var m = String(v == null ? '' : v).trim(); return /^\d{1,4}(\.\d+)?:\d{1,2}(\.\d+)?:\d{4}-\d\d-\d\d$/.test(m) ? m : ''; }
 // ERP'den gelen fiyat tarihi: yalnızca 'yyyy-MM-dd' ve bugünden ileri olmayan değer kabul edilir.
 function erpFiyatTarihi(v) {
   var m = /^(\d{4}-\d{2}-\d{2})$/.exec(String(v == null ? '' : v).trim());
@@ -2027,7 +2030,7 @@ function saveKatalogBulk(entries) {
   var sheet = ss.getSheetByName('Katalog');
   if (!sheet) sheet = ss.insertSheet('Katalog');
   var props = PropertiesService.getScriptProperties();
-  var ozet = listeOzeti(entries.map(function (e) { return [e.name || '', e.barcode || '', e.stockCode || '', cleanNum(e.oldStock), cleanNum(e.price), cleanNum(e.kdv), koliCarpan(e.carpan), String(e.birim || ''), ulkeMetni(e.ulke), erpFiyatTarihi(e.ft), cleanNum(e.of)]; }));
+  var ozet = listeOzeti(entries.map(function (e) { return [e.name || '', e.barcode || '', e.stockCode || '', cleanNum(e.oldStock), cleanNum(e.price), cleanNum(e.kdv), koliCarpan(e.carpan), String(e.birim || ''), ulkeMetni(e.ulke), erpFiyatTarihi(e.ft), cleanNum(e.of), promosyonMetni(e.pr)]; }));
   if (entries.length > 0 && ozet === props.getProperty('KATALOG_OZET') && sheet.getLastRow() === entries.length + 1) {
     return ContentService.createTextOutput(JSON.stringify({ status: 'ok', saved: 0, degisiklikYok: true })).setMimeType(ContentService.MimeType.JSON);
   }
@@ -2064,7 +2067,7 @@ function saveKatalogBulk(entries) {
     if (eft) { ft = eft; var eof = cleanNum(e.of); of = (typeof eof === 'number' && eof > 0) ? eof : ''; erpli[b] = true; }
     return [e.name || '', e.barcode || '', e.stockCode || '', cleanNum(e.oldStock), f, cleanNum(e.kdv), koliCarpan(e.carpan), String(e.birim || ''), ft, of,
       // Ülke alanı HİÇ gelmediyse (eski ERP betiği) tablodaki üretim yeri silinmez, korunur.
-      e.ulke === undefined ? (o ? o.y : '') : ulkeMetni(e.ulke)];
+      e.ulke === undefined ? (o ? o.y : '') : ulkeMetni(e.ulke), promosyonMetni(e.pr)];
   });
   if (degisen.length) {
     var enDusuk = fiyatGecmisEnDusuk(degisenBarkod);

@@ -137,7 +137,10 @@ SELECT
   bb.CARPAN AS Carpan,
   sb.AD AS Birim,
   ul.AD AS Ulke,
-  bb.STOK_STOK_BIRIM AS Ssb
+  bb.STOK_STOK_BIRIM AS Ssb,
+  bb.STOK AS StokId,
+  s.STOK_GRUP AS StokGrup,
+  s.STOK_MARKA AS StokMarka
 FROM dbo.STOK_BARKOD_BIRIM bb
 LEFT JOIN dbo.STOK_BARKOD_W w ON w.ID = bb.BARKOD
 LEFT JOIN dbo.STOK_BARKOD_FIYAT_VARSAYILAN f ON f.STOK_STOK_BIRIM = bb.STOK_STOK_BIRIM
@@ -226,6 +229,31 @@ try {
         Yaz-Log "UYARI: Fiyat degisiklik tarihleri alinamadi: $($_.Exception.Message) (katalog tarihsiz gonderilecek)"
     }
 
+    # Kasanin miktar indirimi (ERP12: POS_PROMASYON). "Su kadar al, hepsine %x indirim" kurallari
+    # (ADET = P_ADET, hedef urunun kendisi / grubu / markasi). Koli barkodu olmayan urunlerde
+    # koli fiyatli afis bununla cikar. Sorgu basarisiz olursa katalog YINE gonderilir.
+    $promoStok = @{}; $promoGrup = @{}; $promoMarka = @{}
+    try {
+        $prRows = @(Invoke-Sqlcmd -ServerInstance $SqlServer -Database $Database -QueryTimeout 60 -Query @"
+SELECT FK_H_STOK AS S, H_GRUP AS G, H_MARKA AS M, ADET AS Adet, FIYAT AS Yuzde, BITIS_TARIHI AS Bitis
+FROM dbo.POS_PROMASYON
+WHERE AKTIF = 1 AND INDIRIMMI = 1 AND ADET > 1 AND ADET = P_ADET AND FIYAT > 0 AND FIYAT < 100
+  AND BASLANGIC_TARIHI <= GETDATE() AND BITIS_TARIHI >= GETDATE()
+  AND ISNULL(FK_P_STOK, 0) = ISNULL(FK_H_STOK, 0) AND ISNULL(P_GRUP, 0) = ISNULL(H_GRUP, 0) AND ISNULL(P_MARKA, 0) = ISNULL(H_MARKA, 0)
+ORDER BY ADET DESC
+"@)
+        foreach ($p in $prRows) {
+            # Ayni hedefe birden cok kural varsa EN AZ adetli olan kalir (sorgu coktan aza sirali).
+            $deger = ([double]$p.Adet).ToString('0.###', [Globalization.CultureInfo]::InvariantCulture) + ':' + ([double]$p.Yuzde).ToString('0.##', [Globalization.CultureInfo]::InvariantCulture) + ':' + ([datetime]$p.Bitis).ToString('yyyy-MM-dd')
+            if ($p.S -isnot [System.DBNull] -and [long]$p.S -gt 0) { $promoStok[[string]$p.S] = $deger }
+            elseif ($p.G -isnot [System.DBNull] -and [long]$p.G -gt 0) { $promoGrup[[string]$p.G] = $deger }
+            elseif ($p.M -isnot [System.DBNull] -and [long]$p.M -gt 0) { $promoMarka[[string]$p.M] = $deger }
+        }
+        Yaz-Log "Kasa promosyonu: $($prRows.Count) gecerli miktar indirimi kurali."
+    } catch {
+        Yaz-Log "UYARI: Kasa promosyonlari alinamadi: $($_.Exception.Message) (katalog promosyonsuz gonderilecek)"
+    }
+
     $entries = foreach ($r in $rows) {
         $fiyatDeger = $null
         if ($r.Fiyat -ne $null -and $r.Fiyat -isnot [System.DBNull]) { $fiyatDeger = [double]$r.Fiyat }
@@ -246,6 +274,13 @@ try {
             $ftDeger = ([datetime]$g.Tarih).ToString('yyyy-MM-dd')
             if ($g.EnDusuk -isnot [System.DBNull] -and $g.EnDusuk -ne $null) { $ofDeger = [double]$g.EnDusuk }
         }
+        # Miktar indirimi yalnizca tekli barkoda yazilir; oncelik: urun > grup > marka.
+        $prDeger = ""
+        if ($carpanDeger -eq $null) {
+            if ($promoStok.ContainsKey([string]$r.StokId)) { $prDeger = $promoStok[[string]$r.StokId] }
+            elseif ($r.StokGrup -isnot [System.DBNull] -and $promoGrup.ContainsKey([string]$r.StokGrup)) { $prDeger = $promoGrup[[string]$r.StokGrup] }
+            elseif ($r.StokMarka -isnot [System.DBNull] -and $promoMarka.ContainsKey([string]$r.StokMarka)) { $prDeger = $promoMarka[[string]$r.StokMarka] }
+        }
         [PSCustomObject]@{
             name      = [string]$r.UrunAdi
             barcode   = [string]$r.Barkod
@@ -258,6 +293,7 @@ try {
             ulke      = $ulkeDeger
             ft        = $ftDeger
             of        = $ofDeger
+            pr        = $prDeger
         }
     }
 
@@ -270,7 +306,7 @@ try {
 
     # Veri tabanina fiyat tarihi/onceki fiyat alanlari GONDERILMEZ (orada kullanilmiyor);
     # govde eski boyutunda kalir. Alanlar JSON metninden cikarilir, liste yeniden cevrilmez.
-    $dbJson = $entriesJson -replace ',"ft":(null|"[0-9-]*")', '' -replace ',"of":(null|-?[0-9][0-9.eE+-]*)', ''
+    $dbJson = $entriesJson -replace ',"ft":(null|"[0-9-]*")', '' -replace ',"of":(null|-?[0-9][0-9.eE+-]*)', '' -replace ',"pr":"[0-9.:-]*"', ''
     Gonder-VeriTabani "katalog_yukle" ('{"p_kaynak":"ERP12 otomatik","p_urunler":' + $dbJson + '}') "$($entries.Count) urun"
 
     # ---------------------------------------------------------------

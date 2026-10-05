@@ -850,6 +850,11 @@
     if(k){
       if(Number(k.carpan) > 1) return null;
       (koliFiyatHarita[String(k.stockCode || '')] || []).forEach(function(x){ if(!t && x.fiyat / x.n < f - 0.004) t = x; });
+      // Koli barkodu yoksa kasanın miktar indirimi (ERP promosyonu): "ADET:YÜZDE:BİTİŞ". Süresi geçmiş kural sayılmaz.
+      if(!t && k.pr){
+        var pm = String(k.pr).split(':'), pn = Number(pm[0]), py = Number(pm[1]);
+        if(pn > 1 && py > 0 && py < 100 && String(pm[2] || '') >= bugun()) t = { n: pn, ad: 'Koli', fiyat: Math.round(f * pn * (100 - py)) / 100 };
+      }
     } else if(Number(u.kvN) > 1 && sayi(u.kvFiyat) > 0) t = { n: Number(u.kvN), ad: String(u.kvAd || 'Koli'), fiyat: sayi(u.kvFiyat) };
     return t ? { n: t.n, ad: t.ad, fiyat: t.fiyat, adet: Math.round(t.fiyat / t.n * 100) / 100 } : null;
   }

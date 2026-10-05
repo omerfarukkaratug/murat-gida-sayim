@@ -270,3 +270,18 @@ Sunucu (Code.gs) ve baskı ajanı değişmedi.
   Baskı işine `ayar.bicim='a5'`, `ayar.yatay=true` ve ürün başına `kvN/kvAd/kvFiyat` olarak gider (sunucu ve
   baskı programı değişmedi). Sınır: koli fiyatı değişince "fiyatı değişenler" bu afişi göstermez; sunucu koli
   fiyatını katalogla karşılaştırmaz.
+
+## Build 144 — kasanın miktar indirimi (ERP promosyonu) koli afişinde
+
+ERP12'de koli barkodu olmayan ürünlerde kasa, "24 adet girilince %10" gibi kuralları `POS_PROMASYON`
+tablosundan uygular (ürüne, stok grubuna ya da markaya bağlı; tarihli). Artık:
+
+- `erp/stok-otomatik-gonder.ps1` geçerli kuralları okur (AKTIF, INDIRIMMI, tarih aralığında, ADET = P_ADET,
+  %0–100 arası, hedef = kendisi) ve tekli barkodlara `pr = "ADET:YÜZDE:BİTİŞ"` alanını yazar
+  (öncelik ürün > grup > marka; aynı hedefte en az adetli kural). "2 al 1 bedava" türü kurallar alınmaz.
+- `Code.gs` (build144) Katalog sayfasına 12. sütun "Promosyon"u yazar ve katalogla birlikte verir.
+- Etiket sayfası: koli barkodu fiyatı yoksa bu kuraldan koli fiyatını hesaplar (adet × fiyat × (1 − %)),
+  "A5 yatay · koli" biçimi çıkar. Bitiş tarihi geçmiş kural sayılmaz.
+- `erp/kesif-koli-fiyat.ps1` + `KESIF-KOLI.bat`: bu tabloyu bulmak için kullanılan salt-okunur keşif aracı.
+
+Kurulum sırası: önce Code.gs (yeni sürüm olarak dağıt), sonra ERP bilgisayarında stok-otomatik-gonder.ps1.
