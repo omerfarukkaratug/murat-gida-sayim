@@ -181,27 +181,31 @@
   .aFiyat{font-size:38em; font-weight:900; line-height:.9; white-space:nowrap; letter-spacing:-.03em; display:inline-flex; align-items:flex-start;}
   .aFiyat .kurus{font-size:.42em; line-height:1.05; letter-spacing:0; margin-left:.06em;}
   .aFiyat .tl{font-size:.34em; line-height:1.25; letter-spacing:0; margin-left:.12em; font-weight:800;}
-  /* A5 yatay koli afişi (210 × 148 mm; 1em = 0,5 mm) */
-  .kAfis{display:flex; flex-direction:column; height:100%; padding:14em 16em 12em; box-sizing:border-box;}
-  .kUst{display:flex; align-items:center; gap:10em; height:44em; flex-shrink:0;}
-  .kUst .aLogo{height:30em; width:auto; flex-shrink:0;}
-  .kAd{flex:1; min-width:0; height:100%; display:flex; align-items:center;}
-  .kAd .yazi{display:block; width:100%; font-weight:900; line-height:1.05; text-transform:uppercase; overflow-wrap:anywhere;}
-  .kOrta{flex:1; min-height:0; display:flex; gap:6em; margin:6em 0 8em;}
-  .kKutu{flex:1; min-width:0; border:1.2em solid #000; border-radius:6em; display:flex; flex-direction:column; align-items:center; padding:5em 4em 4em;}
-  .kKutu.vurgu{background:#000; color:#fff; flex:1.15;}
-  .kBas{font-size:9em; font-weight:900; text-align:center; line-height:1.1; flex-shrink:0;}
-  .kBas small{display:block; font-size:.72em; font-weight:700;}
-  .kFiyatKutu{flex:1; min-height:0; width:100%; display:flex; align-items:center; justify-content:center;}
-  .kFiyat{font-weight:900; line-height:.9; white-space:nowrap; letter-spacing:-.03em; display:inline-flex; align-items:flex-start;}
-  .kFiyat .kurus{font-size:.45em; line-height:1.05; letter-spacing:0; margin-left:.05em;}
-  .kFiyat .tl{font-size:.38em; line-height:1.25; margin-left:.1em; font-weight:800;}
-  .kAlt{flex-shrink:0; display:flex; justify-content:space-between; align-items:flex-end; gap:8em; border-top:1em solid #000; padding-top:4em;}
-  .kBilgi{font-size:6em; line-height:1.4; font-weight:600; min-width:0;}
+  /* A5 yatay koli afişi (210 × 148 mm; 1em = 0,5 mm). Mağazanın elle hazırladığı toptan afişinin düzeni. */
+  .kAfis{display:flex; flex-direction:column; height:100%; padding:12em 14em 10em; box-sizing:border-box; --kk:#e30613;}
+  .kUst{display:flex; align-items:stretch; gap:6em; height:124em; flex-shrink:0;}
+  .kYan{width:96em; flex-shrink:0; display:flex; flex-direction:column; align-items:center; justify-content:flex-end;}
+  .kYan.sol{justify-content:center;}
+  .kEtk{font-size:9.4em; font-weight:900; color:var(--kk); text-align:center; line-height:1.05; font-family:Georgia, "Times New Roman", serif;}
+  .kRozet{margin-top:2em; background:#000; color:#fff; border-radius:7em; padding:1.5em 6em 2.5em; font-size:1em;}
+  .kRozet span{font-size:25em; font-weight:900; line-height:1; white-space:nowrap; letter-spacing:-.02em;}
+  .kIndirim{font-size:13em; font-weight:900; color:var(--kk); text-align:center; line-height:1; transform:rotate(24deg); margin:4em 0 6em 0; font-family:Georgia, "Times New Roman", serif; white-space:nowrap;}
+  .kOrtaAd{flex:1; min-width:0; display:flex; flex-direction:column;}
+  .kAd{flex:1; min-height:0; display:flex; align-items:center; justify-content:center; text-align:center;}
+  .kAd .yazi{display:block; width:100%; font-weight:700; line-height:1.02; text-transform:uppercase; overflow-wrap:anywhere; color:#0b1440;}
+  .kKoliAd{flex-shrink:0; font-size:15em; font-weight:700; text-align:center; line-height:1.1; color:#0b1440; white-space:nowrap;}
+  .kOrta{flex:1; min-height:0; display:flex; align-items:center; gap:6em; margin:2em 0 4em;}
+  .kFiyatKutu{flex:1; min-width:0; height:100%; display:flex; align-items:center; justify-content:center;}
+  .kFiyat{font-weight:900; line-height:.86; white-space:nowrap; letter-spacing:-.03em; display:inline-flex; align-items:flex-start; color:var(--kk);}
+  .kFiyat .kurus{font-size:1em; line-height:.86; letter-spacing:-.03em;}
+  .kFiyat .tl{font-size:.3em; line-height:1.3; margin-left:.15em; font-weight:800; color:#000;}
+  .kOrta .aLogo{height:44em; width:64em; object-fit:contain; flex-shrink:0; align-self:flex-end;}   /* genişlik sabit: resim yüklenmeden ölçülen fiyat taşmasın */
+  .kAlt{flex-shrink:0; display:flex; justify-content:space-between; align-items:flex-end; gap:8em; border-top:.7em solid #000; padding-top:3em;}
+  .kBilgi{font-size:5em; line-height:1.35; font-weight:600; min-width:0;}
   .kBilgi b{font-weight:900;}
-  .kSag{display:flex; align-items:flex-end; gap:6em; flex-shrink:0;}
-  .kSag .barkod{width:64em; height:16em; display:block;} .kSag .brk{font-family:"Courier New", monospace; font-size:4.2em; letter-spacing:.12em;}
-  .kSag .qr{width:26em; height:26em;} .kSag .yerli{height:20em; width:50em;}
+  .kSag{display:flex; align-items:flex-end; gap:5em; flex-shrink:0;}
+  .kSag .barkod{width:56em; height:13em; display:block;} .kSag .brk{font-family:"Courier New", monospace; font-size:3.8em; letter-spacing:.12em;}
+  .kSag .qr{width:21em; height:21em;} .kSag .yerli{height:17em; width:43em;}
   .aKdv{font-size:3em; font-weight:700; margin:.4em 0 .7em; flex-shrink:0;}
   .aOnceki{flex-shrink:0;}
   /* DAR: kâğıdın kullanılabilir yüksekliği azsa (A6, üstte 2 cm boşluk) parçalar küçülür */
@@ -2527,21 +2531,22 @@
     '</div></div>';
   }
   // Zebra rulo etiketi (varsayılan 80×34 mm). Ölçüler mm; 1em = 1mm. Fiyat, ruloda hazır basılı sarı kutuya oturur.
-  // A5 yatay koli afişi: üç fiyat yan yana — tek adet, koli, kolide adedi. Fiyatların üçü de katalogdan gelir.
+  // A5 yatay koli afişi: ortada büyük koli fiyatı; solda perakende adet fiyatı, sağda toptan (kolide) adet fiyatı
+  // ve indirim yüzdesi. Fiyatların üçü de katalogdan gelir; yüzde ikisinden hesaplanır (aşağı yuvarlanır).
   function koliAfisHtml(u){
     var kt = koliTeklif(u) || { n: 0, ad: 'Koli', fiyat: NaN, adet: NaN }, bfm = birimFiyatMetni(u, ' / ');
-    var kutu = function(bas, alt, f, em, sinif){ return '<div class="kKutu' + (sinif ? ' ' + sinif : '') + '"><div class="kBas">' + bas + (alt ? '<small>' + alt + '</small>' : '') + '</div>' +
-      '<div class="kFiyatKutu sig" data-em="' + em + '" data-min="16"><span class="kFiyat yazi">' + fiyatHtml(f) + '</span></div></div>'; };
+    var yuzde = Math.floor((1 - kt.adet / sayi(u.fiyat)) * 100 + 1e-6);
+    var rozet = function(ust, f){ return '<div class="kEtk">' + ust + '<br>ADET FİYATI</div><div class="kRozet"><span>' + para(f) + '</span></div>'; };
     return '<div class="sayfa" style="width:210mm; height:148mm; font-size:.5mm;"><div class="kAfis">' +
-      '<div class="kUst">' + (durum.logo && magazaLogoVar ? '<img class="aLogo" src="' + MAGAZA_LOGO + '" alt="">' : '') +
-        '<div class="kAd sig" data-em="22" data-min="9"><span class="yazi">' + adHtml(u) + '</span></div></div>' +
-      '<div class="kOrta">' + kutu('TEK ADET', 'fiyatı', u.fiyat, 60, '') +
-        kutu(esc(kt.ad.toLocaleUpperCase('tr-TR')) + ' FİYATI', kt.n + ' adet', kt.fiyat, 60, '') +
-        kutu(esc(kt.ad.toLocaleUpperCase('tr-TR')) + ' ALIRSAN', 'adedi', kt.adet, 70, 'vurgu') + '</div>' +
+      '<div class="kUst"><div class="kYan sol">' + rozet('PERAKENDE', u.fiyat) + '</div>' +
+        '<div class="kOrtaAd"><div class="kAd sig" data-em="30" data-min="11"><span class="yazi">' + adHtml(u) + '</span></div>' +
+          '<div class="kKoliAd">' + kt.n + ' ADETLİ ' + esc(kt.ad.toLocaleUpperCase('tr-TR')) + '</div></div>' +
+        '<div class="kYan">' + (yuzde >= 1 ? '<div class="kIndirim">%' + yuzde + '<br>İNDİRİM</div>' : '') + rozet('TOPTAN', kt.adet) + '</div></div>' +
+      '<div class="kOrta"><div class="kFiyatKutu sig" data-em="130" data-min="40"><span class="kFiyat yazi">' + fiyatHtml(kt.fiyat) + '</span></div>' +
+        (durum.logo && magazaLogoVar ? '<img class="aLogo" src="' + MAGAZA_LOGO + '" alt="">' : '') + '</div>' +
       '<div class="kAlt"><div class="kBilgi">' +
-        (bfm ? '<div><b>Birim fiyatı:</b> ' + bfm + '</div>' : '') +
-        '<div><b>Üretim yeri:</b> ' + esc(String(u.yer || '').trim()) + ' &nbsp;·&nbsp; <b>Fiyat değişiklik tarihi:</b> ' + tarihTr(u.tarih) + '</div>' +
-        '<div>Fiyatlara KDV dâhildir.' + (stokKodu(u) ? ' &nbsp;·&nbsp; Stok kodu: <b>' + esc(stokKodu(u)) + '</b>' : '') + '</div>' +
+        '<div>' + (bfm ? '<b>Birim fiyatı:</b> ' + bfm + ' &nbsp;·&nbsp; ' : '') + '<b>Üretim yeri:</b> ' + esc(String(u.yer || '').trim()) + '</div>' +
+        '<div><b>Fiyat değişiklik tarihi:</b> ' + tarihTr(u.tarih) + ' &nbsp;·&nbsp; Fiyatlara KDV dâhildir.' + (stokKodu(u) ? ' &nbsp;·&nbsp; Stok kodu: <b>' + esc(stokKodu(u)) + '</b>' : '') + '</div>' +
       '</div><div class="kSag">' + (u.barkod ? '<div>' + barkodSvg(u.barkod) + '<div class="brk">' + esc(u.barkod) + '</div></div>' : '') + afisQr(u) + yerliHtml(u) + '</div></div>' +
     '</div></div>';
   }
