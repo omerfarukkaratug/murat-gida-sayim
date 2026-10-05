@@ -8,7 +8,7 @@
 // bir sürüm dağıttıktan sonra /exec adresini boş açtığında burada yazan
 // numarayı görmelisin; index.html'in üstündeki "build" numarasıyla
 // eşleşecek şekilde ben her ikisini birlikte güncelliyorum.
-var GS_VERSION = 'build129';
+var GS_VERSION = 'build135';
 
 // Sheets'te "Saat" sütunu zaman biçimli olarak algılanırsa, hücre değeri düz
 // metin değil bir Date nesnesi olarak gelir ve String(...) çirkin bir çıktı
@@ -524,18 +524,19 @@ function etiketBilgiKaydet(urunler, gonderen) {
 // Böylece (1) grup bütün cihazlarda hazır gelir, (2) gruptaki bir ürünün fiyatı değişince
 // uygulama "raftaki çeşit etiketi artık yanlış" diye uyarabilir.
 var ETIKET_GRUP_SEKME = 'EtiketGrup';
-var ETIKET_GRUP_BASLIK = ['Id', 'Ad', 'Fiyat', 'Ürünler', 'Zaman', 'Kullanıcı'];
+var ETIKET_GRUP_BASLIK = ['Id', 'Ad', 'Fiyat', 'Ürünler', 'Zaman', 'Kullanıcı', 'Kod'];   // Kod: etikete basılan 5 haneli çeşitli etiket kodu
 function etiketGrupOku() {
   var sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(ETIKET_GRUP_SEKME);
   var son = sheet ? sheet.getLastRow() : 0, l = [];
-  if (son >= 2) sheet.getRange(2, 1, son - 1, 6).getValues().forEach(function (r) {
+  // Eski sayfada 'Kod' sütunu olmayabilir: var olan sütun kadar okunur.
+  if (son >= 2) sheet.getRange(2, 1, son - 1, Math.min(7, sheet.getMaxColumns())).getValues().forEach(function (r) {
     var uyeler = []; try { uyeler = JSON.parse(String(r[3] || '[]')); } catch (e) { uyeler = []; }
-    if (r[0] && Array.isArray(uyeler) && uyeler.length > 1) l.push({ id: String(r[0]), ad: String(r[1] || ''), fiyat: cleanNum(r[2]), uyeler: uyeler, zaman: String(r[4] || ''), kullanici: String(r[5] || '') });
+    if (r[0] && Array.isArray(uyeler) && uyeler.length > 1) l.push({ id: String(r[0]), ad: String(r[1] || ''), fiyat: cleanNum(r[2]), uyeler: uyeler, zaman: String(r[4] || ''), kullanici: String(r[5] || ''), kod: /^\d{5}$/.test(String(r[6] || '').trim()) ? String(r[6]).trim() : '' });
   });
   return l;
 }
 function etiketGrupGetir(callback) {
-  return outJson({ status: 'ok', gruplar: etiketGrupOku().map(function (g) { return { id: g.id, ad: g.ad, fiyat: g.fiyat, uyeler: g.uyeler }; }) }, callback);
+  return outJson({ status: 'ok', gruplar: etiketGrupOku().map(function (g) { return { id: g.id, ad: g.ad, fiyat: g.fiyat, uyeler: g.uyeler, kod: g.kod }; }) }, callback);
 }
 // gruplar: yeni basılan gruplar. dagit: artık tek başına basılan (gruptan ayrılan) ürünlerin barkodları.
 // Yeni grupla ya da "dagit" ile ortak ürünü olan eski gruplar silinir: bir ürün tek bir grupta olur.
@@ -552,14 +553,15 @@ function etiketGrupKaydet(gruplar, dagit, gonderen) {
     var f = cleanNum(g && g.fiyat);
     if (uyeler.length < 2 || typeof f !== 'number' || !(f > 0)) return;
     uyeler.forEach(function (x) { cikan[x.barkod] = true; });
-    yeni.push({ id: Utilities.getUuid().substring(0, 12), ad: String(g.ad || '').substring(0, 120), fiyat: f, uyeler: uyeler, zaman: simdi, kullanici: kim });
+    yeni.push({ id: Utilities.getUuid().substring(0, 12), ad: String(g.ad || '').substring(0, 120), fiyat: f, uyeler: uyeler, zaman: simdi, kullanici: kim, kod: /^\d{5}$/.test(String((g && g.kod) || '')) ? String(g.kod) : '' });
   });
   var kalan = eski.filter(function (g) { return !g.uyeler.some(function (x) { return cikan[String(x.barkod)]; }); });
-  var rows = kalan.concat(yeni).map(function (g) { return [g.id, g.ad, String(g.fiyat), JSON.stringify(g.uyeler), g.zaman, g.kullanici]; });
+  var rows = kalan.concat(yeni).map(function (g) { return [g.id, g.ad, String(g.fiyat), JSON.stringify(g.uyeler), g.zaman, g.kullanici, g.kod || '']; });
   var ss = SpreadsheetApp.getActiveSpreadsheet();
   var sheet = ss.getSheetByName(ETIKET_GRUP_SEKME) || ss.insertSheet(ETIKET_GRUP_SEKME);
   if (sheet.getMaxRows() < rows.length + 1) sheet.insertRowsAfter(sheet.getMaxRows(), rows.length + 1 - sheet.getMaxRows());
-  sheet.getRange(1, 1, Math.max(rows.length, 1) + 1, 6).setNumberFormat('@');
+  if (sheet.getMaxColumns() < 7) sheet.insertColumnsAfter(sheet.getMaxColumns(), 7 - sheet.getMaxColumns());
+  sheet.getRange(1, 1, Math.max(rows.length, 1) + 1, 7).setNumberFormat('@');
   tabloyuDegistir(sheet, ETIKET_GRUP_BASLIK, rows);
   return jsonCikti({ status: 'ok', grup: rows.length });
 }
