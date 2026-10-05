@@ -258,3 +258,14 @@ Sunucu (Code.gs) ve baskı ajanı değişmedi.
 - `yazici/CALISTIR.bat` + `yazici/OTOMATIK-BASLAT.bat`: baski programı oturum açılınca küçültülmüş
   pencerede başlar, kapanırsa 15 sn sonra yeniden başlar. Eski gizli pencereli başlatıcı ve zamanlanmış
   görev kaldırılır. Kurulum: iki dosyayı `C:\MKBaski` içine koy, `OTOMATIK-BASLAT.bat`'a çift tıkla.
+
+## Build 143 — birim fiyat kuralı, koli fiyatlı etiket
+
+- **Birim fiyat** artık kendiliğinden yalnızca şunlarda yazılır: kg / litre / metre ile ölçülen ürünler ve adı
+  bez, tuvalet kâğıdı, kâğıt havlu, peçete içeren çoklu paketler. Birim fiyat satış fiyatıyla aynıysa yazılmaz.
+  Ürün kartında "Birim fiyatı" seçimiyle ürün bazında "her zaman yaz" / "yazma" denebilir (`bfKip`).
+- **Koli fiyatını da yaz** (`koliFiyat`): aynı stok kodunun koli/paket barkodu katalogda adet başına tekli fiyattan
+  ucuzsa ürün kartında seçenek çıkar. Etikete tek adet fiyatı (büyük), koli fiyatı ve kolide adet fiyatı yazılır.
+  Üç fiyat da katalogdan gelir; elle yazılamaz. Baskı işine `kvN/kvAd/kvFiyat` olarak taşınır.
+  Sınır: koli fiyatı değişince "fiyatı değişenler" bu etiketi göstermez (yalnız tekli fiyat izlenir); sunucu
+  koli fiyatını katalogla karşılaştırmaz.
