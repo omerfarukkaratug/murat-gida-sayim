@@ -264,8 +264,9 @@ Sunucu (Code.gs) ve baskı ajanı değişmedi.
 - **Birim fiyat** artık kendiliğinden yalnızca şunlarda yazılır: kg / litre / metre ile ölçülen ürünler ve adı
   bez, tuvalet kâğıdı, kâğıt havlu, peçete içeren çoklu paketler. Birim fiyat satış fiyatıyla aynıysa yazılmaz.
   Ürün kartında "Birim fiyatı" seçimiyle ürün bazında "her zaman yaz" / "yazma" denebilir (`bfKip`).
-- **Koli fiyatını da yaz** (`koliFiyat`): aynı stok kodunun koli/paket barkodu katalogda adet başına tekli fiyattan
-  ucuzsa ürün kartında seçenek çıkar. Etikete tek adet fiyatı (büyük), koli fiyatı ve kolide adet fiyatı yazılır.
-  Üç fiyat da katalogdan gelir; elle yazılamaz. Baskı işine `kvN/kvAd/kvFiyat` olarak taşınır.
-  Sınır: koli fiyatı değişince "fiyatı değişenler" bu etiketi göstermez (yalnız tekli fiyat izlenir); sunucu
-  koli fiyatını katalogla karşılaştırmaz.
+- **A5 yatay koli afişi** (`a5y`): aynı stok kodunun koli/paket barkodu katalogda adet başına tekli fiyattan
+  ucuzsa ürün kartında "A5 yatay · koli" biçimi çıkar. Afişte üç kutu: tek adet fiyatı, koli fiyatı, kolide adet
+  fiyatı. Yalnızca A5 yatay; bir A4'e alt alta 2 tane basılır. Üç fiyat da katalogdan gelir, elle yazılamaz.
+  Baskı işine `ayar.bicim='a5'`, `ayar.yatay=true` ve ürün başına `kvN/kvAd/kvFiyat` olarak gider (sunucu ve
+  baskı programı değişmedi). Sınır: koli fiyatı değişince "fiyatı değişenler" bu afişi göstermez; sunucu koli
+  fiyatını katalogla karşılaştırmaz.
