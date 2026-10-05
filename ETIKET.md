@@ -196,3 +196,33 @@ Dizili A5, tarayıcıdan baskıda dik A4 sayfanın içinde 90° çevrilmiş bas�
 - Etiketi basan cihaz, çeşitli etiketin ürün listesini kendi hafızasında da tutar (sunucuya ulaşamasa da doğrular).
 - Doğrulama ekranı açılırken katalog ve çeşit grupları tazelenir; gruplar inmeden okutulan çeşitli etiket
   "BEKLE" der ve gruplar inince kendiliğinden sonuçlanır.
+
+## Etiket güvenliği ve yetkiler (build 139)
+
+Etiket müşterinin gördüğü fiyattır; bu sürümle kurallar sunucuda da denetlenir.
+
+- **Fiyat, stok kodu, barkod değiştirilemez.** Ekranda bunları değiştiren alan yoktur; ayrıca sunucu her baskı
+  işini katalogla (ERP) karşılaştırır. Fiyat uyuşmuyorsa iş basılmaz, "Basılmadı: Fiyat katalogla uyuşmuyor…"
+  diye görünür ve telefon kataloğu yeniler. Stok kodu her zaman katalogdaki yazılır.
+- **Katalogda olmayan (elle) ürün:** yalnızca yönetici ekleyip basabilir.
+- **İndirimden önceki fiyat:** ERP'den gelir; elle yalnızca yönetici yazabilir.
+- **Giriş zorunlu:** etiket işlemleri "Kimlik zorunlu" ayarından bağımsız olarak her zaman kullanıcı adı + şifre
+  ister. Telefonda "Oturum bilgisi yok" çıkarsa ana uygulamada çıkış yapıp yeniden giriş yapılır.
+- **Yetkiler** (Kullanıcılar ekranında tek tek işaretlenir; yönetici hepsine sahiptir):
+  | Yetki | Ne sağlar |
+  |---|---|
+  | Etiket Yazdırma | Ekrana giriş, hazır ürünü tanımlı yazıcıya gönderme, QR doğrulama |
+  | Etiket: ad/bilgi düzeltme | Ürün adı, üretim yeri, net miktar, fiyat tarihi, üst başlık |
+  | Etiket: indirim etiketi | İndirimli satış işareti, bitiş tarihi |
+  | Etiket: çok ürünlü etiket | Çeşitleri tek etikette toplama, ayırma |
+  | Etiket: fiyatı değişenler | "Basılacak etiketler" ve "Toplu ekle" kutuları, "Basıldı say" |
+  | Etiket: yazıcı seçme/işler | Yazıcı seçme, baskı işlerini görme/onaylama/iptal, bu cihazdan basma |
+  | Etiket: ölçü ve ayarlar | Zebra ölçüleri, logo, yazı, dizilim |
+  Yetkisiz ad değişikliği sunucuda da geri alınır (katalogdaki ad basılır); yetkili ad değişikliği Sistem Günlüğü'ne yazılır.
+- **Yazıcı seçme yetkisi olmayan** kişi yazıcı seçmez: iş, o biçim için tanımlı yazıcıya gider (yazıcının
+  "biçimler" ayarı). Bu yüzden her yazıcıda bastığı biçimler işaretli olmalıdır.
+- **Ortak ayarlar:** Zebra ölçüleri, logo, yazı ve dizilim artık sunucuda tutulur; bütün telefonlar aynı ayarla
+  basar. Ayar yetkisi olan değiştirince herkese yansır.
+- "Yazıcılar ve baskı işleri" kutusu kapalı gelir; düğmeye basınca açılır.
+- Baskı ve çeşit kaydı yalnızca sunucu işi kabul ettiyse yazılır.
+- Sunucu: `Code.gs` → `GS_VERSION = build139` (yeniden yüklenmeli).
