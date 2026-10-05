@@ -1615,14 +1615,14 @@
     if(document.activeElement !== $('sloganYazi')) $('sloganYazi').value = durum.slogan || '';
     $('rafKesim').checked = !!durum.kesim; $('rafBaslangic').value = durum.baslangic; $('logoGoster').checked = !!durum.logo;
     var B = BICIM[durum.bicim];
-    // Dizili baskı: A6 → dik A4'te 2×2. A5 → yan yana 2 tane; baskı programı için yatık A4 sayfa,
+    // Dizili baskı: A6 → dik A4'te 2×2. A5 → yan yana 2 tane; her zaman dik A4 sayfanın içinde 90° çevrilmiş olarak
     // tarayıcıdan baskıda ise dik A4 sayfanın içinde 90° çevrilmiş olarak (her tarayıcı yatık sayfayı uygulamıyor).
     var Z = durum.zebra;
     // Baskı programı (SumatraPDF) yatık sayfayı sürücü "portrait" iken 90° çevirir. Bu yüzden iş kipinde
     // Zebra sayfası kare yapılır, etiket en üstte durur: kare sayfa çevrilmez; program sayfayı kâğıdın sol üstünden
     // basar, 34 mm'lik kâğıda sığmayan boş alt kısım basılmaz.
     $('sayfaBoyutu').textContent = durum.bicim === 'zebra' ? '@page{ size:' + Z.w + 'mm ' + (zebraKare() ? Z.w : Z.h) + 'mm; margin:0; }'
-      : dizVar() ? '@page{ size:' + (durum.bicim === 'a5' && IS_NO ? '297mm 210mm' : '210mm 297mm') + '; margin:0; }'
+      : dizVar() ? '@page{ size:' + '210mm 297mm' + '; margin:0; }'
       : '@page{ size:' + B.w + 'mm ' + B.h + 'mm; margin:0; }';
     if(dizVar()) $('bicimAciklama').textContent = durum.bicim === 'a5' ? 'Bir A4 kâğıda 2 tane A5 afiş basılır (kâğıtta yan dönmüş çıkar). Yazdırma penceresinde A4 ve dikey seç; basınca ortadaki kesik çizgiden kes.' : 'Bir A4 kâğıda 4 tane A6 afiş basılır. Yazdırma penceresinde A4 seç; basınca kesik çizgilerden kes.';
   }
@@ -1839,7 +1839,6 @@
         for(var j = 0; j < parca.length; j += kac){
           var ic = parca.slice(j, j + kac).join('');
           if(durum.bicim !== 'a5') html += '<div class="sayfa dizgi" style="width:210mm; height:297mm;">' + ic + '</div>';
-          else if(IS_NO) html += '<div class="sayfa dizgi" style="width:297mm; height:210mm;">' + ic + '</div>';
           else html += '<div class="sayfa" style="width:210mm; height:297mm;"><div class="dizgi" style="width:297mm; height:210mm; position:absolute; top:0; left:210mm; transform-origin:top left; transform:rotate(90deg);">' + ic + '</div></div>';
         }
       } else html = et.map(function(u){ return afisHtml(u, B); }).join('');

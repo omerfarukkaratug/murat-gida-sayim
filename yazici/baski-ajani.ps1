@@ -212,13 +212,14 @@ function Bas($is) {
     try { $k = Sor @{ action = "baski_ajan_bitti"; anahtar = $Anahtar; id = $id; durum = "kontrol" } } catch { $k = $null }
     if (-not $k -or $k.status -ne "ok") { Yaz-Log "Is basilmadi: sayfa hata bildirdi ya da is iptal edildi."; return }
 
-    # Kagit: A6/A5 afisler A4'e dizili gelir (a4diz); dizili A5 yatik A4'tur.
+    # Kagit: A6/A5 afisler A4'e dizili gelir (a4diz); dizili A5 de dik A4 sayfadir.
     $dizili = $false
     if ($is.ayar -and $is.ayar.a4diz -eq $true -and ($bicim -eq "a6" -or $bicim -eq "a5")) { $dizili = $true }
     $kagit = "A4"
     if (-not $dizili) { if ($bicim -eq "a3") { $kagit = "A3" } elseif ($bicim -eq "a5") { $kagit = "A5" } elseif ($bicim -eq "a6") { $kagit = "A6" } }
     $ayar = "noscale,paper=$kagit"
-    if ($dizili -and $bicim -eq "a5") { $ayar += ",landscape" } else { $ayar += ",portrait" }
+    # Dizili A5 de DIK A4 sayfa olarak gelir (afisler sayfanin icinde cevrilmis); yazici surucusu "yatik" istegini uygulamayabiliyor.
+    $ayar += ",portrait"
     # Zebra (rulo etiket): kagit boyutu yazicinin kendi ayarindan gelir, yalnizca olcek korunur.
     if ($bicim -eq "zebra") { $ayar = "noscale"; $kagit = "rulo etiket" }
 
