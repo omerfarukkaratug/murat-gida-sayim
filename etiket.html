@@ -1925,7 +1925,7 @@
           var acik = yaziciDuzen === y.kimlik;
           return '<div style="padding:6px 0; border-bottom:1px solid var(--line, #e5e5e5);">' +
             '<div style="display:flex; align-items:center; gap:8px;"><div style="flex:1; min-width:0;"><b style="color:var(--text);">' + esc(y.ad) + '</b> ' +
-              (y.cevrimici ? '<span style="color:var(--green);">● açık</span>' : '<span style="color:var(--red);">● kapalı</span>') + (y.gizli ? ' <span style="color:var(--amber);">(gizli)</span>' : '') +
+              yzDurumHtml(y) + (y.cevrimici && Number(y.ajanSurum || 0) < AJAN_SURUM ? ' <span style="color:var(--amber);">(baskı programı eski — yenisini kur)</span>' : '') + (y.gizli ? ' <span style="color:var(--amber);">(gizli)</span>' : '') +
               '<div style="font-size:11px;">' + esc(bicimYazi(y)) + ' · ' + (y.mod === 'manuel' ? 'onaylı (manuel)' : 'otomatik') + ' · ' + esc(y.bilgisayar) + '</div></div>' +
               (yon ? '<button type="button" data-yz="duzen" data-k="' + esc(y.kimlik) + '" style="padding:6px 10px; font-size:12px;">' + (acik ? 'Kapat' : 'Düzenle') + '</button>' : '') + '</div>' +
             (acik ? '<div style="margin-top:8px; padding:10px; border:1px dashed var(--line); border-radius:12px;">' +
@@ -2030,7 +2030,7 @@
       return '<button type="button" data-ys="' + esc(y.kimlik) + '" style="width:100%; text-align:left; margin-top:8px; padding:12px; display:flex; align-items:center; gap:10px;">' +
         '<span style="font-size:22px;">🖨️</span><span style="flex:1; min-width:0;"><b style="font-size:15px;">' + esc(y.ad) + '</b>' + (y.kimlik === son ? ' <span class="ipucu">· son kullanılan</span>' : '') +
         '<span class="ipucu" style="display:block;">' + esc(y.konum || 'konum yazılmamış') + ' · ' + (y.mod === 'manuel' ? 'onaylı' : 'otomatik') + '</span></span>' +
-        (y.cevrimici ? '<span style="color:var(--green); font-size:12px; font-weight:700;">● açık</span>' : '<span style="color:var(--red); font-size:12px; font-weight:700;">● kapalı</span>') + '</button>';
+        '<span style="font-size:12px; font-weight:700;">' + yzDurumHtml(y) + '</span></button>';
     }).join('') + (baski.yazicilar.length > uygun.length ? '<div class="ipucu" style="margin-top:10px;">' + (baski.yazicilar.length - uygun.length) + ' yazıcı bu biçimi basmadığı ya da gizli olduğu için gösterilmiyor.</div>' : '');
     $('yaziciSec').classList.remove('gizli');
   }
@@ -2086,6 +2086,13 @@
       .catch(function(){ toast('Sunucuya ulaşılamadı — iş gönderilemedi', 'hata'); });
   }
   // Bir biçimin basılacak ürünlerini yazıcısına gönderir (yazıcı listesi yüklenmiş olmalı). sormadan: yazıcı penceresi açılmaz.
+  // Yazıcı durumu iki ayrı şeydir: (1) bilgisayardaki baskı programı çalışıyor mu, (2) Windows yazıcıyı görüyor mu.
+  var AJAN_SURUM = 161, WIN_DURUM = { kapali: 'yazıcı kapalı ya da kablosu takılı değil', kagit: 'kâğıt / etiket sorunu', hata: 'yazıcı hata veriyor' };
+  function yzDurumHtml(y){
+    if(!y.cevrimici) return '<span style="color:var(--red);">● bilgisayar ya da baskı programı kapalı</span>';
+    if(WIN_DURUM[y.winDurum]) return '<span style="color:var(--amber);">● ' + WIN_DURUM[y.winDurum] + '</span>';
+    return '<span style="color:var(--green);">● açık</span>';
+  }
   function bicimYazici(f){
     var uygun = baski.yazicilar.filter(function(y){ return !y.gizli && (!y.bicimler || !y.bicimler.length || y.bicimler.indexOf(yaziciBicim(f)) !== -1); });
     uygun.sort(function(a, b){ return (b.cevrimici - a.cevrimici) || ((b.bicimler || []).length > 0) - ((a.bicimler || []).length > 0); });
@@ -2428,7 +2435,7 @@
       : d.durum === 'iptal' ? 'Baskı iptal edildi.'
       : d.durum === 'onay_bekliyor' ? 'Bilgisayardaki kişinin onayı bekleniyor.'
       : d.durum === 'bekliyor' && yz && !yz.cevrimici ? 'Bilgisayar kapalı ya da baskı programı çalışmıyor — açılınca basılacak.'
-      : bitti ? 'Yazıcıya verildi — çıkan etiketleri say.'
+      : bitti ? 'Yazıcıya verildi — çıkan etiketleri say.' + (yz && WIN_DURUM[yz.winDurum] ? ' <b>Dikkat: ' + WIN_DURUM[yz.winDurum] + '</b> — düzelince kendiliğinden basılır, yeniden gönderme.' : '')
       : (Date.now() - (d.zaman || Date.now()) > 5 * 60 * 1000) ? 'Bu iş takıldı: bilgisayardan sonuç gelmedi. Baskı programının açık olduğuna bak ve yeniden "Yazdır"a bas.' : '';
     if(!bitti && !kotu && Date.now() - (d.zaman || Date.now()) > 5 * 60 * 1000) kotu = true;
     return '<div class="adimKutu' + (kotu ? ' kotu' : bitti ? ' bitti' : '') + '">' +
@@ -2462,7 +2469,7 @@
           '<div class="yzUst"><b>' + esc(BICIM[f].ad) + '</b><span>' + (g.adet ? g.adet + ' adet' : 'bekleyen yok') + '</span></div>' +
           '<div class="ipucu">' + (g.urun ? g.urun + ' ürün bekliyor' : '') + (g.basilan ? (g.urun ? ' · ' : '') + g.basilan + ' ürün basıldı' : '') +
             (g.eksik ? ' · <b style="color:var(--red);">' + g.eksik + ' üründe bilgi eksik</b>' : '') + '</div>' +
-          (g.adet ? '<div class="ipucu">Yazıcı: ' + (yz ? (yz.secili ? '<b>' + esc(yz.secili.ad) + '</b> ' + (yz.secili.cevrimici ? '<span style="color:var(--green);">● açık</span>' : '<span style="color:var(--red);">● kapalı</span>') +
+          (g.adet ? '<div class="ipucu">Yazıcı: ' + (yz ? (yz.secili ? '<b>' + esc(yz.secili.ad) + '</b> ' + yzDurumHtml(yz.secili) +
               (yt('etiket_yazici') && yz.uygun.length > 1 ? ' <button type="button" class="yzKucuk" data-yz="yazici" data-f="' + f + '">değiştir</button>' : '')
               : '<b style="color:var(--red);">tanımlı değil</b>') : 'yükleniyor…') + '</div>' : '') +
           (d ? adimHtml(d) : '') +

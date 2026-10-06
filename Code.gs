@@ -8,7 +8,7 @@
 // bir sürüm dağıttıktan sonra /exec adresini boş açtığında burada yazan
 // numarayı görmelisin; index.html'in üstündeki "build" numarasıyla
 // eşleşecek şekilde ben her ikisini birlikte güncelliyorum.
-var GS_VERSION = 'build153';
+var GS_VERSION = 'build161';
 
 // Sheets'te "Saat" sütunu zaman biçimli olarak algılanırsa, hücre değeri düz
 // metin değil bir Date nesnesi olarak gelir ve String(...) çirkin bir çıktı
@@ -77,7 +77,7 @@ function doGet(e) {
   // ---- Baskı programı (yazıcının bağlı olduğu bilgisayar) : ERP anahtarıyla ----
   if (P.action === 'baski_ajan_al' || P.action === 'baski_ajan_bitti' || P.action === 'baski_ajan_veri') {
     if (!erpAnahtarDogru(P.anahtar)) return outJson({ status: 'error', kimlik: true, message: 'Anahtar geçersiz' }, P.callback);
-    if (P.action === 'baski_ajan_al') return baskiAjanAl(P.bilgisayar, P.yazicilar, P.callback);
+    if (P.action === 'baski_ajan_al') return baskiAjanAl(P.bilgisayar, P.yazicilar, P.callback, P.durumlar, P.surum);
     if (P.action === 'baski_ajan_bitti') return baskiAjanBitti(P.id, P.durum, P.mesaj, P.callback);
     return baskiAjanVeri(P.id, P.callback);
   }
@@ -711,7 +711,7 @@ var BASKI_YAZICI_SEKME = 'Yazicilar';
 var BASKI_YAZICI_BASLIK = ['Kimlik', 'Ad', 'Bilgisayar', 'Windows Adı', 'Mod', 'Son Görülme', 'Konum', 'Biçimler', 'Gizli'];
 var BASKI_BICIMLER = ['zebra', 'raf', 'a6', 'a5', 'a4', 'a3'];
 var BASKI_IS_SAKLA = 40;
-var BASKI_CEVRIMICI_SN = 90;   // program bu kadar saniyedir sormadıysa bilgisayar kapalı sayılır
+var BASKI_CEVRIMICI_SN = 180;   // program bu kadar saniyedir sormadıysa bilgisayar kapalı sayılır
 function baskiSayfa(ad, baslik) {
   var ss = SpreadsheetApp.getActiveSpreadsheet();
   var sheet = ss.getSheetByName(ad);
@@ -723,17 +723,39 @@ function baskiSatirlar(sheet, n) {
   return son >= 2 ? sheet.getRange(2, 1, son - 1, n).getValues() : [];
 }
 function baskiZaman() { return Utilities.formatDate(new Date(), fiyatTz(), 'dd.MM.yyyy HH:mm:ss'); }
+// Baskı programının "nabzı": her sorgusunda, kilit beklemeden önbelleğe yazılır. Böylece sunucu meşgulken
+// (ör. ERP katalog gönderimi kilidi tutarken) ya da program uzun bir iş basarken bilgisayar "kapalı" görünmez.
+// İçinde programın sürümü ve Windows'un yazıcılar için bildirdiği durum da durur (kapali / kagit / hata).
+function baskiNabizYaz(pc, durumlarJson, surum) {
+  try {
+    var d = {}, ham = {};
+    try { ham = JSON.parse(durumlarJson || '{}') || {}; } catch (e) { ham = {}; }
+    Object.keys(ham).slice(0, 30).forEach(function (k) { var v = String(ham[k]); if (v === 'kapali' || v === 'kagit' || v === 'hata') d[String(k).substring(0, 120)] = v; });
+    CacheService.getScriptCache().put('baskiNabiz_' + pc, JSON.stringify({ t: Date.now(), s: String(surum || '').substring(0, 8), d: d }), 21600);
+  } catch (e2) { /* önbellek yazılamasa da iş akışı sürer */ }
+}
+function baskiNabizOku(pcler) {
+  var c = {};
+  try {
+    var ham = CacheService.getScriptCache().getAll(pcler.map(function (p) { return 'baskiNabiz_' + p; }));
+    pcler.forEach(function (p) { try { if (ham['baskiNabiz_' + p]) c[p] = JSON.parse(ham['baskiNabiz_' + p]); } catch (e) {} });
+  } catch (e2) {}
+  return c;
+}
 function baskiYazicilar() {
   var simdi = Date.now();
   var sheet = baskiSayfa(BASKI_YAZICI_SEKME, BASKI_YAZICI_BASLIK);
   // Eski sürümde açılmış sekmede yeni başlıklar (Konum, Biçimler, Gizli) yoksa eklenir.
   if (String(sheet.getRange(1, 7).getValue()) !== 'Konum') sheet.getRange(1, 1, 1, BASKI_YAZICI_BASLIK.length).setValues([BASKI_YAZICI_BASLIK]);
-  return baskiSatirlar(sheet, 9).map(function (r) {
-    var gorulme = Number(r[5]) || 0;
+  var satirlar = baskiSatirlar(sheet, 9), pcGor = {};
+  satirlar.forEach(function (r) { pcGor[String(r[2])] = true; });
+  var nabiz = baskiNabizOku(Object.keys(pcGor));
+  return satirlar.map(function (r) {
+    var nb = nabiz[String(r[2])] || {}, gorulme = Math.max(Number(r[5]) || 0, Number(nb.t) || 0);
     // Biçimler boşsa yazıcı her biçimi basar; doluysa yalnızca yazılanları (ör. "raf" ya da "a4,a5,a6").
     var bicimler = String(r[7] || '').split(',').map(function (x) { return x.trim(); }).filter(function (x) { return BASKI_BICIMLER.indexOf(x) !== -1; });
     return { kimlik: String(r[0]), ad: String(r[1] || r[3]), bilgisayar: String(r[2]), windowsAdi: String(r[3]), mod: String(r[4]) === 'manuel' ? 'manuel' : 'otomatik',
-      cevrimici: simdi - gorulme < BASKI_CEVRIMICI_SN * 1000, konum: String(r[6] || ''), bicimler: bicimler, gizli: String(r[8]) === 'evet' };
+      cevrimici: simdi - gorulme < BASKI_CEVRIMICI_SN * 1000, winDurum: (nb.d || {})[String(r[3])] || '', ajanSurum: String(nb.s || ''), konum: String(r[6] || ''), bicimler: bicimler, gizli: String(r[8]) === 'evet' };
   });
 }
 function baskiIsOzet(r) {
@@ -866,10 +888,11 @@ function baskiYaziciAyar(p, callback) {
   return outJson({ status: 'error', message: 'Yazıcı bulunamadı' }, callback);
 }
 // Program: "ben buradayım, yazıcılarım şunlar, iş var mı?" — sıradaki işi verir.
-function baskiAjanAl(bilgisayar, yazicilarJson, callback) {
+function baskiAjanAl(bilgisayar, yazicilarJson, callback, durumlarJson, surum) {
   var pc = String(bilgisayar || '').substring(0, 40), adlar = [];
   try { adlar = JSON.parse(yazicilarJson || '[]'); } catch (e) { adlar = []; }
   if (!pc || !Array.isArray(adlar)) return outJson({ status: 'error', message: 'Eksik bilgi' }, callback);
+  baskiNabizYaz(pc, durumlarJson, surum);
   var lock = LockService.getScriptLock();
   try { lock.waitLock(15000); } catch (e2) { return outJson({ status: 'ok', is: null, mesgul: true }, callback); }
   try {

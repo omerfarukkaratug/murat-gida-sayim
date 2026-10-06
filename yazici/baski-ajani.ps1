@@ -20,7 +20,8 @@ $LogFile       = Join-Path $Klasor "baski-log.txt"
 $Sumatra       = Join-Path $Klasor "SumatraPDF.exe"
 $IsKlasoru     = Join-Path $Klasor "is"
 $Profil        = Join-Path $Klasor "tarayici-profil"
-$BeklemeSn     = 8      # iki sorgu arasi bekleme
+$BeklemeSn     = 5      # iki sorgu arasi bekleme
+$AjanSurum     = "161"  # sunucuya bildirilir; uygulama eski programi uyarir
 # Uygulamada GORUNMEYECEK yazicilar (sanal yazicilar)
 $YaziciHaric   = 'PDF|XPS|OneNote|Fax|Send To'
 
@@ -69,6 +70,22 @@ function Yazici-Adlari {
     try { $adlar = @(Get-Printer -ErrorAction Stop | Where-Object { $_.Name -notmatch $YaziciHaric } | ForEach-Object { $_.Name }) }
     catch { $adlar = @(Get-WmiObject Win32_Printer | Where-Object { $_.Name -notmatch $YaziciHaric } | ForEach-Object { $_.Name }) }
     return $adlar
+}
+
+# Windows'un yazici icin bildirdigi durum: kapali (cevrimdisi / bagli degil), kagit, hata. Sorun yoksa listede yer almaz.
+function Yazici-Durumlari {
+    $d = @{}
+    try {
+        Get-Printer -ErrorAction Stop | Where-Object { $_.Name -notmatch $YaziciHaric } | ForEach-Object {
+            $s = [string]$_.PrinterStatus
+            if ($s -match 'Offline|NotAvailable') { $d[$_.Name] = "kapali" }
+            elseif ($s -match 'Paper') { $d[$_.Name] = "kagit" }
+            elseif ($s -match 'Error|UserIntervention|DoorOpen|NoToner') { $d[$_.Name] = "hata" }
+        }
+    } catch {
+        try { Get-WmiObject Win32_Printer | Where-Object { $_.Name -notmatch $YaziciHaric -and $_.WorkOffline } | ForEach-Object { $d[$_.Name] = "kapali" } } catch {}
+    }
+    return $d
 }
 
 function Bitti($id, $durum, $mesaj) {
@@ -196,6 +213,8 @@ function Bas($is) {
     Yaz-Log "Is alindi: $id ($bicim) -> $yazici"
 
     if (-not (Yazici-Adlari | Where-Object { $_ -eq $yazici })) { Bitti $id "hata" "Yazici bu bilgisayarda bulunamadi: $yazici"; Yaz-Log "HATA: yazici yok: $yazici"; return }
+    $wd = (Yazici-Durumlari)[$yazici]
+    if ($wd) { Yaz-Log "UYARI: Windows bu yaziciyi '$wd' gosteriyor: $yazici (is yine de gonderiliyor)" }
     if ($bicim -eq "zebra") { Zebra-Is $is $id $yazici; return }
     if (-not (Pdf-Uret $id $pdf)) { Bitti $id "hata" "Etiket sayfasi hazirlanamadi (tarayici/Internet)"; Yaz-Log "HATA: PDF uretilemedi."; return }
 
@@ -234,7 +253,8 @@ $hataSayisi = 0
 while ($true) {
     try {
         $yaziciJson = ConvertTo-Json -InputObject @(Yazici-Adlari) -Compress
-        $cevap = Sor @{ action = "baski_ajan_al"; anahtar = $Anahtar; bilgisayar = $env:COMPUTERNAME; yazicilar = $yaziciJson }
+        $durumJson = ConvertTo-Json -InputObject (Yazici-Durumlari) -Compress
+        $cevap = Sor @{ action = "baski_ajan_al"; anahtar = $Anahtar; bilgisayar = $env:COMPUTERNAME; yazicilar = $yaziciJson; durumlar = $durumJson; surum = $AjanSurum }
         if ($cevap -and $cevap.status -eq "error") {
             if ($hataSayisi % 40 -eq 0) { Yaz-Log "HATA: Sunucu reddetti: $($cevap.message) (anahtar dogru mu, Code.gs guncel mi?)" }
             $hataSayisi++
