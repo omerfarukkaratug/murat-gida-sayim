@@ -140,7 +140,8 @@ SELECT
   bb.STOK_STOK_BIRIM AS Ssb,
   bb.STOK AS StokId,
   s.STOK_GRUP AS StokGrup,
-  s.STOK_MARKA AS StokMarka
+  s.STOK_MARKA AS StokMarka,
+  s.SON_ALIS_FIYAT AS SonAlis
 FROM dbo.STOK_BARKOD_BIRIM bb
 LEFT JOIN dbo.STOK_BARKOD_W w ON w.ID = bb.BARKOD
 LEFT JOIN dbo.STOK_BARKOD_FIYAT_VARSAYILAN f ON f.STOK_STOK_BIRIM = bb.STOK_STOK_BIRIM
@@ -281,6 +282,11 @@ ORDER BY ADET DESC
             elseif ($r.StokGrup -isnot [System.DBNull] -and $promoGrup.ContainsKey([string]$r.StokGrup)) { $prDeger = $promoGrup[[string]$r.StokGrup] }
             elseif ($r.StokMarka -isnot [System.DBNull] -and $promoMarka.ContainsKey([string]$r.StokMarka)) { $prDeger = $promoMarka[[string]$r.StokMarka] }
         }
+        # Son alis fiyati (STOK.SON_ALIS_FIYAT, KDV haric). Koli barkodunda carpanla carpilir. Mal giriste kullanilir.
+        $afDeger = $null
+        if ($r.SonAlis -ne $null -and $r.SonAlis -isnot [System.DBNull] -and [double]$r.SonAlis -gt 0) {
+            $afDeger = [Math]::Round([double]$r.SonAlis * $(if ($carpanDeger -ne $null) { $carpanDeger } else { 1 }), 4)
+        }
         [PSCustomObject]@{
             name      = [string]$r.UrunAdi
             barcode   = [string]$r.Barkod
@@ -294,6 +300,7 @@ ORDER BY ADET DESC
             ft        = $ftDeger
             of        = $ofDeger
             pr        = $prDeger
+            af        = $afDeger
         }
     }
 
@@ -306,8 +313,43 @@ ORDER BY ADET DESC
 
     # Veri tabanina fiyat tarihi/onceki fiyat alanlari GONDERILMEZ (orada kullanilmiyor);
     # govde eski boyutunda kalir. Alanlar JSON metninden cikarilir, liste yeniden cevrilmez.
-    $dbJson = $entriesJson -replace ',"ft":(null|"[0-9-]*")', '' -replace ',"of":(null|-?[0-9][0-9.eE+-]*)', '' -replace ',"pr":"[0-9.:-]*"', ''
+    $dbJson = $entriesJson -replace ',"ft":(null|"[0-9-]*")', '' -replace ',"of":(null|-?[0-9][0-9.eE+-]*)', '' -replace ',"pr":"[0-9.:-]*"', '' -replace ',"af":(null|-?[0-9][0-9.eE+-]*)', ''
     Gonder-VeriTabani "katalog_yukle" ('{"p_kaynak":"ERP12 otomatik","p_urunler":' + $dbJson + '}') "$($entries.Count) urun"
+
+    # ---------------------------------------------------------------
+    # BEKLEYEN ALISTAN IADE IRSALIYELERI (FIS_TURU = 7, henuz faturalanmamis satirlar, son 180 gun).
+    # Mal kabulde o cari secilince uygulama "bekleyen iadesi var" diye uyarir. Hata verirse gerisi etkilenmez.
+    # ---------------------------------------------------------------
+    try {
+        $iadeRows = @(Invoke-Sqlcmd -ServerInstance $SqlServer -Database $Database -QueryTimeout 120 -Query @"
+SELECT f.ID AS FisId, ISNULL(f.BELGENO, '') AS BelgeNo, f.FIS_TARIHI AS Tarih, f.GENELTOPLAM AS Toplam,
+       ISNULL(c.KOD, '') AS CariKod, ISNULL(c.AD, '') AS CariAd,
+       ISNULL(d.BARKOD, '') AS Barkod, ISNULL(w.AD, '') AS UrunAdi, d.MIKTAR_FIS AS Miktar, d.DAHIL_FIYAT AS Fiyat
+FROM dbo.FIS f
+JOIN dbo.FIS_DETAY d ON d.FIS = f.ID
+LEFT JOIN dbo.CARI c ON c.ID = f.CARI
+LEFT JOIN dbo.STOK_BARKOD_W w ON w.ID = d.BARKOD
+WHERE f.FIS_TURU = 7 AND f.AKTIF = 1 AND ISNULL(d.FATRALANDIRILMIS_IRSALIYEMI, 0) = 0
+  AND f.FIS_TARIHI >= DATEADD(day, -180, GETDATE())
+ORDER BY f.FIS_TARIHI DESC, f.ID, d.ID
+"@)
+        $iadeFis = [ordered]@{}
+        foreach ($r in $iadeRows) {
+            $fid = [string]$r.FisId
+            if (-not $iadeFis.Contains($fid)) {
+                $iadeFis[$fid] = [PSCustomObject]@{ cariKod = [string]$r.CariKod; cari = [string]$r.CariAd; belgeNo = [string]$r.BelgeNo
+                    tarih = ([datetime]$r.Tarih).ToString('yyyy-MM-dd'); toplam = $(if ($r.Toplam -isnot [System.DBNull]) { [double]$r.Toplam } else { $null })
+                    satirlar = (New-Object System.Collections.ArrayList) }
+            }
+            [void]$iadeFis[$fid].satirlar.Add([PSCustomObject]@{ b = [string]$r.Barkod; a = [string]$r.UrunAdi
+                m = $(if ($r.Miktar -isnot [System.DBNull]) { [double]$r.Miktar } else { $null }); f = $(if ($r.Fiyat -isnot [System.DBNull]) { [Math]::Round([double]$r.Fiyat, 2) } else { $null }) })
+        }
+        $iadeJson = ConvertTo-Json -InputObject @($iadeFis.Values) -Depth 5 -Compress
+        Yaz-Log "Bekleyen alistan iade irsaliyesi: $($iadeFis.Count) fis, $($iadeRows.Count) satir. Sunucuya gonderiliyor..."
+        [void](Gonder-Sheets ('{"type":"iade_bulk",' + $ErpAnahtarJson + '"fisler":' + $iadeJson + '}') "iade irsaliyesi" $iadeFis.Count)
+    } catch {
+        Yaz-Log "UYARI: Bekleyen iade irsaliyeleri gonderilemedi: $($_.Exception.Message) (katalog ve cari etkilenmedi)"
+    }
 
     # ---------------------------------------------------------------
     # CARI (tedarikci/musteri) listesi + bakiye
