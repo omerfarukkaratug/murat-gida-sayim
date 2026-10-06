@@ -293,3 +293,13 @@ Kurulum sırası: önce Code.gs (yeni sürüm olarak dağıt), sonra ERP bilgisa
   ve barkod yerine etiket kodu basılır.
 - "Üstte 2 cm boşluk bırak" artık ürün kartında, bütün afiş biçimlerinde (A6, A5, A5 yatay koli, A4, A3)
   ürün ürün işaretlenir (`ustBosluk`). Hiç dokunulmamış üründe eski genel ayar geçerlidir (yalnız A6/A5).
+
+## Build 146 — tikli arama, sade ürün kartı, koli seçiliyken çeşit toplama
+
+- **Arama**: sonuçların solunda tik kutusu, sağında "＋" (hemen ekle). Tik konanlar arama değişse de durur;
+  "✓ n ürünü listeye ekle" hepsini birden ekler. Listede olan ürün soluk ve işaretlenemez görünür.
+- **Koli afişi seçiliyken çeşit toplama**: yalnızca koli fiyatı aynı olan çeşitler alınır (öbürleri alınmaz ve
+  kaç tane olduğu söylenir); biçim "A5 yatay · koli" olarak kalır. Önceden hepsi alınıp biçim düz A5'e dönüyordu.
+- **Kart sadeleşti**: "2 cm boşluk" biçim satırında çip; çeşit önerisi tek kısa düğme; geniş çeşit önerisi,
+  çeşit listesi ve fiyat düşüşü kutusu "Düzenle" altında. "Yeni ürün" biçimi arama kartının içinde;
+  liste paylaş/getir "Listeyi başka cihaza aktar" altında.
