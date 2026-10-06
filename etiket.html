@@ -501,6 +501,10 @@
 
     <div class="kart">
       <div class="kartBaslik"><span>Liste <span id="listeSayi" class="ipucu"></span></span><button type="button" id="temizleBtn" style="padding:6px 10px; font-size:12px;">Listeyi boşalt</button></div>
+      <div id="topluBicim" class="gizli" style="margin-bottom:10px; padding:8px 10px; border:1px dashed var(--line); border-radius:12px;">
+        <div style="font-size:12.5px; font-weight:800; margin-bottom:6px;">Listedeki hepsini şuna çevir:</div>
+        <div class="bicimSec" style="margin:0;"><button type="button" data-tb="zebra" class="etk">🏷️ Etiket</button><button type="button" data-tb="a6">A6</button><button type="button" data-tb="a5">A5</button><button type="button" data-tb="a4">A4</button><button type="button" data-tb="a3">A3</button></div>
+      </div>
       <div id="liste"><div class="ipucu">Henüz ürün eklenmedi.</div></div>
       <!-- Liste aktarma: telefonda hazırla, yazıcının bağlı olduğu bilgisayarda getirip bas. -->
       <button type="button" id="listeIslemAc" class="baglanti" style="margin-top:10px;">Listeyi başka cihaza aktar ▾</button>
@@ -1363,6 +1367,7 @@
   var odakBirakiliyor = false;
   function listeCiz(){
     var kutu = $('liste');
+    $('topluBicim').classList.toggle('gizli', durum.liste.filter(function(u){ return !u.basildi; }).length < 2);
     // Yazılmakta olan kutu varsa önce bırakılır: değişikliği kaydolur, sonra liste yeniden çizilir.
     var odak = document.activeElement;
     if(odak && kutu.contains(odak) && !odakBirakiliyor){ odakBirakiliyor = true; try { odak.blur(); } catch(e){} odakBirakiliyor = false; }
@@ -1464,6 +1469,17 @@
         return '<button type="button" data-is="bicim" data-f="' + t[0] + '"' + (f === t[0] ? ' class="secili"' : '') + '>' + t[1] + '</button>'; }).join('') : '') +
         (AFIS_BICIM[f] || f === 'dokme' ? '<button type="button" data-is="bosluk" title="Üstte 2 cm boşluk bırak (askı / raf rayı için)" style="border-style:dashed;"' + (urunBosluk(u, f) ? ' class="secili"' : '') + '>↥ 2 cm boşluk</button>' : '') + '</div>' : '');
   }
+  // Toplu kâğıt değişimi: yanlış kâğıtla okutulan liste tek dokunuşla düzeltilir (basılmış ürünlere dokunulmaz).
+  $('topluBicim').addEventListener('click', function(e){
+    var b = e.target.closest('button[data-tb]'); if(!b) return;
+    if(!yetkiVar(IS_YETKI.bicim)){ toast('Bu işlem için yetkin yok', 'uyari'); return; }
+    var f = b.getAttribute('data-tb'), l = durum.liste.filter(function(u){ return !u.basildi; });
+    if(!l.length) return;
+    var ad = f === 'zebra' ? 'Etiket (Zebra)' : f.toUpperCase() + ' afiş';
+    if(!window.confirm('Listedeki ' + l.length + ' ürünün hepsi "' + ad + '" olarak değişsin mi?\n\n(Dökme kartı, koli afişi ve boy listesi gibi özel taslaklar da değişir.)')) return;
+    l.forEach(function(u){ u.bicim = f; });
+    kaydet(); listeCiz(); ciz(); toast(l.length + ' ürün ' + ad + ' yapıldı');
+  });
   function urunBul(el){ var k = el.closest('.urun'); if(!k) return null; var id = k.getAttribute('data-id'); return durum.liste.filter(function(u){ return u.id === id; })[0] || null; }
   // ---------- Ortak etiket bilgisi (bütün cihazlar) ----------
   // Girilen üretim yeri / net miktar / koli adedi sunucuya yazılır; açılışta sunucudaki bilgiler alınır.
