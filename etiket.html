@@ -455,6 +455,10 @@
           <div id="dgAlt"><span id="dgSayac"></span><label style="margin:0; text-transform:none; letter-spacing:0; font-size:12.5px; color:inherit; display:flex; align-items:center; gap:6px;"><input id="dgOto" type="checkbox" style="width:auto;"> hatalıları listeye ekle</label></div>
         </div>
       </div>
+      <div id="hizliKutu" style="margin-top:10px; padding:8px 10px; border:2px solid var(--amber); border-radius:12px;">
+        <label style="display:flex; align-items:center; gap:10px; margin:0; text-transform:none; letter-spacing:0; font-size:14px; color:var(--text);"><input id="hizliAc" type="checkbox" style="width:22px; height:22px;"> <span>⚡ <b>Hızlı etiket</b> — okutulan ürün Zebra etiketi olarak kendiliğinden yazıcıya gider</span></label>
+        <div id="hizliDurum" class="gizli" style="display:flex; align-items:center; justify-content:space-between; gap:8px; margin-top:8px; font-size:13px; font-weight:700;"><span id="hizliYazi"></span><button type="button" id="hizliSimdi" class="ana" style="flex:none; padding:6px 12px; font-size:12.5px;">Şimdi gönder</button></div>
+      </div>
       <div id="sonuclar"></div>
       <div id="araSecBar" class="gizli"><button type="button" class="ana" id="araSecEkle" style="flex:1;"></button><button type="button" id="araSecTemizle" style="flex:none; font-size:12.5px;">Seçimi temizle</button></div>
       <div class="ekSatir"><span class="ipucu">Yeni ürün:</span><div class="bicimSec" id="varsayilanSec" style="margin:0;"></div></div>
@@ -1131,8 +1135,10 @@
       if(sab.ustBosluk !== undefined) yu.ustBosluk = sab.ustBosluk;
     }
     if(sessiz) return;
+    if(durum.hizli) durum.liste[0].bicim = 'zebra';      // hızlı etiket: raf etiketi olarak doğrudan yazıcıya
     kaydet(); listeCiz(); ciz();
     toast('Eklendi: ' + u.ad);
+    if(durum.hizli) hizliPlanla();
   }
   if(!YONETICI) $('elleBtn').classList.add('yetkiGizli');
   $('elleBtn').addEventListener('click', function(){
@@ -1368,6 +1374,7 @@
   function listeCiz(){
     var kutu = $('liste');
     $('topluBicim').classList.toggle('gizli', durum.liste.filter(function(u){ return !u.basildi; }).length < 2);
+    hizliCiz();
     // Yazılmakta olan kutu varsa önce bırakılır: değişikliği kaydolur, sonra liste yeniden çizilir.
     var odak = document.activeElement;
     if(odak && kutu.contains(odak) && !odakBirakiliyor){ odakBirakiliyor = true; try { odak.blur(); } catch(e){} odakBirakiliyor = false; }
@@ -1984,7 +1991,7 @@
             durum.liste.forEach(function(u){ if((d.idler || []).indexOf(u.id) !== -1) u.basildi = damga; });
           }
         });
-        if(degisti){ kaydet(); listeCiz(); ciz(); }
+        if(degisti){ kaydet(); listeCiz(); ciz(); if(durum.hizli) hizliPlanla(2); }
         baski.isler.forEach(function(i){
           var z = izlenen[i.id]; if(!z || z.bitti) return;
           if(i.durum === 'basildi'){ z.bitti = true; toast('Yazıcıya gönderildi ✅ — çıkanı kontrol et'); basildiIsaretle(z.kuyruk); }
@@ -2129,6 +2136,42 @@
     yaziciyaGonder(yz.secili);
     return true;
   }
+  // ---------- Hızlı etiket ----------
+  // Personel rafı okutur; okutulan ürünler listeye iner ve son okutmadan birkaç saniye sonra TEK iş olarak
+  // Zebra yazıcıya gider. Önceki iş bitmeden yenisi gönderilmez (aynı etiket iki kez çıkmasın).
+  var hizliZ = null, HIZLI_BEKLE_SN = 5;
+  function hizliBekleyen(){ return durum.liste.filter(function(u){ return urunBicim(u) === 'zebra' && !u.basildi && !eksikler(u).length; }); }
+  function hizliMesgul(){
+    var d = durum.isDurum.zebra; if(!d) return false;
+    return (d.durum === 'gonderildi' || d.durum === 'bekliyor' || d.durum === 'basiliyor' || d.durum === 'onay_bekliyor') && Date.now() - (d.zaman || 0) < 6 * 60 * 1000;
+  }
+  function hizliCiz(){
+    $('hizliAc').checked = !!durum.hizli;
+    var ucan = hizliMesgul() ? ((durum.isDurum.zebra || {}).idler || []) : [];
+    var n = hizliBekleyen().filter(function(u){ return ucan.indexOf(u.id) === -1; }).length, eksik = durum.liste.filter(function(u){ return urunBicim(u) === 'zebra' && !u.basildi && eksikler(u).length; }).length, m = hizliMesgul();
+    $('hizliDurum').classList.toggle('gizli', !durum.hizli || (!n && !eksik && !m));
+    $('hizliYazi').innerHTML = (m ? '🖨️ Basılıyor…' + (n ? ' (' + n + ' etiket sırada)' : '') : n ? '⏳ ' + n + ' etiket birazdan yazıcıya gidecek' : '') +
+      (eksik ? (m || n ? '<br>' : '') + '<span style="color:var(--red);">' + eksik + ' üründe bilgi eksik — basılmaz, kartındaki kırmızı uyarıyı tamamla</span>' : '');
+    $('hizliSimdi').classList.toggle('gizli', m || !n);
+  }
+  function hizliPlanla(sn){
+    clearTimeout(hizliZ);
+    if(durum.hizli) hizliZ = setTimeout(hizliGonder, (sn || HIZLI_BEKLE_SN) * 1000);
+    hizliCiz();
+  }
+  function hizliGonder(){
+    clearTimeout(hizliZ);
+    if(!durum.hizli || !hizliBekleyen().length){ hizliCiz(); return; }
+    if(hizliMesgul()){ hizliPlanla(4); return; }
+    if(!gonderOnKontrol()){ hizliCiz(); return; }
+    baskiYukle(function(){
+      if(!baski.hazir){ hizliPlanla(8); return; }
+      if(hizliMesgul()){ hizliPlanla(4); return; }
+      bicimGonder('zebra', true); hizliCiz();
+    });
+  }
+  $('hizliAc').addEventListener('change', function(){ durum.hizli = this.checked; kaydet(); if(durum.hizli) toast('Hızlı etiket açık — okuttuğun ürün yazıcıya gider'); hizliPlanla(); });
+  $('hizliSimdi').addEventListener('click', hizliGonder);
   function gonderOnKontrol(){
     if(!navigator.onLine){ toast('İnternet yok', 'hata'); return false; }
     if(!kimlikBilgisi()){ toast('Oturum bilgisi yok — ana uygulamada çıkış yapıp yeniden giriş yap', 'hata'); return false; }
