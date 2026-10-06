@@ -225,12 +225,14 @@
   .dKart{display:flex; flex-direction:column; height:100%; padding:7em 8em 6em; box-sizing:border-box;}
   .dAd{height:30em; flex-shrink:0; display:flex; align-items:center; justify-content:center; text-align:center;}
   .dAd .yazi{display:block; width:100%; font-weight:900; line-height:1.05; text-transform:uppercase; overflow-wrap:anywhere; text-wrap:balance;}
-  .dOrta{flex:1; min-height:0; display:flex;} .dFiyatKutu{flex:1; min-width:0; display:flex; align-items:center; justify-content:center;}
+  .dOrta{flex:1; min-height:0; display:flex; flex-direction:column;} .dFiyatKutu{flex:1; min-width:0; display:flex; align-items:center; justify-content:center;}
   .dFiyat{font-weight:900; line-height:.9; white-space:nowrap; letter-spacing:-.035em; display:inline-flex; align-items:flex-start;}
   .dFiyat .kurus{font-size:.5em; line-height:1; margin-left:.04em;} .dFiyat .tl{font-size:.36em; line-height:1.35; margin-left:.12em; font-weight:800;}
   .dAlt{flex-shrink:0; display:flex; justify-content:space-between; align-items:flex-end; gap:3em; border-top:.5em solid #000; padding-top:1.6em;}
   .dAlt b{font-size:5.4em; font-weight:900; white-space:nowrap;} .dAlt span{font-size:2.5em; font-weight:600;} .dSol{display:flex; flex-direction:column; gap:.6em; min-width:0;}
-  .dAlt .dSkt{font-size:4.4em; font-weight:900; white-space:nowrap;} .dAlt .qr{width:17em; height:17em; flex-shrink:0;}
+  .dAlt .dSkt{font-size:4.4em; font-weight:900; white-space:nowrap;} .dAlt .qr{width:15em; height:15em; flex-shrink:0;}
+  .dBrk{flex-shrink:0; text-align:center;} .dBrk .barkod{width:38em; height:11em; display:block;} .dBrk div{font-family:"Courier New", monospace; font-size:2.6em; letter-spacing:.1em; line-height:1.1;}
+  .dOnceki{flex-shrink:0; display:flex; align-items:center; justify-content:center; gap:1.6em; font-size:6em; font-weight:800; line-height:1;} .dOnceki s{text-decoration-thickness:.09em;} .dOnceki b{background:#000; color:#fff; padding:.08em .35em; border-radius:.2em; font-size:.85em;} .dOnceki i{font-style:normal; font-size:.42em; font-weight:700; line-height:1.15;}
   /* A5 yatay koli afişi (210 × 148 mm; 1em = 0,5 mm): solda büyük koli fiyatı, sağda tek/koli adet karşılaştırması */
   .kAfis{position:relative; display:flex; flex-direction:column; height:100%; padding:12em 14em 10em; box-sizing:border-box; --kk:#000;}
   .kBas{display:flex; align-items:center; gap:8em; height:32em; flex-shrink:0;}
@@ -2840,14 +2842,26 @@
     var mik = sayi(u.mik), birim = String(u.birim || '');
     var olcu = (birim === 'kg' && mik === 1) ? 'KİLOSU' : (birim === 'l' && mik === 1) ? 'LİTRESİ' : (birim === 'adet' && mik === 1) ? 'ADEDİ'
       : (!isNaN(mik) && mik > 0 ? String(mik).replace('.', ',') + ' ' + (birim === 'l' ? 'L' : birim) : '');
+    var onceki = sayi(u.onceki), oran = (u.indirim && onceki > u.fiyat) ? Math.round((1 - u.fiyat / onceki) * 100) : 0, brk = u.grup ? '' : tartiBarkod(u);
     return '<div class="sayfa" style="width:132mm; height:105mm; font-size:1mm;"><div class="dKart">' +
       '<div class="dAd sig" data-em="14" data-min="6"><span class="yazi">' + adHtml(u) + '</span></div>' +
-      '<div class="dOrta"><div class="dFiyatKutu sig" data-em="50" data-min="18"><span class="dFiyat yazi">' + fiyatHtml(u.fiyat) + '</span></div></div>' +
+      '<div class="dOrta">' + (oran > 0 ? '<div class="dOnceki"><s>' + para(onceki) + ' ₺</s><b>%' + oran + '</b><i>indirimden<br>önceki fiyat</i></div>' : '') +
+        '<div class="dFiyatKutu sig" data-em="50" data-min="18"><span class="dFiyat yazi">' + fiyatHtml(u.fiyat) + '</span></div></div>' +
       // SKT (son kullanma) ya da TETT (tavsiye edilen tüketim) — ürüne göre seçilir, tarih elle girilir.
       '<div class="dAlt"><div class="dSol"><b>' + esc(olcu) + '</b>' +
           (u.sktTur && u.sktTarih ? '<span class="dSkt">' + (u.sktTur === 'tett' ? 'TETT' : 'SKT') + ': ' + tarihTr(u.sktTarih) + '</span>' : '') +
-          '<span>Üretim yeri: ' + esc(String(u.yer || '').trim()) + ' · Fiyat tarihi: ' + tarihTr(u.tarih) + ' · KDV dâhil</span></div>' + afisQr(u) + '</div>' +
+          '<span>Üretim yeri: ' + esc(String(u.yer || '').trim()) + ' · ' + (u.indirim ? 'İndirim: ' + tarihTr(u.tarih) + (u.bitis ? ' – ' + tarihTr(u.bitis) : '') : 'Fiyat tarihi: ' + tarihTr(u.tarih)) + ' · KDV dâhil</span></div>' +
+        (brk && barkodSvg(brk) ? '<div class="dBrk">' + barkodSvg(brk) + '<div>' + esc(brk) + '</div></div>' : '') + afisQr(u) + '</div>' +
     '</div></div>';
+  }
+  // Tartılı ürün (terazi barkodu 29 + 5 hane ürün no + 5 hane gram + kontrol): karta 1 kg'lık barkod basılır,
+  // kasada okutulunca 1 kg satılır. Katalogdaki barkod 7 haneyse (29 + ürün no) ya da 13 haneyse uygulanır.
+  function tartiBarkod(u){
+    var b = String(u.barkod || '');
+    if(!/^29\d+$/.test(b) || (b.length !== 7 && b.length !== 13)) return b;
+    var g = b.substring(0, 7) + '01000', t = 0;
+    for(var i = 0; i < 12; i++) t += Number(g.charAt(i)) * (i % 2 ? 3 : 1);
+    return g + String((10 - t % 10) % 10);
   }
   function zebraKare(){ return !!IS_NO && !GORUNTU && durum.zebra.w > durum.zebra.h; }
   function zebraHtml(u){
