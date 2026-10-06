@@ -473,6 +473,12 @@
       </div>
     </div>
 
+    <div class="kart gizli" id="sktKart" style="border:2px solid var(--red);">
+      <div class="kartBaslik">⏳ SKT / TETT tarihi yaklaşan dökme ürünler</div>
+      <div class="ipucu" style="margin-bottom:4px;">Dökme kartına yazdığın tarihe 7 gün ve daha az kalanlar. Yeni mal gelince kartı yeni tarihle bas.</div>
+      <div id="sktListe"></div>
+    </div>
+
     <div class="kart" id="topluKart">
       <button type="button" id="topluAcBtn" style="width:100%; display:flex; justify-content:space-between; align-items:center;"><span>🗓️ Geçmişe göre toplu ekle (son günlerde fiyatı değişenler)</span><span>▼</span></button>
       <div id="topluIc" class="gizli" style="margin-top:10px;">
@@ -656,7 +662,7 @@
   // Üstte 2 cm boşluk ürün bazındadır (bütün afiş biçimlerinde). Kartta hiç işaretlenmediyse genel ayar geçerli (yalnız A6/A5).
   var AFIS_BICIM = { a6: 1, a5: 1, a5y: 1, a4: 1, a4b: 1, a3: 1 };
   function urunBosluk(u, f){
-    if(!AFIS_BICIM[f]) return false;
+    if(!AFIS_BICIM[f] && f !== 'dokme') return false;
     if(u && (u.ustBosluk === true || u.ustBosluk === false)) return u.ustBosluk;
     return !!durum.bosluk && (f === 'a6' || f === 'a5');
   }
@@ -668,7 +674,41 @@
   Object.keys(ZEBRA_VARSAYILAN).forEach(function(k){ if(durum.zebra[k] === undefined) durum.zebra[k] = ZEBRA_VARSAYILAN[k]; });
   if(durum.a4diz === undefined) durum.a4diz = true;     // A6/A5 afişleri A4 kâğıda diz (A6: 4, A5: 2)
   function dizVar(){ return durum.bicim === 'a5y' || durum.bicim === 'dokme' || (!!durum.a4diz && (durum.bicim === 'a6' || durum.bicim === 'a5')); }
-  function kaydet(){ if(IS_NO) return; if(!yaz(ETIKET_ANAHTAR, durum)) toast('Telefon hafızası dolu — liste kaydedilemedi', 'hata'); if(typeof ayarGonder === 'function') ayarGonder(); }
+  function kaydet(){ if(IS_NO) return; sablonHatirla(); if(!yaz(ETIKET_ANAHTAR, durum)) toast('Telefon hafızası dolu — liste kaydedilemedi', 'hata'); if(typeof ayarGonder === 'function') ayarGonder(); }
+
+  // ---- Ürünün taslağını hatırla (bu cihazda): kâğıt/taslak, boy listesi, SKT-TETT, üst boşluk ----
+  // Ürün listeye yeniden eklenince aynı taslakla gelir; boy listesinin öbür boyu eklenirse afişin kendisi gelir.
+  if(!durum.sablon) durum.sablon = {};
+  function sablonHatirla(){
+    durum.liste.forEach(function(u){
+      if(!u.barkod || u.grup || u.elle) return;
+      var f = BICIM_SIRA.indexOf(u.bicim) !== -1 ? u.bicim : '';
+      var r = { ad: u.katalogAd || u.ad };
+      if(f === 'dokme' || f === 'a4b' || f === 'a5y' || f === 'a3' || f === 'a4') r.bicim = f;
+      if(f === 'a4b' && u.boylar && u.boylar.length){ r.boylar = u.boylar; r.boyEtiket = u.boyEtiket || ''; r.baslik = u.ad; }
+      if(u.sktTur){ r.sktTur = u.sktTur; r.sktTarih = u.sktTarih || ''; }
+      if(u.ustBosluk === true || u.ustBosluk === false) r.ustBosluk = u.ustBosluk;
+      if(r.bicim || r.sktTur || r.ustBosluk !== undefined) durum.sablon[u.barkod] = r; else delete durum.sablon[u.barkod];
+    });
+  }
+  function boyAnasi(barkod){
+    var b = String(barkod), ana = '';
+    Object.keys(durum.sablon).some(function(a){ var r = durum.sablon[a]; if(r.boylar && r.boylar.some(function(x){ return String(x.barkod) === b; })){ ana = a; return true; } return false; });
+    return ana;
+  }
+  // SKT / TETT tarihi yaklaşan (7 gün) ya da geçmiş dökme ürünler.
+  var SKT_UYARI_GUN = 7;
+  function sktYaklasanlar(){
+    return Object.keys(durum.sablon).map(function(b){ var r = durum.sablon[b]; return { b: b, ad: r.ad || b, tur: r.sktTur, tarih: r.sktTarih, kalan: r.sktTarih ? gunFarki(r.sktTarih, bugun()) : 999 }; })
+      .filter(function(x){ return x.tur && x.tarih && x.kalan <= SKT_UYARI_GUN; }).sort(function(a, c){ return a.kalan - c.kalan; });
+  }
+  function sktCiz(){
+    var l = sktYaklasanlar(), kart = $('sktKart'); if(!kart) return;
+    kart.classList.toggle('gizli', !l.length);
+    $('sktListe').innerHTML = l.map(function(x){
+      return '<div style="display:flex; justify-content:space-between; align-items:center; gap:8px; padding:6px 0; border-top:1px solid var(--line);"><div style="min-width:0;"><b>' + esc(x.ad) + '</b><div class="ipucu">' + (x.tur === 'tett' ? 'TETT' : 'SKT') + ': ' + tarihTr(x.tarih) + '</div></div>' +
+        '<div style="text-align:right; white-space:nowrap;"><b style="color:' + (x.kalan < 0 ? 'var(--red)' : 'var(--amber)') + ';">' + (x.kalan < 0 ? 'GEÇTİ' : x.kalan === 0 ? 'BUGÜN' : x.kalan + ' gün kaldı') + '</b><br><button type="button" data-skt="' + esc(x.b) + '" style="padding:2px 8px; font-size:11.5px; margin-top:2px;">listeden çıkar</button></div></div>'; }).join('');
+  }
 
   // ---------- Görseller (yerli üretim logosu var mı?) ----------
   var yerliLogoVar = false, magazaLogoVar = false, gorselBekleyen = 2;
@@ -1047,6 +1087,14 @@
       eksikGecmis: !!FIYAT_IZLEME && gunFarki(ft, FIYAT_IZLEME) < INDIRIM_PENCERE_GUN };
   }
   function urunEkle(u, sessiz){
+    // Boy listesinin öbür boyu (ör. 15'li) eklenirse afişin kendisi (ana ürün) eklenir.
+    var ana = (!u.elle && u.barkod) ? boyAnasi(u.barkod) : '', ak = ana ? katalogHarita[ana] : null;
+    if(ak && sayi(ak.price) > 0){
+      if(durum.liste.some(function(x){ return x.barkod === ana; })) return;
+      u = { barkod: ana, ad: ak.name, fiyat: sayi(ak.price), elle: false, ft: ak.ft || '', of: ak.of || '', erpYer: ak.yer || '' };
+      if(!sessiz) toast('Bu ürün bir boy listesi afişinde — afiş eklendi');
+    }
+    var sab = (!u.elle && u.barkod && durum.sablon[u.barkod]) || null;
     var bil = durum.urun[u.barkod] || {};
     var tahmin = u.tartili ? { mik: 1, birim: 'kg' } : miktarBul(u.ad);
     durum.liste.unshift({
@@ -1064,6 +1112,13 @@
       // Paket/koli içi adet: ERP'de bu ürüne tanımlı Paket/Koli biriminin çarpanı (elle değiştirilebilir).
       koli: bil.koli || koliBilgi(u.barkod).n, koliAd: bil.koliAd || koliBilgi(u.barkod).ad, koliEk: bil.koli ? '' : koliBilgi(u.barkod).ek
     });
+    if(sab){
+      var yu = durum.liste[0];
+      if(sab.bicim) yu.bicim = sab.bicim;
+      if(sab.boylar){ yu.boylar = sab.boylar.filter(function(x){ return !!katalogHarita[String(x.barkod)]; }); yu.boyEtiket = sab.boyEtiket || ''; if(sab.baslik) yu.ad = sab.baslik; }
+      if(sab.sktTur){ yu.sktTur = sab.sktTur; yu.sktTarih = sab.sktTarih || ''; }
+      if(sab.ustBosluk !== undefined) yu.ustBosluk = sab.ustBosluk;
+    }
     if(sessiz) return;
     kaydet(); listeCiz(); ciz();
     toast('Eklendi: ' + u.ad);
@@ -1400,7 +1455,7 @@
         return '<button type="button" data-is="bicim" data-f="' + (k === 'etiket' ? 'zebra' : k) + '" class="' + (k === 'etiket' ? 'etk' : '') + (kg === k ? ' secili' : '') + '">' + (k === 'etiket' ? '🏷️ Etiket' : k.toUpperCase()) + '</button>'; }).join('') + '</div>' +
       (ts.length > 1 || AFIS_BICIM[f] || f === 'dokme' ? '<div class="taslakSec">' + (ts.length > 1 ? '<span>Taslak:</span>' + ts.map(function(t){
         return '<button type="button" data-is="bicim" data-f="' + t[0] + '"' + (f === t[0] ? ' class="secili"' : '') + '>' + t[1] + '</button>'; }).join('') : '') +
-        (AFIS_BICIM[f] ? '<button type="button" data-is="bosluk" title="Üstte 2 cm boşluk bırak (askı / raf rayı için)" style="border-style:dashed;"' + (urunBosluk(u, f) ? ' class="secili"' : '') + '>↥ 2 cm boşluk</button>' : '') + '</div>' : '');
+        (AFIS_BICIM[f] || f === 'dokme' ? '<button type="button" data-is="bosluk" title="Üstte 2 cm boşluk bırak (askı / raf rayı için)" style="border-style:dashed;"' + (urunBosluk(u, f) ? ' class="secili"' : '') + '>↥ 2 cm boşluk</button>' : '') + '</div>' : '');
   }
   function urunBul(el){ var k = el.closest('.urun'); if(!k) return null; var id = k.getAttribute('data-id'); return durum.liste.filter(function(u){ return u.id === id; })[0] || null; }
   // ---------- Ortak etiket bilgisi (bütün cihazlar) ----------
@@ -2068,7 +2123,8 @@
   function kuyrukCiz(){
     var l = kuyrukListe(), kart = $('kuyrukKart'), bg = bozukGruplar();
     kart.classList.remove('gizli'); $('kuyrukBos').classList.toggle('gizli', !!(l.length || bg.length)); kart.style.borderColor = (l.length || bg.length) ? 'var(--amber)' : 'var(--line)';
-    Array.prototype.forEach.call(document.querySelectorAll('[data-sayac="kontrol"]'), function(el){ var n = l.length + bg.length; el.textContent = n && yt('etiket_kuyruk') ? String(n) : ''; });
+    sktCiz();
+    Array.prototype.forEach.call(document.querySelectorAll('[data-sayac="kontrol"]'), function(el){ var n = (yt('etiket_kuyruk') ? l.length + bg.length : 0) + sktYaklasanlar().length; el.textContent = n ? String(n) : ''; });
     $('kuyrukGrupKutu').classList.toggle('gizli', !bg.length);
     if(bg.length) $('kuyrukGrupBilgi').innerHTML = '<b>' + bg.length + '</b> çeşitli etiket GEÇERSİZ (fiyat değişti):' +
       bg.slice(0, 6).map(function(g){ return '<div style="margin-top:4px;"><b>' + esc((g.kod ? grupKodYazi(g.kod) + ' ' : '') + g.ad) + '</b><br><span style="color:var(--red);">' + grupFarklari(g).slice(0, 3).map(esc).join('<br>') + '</span></div>'; }).join('') + (bg.length > 6 ? '<div>…</div>' : '') +
@@ -2103,7 +2159,7 @@
     var c = [], gorulen = {};
     aktifListe().forEach(function(u){
       if(eksikler(u).length) return;
-      (u.grup ? u.grup.map(function(g){ return g.barkod; }) : [u.barkod]).forEach(function(b){
+      (u.grup ? u.grup.map(function(g){ return g.barkod; }) : [u.barkod].concat(urunBicim(u) === 'a4b' ? (u.boylar || []).map(function(x){ return x.barkod; }) : [])).forEach(function(b){
         var kt = katalogHarita[String(b)];
         if(!b || gorulen[b] || !kt || !kt.ft || kt.ft < kuyruk.baslangic || kuyruk.basilan[String(b)] === kt.ft) return;
         gorulen[b] = true; c.push([String(b), kt.ft]);
@@ -2432,6 +2488,7 @@
     Array.prototype.forEach.call(document.querySelectorAll('[data-sek]'), function(el){ el.classList.toggle('sekGizli', el.getAttribute('data-sek') !== ad); });
     Array.prototype.forEach.call(document.querySelectorAll('#cubuk button[data-sekme]'), function(el){ el.classList.toggle('secili', el.getAttribute('data-sekme') === ad); });
     if(ad === 'yazdir'){ yazdirCiz(); ciz(); if(navigator.onLine) baskiYukle(); }
+    if(ad === 'kontrol') kuyrukCiz();
     window.scrollTo(0, 0);
   }
   (function(){
@@ -2439,7 +2496,8 @@
     var ata = function(el, ad){ if(el) el.setAttribute('data-sek', ad); };
     ata(kart('ara'), 'urun'); ata(kart('liste'), 'urun');
     ata($('yazdirKart'), 'yazdir'); ata($('onizleKart'), 'yazdir');
-    ata(kart('dogrulaBtn'), 'kontrol'); ata($('kuyrukKart'), 'kontrol'); ata($('topluKart'), 'kontrol');
+    ata(kart('dogrulaBtn'), 'kontrol'); ata($('kuyrukKart'), 'kontrol'); ata($('sktKart'), 'kontrol'); ata($('topluKart'), 'kontrol');
+    $('sktListe').addEventListener('click', function(e){ var b = e.target.closest('button[data-skt]'); if(!b) return; var r = durum.sablon[b.getAttribute('data-skt')]; if(r){ delete r.sktTur; delete r.sktTarih; } durum.liste.forEach(function(u){ if(u.barkod === b.getAttribute('data-skt')){ u.sktTur = ''; u.sktTarih = ''; } }); kaydet(); listeCiz(); kuyrukCiz(); });
     $('topluKart').parentNode.insertBefore(kart('dogrulaBtn'), $('topluKart'));       // sıra: basılmayanlar → etiket doğrulama → toplu ekle
     $('topluAcBtn').addEventListener('click', function(){ $('topluIc').classList.toggle('gizli'); });
     ata(kart('bicimSecim'), 'ayar'); ata($('baskiKart'), 'ayar');
@@ -2863,7 +2921,7 @@
     var olcu = (birim === 'kg' && mik === 1) ? 'KİLOSU' : (birim === 'l' && mik === 1) ? 'LİTRESİ' : (birim === 'adet' && mik === 1) ? 'ADEDİ'
       : (!isNaN(mik) && mik > 0 ? String(mik).replace('.', ',') + ' ' + (birim === 'l' ? 'L' : birim) : '');
     var onceki = sayi(u.onceki), oran = (u.indirim && onceki > u.fiyat) ? Math.round((1 - u.fiyat / onceki) * 100) : 0, brk = u.grup ? '' : tartiBarkod(u);
-    return '<div class="sayfa" style="width:132mm; height:105mm; font-size:1mm;"><div class="dKart">' +
+    return '<div class="sayfa" style="width:132mm; height:105mm; font-size:1mm; padding-top:' + (urunBosluk(u, 'dokme') ? UST_BOSLUK_MM : 0) + 'mm;"><div class="dKart">' +
       '<div class="dAd sig" data-em="14" data-min="6"><span class="yazi">' + adHtml(u) + '</span></div>' +
       '<div class="dOrta">' + (oran > 0 ? '<div class="dOnceki"><s>' + para(onceki) + ' ₺</s><b>%' + oran + '</b><i>indirimden<br>önceki fiyat</i></div>' : '') +
         '<div class="dFiyatKutu sig" data-em="50" data-min="18"><span class="dFiyat yazi">' + fiyatHtml(u.fiyat) + '</span></div></div>' +
