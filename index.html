@@ -3891,6 +3891,7 @@
 
   function openMalHareketScreen(tip){
     malTip = tip;
+    setTimeout(function(){ malIadeKontrol(false); }, 400);   // yarım kalan kayıtla açıldıysa bekleyen iade düğmesi yine görünsün
     hizliGecisCiz();
     malSaving = false;
     malSaveBtnEl.disabled = false; malSaveBtnEl.textContent = '💾 Kaydet';
