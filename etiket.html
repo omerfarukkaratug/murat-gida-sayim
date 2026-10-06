@@ -626,7 +626,7 @@
   // ---------- Ürün bazında biçim (build 140) ----------
   // Her ürünün kendi biçimi vardır (Zebra etiket ya da bir afiş boyu). Yazdırma biçime göre gruplanır;
   // basılan ürün "basıldı" işaretlenir ve bir daha gönderilmez (kartındaki "tekrar bas" ile geri alınır).
-  var BICIM_SIRA = ['zebra', 'a6', 'dokme', 'a5', 'a5y', 'a4', 'a4b', 'a3', 'raf'], BICIM_KISA = { zebra: 'Zebra', a6: 'A6', dokme: 'Dökme kartı', a5: 'A5', a5y: 'A5 yatay · koli', a4: 'A4', a4b: 'A4 · boy listesi', a3: 'A3', raf: 'Raf' };
+  var BICIM_SIRA = ['zebra', 'a6', 'dokme', 'a5', 'a5y', 'a4', 'a4b', 'a3', 'raf'], BICIM_KISA = { zebra: 'Zebra', a6: 'A6', dokme: 'A6 · dökme', a5: 'A5', a5y: 'A5 yatay · koli', a4: 'A4', a4b: 'A4 · boy listesi', a3: 'A3', raf: 'Raf' };
   function yaziciBicim(f){ return f === 'a5y' ? 'a5' : (f === 'a4b' || f === 'dokme') ? 'a4' : f; }   // yazıcı ve sunucu için: yatay koli afişi de A5 işidir
   if(BICIM_SIRA.indexOf(durum.varsayilan) === -1 || durum.varsayilan === 'a5y' || durum.varsayilan === 'a4b') durum.varsayilan = 'zebra';
   if(!durum.isDurum) durum.isDurum = {};          // biçim -> { id, adet, zaman, durum, mesaj, idler }
