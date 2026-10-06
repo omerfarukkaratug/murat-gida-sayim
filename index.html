@@ -351,7 +351,7 @@
   <header style="border:none; padding:0 0 16px; background:transparent; display:flex; align-items:flex-start; justify-content:space-between;">
     <div>
       <h1><img src="logo-header.png" alt="Murat Gıda" style="height:30px; width:auto; display:block;"></h1>
-      <div class="sub">MK ERP · Murat Gıda • offline • Android • build 149</div>
+      <div class="sub">MK ERP · Murat Gıda • offline • Android • build 150</div>
     </div>
     <button type="button" id="themeToggleBtn" title="Tema seç" style="background:var(--panel2); border:1.5px solid var(--line); color:var(--text); width:34px; height:34px; border-radius:50%; font-size:15px; padding:0; display:flex; align-items:center; justify-content:center; flex-shrink:0;">🎨</button>
   </header>
@@ -3814,14 +3814,16 @@
     malCariInputEl.value = malCari.name;
     malCariResultsEl.classList.add('hidden');
     showPickedCari();
-    malIadeKontrol(true);
+    malIadeKontrol();        // sessizce önden sorulur; uyarı "Ürün okutmaya başla"da çıkar
   });
 
   // ---- Bekleyen alıştan iade irsaliyesi uyarısı (yalnızca mal GİRİŞ) ----
   // ERP'de bu cariye kesilmiş, henüz faturalanmamış iade irsaliyesi varsa: cari seçilince büyük uyarı
   // açılır; kırmızı düğmeyle içerik yeniden görülebilir. İnternet yoksa sessizce geçilir.
-  var malIadeFisler = [], malIadeKod = '';
-  function malIadeGizle(){ malIadeFisler = []; malIadeKod = ''; document.getElementById('malIadeBtn').classList.add('hidden'); }
+  // malIadeDurum: '' (sorulmadı) | 'bekliyor' | 'geldi' | 'hata'. malIadeOnay: uyarısı görülüp "Tamam" denen cari kodu.
+  var malIadeFisler = [], malIadeKod = '', malIadeDurum = '', malIadeOnay = '', malIadeBekleyenler = [];
+  function malIadeAnahtar(c){ return c ? (c.code || '') + '|' + (c.name || '') : ''; }
+  function malIadeGizle(){ malIadeFisler = []; malIadeKod = ''; malIadeDurum = ''; malIadeBekleyenler = []; document.getElementById('malIadeBtn').classList.add('hidden'); }
   function malIadeGoster(){
     var top = 0, kalem = 0;
     malIadeFisler.forEach(function(f){ kalem += (f.satirlar || []).length; if(typeof f.toplam === 'number') top += f.toplam; });
@@ -3838,22 +3840,37 @@
     }).join('');
     document.getElementById('malIadeModal').classList.remove('hidden');
   }
-  function malIadeKontrol(ac){
-    malIadeGizle();
-    if(malTip !== 'giris' || !malCari || !malCari.code || !navigator.onLine) return;
-    var kod = malCari.code; malIadeKod = kod;
-    jsonpRequestP(state.serverUrl, { action: 'iade_bekleyen', cari: kod }, function(err, veri){
-      if(err || !veri || veri.status !== 'ok' || malIadeKod !== kod || !malCari || malCari.code !== kod) return;   // eski sunucu / cari değişti
+  // cb(durum): sonuç gelince (ya da hata/zaman aşımında) bir kez çağrılır.
+  function malIadeKontrol(cb){
+    var c = malCari;
+    if(malTip !== 'giris' || !c || !(c.code || c.name)){ if(cb) cb('yok'); return; }
+    var anahtar = malIadeAnahtar(c);
+    if(malIadeKod === anahtar && malIadeDurum === 'geldi'){ if(cb) cb('geldi'); return; }
+    if(malIadeKod === anahtar && malIadeDurum === 'bekliyor'){ if(cb) malIadeBekleyenler.push(cb); return; }
+    malIadeGizle(); malIadeKod = anahtar; malIadeDurum = 'bekliyor'; if(cb) malIadeBekleyenler.push(cb);
+    var bitir = function(d){ malIadeDurum = d; var l = malIadeBekleyenler; malIadeBekleyenler = []; l.forEach(function(f){ f(d); }); };
+    if(!navigator.onLine){ bitir('hata'); return; }
+    jsonpRequestP(state.serverUrl, { action: 'iade_bekleyen', cari: c.code || '', ad: c.name || '' }, function(err, veri){
+      if(malIadeKod !== anahtar) return;                                    // bu arada başka cari seçildi
+      if(err || !veri || veri.status !== 'ok'){ bitir('hata'); return; }    // eski sunucu / bağlantı yok
       malIadeFisler = Array.isArray(veri.fisler) ? veri.fisler : [];
-      if(!malIadeFisler.length) return;
-      var b = document.getElementById('malIadeBtn');
-      b.innerHTML = '⚠️ BEKLEYEN İADE VAR (' + malIadeFisler.length + ' irsaliye)<br><span style="font-size:12.5px; font-weight:700;">İrsaliye içeriğini gör</span>';
-      b.classList.remove('hidden');
-      if(ac) malIadeGoster();
-    }, 20000);
+      if(malIadeFisler.length){
+        var b = document.getElementById('malIadeBtn');
+        b.innerHTML = '⚠️ BEKLEYEN İADE VAR (' + malIadeFisler.length + ' irsaliye)<br><span style="font-size:12.5px; font-weight:700;">İrsaliye içeriğini gör</span>';
+        b.classList.remove('hidden');
+      }
+      bitir('geldi');
+      if(typeof renderMalMeta === 'function' && malItems) { try { renderMalMeta(); } catch(e){} }
+    }, 9000);
   }
   document.getElementById('malIadeBtn').addEventListener('click', function(){ if(malIadeFisler.length) malIadeGoster(); });
-  document.getElementById('malIadeKapat').addEventListener('click', function(){ document.getElementById('malIadeModal').classList.add('hidden'); });
+  document.getElementById('malIadeKapat').addEventListener('click', function(){
+    malIadeOnay = malIadeAnahtar(malCari);            // uyarı görüldü: "Ürün okutmaya başla" artık doğrudan başlar
+    document.getElementById('malIadeModal').classList.add('hidden');
+  });
+  document.getElementById('malHareketMeta').addEventListener('click', function(e){
+    if(e.target.closest && e.target.closest('#malIadeMetaBtn') && malIadeFisler.length) malIadeGoster();
+  });
 
   // ---- Belge türü seçimi ----
   function renderBelgeSeg(){
@@ -3891,7 +3908,7 @@
 
   function openMalHareketScreen(tip){
     malTip = tip;
-    setTimeout(function(){ malIadeKontrol(false); }, 400);   // yarım kalan kayıtla açıldıysa bekleyen iade düğmesi yine görünsün
+    setTimeout(function(){ malIadeOnay = malIadeAnahtar(malCari); malIadeKontrol(); }, 400);   // yarım kalan kayıtla açıldıysa bekleyen iade düğmesi yine görünsün
     hizliGecisCiz();
     malSaving = false;
     malSaveBtnEl.disabled = false; malSaveBtnEl.textContent = '💾 Kaydet';
@@ -4003,10 +4020,23 @@
     }
     if(malTip === 'cikis' && !malSebepSelectEl.value){ warnToast('Çıkış sebebini seç'); return; }
     malCari = cari;
-    malFatura = malFaturaInputEl.value.trim();
-    malSebep = malTip === 'cikis' ? malSebepSelectEl.value : '';
-    enterMalScan();
-    saveMalDraft();
+    var basla = function(){
+      malFatura = malFaturaInputEl.value.trim();
+      malSebep = malTip === 'cikis' ? malSebepSelectEl.value : '';
+      enterMalScan();
+      saveMalDraft();
+    };
+    // Mal GİRİŞ: bu carinin bekleyen alıştan iade irsaliyesi varsa ÖNCE uyarı gösterilir.
+    // "Tamam" dedikten sonra düğmeye yeniden basılınca okutma başlar.
+    if(malTip !== 'giris' || malIadeOnay === malIadeAnahtar(cari)){ basla(); return; }
+    var btn = this, eskiYazi = btn.textContent;
+    btn.disabled = true; btn.textContent = 'Bekleyen iade kontrol ediliyor…';
+    malIadeKontrol(function(d){
+      btn.disabled = false; btn.textContent = eskiYazi;
+      if(d === 'geldi' && malIadeFisler.length){ malIadeGoster(); return; }
+      if(d === 'hata') warnToast('Bekleyen iade kontrol edilemedi (bağlantı yok) — okutma başlıyor');
+      basla();
+    });
   });
 
   var malAciklamaEl = document.getElementById('malHareketAciklama');
@@ -4073,7 +4103,8 @@
       '<div style="font-weight:800; font-size:13px;">' + escapeHtml(malBelge) + (malFatura ? ' · No ' + escapeHtml(malFatura) : '') + '</div>' +
       '<div style="color:var(--muted);">' + escapeHtml(malCari ? malCari.name : '') + (malCari && malCari.code ? ' · ' + escapeHtml(malCari.code) : '') + '</div>' +
       (malSebep ? '<div style="color:var(--muted);">Sebep: ' + escapeHtml(malSebep) + '</div>' : '') +
-      '<div style="font-family:var(--mono); color:var(--muted);"><b style="color:var(--text);">' + malKalemSayisi() + ' kalem</b> · ' + malItems.length + ' satır · toplam ' + fmtQty(toplam) + '</div>' + fiyatHtml;
+      '<div style="font-family:var(--mono); color:var(--muted);"><b style="color:var(--text);">' + malKalemSayisi() + ' kalem</b> · ' + malItems.length + ' satır · toplam ' + fmtQty(toplam) + '</div>' + fiyatHtml +
+      (malTip === 'giris' && malIadeFisler.length ? '<button type="button" id="malIadeMetaBtn" style="width:100%; margin-top:8px; background:var(--red); border-color:var(--red); color:#fff; font-weight:800; font-size:13.5px; padding:10px;">⚠️ Bekleyen iade irsaliyesi (' + malIadeFisler.length + ') — içeriği gör</button>' : '');
   }
   // Faturayla karşılaştırma için: farklı ürün (barkod) sayısı = faturadaki kalem sayısı.
   // Aynı ürün art arda okutulunca ayrı satır olur ama tek kalem sayılır.
