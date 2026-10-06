@@ -110,12 +110,22 @@
   .yzSatir.secili{border-color:var(--accent);}
   .yzUst{display:flex; justify-content:space-between; align-items:baseline; gap:10px; font-size:16px;}
   .yzUst span{font-weight:800;}
+  .adimKutu{margin-top:8px; padding:9px 10px; border-radius:12px; background:var(--panel2); border:1px solid var(--line);}
+  .adimKutu.bitti{border-color:var(--green);} .adimKutu.kotu{border-color:var(--red);}
+  .adimUst{display:flex; justify-content:space-between; gap:8px; font-size:13px;} .adimSure{font-family:var(--mono); font-weight:700; color:var(--muted);}
+  .adimlar{display:flex; gap:4px; margin-top:8px;}
+  .adim{flex:1; min-width:0; text-align:center; font-size:10.5px; font-weight:700; color:var(--muted); line-height:1.2;}
+  .adim i{display:block; width:24px; height:24px; line-height:24px; border-radius:50%; margin:0 auto 3px; font-style:normal; font-size:12px; font-weight:800; background:var(--line); color:var(--muted);}
+  .adim.tamam{color:var(--green);} .adim.tamam i{background:var(--green); color:#fff;}
+  .adim.simdi{color:var(--text);} .adim.simdi i{background:var(--amber); color:#fff; animation:adimNabiz 1s ease-in-out infinite;}
+  @keyframes adimNabiz{50%{transform:scale(1.18); opacity:.7;}}
+  .adimNot{margin-top:7px; font-size:12.5px; font-weight:700; line-height:1.35;} .adimKutu.kotu .adimNot{color:var(--red);} .adimKutu.bitti .adimNot{color:var(--green);}
   .yzDurum{margin-top:6px; padding:7px 10px; border-radius:10px; font-size:13px; font-weight:700; background:var(--line); line-height:1.35;}
   .yzDurum.basildi{background:rgba(47,158,91,.18); color:var(--green);} .yzDurum.hata, .yzDurum.ulasmadi{background:rgba(200,40,40,.14); color:var(--red);}
   .yzDugme{display:flex; gap:6px; margin-top:8px; flex-wrap:wrap;} .yzDugme button{flex:1; font-size:13.5px; padding:9px 8px;}
   .yzKucuk{padding:1px 8px; font-size:11.5px; margin-left:4px;}
   #toast{position:fixed; left:14px; right:14px; bottom:calc(84px + env(safe-area-inset-bottom)); z-index:60; padding:12px 14px; border-radius:12px; color:#fff; font-weight:700; font-size:14px; text-align:center;}
-  #onizleKutu{background:#8b8f8b; border-radius:12px; padding:10px; overflow:hidden;}
+  #onizleKutu{background:#8b8f8b; border-radius:12px; padding:10px; overflow-x:hidden; overflow-y:auto; -webkit-overflow-scrolling:touch;}
   #onizle{background:#fff; transform-origin:0 0; box-shadow:0 2px 10px rgba(0,0,0,.35);}
   /* Kamera: sayım ekranındakiyle aynı düzen (çerçeve, fener, kapat, yeşil/turuncu yanıp sönme, alt bant) */
   #kamera{position:sticky; top:0; z-index:20; background:#000; border-radius:16px; overflow:hidden; height:38dvh; margin-top:8px;}
@@ -1810,7 +1820,7 @@
       var bekleyenVar = Object.keys(durum.isDurum).some(function(f){ var dd = durum.isDurum[f].durum; return dd === 'gonderildi' || dd === 'bekliyor' || dd === 'basiliyor' || dd === 'onay_bekliyor'; }) ||
         Object.keys(izlenen).some(function(k){ return !izlenen[k].bitti; }) || baski.isler.some(function(i){ return i.durum === 'onay_bekliyor' || i.durum === 'bekliyor' || i.durum === 'basiliyor'; });
       if(document.visibilityState === 'visible' && bekleyenVar && !yaziciDuzen) baskiYukle();
-    }, 6000);
+    }, 3000);
     setInterval(function(){ if(document.visibilityState === 'visible' && !yaziciDuzen) baskiYukle(); }, 45000);   // yazıcı düzenlenirken yenileme yazılanı silmesin
   }
   $('baskiYenileBtn').addEventListener('click', function(){ baskiYukle(function(){ toast('Güncellendi'); }); });
@@ -2199,6 +2209,30 @@
   }
   var IS_DURUM_YAZI = { gonderildi: '📡 gönderiliyor…', bekliyor: '⏳ sırada — birazdan basılacak', onay_bekliyor: '✋ bilgisayarda onay bekliyor', basiliyor: '🖨️ basılıyor…',
     basildi: '✅ yazıcıya gönderildi', hata: '❌ basılmadı', iptal: '⚠️ iptal edildi', ulasmadi: '❌ sunucuya ulaşmadı — tekrar dene' };
+  // Baskı işinin yolu, adım adım: telefon → sunucu → bilgisayar → yazıcı. Geçen süre saniye saniye güncellenir.
+  var ADIMLAR = ['Telefondan çıktı', 'Sunucuda', 'Bilgisayar aldı', 'Yazıcıya verildi'];
+  function adimHtml(d){
+    var sira = { gonderildi: 1, bekliyor: 2, onay_bekliyor: 2, basiliyor: 3, basildi: 4 }[d.durum] || 0;
+    var kotu = d.durum === 'hata' || d.durum === 'iptal' || d.durum === 'ulasmadi', bitti = d.durum === 'basildi';
+    var yz = baski.hazir ? baski.yazicilar.filter(function(y){ return y.ad === d.yazici; })[0] : null;
+    var not = d.durum === 'ulasmadi' ? 'Sunucuya ulaşmadı — tekrar "Yazdır"a bas.'
+      : d.durum === 'hata' ? 'Basılmadı' + (d.mesaj ? ': ' + esc(d.mesaj) : '')
+      : d.durum === 'iptal' ? 'Baskı iptal edildi.'
+      : d.durum === 'onay_bekliyor' ? 'Bilgisayardaki kişinin onayı bekleniyor.'
+      : d.durum === 'bekliyor' && yz && !yz.cevrimici ? 'Bilgisayar kapalı ya da baskı programı çalışmıyor — açılınca basılacak.'
+      : bitti ? 'Yazıcıya verildi — çıkan etiketleri say.' : '';
+    return '<div class="adimKutu' + (kotu ? ' kotu' : bitti ? ' bitti' : '') + '">' +
+      '<div class="adimUst"><b>' + d.adet + ' adet</b>' + (d.yazici ? ' · ' + esc(d.yazici) : '') +
+        '<span class="adimSure"' + (bitti || kotu ? '' : ' data-gecen="' + (d.zaman || 0) + '"') + '>' + (bitti || kotu ? '' : gecenYazi(d.zaman)) + '</span></div>' +
+      '<div class="adimlar">' + ADIMLAR.map(function(a, n){
+        var tamam = !kotu && n < sira, simdi = !kotu && !bitti && n === sira;
+        return '<div class="adim' + (tamam ? ' tamam' : simdi ? ' simdi' : '') + '"><i>' + (tamam ? '✓' : (n + 1)) + '</i><span>' + a + '</span></div>'; }).join('') + '</div>' +
+      (not ? '<div class="adimNot">' + not + '</div>' : '') + '</div>';
+  }
+  function gecenYazi(z){ var s2 = Math.max(0, Math.round((Date.now() - (z || Date.now())) / 1000)); return s2 < 60 ? s2 + ' sn' : Math.floor(s2 / 60) + ' dk ' + (s2 % 60) + ' sn'; }
+  if(!IS_NO) setInterval(function(){
+    Array.prototype.forEach.call(document.querySelectorAll('[data-gecen]'), function(el){ el.textContent = gecenYazi(Number(el.getAttribute('data-gecen'))); });
+  }, 1000);
   function yazdirCiz(){
     if(IS_NO) return;
     var kutu = $('yazdirOzet'); if(!kutu) return;
@@ -2217,8 +2251,7 @@
           (g.adet ? '<div class="ipucu">Yazıcı: ' + (yz ? (yz.secili ? '<b>' + esc(yz.secili.ad) + '</b> ' + (yz.secili.cevrimici ? '<span style="color:var(--green);">● açık</span>' : '<span style="color:var(--red);">● kapalı</span>') +
               (yt('etiket_yazici') && yz.uygun.length > 1 ? ' <button type="button" class="yzKucuk" data-yz="yazici" data-f="' + f + '">değiştir</button>' : '')
               : '<b style="color:var(--red);">tanımlı değil</b>') : 'yükleniyor…') + '</div>' : '') +
-          (d ? '<div class="yzDurum ' + esc(d.durum) + '">' + (IS_DURUM_YAZI[d.durum] || esc(d.durum)) + ' · ' + d.adet + ' adet' + (d.yazici ? ' · ' + esc(d.yazici) : '') +
-              (d.durum === 'hata' && d.mesaj ? '<br>' + esc(d.mesaj) : '') + '</div>' : '') +
+          (d ? adimHtml(d) : '') +
           '<div class="yzDugme">' + (g.adet ? '<button type="button" class="ana" data-yz="bas" data-f="' + f + '">🖨️ Yazdır</button>' : '') +
             '<button type="button" data-yz="onizle" data-f="' + f + '">Önizle</button>' +
             (g.adet && f === 'zebra' ? '<button type="button" data-yz="deneme" data-f="' + f + '">1 deneme etiketi</button>' : '') +
@@ -2773,13 +2806,27 @@
       kutu.style.height = '';
       return;
     }
-    on.style.cssText = '';
-    on.innerHTML = ''; on.appendChild(ilk.cloneNode(true));
-    var gen = kutu.clientWidth - 20, olcek = gen / ilk.offsetWidth;
-    on.style.width = ilk.offsetWidth + 'px'; on.style.height = ilk.offsetHeight + 'px';
+    // Bütün sayfalar alt alta, ekrana sığacak kadar küçültülmüş; uzunsa kutunun içinde kaydırılır.
+    var sayfalar = Array.prototype.slice.call(baski.querySelectorAll('.sayfa'), 0, ONIZLE_SINIR);
+    var gen = kutu.clientWidth - 20, olcek = gen / ilk.offsetWidth, ara = Math.round(10 / olcek), topH = 0;
+    on.style.cssText = 'background:transparent; box-shadow:none;';
+    on.innerHTML = '';
+    sayfalar.forEach(function(sf, n){
+      var k = sf.cloneNode(true);
+      k.style.boxShadow = '0 2px 10px rgba(0,0,0,.35)'; k.style.marginBottom = (n < sayfalar.length - 1 ? ara : 0) + 'px'; k.style.position = 'relative';
+      on.appendChild(k); topH += sf.offsetHeight + (n < sayfalar.length - 1 ? ara : 0);
+    });
+    if(sayfaAdedi > sayfalar.length){
+      var not = document.createElement('div'); not.style.cssText = 'color:#fff; text-align:center; font-weight:700; font-size:' + Math.round(13 / olcek) + 'px; padding:' + Math.round(10 / olcek) + 'px 0 0;';
+      not.textContent = '… ve ' + (sayfaAdedi - sayfalar.length) + ' sayfa daha'; on.appendChild(not); topH += Math.round(34 / olcek);
+    }
+    on.style.width = ilk.offsetWidth + 'px'; on.style.height = topH + 'px';
     on.style.transform = 'scale(' + olcek + ')';
-    kutu.style.height = (ilk.offsetHeight * olcek + 20) + 'px';
+    on.style.marginBottom = -Math.round(topH * (1 - olcek)) + 'px';      // küçültülen içeriğin boş kalan yüksekliği alınır
+    kutu.style.height = Math.min(topH * olcek + 20, Math.round(window.innerHeight * 0.68)) + 'px';
+    kutu.scrollTop = 0;
   }
+  var ONIZLE_SINIR = 60;
   window.addEventListener('resize', function(){ ciz(); });
 
   // ---------- Yazdır ----------

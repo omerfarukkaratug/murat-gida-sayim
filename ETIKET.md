@@ -303,3 +303,11 @@ Kurulum sırası: önce Code.gs (yeni sürüm olarak dağıt), sonra ERP bilgisa
 - **Kart sadeleşti**: "2 cm boşluk" biçim satırında çip; çeşit önerisi tek kısa düğme; geniş çeşit önerisi,
   çeşit listesi ve fiyat düşüşü kutusu "Düzenle" altında. "Yeni ürün" biçimi arama kartının içinde;
   liste paylaş/getir "Listeyi başka cihaza aktar" altında.
+
+## Build 151 — önizlemede bütün sayfalar, baskı adımları
+
+- Önizleme artık bütün sayfaları/etiketleri alt alta gösterir (en çok 60; fazlası "… ve n sayfa daha");
+  ekranın %68'inden uzunsa kutunun içinde kaydırılır.
+- Yazdır satırında işin yolu dört adımla görünür: Telefondan çıktı → Sunucuda → Bilgisayar aldı → Yazıcıya verildi.
+  Sıradaki adım yanıp söner, geçen süre saniye saniye yazar; bilgisayar kapalıysa, onay bekliyorsa ya da hata
+  varsa altında sebebi yazar. İş sürerken durum 3 saniyede bir sorulur (önceden 6).
