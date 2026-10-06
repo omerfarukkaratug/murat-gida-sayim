@@ -351,7 +351,7 @@
   <header style="border:none; padding:0 0 16px; background:transparent; display:flex; align-items:flex-start; justify-content:space-between;">
     <div>
       <h1><img src="logo-header.png" alt="Murat Gıda" style="height:30px; width:auto; display:block;"></h1>
-      <div class="sub">MK ERP · Murat Gıda • offline • Android • build 146</div>
+      <div class="sub">MK ERP · Murat Gıda • offline • Android • build 147</div>
     </div>
     <button type="button" id="themeToggleBtn" title="Tema seç" style="background:var(--panel2); border:1.5px solid var(--line); color:var(--text); width:34px; height:34px; border-radius:50%; font-size:15px; padding:0; display:flex; align-items:center; justify-content:center; flex-shrink:0;">🎨</button>
   </header>
@@ -922,8 +922,8 @@
       <div class="sheetGrip"></div>
       <div style="font-size:13px; font-weight:800; color:var(--amber); margin-bottom:2px; text-align:center;">BARKOD LİSTEDE YOK</div>
       <div id="malHareketNewProductAskBarcode" style="font-family:var(--mono); font-size:20px; font-weight:800; text-align:center; margin-bottom:14px; word-break:break-all;"></div>
-      <button type="button" class="choiceBtn main" id="malAskStokAc">➕ Yeni ürün olarak ekle<small>Ürün adı yazılır, ERP12'de stok kartı açılacak</small></button>
-      <button type="button" class="choiceBtn" id="malAskStoksuz">📦 Stok açmadan ekle<small>Sadece barkod + miktar, stok kartı açılmaz</small></button>
+      <button type="button" class="choiceBtn main" id="malAskStoksuz">📦 Stok açmadan ekle<small>Sadece barkod + miktar, stok kartı açılmaz</small></button>
+      <button type="button" class="choiceBtn" id="malAskStokAc">➕ Yeni ürün olarak ekle<small>Ürün adı yazılır, ERP12'de stok kartı açılacak</small></button>
       <button type="button" class="choiceBtn skip" id="malHareketNewProductAskNo">Atla</button>
     </div>
   </div>
@@ -3591,7 +3591,8 @@
       render();
     }
     function build(){
-      var keys = ['7','8','9','⌫', '4','5','6','×', '1','2','3','+', bulk ? ',' : '00','0','C','−'];
+      // İşlem tuşları SOLDA, rakamlar SAĞDA (sağ elle rakam, sol tarafta hesap).
+      var keys = ['⌫','7','8','9', '×','4','5','6', '+','1','2','3', '−', bulk ? ',' : '00','0','C'];
       padEl.innerHTML = keys.map(function(k){
         var cls = 'calcKey' + (OPS.indexOf(k) !== -1 ? ' op' : '') + (k === '⌫' ? ' del' : '') + (k === 'C' ? ' clr' : '');
         return '<button type="button" class="' + cls + '" data-k="' + k + '">' + k + '</button>';
