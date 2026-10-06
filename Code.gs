@@ -8,7 +8,7 @@
 // bir sürüm dağıttıktan sonra /exec adresini boş açtığında burada yazan
 // numarayı görmelisin; index.html'in üstündeki "build" numarasıyla
 // eşleşecek şekilde ben her ikisini birlikte güncelliyorum.
-var GS_VERSION = 'build144';
+var GS_VERSION = 'build148';
 
 // Sheets'te "Saat" sütunu zaman biçimli olarak algılanırsa, hücre değeri düz
 // metin değil bir Date nesnesi olarak gelir ve String(...) çirkin bir çıktı
@@ -34,6 +34,10 @@ function doGet(e) {
   if (P.action === 'katalog') {
     k = kapi('katalog okuma'); if (!k.ok) return kimlikRed(k, P.callback);
     return getKatalog(P.callback);
+  }
+  if (P.action === 'iade_bekleyen') {
+    k = kapi('bekleyen iade okuma'); if (!k.ok) return kimlikRed(k, P.callback);
+    return iadeBekleyenGetir(P.cari, P.callback);
   }
   if (P.action === 'cari') {
     k = kapi('cari okuma'); if (!k.ok) return kimlikRed(k, P.callback);
@@ -401,6 +405,37 @@ function handleLogin(user, pass, callback) {
 // Cari (tedarikçi/müşteri) listesi — Mal Giriş/Mal Çıkış ekranlarında
 // seçilebilecek cari hesapları. Katalog ile aynı mantık: "Cari" sekiminden
 // okunur, telefonlar otomatik senkronize eder (CARI_VERSION ile).
+// ---- BEKLEYEN ALIŞTAN İADE İRSALİYELERİ (ERP12: FIS_TURU = 7, henüz faturalanmamış satırlar) ----
+// ERP programı her gönderimde listenin TAMAMINI yollar; tablo aynen onunla değişir (boş liste = bekleyen yok).
+var IADE_SEKME = 'BekleyenIade';
+var IADE_BASLIK = ['Cari Kodu', 'Cari', 'Belge No', 'Tarih', 'Toplam', 'Satırlar (JSON)'];
+function iadeBulkKaydet(fisler) {
+  if (!Array.isArray(fisler)) return jsonCikti({ status: 'error', message: 'Geçersiz iade listesi' });
+  var ss = SpreadsheetApp.getActiveSpreadsheet();
+  var sheet = ss.getSheetByName(IADE_SEKME) || ss.insertSheet(IADE_SEKME);
+  var rows = fisler.slice(0, 2000).map(function (f) {
+    var satirlar = (Array.isArray(f.satirlar) ? f.satirlar : []).slice(0, 200).map(function (x) {
+      return { b: String(x.b || '').substring(0, 30), a: String(x.a || '').substring(0, 80), m: cleanNum(x.m), f: cleanNum(x.f) };
+    });
+    var j = JSON.stringify(satirlar);
+    while (j.length > 45000 && satirlar.length > 1) { satirlar.pop(); j = JSON.stringify(satirlar); }
+    return [String(f.cariKod || ''), String(f.cari || '').substring(0, 120), String(f.belgeNo || '').substring(0, 60), String(f.tarih || '').substring(0, 10), cleanNum(f.toplam), j];
+  });
+  if (sheet.getMaxRows() > 1) sheet.getRange(1, 1, sheet.getMaxRows(), 4).setNumberFormat('@');
+  tabloyuDegistir(sheet, IADE_BASLIK, rows);
+  return jsonCikti({ status: 'ok', saved: rows.length });
+}
+function iadeBekleyenGetir(cariKod, callback) {
+  var sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(IADE_SEKME), fisler = [], kod = String(cariKod || '').trim();
+  if (sheet && sheet.getLastRow() >= 2 && kod) {
+    sheet.getRange(2, 1, sheet.getLastRow() - 1, IADE_BASLIK.length).getValues().forEach(function (r) {
+      if (String(r[0]).trim() !== kod) return;
+      var satirlar = []; try { satirlar = JSON.parse(String(r[5] || '[]')); } catch (e) { satirlar = []; }
+      fisler.push({ belgeNo: String(r[2] || ''), tarih: fiyatTarihiMetni(r[3]) || String(r[3] || ''), toplam: cleanNum(r[4]), satirlar: satirlar });
+    });
+  }
+  return outJson({ status: 'ok', fisler: fisler }, callback);
+}
 function getCari(callback, bakiyeGoster) {
   if (bakiyeGoster === undefined) bakiyeGoster = true;
   var ss = SpreadsheetApp.getActiveSpreadsheet();
@@ -1275,6 +1310,7 @@ function getKatalog(callback) {
         if (ft) { e.ft = ft; if (r[9] !== '' && r[9] !== null && r[9] !== undefined) e.of = String(r[9]); }
         if (r[10]) e.yer = String(r[10]); // üretim yeri (ERP stok kartındaki ülke)
         if (r[11]) { var pr = promosyonMetni(r[11]); if (pr) e.pr = pr; } // kasanın miktar indirimi
+        if (typeof r[12] === 'number' && r[12] > 0) e.af = String(r[12]); // son alış fiyatı (KDV hariç) — mal girişte kullanılır
         return e;
       });
   }
@@ -1731,7 +1767,7 @@ function doPostIsle(e) {
     // ---- KİMLİK KAPISI (bkz. GÜVENLİK bölümü) ----
     // Katalog/cari listesinin tamamını değiştirmek: ERP anahtarı ya da
     // "ayarlar" yetkili kullanıcı. Diğer her yazma: giriş yapmış kullanıcı.
-    var topluMu = data.type === 'katalog_bulk' || data.type === 'cari_bulk';
+    var topluMu = data.type === 'katalog_bulk' || data.type === 'cari_bulk' || data.type === 'iade_bulk';
     var postKapi = (topluMu && erpAnahtarDogru(data.anahtar)) ? { ok: true }
       : kimlikGerek(data.user, data.pass,
           data.type === 'katalog_bulk' ? 'katalog gönderimi' : data.type === 'cari_bulk' ? 'cari gönderimi'
@@ -1784,6 +1820,7 @@ function doPostIsle(e) {
       gunlukYaz('katalog_urun', kaynak, 'Tek ürün: ' + ((data.entry && data.entry.name) || '') + ' (' + ((data.entry && data.entry.barcode) || '') + ')', false);
       return kiOut;
     }
+    if (data.type === 'iade_bulk') return iadeBulkKaydet(data.fisler);
     if (data.type === 'cari_bulk') {
       var cOut = saveCariBulk(data.entries || []);
       var cDegismedi = cOut.getContent().indexOf('degisiklikYok') !== -1;
@@ -1965,7 +2002,7 @@ function koliCarpan(v) {
 // ============================================================
 // 11. sütun 'Üretim Yeri': ERP12 stok kartındaki ülke (dbo.ULKE.AD). Etiketteki
 // "Üretim yeri" ve yerli üretim logosu buradan gelir; ERP'de boşsa boş kalır.
-var KATALOG_BASLIK = ['Ürün Adı', 'Barkod', 'Stok Kodu', 'Eski Stok', 'Fiyat', 'KDV %', 'Koli Çarpanı', 'Birim', 'Fiyat Tarihi', 'Önceki Fiyat', 'Üretim Yeri', 'Promosyon'];
+var KATALOG_BASLIK = ['Ürün Adı', 'Barkod', 'Stok Kodu', 'Eski Stok', 'Fiyat', 'KDV %', 'Koli Çarpanı', 'Birim', 'Fiyat Tarihi', 'Önceki Fiyat', 'Üretim Yeri', 'Promosyon', 'Son Alış'];
 // Promosyon: kasanın miktar indirimi (ERP12 POS_PROMASYON) — "ADET:YÜZDE:BİTİŞ" (örn. "24:10:2029-12-28").
 function promosyonMetni(v) { var m = String(v == null ? '' : v).trim(); return /^\d{1,4}(\.\d+)?:\d{1,2}(\.\d+)?:\d{4}-\d\d-\d\d$/.test(m) ? m : ''; }
 // ERP'den gelen fiyat tarihi: yalnızca 'yyyy-MM-dd' ve bugünden ileri olmayan değer kabul edilir.
@@ -2030,7 +2067,7 @@ function saveKatalogBulk(entries) {
   var sheet = ss.getSheetByName('Katalog');
   if (!sheet) sheet = ss.insertSheet('Katalog');
   var props = PropertiesService.getScriptProperties();
-  var ozet = listeOzeti(entries.map(function (e) { return [e.name || '', e.barcode || '', e.stockCode || '', cleanNum(e.oldStock), cleanNum(e.price), cleanNum(e.kdv), koliCarpan(e.carpan), String(e.birim || ''), ulkeMetni(e.ulke), erpFiyatTarihi(e.ft), cleanNum(e.of), promosyonMetni(e.pr)]; }));
+  var ozet = listeOzeti(entries.map(function (e) { return [e.name || '', e.barcode || '', e.stockCode || '', cleanNum(e.oldStock), cleanNum(e.price), cleanNum(e.kdv), koliCarpan(e.carpan), String(e.birim || ''), ulkeMetni(e.ulke), erpFiyatTarihi(e.ft), cleanNum(e.of), promosyonMetni(e.pr), cleanNum(e.af)]; }));
   if (entries.length > 0 && ozet === props.getProperty('KATALOG_OZET') && sheet.getLastRow() === entries.length + 1) {
     return ContentService.createTextOutput(JSON.stringify({ status: 'ok', saved: 0, degisiklikYok: true })).setMimeType(ContentService.MimeType.JSON);
   }
@@ -2067,7 +2104,7 @@ function saveKatalogBulk(entries) {
     if (eft) { ft = eft; var eof = cleanNum(e.of); of = (typeof eof === 'number' && eof > 0) ? eof : ''; erpli[b] = true; }
     return [e.name || '', e.barcode || '', e.stockCode || '', cleanNum(e.oldStock), f, cleanNum(e.kdv), koliCarpan(e.carpan), String(e.birim || ''), ft, of,
       // Ülke alanı HİÇ gelmediyse (eski ERP betiği) tablodaki üretim yeri silinmez, korunur.
-      e.ulke === undefined ? (o ? o.y : '') : ulkeMetni(e.ulke), promosyonMetni(e.pr)];
+      e.ulke === undefined ? (o ? o.y : '') : ulkeMetni(e.ulke), promosyonMetni(e.pr), cleanNum(e.af)];
   });
   if (degisen.length) {
     var enDusuk = fiyatGecmisEnDusuk(degisenBarkod);

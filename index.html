@@ -351,7 +351,7 @@
   <header style="border:none; padding:0 0 16px; background:transparent; display:flex; align-items:flex-start; justify-content:space-between;">
     <div>
       <h1><img src="logo-header.png" alt="Murat Gıda" style="height:30px; width:auto; display:block;"></h1>
-      <div class="sub">MK ERP · Murat Gıda • offline • Android • build 147</div>
+      <div class="sub">MK ERP · Murat Gıda • offline • Android • build 148</div>
     </div>
     <button type="button" id="themeToggleBtn" title="Tema seç" style="background:var(--panel2); border:1.5px solid var(--line); color:var(--text); width:34px; height:34px; border-radius:50%; font-size:15px; padding:0; display:flex; align-items:center; justify-content:center; flex-shrink:0;">🎨</button>
   </header>
@@ -790,6 +790,7 @@
         <input type="text" id="malHareketCariInput" placeholder="Cari adı ya da kodu yaz" autocomplete="off">
         <div id="malHareketCariResults" class="cariResults hidden"></div>
         <div id="malHareketCariPicked" class="cariPicked hidden"></div>
+        <button type="button" id="malIadeBtn" class="hidden" style="width:100%; margin-top:8px; background:var(--red); border-color:var(--red); color:#fff; font-weight:800; font-size:15px; padding:14px 10px; line-height:1.35;"></button>
         <div id="malHareketCariHint" class="hint"></div>
       </div>
       <div class="row hidden" id="malHareketSebepRow" style="margin-bottom:14px;">
@@ -861,6 +862,16 @@
   <!-- Build 94: Sayım'ın adet kartı ve yeni ürün kartı da Mal Giriş/Çıkış ile
        AYNI alttan açılan kartı ve AYNI hesap makinesi tuş takımını kullanır —
        uygulamanın her yerinde tek tip miktar girişi. -->
+  <!-- Bekleyen alıştan iade irsaliyeleri: mal kabulde cari seçilince uyarı + içerik -->
+  <div id="malIadeModal" class="sheetOverlay hidden">
+    <div class="sheetCard" style="text-align:left; max-height:92dvh; overflow-y:auto;">
+      <div class="sheetGrip"></div>
+      <div style="background:var(--red); color:#fff; border-radius:12px; padding:14px 12px; text-align:center; font-weight:800; font-size:19px; line-height:1.3;">⚠️ BU CARİNİN BEKLEYEN İADESİ VAR<div id="malIadeAlt" style="font-size:14px; font-weight:700; margin-top:6px;"></div></div>
+      <div id="malIadeIcerik" style="margin-top:12px;"></div>
+      <button type="button" class="choiceBtn main" id="malIadeKapat" style="margin-top:12px; text-align:center;">Tamam, iade ürünlerini teslim edeceğim</button>
+    </div>
+  </div>
+
   <div id="qtyEntry" class="sheetOverlay hidden">
     <div class="sheetCard">
       <div class="sheetGrip"></div>
@@ -1991,7 +2002,7 @@
   // Sayfa açılışında daha önce yüklenmiş kataloğu belleğe getir (varsa) —
   // her açılışta 50 bin satırı yeniden yüklemene gerek kalmaz.
   idbLoadAll().then(function(rows){
-    rows.forEach(function(r){ catalogMap.set(r.barcode, { name: r.name, stockCode: r.stockCode || '', oldStock: r.oldStock || '', price: r.price || '', kdv: r.kdv || '', carpan: r.carpan || '', birim: r.birim || '', ft: r.ft || '', of: r.of || '', yer: r.yer || '', pr: r.pr || '' }); });
+    rows.forEach(function(r){ catalogMap.set(r.barcode, { name: r.name, stockCode: r.stockCode || '', oldStock: r.oldStock || '', price: r.price || '', kdv: r.kdv || '', carpan: r.carpan || '', birim: r.birim || '', ft: r.ft || '', of: r.of || '', yer: r.yer || '', pr: r.pr || '', af: r.af || '' }); });
     updateProductCountLabel();
     setSyncStatus();
   }).catch(function(){ productCountEl.textContent = "Henüz ürün yok"; });
@@ -2164,11 +2175,11 @@
       var tamYukleme = catalogMap.size === 0;
       var yeni = new Map(), islemler = [];
       entries.forEach(function(e){
-        var v = { name: e.name, stockCode: e.stockCode || '', oldStock: e.oldStock || '', price: e.price || '', kdv: e.kdv || '', carpan: e.carpan || '', birim: e.birim || '', ft: e.ft || '', of: e.of || '', yer: e.yer || '', pr: e.pr || '' };
+        var v = { name: e.name, stockCode: e.stockCode || '', oldStock: e.oldStock || '', price: e.price || '', kdv: e.kdv || '', carpan: e.carpan || '', birim: e.birim || '', ft: e.ft || '', of: e.of || '', yer: e.yer || '', pr: e.pr || '', af: e.af || '' };
         yeni.set(e.barcode, v);
         var o = catalogMap.get(e.barcode);
         if(tamYukleme || !o || o.name !== v.name || String(o.stockCode) !== String(v.stockCode) || String(o.oldStock) !== String(v.oldStock) ||
-           String(o.price) !== String(v.price) || String(o.kdv) !== String(v.kdv) || String(o.carpan || '') !== String(v.carpan) || String(o.birim || '') !== String(v.birim) || String(o.ft || '') !== String(v.ft) || String(o.of || '') !== String(v.of) || String(o.yer || '') !== String(v.yer) || String(o.pr || '') !== String(v.pr)){
+           String(o.price) !== String(v.price) || String(o.kdv) !== String(v.kdv) || String(o.carpan || '') !== String(v.carpan) || String(o.birim || '') !== String(v.birim) || String(o.ft || '') !== String(v.ft) || String(o.of || '') !== String(v.of) || String(o.yer || '') !== String(v.yer) || String(o.pr || '') !== String(v.pr) || String(o.af || '') !== String(v.af || '')){
           islemler.push(function(st){ st.put(e); });
         }
       });
@@ -3790,7 +3801,7 @@
   var malCariDebounce = null;
   malCariInputEl.addEventListener('input', function(){
     malCari = null;                       // yazmaya devam ediyorsa seçim iptal olur
-    malCariPickedEl.classList.add('hidden');
+    malCariPickedEl.classList.add('hidden'); malIadeGizle();
     clearTimeout(malCariDebounce);
     malCariDebounce = setTimeout(renderCariResults, 150);
   });
@@ -3803,7 +3814,46 @@
     malCariInputEl.value = malCari.name;
     malCariResultsEl.classList.add('hidden');
     showPickedCari();
+    malIadeKontrol(true);
   });
+
+  // ---- Bekleyen alıştan iade irsaliyesi uyarısı (yalnızca mal GİRİŞ) ----
+  // ERP'de bu cariye kesilmiş, henüz faturalanmamış iade irsaliyesi varsa: cari seçilince büyük uyarı
+  // açılır; kırmızı düğmeyle içerik yeniden görülebilir. İnternet yoksa sessizce geçilir.
+  var malIadeFisler = [], malIadeKod = '';
+  function malIadeGizle(){ malIadeFisler = []; malIadeKod = ''; document.getElementById('malIadeBtn').classList.add('hidden'); }
+  function malIadeGoster(){
+    var top = 0, kalem = 0;
+    malIadeFisler.forEach(function(f){ kalem += (f.satirlar || []).length; if(typeof f.toplam === 'number') top += f.toplam; });
+    document.getElementById('malIadeAlt').textContent = (malCari ? malCari.name + ' · ' : '') + malIadeFisler.length + ' irsaliye, ' + kalem + ' kalem' + (top ? ' · ' + top.toFixed(2).replace('.', ',') + ' ₺' : '');
+    document.getElementById('malIadeIcerik').innerHTML = malIadeFisler.map(function(f){
+      var t = String(f.tarih || '').split('-'), tarih = t.length === 3 ? t[2] + '.' + t[1] + '.' + t[0] : String(f.tarih || '');
+      return '<div style="border:1.5px solid var(--line); border-radius:12px; padding:10px 12px; margin-bottom:10px;">' +
+        '<div style="font-weight:800; font-size:14px;">İrsaliye ' + escapeHtml(f.belgeNo || '—') + ' · ' + escapeHtml(tarih) + (typeof f.toplam === 'number' ? ' · ' + f.toplam.toFixed(2).replace('.', ',') + ' ₺' : '') + '</div>' +
+        (f.satirlar || []).map(function(x){
+          return '<div style="display:flex; justify-content:space-between; gap:10px; padding:6px 0; border-top:1px solid var(--line); margin-top:6px; font-size:13.5px;">' +
+            '<div style="min-width:0;"><b>' + escapeHtml(x.a || x.b || '?') + '</b><div style="font-family:var(--mono); font-size:11.5px; color:var(--muted);">' + escapeHtml(x.b || '') + '</div></div>' +
+            '<div style="font-family:var(--mono); font-weight:800; white-space:nowrap; font-size:16px;">' + escapeHtml(String(x.m === '' || x.m === null || x.m === undefined ? '?' : x.m).replace('.', ',')) + '</div></div>';
+        }).join('') + '</div>';
+    }).join('');
+    document.getElementById('malIadeModal').classList.remove('hidden');
+  }
+  function malIadeKontrol(ac){
+    malIadeGizle();
+    if(malTip !== 'giris' || !malCari || !malCari.code || !navigator.onLine) return;
+    var kod = malCari.code; malIadeKod = kod;
+    jsonpRequestP(state.serverUrl, { action: 'iade_bekleyen', cari: kod }, function(err, veri){
+      if(err || !veri || veri.status !== 'ok' || malIadeKod !== kod || !malCari || malCari.code !== kod) return;   // eski sunucu / cari değişti
+      malIadeFisler = Array.isArray(veri.fisler) ? veri.fisler : [];
+      if(!malIadeFisler.length) return;
+      var b = document.getElementById('malIadeBtn');
+      b.innerHTML = '⚠️ BEKLEYEN İADE VAR (' + malIadeFisler.length + ' irsaliye)<br><span style="font-size:12.5px; font-weight:700;">İrsaliye içeriğini gör</span>';
+      b.classList.remove('hidden');
+      if(ac) malIadeGoster();
+    }, 20000);
+  }
+  document.getElementById('malIadeBtn').addEventListener('click', function(){ if(malIadeFisler.length) malIadeGoster(); });
+  document.getElementById('malIadeKapat').addEventListener('click', function(){ document.getElementById('malIadeModal').classList.add('hidden'); });
 
   // ---- Belge türü seçimi ----
   function renderBelgeSeg(){
@@ -4185,7 +4235,9 @@
     malItems.push({
       id: makeId(), barkod: malPendingBarcode, ad: name,
       stokKodu: entry.stockCode || '', birim: unitFor(malPendingBarcode), miktar: qty,
-      kdv: entry.kdv === undefined ? '' : entry.kdv, fiyat: entry.price === undefined ? '' : entry.price,
+      kdv: entry.kdv === undefined ? '' : entry.kdv,
+      // Mal GİRİŞ: en son alış fiyatı (ERP, KDV hariç; hiç alınmamışsa boş). Mal ÇIKIŞ: satış fiyatı.
+      fiyat: malTip === 'giris' ? (entry.af ? entry.af : '') : (entry.price === undefined ? '' : entry.price),
       tarih: t.date, saat: t.time, v: 1
     });
     if(!malCommit(onceki, 'Bu okutma (' + name + ')')) return;
