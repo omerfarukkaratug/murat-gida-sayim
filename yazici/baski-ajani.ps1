@@ -21,7 +21,8 @@ $Sumatra       = Join-Path $Klasor "SumatraPDF.exe"
 $IsKlasoru     = Join-Path $Klasor "is"
 $Profil        = Join-Path $Klasor "tarayici-profil"
 $BeklemeSn     = 5      # iki sorgu arasi bekleme
-$AjanSurum     = "162"  # sunucuya bildirilir; uygulama eski programi uyarir
+$AjanSurum     = "163"  # sunucuya bildirilir; uygulama eski programi uyarir
+$ZebraParcaBoy = 40     # bir goruntudeki en fazla etiket (etiket.html PARCA_BOY ile ayni olmali)
 # Uygulamada GORUNMEYECEK yazicilar (sanal yazicilar)
 $YaziciHaric   = 'PDF|XPS|OneNote|Fax|Send To'
 
@@ -113,7 +114,7 @@ function Tarayici-Calistir($ekArg, $cikti, $ne) {
         if (Test-Path $cikti) { Remove-Item $cikti -Force }
         # --do-not-de-elevate: program yonetici olarak calisiyorsa Chrome kendini yeniden baslatip
         # ilk islemi hemen kapatir; bu bayrak onu engeller.
-        $arg = @($bassiz, "--disable-gpu", "--no-first-run", "--do-not-de-elevate", "--user-data-dir=$Profil", "--virtual-time-budget=15000") + $ekArg
+        $arg = @($bassiz, "--disable-gpu", "--no-first-run", "--do-not-de-elevate", "--no-default-browser-check", "--disable-extensions", "--disable-sync", "--disable-component-update", "--user-data-dir=$Profil", "--virtual-time-budget=15000") + $ekArg
         $p = Start-Process -FilePath $Tarayici -ArgumentList $arg -PassThru -WindowStyle Hidden
         if (-not $p.WaitForExit(90000)) { try { $p.Kill() } catch {} }
         # Tarayici kapandiktan sonra dosya en gec birkac saniyede gelir; gelmezse beklemeden oteki denemeye gecilir.
