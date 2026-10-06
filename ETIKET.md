@@ -311,3 +311,12 @@ Kurulum sırası: önce Code.gs (yeni sürüm olarak dağıt), sonra ERP bilgisa
 - Yazdır satırında işin yolu dört adımla görünür: Telefondan çıktı → Sunucuda → Bilgisayar aldı → Yazıcıya verildi.
   Sıradaki adım yanıp söner, geçen süre saniye saniye yazar; bilgisayar kapalıysa, onay bekliyorsa ya da hata
   varsa altında sebebi yazar. İş sürerken durum 3 saniyede bir sorulur (önceden 6).
+
+## Build 152 — iki yeni taslak: A4 boy listesi, dökme kartı
+
+- **A4 boy listesi** (`a4b`): aynı ürünün farklı boyları tek A4'te, her boy kendi katalog fiyatıyla (yumurta 30'lu /
+  15'li). Kartta "Başka boy ekle" ile öbür boy aranıp eklenir; satır yazısı addan önerilir ("30'LU"), elle
+  düzeltilebilir. Adedi bilinen boyda "adedi x ₺" yazılır. İşe `boySatir` olarak taşınır.
+- **Dökme kartı** (`dokme`): sarı fiyat levhasına takılan 132 × 105 mm kart; ad, büyük fiyat, "KİLOSU" (ya da
+  net miktar), üretim yeri ve tarih. Bir A4'e 4 tane basılır (A5 gibi döndürülmüş dizgi).
+- İkisi de yazıcı ve sunucu açısından A4 işidir (`ayar.bicim='a4'`, gerçek taslak `ayar.altBicim`).
