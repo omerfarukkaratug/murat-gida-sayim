@@ -103,6 +103,9 @@
   .bicimSec{display:flex; gap:5px; flex-wrap:wrap; margin-top:8px;}
   .bicimSec button{padding:5px 11px; font-size:12.5px; font-weight:700; border-radius:999px;}
   .bicimSec button.secili{background:var(--accent); border-color:var(--accent); color:#fff;}
+  .bicimSec button.etk{border-color:var(--amber); color:var(--amber);} .bicimSec button.etk.secili{background:var(--amber); border-color:var(--amber); color:#fff;}
+  .taslakSec{display:flex; gap:5px; flex-wrap:wrap; align-items:center; margin-top:6px; padding:6px 8px; border-radius:10px; background:rgba(127,127,127,.09);}
+  .taslakSec span{font-size:11.5px; font-weight:700; opacity:.7;} .taslakSec button{padding:4px 10px; font-size:12px; font-weight:700; border-radius:8px;} .taslakSec button.secili{background:var(--text); border-color:var(--text); color:var(--panel);}
   .urun.basildi{opacity:.62;}
   .basildiBant{margin-top:8px; font-size:13px; font-weight:700; color:var(--green); display:flex; align-items:center; gap:8px;}
   .basildiBant button{padding:3px 9px; font-size:12px;}
@@ -225,12 +228,14 @@
   .dKart{display:flex; flex-direction:column; height:100%; padding:7em 8em 6em; box-sizing:border-box;}
   .dAd{height:30em; flex-shrink:0; display:flex; align-items:center; justify-content:center; text-align:center;}
   .dAd .yazi{display:block; width:100%; font-weight:900; line-height:1.05; text-transform:uppercase; overflow-wrap:anywhere; text-wrap:balance;}
-  .dOrta{flex:1; min-height:0; display:flex;} .dFiyatKutu{flex:1; min-width:0; display:flex; align-items:center; justify-content:center;}
+  .dOrta{flex:1; min-height:0; display:flex; flex-direction:column;} .dFiyatKutu{flex:1; min-width:0; display:flex; align-items:center; justify-content:center;}
   .dFiyat{font-weight:900; line-height:.9; white-space:nowrap; letter-spacing:-.035em; display:inline-flex; align-items:flex-start;}
   .dFiyat .kurus{font-size:.5em; line-height:1; margin-left:.04em;} .dFiyat .tl{font-size:.36em; line-height:1.35; margin-left:.12em; font-weight:800;}
   .dAlt{flex-shrink:0; display:flex; justify-content:space-between; align-items:flex-end; gap:3em; border-top:.5em solid #000; padding-top:1.6em;}
   .dAlt b{font-size:5.4em; font-weight:900; white-space:nowrap;} .dAlt span{font-size:2.5em; font-weight:600;} .dSol{display:flex; flex-direction:column; gap:.6em; min-width:0;}
-  .dAlt .dSkt{font-size:4.4em; font-weight:900; white-space:nowrap;} .dAlt .qr{width:17em; height:17em; flex-shrink:0;}
+  .dAlt .dSkt{font-size:4.4em; font-weight:900; white-space:nowrap;} .dAlt .qr{width:15em; height:15em; flex-shrink:0;}
+  .dBrk{flex-shrink:0; text-align:center;} .dBrk .barkod{width:38em; height:11em; display:block;} .dBrk div{font-family:"Courier New", monospace; font-size:2.6em; letter-spacing:.1em; line-height:1.1;}
+  .dOnceki{flex-shrink:0; display:flex; align-items:center; justify-content:center; gap:1.6em; font-size:6em; font-weight:800; line-height:1;} .dOnceki s{text-decoration-thickness:.09em;} .dOnceki b{background:#000; color:#fff; padding:.08em .35em; border-radius:.2em; font-size:.85em;} .dOnceki i{font-style:normal; font-size:.42em; font-weight:700; line-height:1.15;}
   /* A5 yatay koli afişi (210 × 148 mm; 1em = 0,5 mm): solda büyük koli fiyatı, sağda tek/koli adet karşılaştırması */
   .kAfis{position:relative; display:flex; flex-direction:column; height:100%; padding:12em 14em 10em; box-sizing:border-box; --kk:#000;}
   .kBas{display:flex; align-items:center; gap:8em; height:32em; flex-shrink:0;}
@@ -379,7 +384,8 @@
     <div id="katalogBilgi" class="ipucu" style="margin:0 2px 10px;"></div>
 
     <div class="kart" style="padding-top:12px; padding-bottom:12px;">
-      <button type="button" id="dogrulaBtn" style="width:100%; font-weight:800;">✅ QR etiket doğrulama</button>
+      <div class="kartBaslik">📷 Raftaki etiket doğru mu?</div>
+      <button type="button" id="dogrulaBtn" style="width:100%; font-weight:800;">Etiketin QR kodunu okut</button>
       <div class="ipucu" style="margin-top:6px;">Raftaki etiketin QR kodunu okut: etikette yazan fiyat güncel mi, anında yeşil/kırmızı görürsün.</div>
     </div>
 
@@ -449,25 +455,33 @@
       <div id="sonuclar"></div>
       <div id="araSecBar" class="gizli"><button type="button" class="ana" id="araSecEkle" style="flex:1;"></button><button type="button" id="araSecTemizle" style="flex:none; font-size:12.5px;">Seçimi temizle</button></div>
       <div class="ekSatir"><span class="ipucu">Yeni ürün:</span><div class="bicimSec" id="varsayilanSec" style="margin:0;"></div></div>
-      <button type="button" id="elleBtn" class="baglanti">Katalogda olmayan ürünü elle ekle</button>
+      <button type="button" id="elleBtn" class="baglanti gizli">Katalogda olmayan ürünü elle ekle</button>
     </div>
 
     <!-- Basılacak etiketler: fiyatı değişip etiketi henüz basılmamış ürünler (bütün cihazlarda ortak) -->
     <div class="kart gizli" id="kuyrukKart" style="border:2px solid var(--amber);">
-      <div class="kartBaslik">🔔 Basılacak etiketler</div>
+      <div class="kartBaslik">🔔 Fiyatı değişti, etiketi basılmadı</div>
+      <div id="kuyrukBos" class="ipucu gizli">✅ Fiyatı değişip etiketi basılmamış ürün yok. Bir ürünün fiyatı değişince burada görünür; etiketini basınca listeden düşer.</div>
       <div id="kuyrukGrupKutu" class="gizli" style="margin-bottom:10px;">
         <div id="kuyrukGrupBilgi" style="font-size:14px; margin-bottom:8px;"></div>
         <button type="button" id="kuyrukGrupBtn" class="ana" style="width:100%;">Çeşitli etiketleri düzelt ve listeye ekle</button>
       </div>
       <div id="kuyrukBilgi" style="font-size:14px; margin-bottom:8px;"></div>
       <div class="satir">
-        <button type="button" id="kuyrukEkleBtn" style="flex:1.6;">Listeyi aç</button>
-        <button type="button" id="kuyrukAtlaBtn" style="flex:1; font-size:13px;">Basıldı say</button>
+        <button type="button" id="kuyrukEkleBtn" class="ana" style="flex:1.6;">Ürünleri gör, seç ve bas</button>
+        <button type="button" id="kuyrukAtlaBtn" style="flex:1; font-size:13px;">Hepsini basıldı say</button>
       </div>
     </div>
 
+    <div class="kart gizli" id="sktKart" style="border:2px solid var(--red);">
+      <div class="kartBaslik">⏳ SKT / TETT tarihi yaklaşan dökme ürünler</div>
+      <div class="ipucu" style="margin-bottom:4px;">Dökme kartına yazdığın tarihe 7 gün ve daha az kalanlar. Yeni mal gelince kartı yeni tarihle bas.</div>
+      <div id="sktListe"></div>
+    </div>
+
     <div class="kart" id="topluKart">
-      <div class="kartBaslik">Toplu ekle</div>
+      <button type="button" id="topluAcBtn" style="width:100%; display:flex; justify-content:space-between; align-items:center;"><span>🗓️ Geçmişe göre toplu ekle (son günlerde fiyatı değişenler)</span><span>▼</span></button>
+      <div id="topluIc" class="gizli" style="margin-top:10px;">
       <div id="topluBilgi" class="ipucu" style="margin-bottom:8px;"></div>
       <div class="satir">
         <div style="flex:1.1;"><label for="topluGun">Fiyatı değişenler</label>
@@ -479,6 +493,7 @@
         <button type="button" id="topluDusenBtn" style="flex:1.6; font-size:13px;">📉 Fiyatı düşenleri listele</button>
       </div>
       <button type="button" id="topluTrBtn" style="width:100%; margin-top:10px; font-size:13px; border-style:dashed;">Üretim yeri boş olanlara "Türkiye" yaz</button>
+      </div>
     </div>
 
     <div class="kart">
@@ -540,7 +555,7 @@
 <div class="cubuk gizli" id="cubuk">
   <button type="button" data-sekme="urun"><span class="sekSimge">🛒</span>Ürünler<i data-sayac="urun"></i></button>
   <button type="button" data-sekme="yazdir"><span class="sekSimge">🖨️</span>Yazdır<i data-sayac="yazdir"></i></button>
-  <button type="button" data-sekme="kontrol"><span class="sekSimge">🔔</span>Kontrol<i data-sayac="kontrol"></i></button>
+  <button type="button" data-sekme="kontrol"><span class="sekSimge">🔔</span>Fiyat takibi<i data-sayac="kontrol"></i></button>
   <button type="button" data-sekme="ayar"><span class="sekSimge">⚙️</span>Ayarlar</button>
 </div>
 <div class="gizli"><button type="button" id="gonderBtn"></button><button type="button" id="yazdirBtn"></button></div>
@@ -647,7 +662,7 @@
   // Üstte 2 cm boşluk ürün bazındadır (bütün afiş biçimlerinde). Kartta hiç işaretlenmediyse genel ayar geçerli (yalnız A6/A5).
   var AFIS_BICIM = { a6: 1, a5: 1, a5y: 1, a4: 1, a4b: 1, a3: 1 };
   function urunBosluk(u, f){
-    if(!AFIS_BICIM[f]) return false;
+    if(!AFIS_BICIM[f] && f !== 'dokme') return false;
     if(u && (u.ustBosluk === true || u.ustBosluk === false)) return u.ustBosluk;
     return !!durum.bosluk && (f === 'a6' || f === 'a5');
   }
@@ -659,7 +674,41 @@
   Object.keys(ZEBRA_VARSAYILAN).forEach(function(k){ if(durum.zebra[k] === undefined) durum.zebra[k] = ZEBRA_VARSAYILAN[k]; });
   if(durum.a4diz === undefined) durum.a4diz = true;     // A6/A5 afişleri A4 kâğıda diz (A6: 4, A5: 2)
   function dizVar(){ return durum.bicim === 'a5y' || durum.bicim === 'dokme' || (!!durum.a4diz && (durum.bicim === 'a6' || durum.bicim === 'a5')); }
-  function kaydet(){ if(IS_NO) return; if(!yaz(ETIKET_ANAHTAR, durum)) toast('Telefon hafızası dolu — liste kaydedilemedi', 'hata'); if(typeof ayarGonder === 'function') ayarGonder(); }
+  function kaydet(){ if(IS_NO) return; sablonHatirla(); if(!yaz(ETIKET_ANAHTAR, durum)) toast('Telefon hafızası dolu — liste kaydedilemedi', 'hata'); if(typeof ayarGonder === 'function') ayarGonder(); }
+
+  // ---- Ürünün taslağını hatırla (bu cihazda): kâğıt/taslak, boy listesi, SKT-TETT, üst boşluk ----
+  // Ürün listeye yeniden eklenince aynı taslakla gelir; boy listesinin öbür boyu eklenirse afişin kendisi gelir.
+  if(!durum.sablon) durum.sablon = {};
+  function sablonHatirla(){
+    durum.liste.forEach(function(u){
+      if(!u.barkod || u.grup || u.elle) return;
+      var f = BICIM_SIRA.indexOf(u.bicim) !== -1 ? u.bicim : '';
+      var r = { ad: u.katalogAd || u.ad };
+      if(f === 'dokme' || f === 'a4b' || f === 'a5y' || f === 'a3' || f === 'a4') r.bicim = f;
+      if(f === 'a4b' && u.boylar && u.boylar.length){ r.boylar = u.boylar; r.boyEtiket = u.boyEtiket || ''; r.baslik = u.ad; }
+      if(u.sktTur){ r.sktTur = u.sktTur; r.sktTarih = u.sktTarih || ''; }
+      if(u.ustBosluk === true || u.ustBosluk === false) r.ustBosluk = u.ustBosluk;
+      if(r.bicim || r.sktTur || r.ustBosluk !== undefined) durum.sablon[u.barkod] = r; else delete durum.sablon[u.barkod];
+    });
+  }
+  function boyAnasi(barkod){
+    var b = String(barkod), ana = '';
+    Object.keys(durum.sablon).some(function(a){ var r = durum.sablon[a]; if(r.boylar && r.boylar.some(function(x){ return String(x.barkod) === b; })){ ana = a; return true; } return false; });
+    return ana;
+  }
+  // SKT / TETT tarihi yaklaşan (7 gün) ya da geçmiş dökme ürünler.
+  var SKT_UYARI_GUN = 7;
+  function sktYaklasanlar(){
+    return Object.keys(durum.sablon).map(function(b){ var r = durum.sablon[b]; return { b: b, ad: r.ad || b, tur: r.sktTur, tarih: r.sktTarih, kalan: r.sktTarih ? gunFarki(r.sktTarih, bugun()) : 999 }; })
+      .filter(function(x){ return x.tur && x.tarih && x.kalan <= SKT_UYARI_GUN; }).sort(function(a, c){ return a.kalan - c.kalan; });
+  }
+  function sktCiz(){
+    var l = sktYaklasanlar(), kart = $('sktKart'); if(!kart) return;
+    kart.classList.toggle('gizli', !l.length);
+    $('sktListe').innerHTML = l.map(function(x){
+      return '<div style="display:flex; justify-content:space-between; align-items:center; gap:8px; padding:6px 0; border-top:1px solid var(--line);"><div style="min-width:0;"><b>' + esc(x.ad) + '</b><div class="ipucu">' + (x.tur === 'tett' ? 'TETT' : 'SKT') + ': ' + tarihTr(x.tarih) + '</div></div>' +
+        '<div style="text-align:right; white-space:nowrap;"><b style="color:' + (x.kalan < 0 ? 'var(--red)' : 'var(--amber)') + ';">' + (x.kalan < 0 ? 'GEÇTİ' : x.kalan === 0 ? 'BUGÜN' : x.kalan + ' gün kaldı') + '</b><br><button type="button" data-skt="' + esc(x.b) + '" style="padding:2px 8px; font-size:11.5px; margin-top:2px;">listeden çıkar</button></div></div>'; }).join('');
+  }
 
   // ---------- Görseller (yerli üretim logosu var mı?) ----------
   var yerliLogoVar = false, magazaLogoVar = false, gorselBekleyen = 2;
@@ -1038,6 +1087,14 @@
       eksikGecmis: !!FIYAT_IZLEME && gunFarki(ft, FIYAT_IZLEME) < INDIRIM_PENCERE_GUN };
   }
   function urunEkle(u, sessiz){
+    // Boy listesinin öbür boyu (ör. 15'li) eklenirse afişin kendisi (ana ürün) eklenir.
+    var ana = (!u.elle && u.barkod) ? boyAnasi(u.barkod) : '', ak = ana ? katalogHarita[ana] : null;
+    if(ak && sayi(ak.price) > 0){
+      if(durum.liste.some(function(x){ return x.barkod === ana; })) return;
+      u = { barkod: ana, ad: ak.name, fiyat: sayi(ak.price), elle: false, ft: ak.ft || '', of: ak.of || '', erpYer: ak.yer || '' };
+      if(!sessiz) toast('Bu ürün bir boy listesi afişinde — afiş eklendi');
+    }
+    var sab = (!u.elle && u.barkod && durum.sablon[u.barkod]) || null;
     var bil = durum.urun[u.barkod] || {};
     var tahmin = u.tartili ? { mik: 1, birim: 'kg' } : miktarBul(u.ad);
     durum.liste.unshift({
@@ -1055,6 +1112,13 @@
       // Paket/koli içi adet: ERP'de bu ürüne tanımlı Paket/Koli biriminin çarpanı (elle değiştirilebilir).
       koli: bil.koli || koliBilgi(u.barkod).n, koliAd: bil.koliAd || koliBilgi(u.barkod).ad, koliEk: bil.koli ? '' : koliBilgi(u.barkod).ek
     });
+    if(sab){
+      var yu = durum.liste[0];
+      if(sab.bicim) yu.bicim = sab.bicim;
+      if(sab.boylar){ yu.boylar = sab.boylar.filter(function(x){ return !!katalogHarita[String(x.barkod)]; }); yu.boyEtiket = sab.boyEtiket || ''; if(sab.baslik) yu.ad = sab.baslik; }
+      if(sab.sktTur){ yu.sktTur = sab.sktTur; yu.sktTarih = sab.sktTarih || ''; }
+      if(sab.ustBosluk !== undefined) yu.ustBosluk = sab.ustBosluk;
+    }
     if(sessiz) return;
     kaydet(); listeCiz(); ciz();
     toast('Eklendi: ' + u.ad);
@@ -1310,9 +1374,7 @@
           '<div style="text-align:right;"><div class="urunFiyat">' + para(u.fiyat) + ' ₺</div>' +
           '<button type="button" data-is="sil" style="padding:3px 8px; font-size:12px; margin-top:4px; border:none; background:transparent; color:var(--red);">✕ çıkar</button></div></div>' +
         (u.basildi ? '<div class="basildiBant">✅ ' + esc(u.basildi) + ' basıldı <button type="button" data-is="tekrar">tekrar bas</button></div>' : '') +
-        '<div class="bicimSec">' + BICIM_SIRA.filter(function(f){ return f === 'a5y' ? !!koliTeklif(u) : f === 'a4b' ? (!u.grup && !u.elle && !!u.barkod) : (f !== 'raf' || urunBicim(u) === 'raf'); }).map(function(f){
-          return '<button type="button" data-is="bicim" data-f="' + f + '"' + (urunBicim(u) === f ? ' class="secili"' : '') + '>' + BICIM_KISA[f] + '</button>'; }).join('') +
-          (AFIS_BICIM[urunBicim(u)] ? '<button type="button" data-is="bosluk" title="Üstte 2 cm boşluk bırak (askı / raf rayı için)" style="border-style:dashed;"' + (urunBosluk(u, urunBicim(u)) ? ' class="secili"' : '') + '>↥ 2 cm boşluk</button>' : '') + '</div>' +
+        bicimSecHtml(u) +
         (urunBicim(u) === 'a4b' ? '<div style="margin-top:8px; border:1px dashed var(--line); border-radius:12px; padding:8px 10px;">' +
             '<div class="ipucu" style="margin-bottom:4px;"><b>Afişteki boylar</b> — soldaki yazı afişte çıkar, fiyat katalogdan gelir:</div>' +
             boySatirlari(u).map(function(r){ return '<div style="display:flex; align-items:center; gap:8px; padding:3px 0;">' +
@@ -1381,6 +1443,19 @@
     Array.prototype.forEach.call(kutu.querySelectorAll('[data-al]'), function(el){ if(!yetkiVar(ALAN_YETKI[el.getAttribute('data-al')])){ el.disabled = true; el.title = 'Bu alanı değiştirme yetkin yok'; } });
     Array.prototype.forEach.call(kutu.querySelectorAll('button[data-is]'), function(el){ if(!yetkiVar(IS_YETKI[el.getAttribute('data-is')])) el.classList.add('yetkiGizli'); });
     yazdirCiz();
+  }
+  // Biçim seçimi iki basamak: önce KÂĞIT (Etiket ayrı renkte; sonra A6 A5 A4 A3), altında o kâğıdın TASLAKLARI.
+  var KAGIT = { zebra: 'etiket', raf: 'etiket', a6: 'a6', dokme: 'a6', a5: 'a5', a5y: 'a5', a4: 'a4', a4b: 'a4', a3: 'a3' };
+  var TASLAK = { etiket: [['zebra', 'Zebra rulo'], ['raf', 'Raf (A4 yaprak)']], a6: [['a6', 'Standart'], ['dokme', 'Dökme kartı']], a5: [['a5', 'Standart'], ['a5y', 'Koli fiyatı (yatay)']], a4: [['a4', 'Standart'], ['a4b', 'Boy listesi (30\'lu / 15\'li)']], a3: [['a3', 'Standart']] };
+  function bicimSecHtml(u){
+    var f = urunBicim(u), kg = KAGIT[f];
+    var uygun = function(x){ return x === 'a5y' ? !!koliTeklif(u) : x === 'a4b' ? (!u.grup && !u.elle && !!u.barkod) : (x !== 'raf' || f === 'raf'); };
+    var ts = TASLAK[kg].filter(function(t){ return uygun(t[0]); });
+    return '<div class="bicimSec">' + ['etiket', 'a6', 'a5', 'a4', 'a3'].map(function(k){
+        return '<button type="button" data-is="bicim" data-f="' + (k === 'etiket' ? 'zebra' : k) + '" class="' + (k === 'etiket' ? 'etk' : '') + (kg === k ? ' secili' : '') + '">' + (k === 'etiket' ? '🏷️ Etiket' : k.toUpperCase()) + '</button>'; }).join('') + '</div>' +
+      (ts.length > 1 || AFIS_BICIM[f] || f === 'dokme' ? '<div class="taslakSec">' + (ts.length > 1 ? '<span>Taslak:</span>' + ts.map(function(t){
+        return '<button type="button" data-is="bicim" data-f="' + t[0] + '"' + (f === t[0] ? ' class="secili"' : '') + '>' + t[1] + '</button>'; }).join('') : '') +
+        (AFIS_BICIM[f] || f === 'dokme' ? '<button type="button" data-is="bosluk" title="Üstte 2 cm boşluk bırak (askı / raf rayı için)" style="border-style:dashed;"' + (urunBosluk(u, f) ? ' class="secili"' : '') + '>↥ 2 cm boşluk</button>' : '') + '</div>' : '');
   }
   function urunBul(el){ var k = el.closest('.urun'); if(!k) return null; var id = k.getAttribute('data-id'); return durum.liste.filter(function(u){ return u.id === id; })[0] || null; }
   // ---------- Ortak etiket bilgisi (bütün cihazlar) ----------
@@ -1696,7 +1771,7 @@
     var u = urunBul(b); if(!u) return;
     if(!yetkiVar(IS_YETKI[b.getAttribute('data-is')])){ toast('Bu işlem için yetkin yok', 'uyari'); return; }
     if(b.getAttribute('data-is') === 'sil'){ durum.liste = durum.liste.filter(function(x){ return x.id !== u.id; }); }
-    else if(b.getAttribute('data-is') === 'bicim'){ u.bicim = b.getAttribute('data-f'); u.basildi = ''; }
+    else if(b.getAttribute('data-is') === 'bicim'){ var yf = b.getAttribute('data-f'); if(b.parentNode.className === 'bicimSec' && KAGIT[urunBicim(u)] === KAGIT[yf]) return; u.bicim = yf; u.basildi = ''; }
     else if(b.getAttribute('data-is') === 'tekrar'){ u.basildi = ''; }
     else if(b.getAttribute('data-is') === 'bosluk'){ u.ustBosluk = !urunBosluk(u, urunBicim(u)); u.basildi = ''; }
     else if(b.getAttribute('data-is') === 'tr'){ u.yer = 'Türkiye'; bilgiHatirla(u); }
@@ -2047,8 +2122,9 @@
   }
   function kuyrukCiz(){
     var l = kuyrukListe(), kart = $('kuyrukKart'), bg = bozukGruplar();
-    kart.classList.toggle('gizli', !l.length && !bg.length);
-    Array.prototype.forEach.call(document.querySelectorAll('[data-sayac="kontrol"]'), function(el){ var n = l.length + bg.length; el.textContent = n && yt('etiket_kuyruk') ? String(n) : ''; });
+    kart.classList.remove('gizli'); $('kuyrukBos').classList.toggle('gizli', !!(l.length || bg.length)); kart.style.borderColor = (l.length || bg.length) ? 'var(--amber)' : 'var(--line)';
+    sktCiz();
+    Array.prototype.forEach.call(document.querySelectorAll('[data-sayac="kontrol"]'), function(el){ var n = (yt('etiket_kuyruk') ? l.length + bg.length : 0) + sktYaklasanlar().length; el.textContent = n ? String(n) : ''; });
     $('kuyrukGrupKutu').classList.toggle('gizli', !bg.length);
     if(bg.length) $('kuyrukGrupBilgi').innerHTML = '<b>' + bg.length + '</b> çeşitli etiket GEÇERSİZ (fiyat değişti):' +
       bg.slice(0, 6).map(function(g){ return '<div style="margin-top:4px;"><b>' + esc((g.kod ? grupKodYazi(g.kod) + ' ' : '') + g.ad) + '</b><br><span style="color:var(--red);">' + grupFarklari(g).slice(0, 3).map(esc).join('<br>') + '</span></div>'; }).join('') + (bg.length > 6 ? '<div>…</div>' : '') +
@@ -2083,7 +2159,7 @@
     var c = [], gorulen = {};
     aktifListe().forEach(function(u){
       if(eksikler(u).length) return;
-      (u.grup ? u.grup.map(function(g){ return g.barkod; }) : [u.barkod]).forEach(function(b){
+      (u.grup ? u.grup.map(function(g){ return g.barkod; }) : [u.barkod].concat(urunBicim(u) === 'a4b' ? (u.boylar || []).map(function(x){ return x.barkod; }) : [])).forEach(function(b){
         var kt = katalogHarita[String(b)];
         if(!b || gorulen[b] || !kt || !kt.ft || kt.ft < kuyruk.baslangic || kuyruk.basilan[String(b)] === kt.ft) return;
         gorulen[b] = true; c.push([String(b), kt.ft]);
@@ -2412,6 +2488,7 @@
     Array.prototype.forEach.call(document.querySelectorAll('[data-sek]'), function(el){ el.classList.toggle('sekGizli', el.getAttribute('data-sek') !== ad); });
     Array.prototype.forEach.call(document.querySelectorAll('#cubuk button[data-sekme]'), function(el){ el.classList.toggle('secili', el.getAttribute('data-sekme') === ad); });
     if(ad === 'yazdir'){ yazdirCiz(); ciz(); if(navigator.onLine) baskiYukle(); }
+    if(ad === 'kontrol') kuyrukCiz();
     window.scrollTo(0, 0);
   }
   (function(){
@@ -2419,7 +2496,10 @@
     var ata = function(el, ad){ if(el) el.setAttribute('data-sek', ad); };
     ata(kart('ara'), 'urun'); ata(kart('liste'), 'urun');
     ata($('yazdirKart'), 'yazdir'); ata($('onizleKart'), 'yazdir');
-    ata(kart('dogrulaBtn'), 'kontrol'); ata($('kuyrukKart'), 'kontrol'); ata($('topluKart'), 'kontrol');
+    ata(kart('dogrulaBtn'), 'kontrol'); ata($('kuyrukKart'), 'kontrol'); ata($('sktKart'), 'kontrol'); ata($('topluKart'), 'kontrol');
+    $('sktListe').addEventListener('click', function(e){ var b = e.target.closest('button[data-skt]'); if(!b) return; var r = durum.sablon[b.getAttribute('data-skt')]; if(r){ delete r.sktTur; delete r.sktTarih; } durum.liste.forEach(function(u){ if(u.barkod === b.getAttribute('data-skt')){ u.sktTur = ''; u.sktTarih = ''; } }); kaydet(); listeCiz(); kuyrukCiz(); });
+    $('topluKart').parentNode.insertBefore(kart('dogrulaBtn'), $('topluKart'));       // sıra: basılmayanlar → etiket doğrulama → toplu ekle
+    $('topluAcBtn').addEventListener('click', function(){ $('topluIc').classList.toggle('gizli'); });
     ata(kart('bicimSecim'), 'ayar'); ata($('baskiKart'), 'ayar');
     if(!yt('etiket_ayar') && !yt('etiket_yazici')){ var ab = document.querySelector('#cubuk button[data-sekme="ayar"]'); if(ab) ab.classList.add('yetkiGizli'); }
     $('cubuk').addEventListener('click', function(e){ var b = e.target.closest('button[data-sekme]'); if(b) sekmeAc(b.getAttribute('data-sekme')); });
@@ -2430,8 +2510,8 @@
   })();
   $('listeIslemAc').addEventListener('click', function(){ $('listeIslem').classList.toggle('gizli'); });
   function varsayilanCiz(){
-    $('varsayilanSec').innerHTML = BICIM_SIRA.filter(function(f){ return f !== 'raf' && f !== 'a5y' && f !== 'a4b'; }).map(function(f){
-      return '<button type="button" data-f="' + f + '"' + (durum.varsayilan === f ? ' class="secili"' : '') + '>' + BICIM_KISA[f] + '</button>'; }).join('');
+    $('varsayilanSec').innerHTML = ['zebra', 'a6', 'a5', 'a4', 'a3'].map(function(f){
+      return '<button type="button" data-f="' + f + '" class="' + (f === 'zebra' ? 'etk' : '') + (KAGIT[durum.varsayilan] === KAGIT[f] ? ' secili' : '') + '">' + (f === 'zebra' ? '🏷️ Etiket' : f.toUpperCase()) + '</button>'; }).join('');
   }
   // ---------- Yetkiye göre ekran ----------
   (function(){
@@ -2840,14 +2920,26 @@
     var mik = sayi(u.mik), birim = String(u.birim || '');
     var olcu = (birim === 'kg' && mik === 1) ? 'KİLOSU' : (birim === 'l' && mik === 1) ? 'LİTRESİ' : (birim === 'adet' && mik === 1) ? 'ADEDİ'
       : (!isNaN(mik) && mik > 0 ? String(mik).replace('.', ',') + ' ' + (birim === 'l' ? 'L' : birim) : '');
-    return '<div class="sayfa" style="width:132mm; height:105mm; font-size:1mm;"><div class="dKart">' +
+    var onceki = sayi(u.onceki), oran = (u.indirim && onceki > u.fiyat) ? Math.round((1 - u.fiyat / onceki) * 100) : 0, brk = u.grup ? '' : tartiBarkod(u);
+    return '<div class="sayfa" style="width:132mm; height:105mm; font-size:1mm; padding-top:' + (urunBosluk(u, 'dokme') ? UST_BOSLUK_MM : 0) + 'mm;"><div class="dKart">' +
       '<div class="dAd sig" data-em="14" data-min="6"><span class="yazi">' + adHtml(u) + '</span></div>' +
-      '<div class="dOrta"><div class="dFiyatKutu sig" data-em="50" data-min="18"><span class="dFiyat yazi">' + fiyatHtml(u.fiyat) + '</span></div></div>' +
+      '<div class="dOrta">' + (oran > 0 ? '<div class="dOnceki"><s>' + para(onceki) + ' ₺</s><b>%' + oran + '</b><i>indirimden<br>önceki fiyat</i></div>' : '') +
+        '<div class="dFiyatKutu sig" data-em="50" data-min="18"><span class="dFiyat yazi">' + fiyatHtml(u.fiyat) + '</span></div></div>' +
       // SKT (son kullanma) ya da TETT (tavsiye edilen tüketim) — ürüne göre seçilir, tarih elle girilir.
       '<div class="dAlt"><div class="dSol"><b>' + esc(olcu) + '</b>' +
           (u.sktTur && u.sktTarih ? '<span class="dSkt">' + (u.sktTur === 'tett' ? 'TETT' : 'SKT') + ': ' + tarihTr(u.sktTarih) + '</span>' : '') +
-          '<span>Üretim yeri: ' + esc(String(u.yer || '').trim()) + ' · Fiyat tarihi: ' + tarihTr(u.tarih) + ' · KDV dâhil</span></div>' + afisQr(u) + '</div>' +
+          '<span>Üretim yeri: ' + esc(String(u.yer || '').trim()) + ' · ' + (u.indirim ? 'İndirim: ' + tarihTr(u.tarih) + (u.bitis ? ' – ' + tarihTr(u.bitis) : '') : 'Fiyat tarihi: ' + tarihTr(u.tarih)) + ' · KDV dâhil</span></div>' +
+        (brk && barkodSvg(brk) ? '<div class="dBrk">' + barkodSvg(brk) + '<div>' + esc(brk) + '</div></div>' : '') + afisQr(u) + '</div>' +
     '</div></div>';
+  }
+  // Tartılı ürün (terazi barkodu 29 + 5 hane ürün no + 5 hane gram + kontrol): karta 1 kg'lık barkod basılır,
+  // kasada okutulunca 1 kg satılır. Katalogdaki barkod 7 haneyse (29 + ürün no) ya da 13 haneyse uygulanır.
+  function tartiBarkod(u){
+    var b = String(u.barkod || '');
+    if(!/^29\d+$/.test(b) || (b.length !== 7 && b.length !== 13)) return b;
+    var g = b.substring(0, 7) + '01000', t = 0;
+    for(var i = 0; i < 12; i++) t += Number(g.charAt(i)) * (i % 2 ? 3 : 1);
+    return g + String((10 - t % 10) % 10);
   }
   function zebraKare(){ return !!IS_NO && !GORUNTU && durum.zebra.w > durum.zebra.h; }
   function zebraHtml(u){
