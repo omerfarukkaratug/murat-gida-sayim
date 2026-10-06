@@ -67,6 +67,20 @@
   .secim button{padding:10px 2px; font-size:12.5px;}
   .secim button.aktif{background:var(--accent); color:#fff; border-color:var(--accent);}
   .sonuc{display:block; width:100%; text-align:left; background:var(--panel2); border:1px solid var(--line); border-radius:12px; padding:10px 12px; margin-top:6px; font-weight:700; font-size:14px;}
+  .araSatir{display:flex; align-items:stretch; gap:6px; margin-top:6px;}
+  .araSatir label{flex:1; min-width:0; display:flex; align-items:center; gap:10px; margin:0; text-transform:none; letter-spacing:0; background:var(--panel2); border:1px solid var(--line); border-radius:12px; padding:9px 10px; color:var(--text);}
+  .araSatir input{width:22px; height:22px; flex:none;}
+  .araSatir .araAd{min-width:0; font-weight:700; font-size:14px;}
+  .araSatir .araAd small{display:block; font-weight:500; font-size:11.5px; color:var(--muted); font-family:var(--mono); margin-top:2px;}
+  .araSatir.listede label{opacity:.55;}
+  .araSatir .sonuc{flex:none; width:46px; margin:0; padding:0; text-align:center; font-size:20px;}
+  #araSecBar{display:flex; gap:8px; margin-top:10px; position:sticky; bottom:76px; z-index:5;}
+  #araSecBar.gizli{display:none;}
+  .ekSatir{display:flex; align-items:center; gap:8px; flex-wrap:wrap; margin-top:10px;}
+  button.baglanti{border:none; background:transparent; color:var(--muted); font-size:12.5px; font-weight:600; text-decoration:underline; padding:6px 0 0; width:auto;}
+  .urunEk.gizli{display:none;}
+  .ozet.kisa{white-space:nowrap; overflow:hidden; text-overflow:ellipsis; font-size:12px;}
+  .kisaBtn{padding:5px 11px; font-size:12.5px; font-weight:700; border-radius:999px; border-style:dashed; margin-top:8px;}
   .sonuc small{display:block; font-weight:500; font-size:11.5px; color:var(--muted); font-family:var(--mono); margin-top:2px;}
   .urun{border:1.5px solid var(--line); border-radius:14px; padding:12px; margin-bottom:10px; background:var(--panel);}
   .urunUst{display:flex; justify-content:space-between; gap:8px; align-items:flex-start;}
@@ -377,11 +391,6 @@
       <input id="sloganYazi" type="text" maxlength="28" placeholder="örn. 1987'den beri">
     </div>
 
-    <div class="kart" id="varsayilanKart" style="padding-top:10px; padding-bottom:10px;">
-      <div style="display:flex; align-items:center; gap:10px; flex-wrap:wrap;"><span style="font-size:13px; font-weight:700;">Yeni eklenen ürün:</span><div class="bicimSec" id="varsayilanSec" style="margin:0;"></div></div>
-      <div class="ipucu" style="margin-top:4px;">Eklediğin ürün bu biçimde listeye girer; her ürünün biçimini kartından ayrıca değiştirebilirsin.</div>
-    </div>
-
     <div class="kart">
       <div class="kartBaslik">Ürün ekle</div>
       <div class="satir">
@@ -402,7 +411,9 @@
         </div>
       </div>
       <div id="sonuclar"></div>
-      <button type="button" id="elleBtn" style="width:100%; margin-top:8px; border-style:dashed; font-size:13px;">➕ Katalogda olmayan ürünü elle ekle</button>
+      <div id="araSecBar" class="gizli"><button type="button" class="ana" id="araSecEkle" style="flex:1;"></button><button type="button" id="araSecTemizle" style="flex:none; font-size:12.5px;">Seçimi temizle</button></div>
+      <div class="ekSatir"><span class="ipucu">Yeni ürün:</span><div class="bicimSec" id="varsayilanSec" style="margin:0;"></div></div>
+      <button type="button" id="elleBtn" class="baglanti">Katalogda olmayan ürünü elle ekle</button>
     </div>
 
     <!-- Basılacak etiketler: fiyatı değişip etiketi henüz basılmamış ürünler (bütün cihazlarda ortak) -->
@@ -438,12 +449,15 @@
       <div class="kartBaslik"><span>Liste <span id="listeSayi" class="ipucu"></span></span><button type="button" id="temizleBtn" style="padding:6px 10px; font-size:12px;">Listeyi boşalt</button></div>
       <div id="liste"><div class="ipucu">Henüz ürün eklenmedi.</div></div>
       <!-- Liste aktarma: telefonda hazırla, yazıcının bağlı olduğu bilgisayarda getirip bas. -->
-      <div class="satir" style="margin-top:12px;">
+      <button type="button" id="listeIslemAc" class="baglanti" style="margin-top:10px;">Listeyi başka cihaza aktar ▾</button>
+      <div id="listeIslem" class="gizli">
+      <div class="satir" style="margin-top:8px;">
         <button type="button" id="listeGonderBtn" style="flex:1; font-size:13px;">📤 Listeyi paylaş</button>
         <button type="button" id="listeGetirBtn" style="flex:1; font-size:13px;">📥 Hazır listeyi getir</button>
       </div>
       <div class="ipucu" style="margin-top:4px;">Liste bu cihazda durur. Başka telefonda ya da bilgisayarda basılacaksa "paylaş"; öbür cihazda "hazır listeyi getir".</div>
       <div id="aktarKutu" class="gizli" style="margin-top:8px;"></div>
+      </div>
     </div>
 
     <div class="kart" id="baskiKart" style="padding-top:12px; padding-bottom:12px;">
@@ -824,16 +838,41 @@
     }
     if(!cikan.length){ kutu.innerHTML = '<div class="ipucu" style="margin-top:8px;">Eşleşen ürün yok.</div>'; return; }
     kutu.innerHTML = cikan.map(function(k){
-      var f = sayi(k.price);
-      return '<button type="button" class="sonuc" data-b="' + esc(k.barcode) + '">' + esc(k.name) +
-        '<small>' + esc(k.barcode) + (isNaN(f) || k.price === '' ? ' · fiyat yok' : ' · ' + para(f) + ' ₺') + '</small></button>';
-    }).join('');
+      var f = sayi(k.price), b = String(k.barcode), fiyatsiz = isNaN(f) || k.price === '' || !(f > 0), listede = listedeMi(b);
+      return '<div class="araSatir' + (listede ? ' listede' : '') + '">' +
+        '<label><input type="checkbox" data-sec="' + esc(b) + '"' + (araSecili[b] ? ' checked' : '') + (fiyatsiz || listede ? ' disabled' : '') + '>' +
+        '<span class="araAd">' + esc(k.name) + '<small>' + esc(b) + (fiyatsiz ? ' · fiyat yok' : ' · ' + para(f) + ' ₺') + (listede ? ' · listede' : '') + '</small></span></label>' +
+        '<button type="button" class="sonuc" data-b="' + esc(b) + '" title="Hemen ekle">＋</button></div>';
+    }).join('') + (cikan.length >= 30 ? '<div class="ipucu" style="margin-top:6px;">Daha çok sonuç var — aramayı daralt.</div>' : '');
+    araSecCiz();
   }
+  // Aramada tik konan ürünler: arama değişse de seçim durur; "listeye ekle" hepsini birden ekler.
+  var araSecili = {};
+  function araSecCiz(){
+    var n = Object.keys(araSecili).length, c = $('araSecBar');
+    c.classList.toggle('gizli', !n);
+    $('araSecEkle').textContent = '✓ ' + n + ' ürünü listeye ekle';
+  }
+  $('sonuclar').addEventListener('change', function(e){
+    var b = e.target.getAttribute('data-sec'); if(!b) return;
+    if(e.target.checked) araSecili[b] = true; else delete araSecili[b];
+    araSecCiz();
+  });
   $('sonuclar').addEventListener('click', function(e){
     var b = e.target.closest('.sonuc'); if(!b) return;
-    barkodEkle(b.getAttribute('data-b'));
-    $('ara').value = ''; $('sonuclar').innerHTML = '';
+    var s2 = barkodEkle(b.getAttribute('data-b'));
+    delete araSecili[b.getAttribute('data-b')];
+    if(s2 === 'grup' || !Object.keys(araSecili).length){ $('ara').value = ''; $('sonuclar').innerHTML = ''; }
+    else aramaCiz();
+    araSecCiz();
   });
+  $('araSecEkle').addEventListener('click', function(){
+    var l = Object.keys(araSecili), n = 0;
+    l.forEach(function(b){ if(!listedeMi(b) && barkodEkle(b) === 'eklendi') n++; });
+    araSecili = {}; $('ara').value = ''; $('sonuclar').innerHTML = ''; araSecCiz();
+    toast(n + ' ürün listeye eklendi');
+  });
+  $('araSecTemizle').addEventListener('click', function(){ araSecili = {}; araSecCiz(); aramaCiz(); });
   var koliHarita = {};
   // ERP'deki birim adı etikete düzgün yazılsın: "KOLİ" / "paket" -> "Koli" / "Paket".
   function birimAdi(b){
@@ -1207,12 +1246,13 @@
           '<button type="button" data-is="sil" style="padding:3px 8px; font-size:12px; margin-top:4px; border:none; background:transparent; color:var(--red);">✕ çıkar</button></div></div>' +
         (u.basildi ? '<div class="basildiBant">✅ ' + esc(u.basildi) + ' basıldı <button type="button" data-is="tekrar">tekrar bas</button></div>' : '') +
         '<div class="bicimSec">' + BICIM_SIRA.filter(function(f){ return f === 'a5y' ? !!koliTeklif(u) : (f !== 'raf' || urunBicim(u) === 'raf'); }).map(function(f){
-          return '<button type="button" data-is="bicim" data-f="' + f + '"' + (urunBicim(u) === f ? ' class="secili"' : '') + '>' + BICIM_KISA[f] + '</button>'; }).join('') + '</div>' +
-        (AFIS_BICIM[urunBicim(u)] ? '<label style="display:flex; align-items:center; gap:8px; margin:8px 0 0; text-transform:none; letter-spacing:0; font-size:13px;"><input data-al="ustBosluk" type="checkbox"' + (urunBosluk(u, urunBicim(u)) ? ' checked' : '') + '>Üstte 2 cm boşluk bırak (askı / raf rayı için)</label>' : '') +
+          return '<button type="button" data-is="bicim" data-f="' + f + '"' + (urunBicim(u) === f ? ' class="secili"' : '') + '>' + BICIM_KISA[f] + '</button>'; }).join('') +
+          (AFIS_BICIM[urunBicim(u)] ? '<button type="button" data-is="bosluk" title="Üstte 2 cm boşluk bırak (askı / raf rayı için)" style="border-style:dashed;"' + (urunBosluk(u, urunBicim(u)) ? ' class="secili"' : '') + '>↥ 2 cm boşluk</button>' : '') + '</div>' +
         (eks.length ? '<div class="uyari kirmizi" style="margin:8px 0 0;">Eksik: ' + esc(eks.join(', ')) + '</div>' : '') +
         (koliEngel(u) ? '<div class="ipucu" style="margin-top:8px;">Koli afişi çıkmıyor: <b>' + esc(koliEngel(u)) + '</b> çeşidinin koli fiyatı yok ya da ötekilerden farklı. Koli afişi için o çeşidi gruptan çıkar.</div>' : '') +
-        (benzer.length ? '<button type="button" data-is="grup" style="width:100%; margin-top:10px; font-size:13px; border-style:dashed; text-align:left; line-height:1.4;">🧩 Aynı fiyatlı <b>' + benzer.length + ' çeşidi</b> daha var — hepsini tek etikette topla</button>' : '') +
+        (benzer.length ? '<button type="button" data-is="grup" class="kisaBtn">🧩 Aynı fiyatlı ' + benzer.length + ' çeşidi tek etikette topla</button>' : '') +
         (!u.grup && u.barkod && grupHarita[String(u.barkod)] ? '<button type="button" data-is="grupKayitli" class="ana" style="width:100%; margin-top:10px; font-size:13px; text-align:left; line-height:1.4;">🧩 Bu ürün daha önce <b>' + esc(grupHarita[String(u.barkod)].ad) + '</b> etiketinde basılmış (' + grupHarita[String(u.barkod)].uyeler.length + ' çeşit) — aynı etiketi getir</button>' : '') +
+        '<div class="urunEk' + (ac ? '' : ' gizli') + '">' +
         (genis.length > benzer.length ? '<button type="button" data-is="grupGenis" style="width:100%; margin-top:8px; font-size:13px; border-style:dashed; text-align:left; line-height:1.4;">🧩 Farklı gramajlarla birlikte <b>' + genis.length + ' çeşit</b> aynı fiyatta — hepsini tek etikette topla</button>' : '') +
         (u.grup ? '<div style="margin-top:10px; border:1px dashed var(--line); border-radius:12px; padding:8px 10px;">' +
             '<div class="ipucu" style="margin-bottom:4px;"><b>Bu etiketin kapsadığı ürünler</b> — fiyatı ya da üretim yeri farklı olanı, alakasız ürünü çıkar:</div>' +
@@ -1221,16 +1261,19 @@
             '<div style="display:flex; gap:6px; margin-top:6px; flex-wrap:wrap;"><button type="button" data-is="grupEkle" style="padding:6px 10px; font-size:12px;">➕ Bu etikete ürün ekle</button>' +
             '<button type="button" data-is="dagit" style="padding:6px 10px; font-size:12px;">Grubu dağıt (tek ürüne dön)</button></div></div>'
           : (ac && !u.elle && u.barkod ? '<button type="button" data-is="grupEkle" style="width:100%; margin-top:8px; font-size:13px; border-style:dashed; text-align:left;">➕ Aynı fiyatlı başka ürünleri bu etikete ekle (listeden seç)</button>' : '')) +
+        '</div>' +
         // --- Özet: en çok gereken bilgiler; ayrıntı "Düzenle" ile açılır ---
         (!String(u.yer || '').trim() && !ac
           ? '<div class="satir" style="margin-top:8px;"><div style="flex:1.5;"><input data-al="yer" class="eksik" list="ulkeler" value="" placeholder="Üretim yeri (ülke seç ya da yaz)"></div><button type="button" data-is="tr" style="flex:none; padding:10px;">Türkiye</button></div>'
-          : '<div class="ozet">Üretim yeri: <b>' + esc(String(u.yer || '').trim() || '—') + '</b>' + (u.barkodYer && u.yer === 'Türkiye' ? ' (barkoddan)' : '') +
+          : '<div class="ozet' + (ac ? '' : ' kisa') + '">Üretim yeri: <b>' + esc(String(u.yer || '').trim() || '—') + '</b>' + (u.barkodYer && u.yer === 'Türkiye' ? ' (barkoddan)' : '') +
             ' · Net: <b>' + (grupBoylari(u).length ? grupBoylari(u).map(boyYazi).join(', ') : esc(String(u.mik).replace('.', ',')) + ' ' + esc(u.birim)) + '</b> · Fiyat tarihi: <b>' + tarihTr(u.tarih) + '</b>' + (koliYazi(u) ? ' · <b>' + koliYazi(u) + '</b>' : '') +
             (u.indirim ? ' · <b style="color:var(--red);">İNDİRİM</b>' : '') + '</div>') +
+        '<div class="urunEk' + (ac ? '' : ' gizli') + '">' +
         (dusus && !u.indirim ? '<div style="margin-top:8px; border:1.5px solid var(--accent); border-radius:12px; padding:8px 10px; display:flex; align-items:center; gap:8px;">' +
             '<div style="flex:1; font-size:13px; line-height:1.4;">📉 ' + tarihTr(dusus.tarih) + ' günü <b>' + para(dusus.onceki) + ' → ' + para(u.fiyat) + ' ₺</b> (%' + dusus.oran + ')' +
             (dusus.eksikGecmis ? '<div class="ipucu">Fiyat geçmişi ' + tarihTr(FIYAT_IZLEME) + ' gününden beri tutuluyor.</div>' : '') + '</div>' +
             '<button type="button" data-is="indirimYaz" class="ana" style="flex:none; font-size:12.5px; padding:8px 10px;">İndirim yap</button></div>' : '') +
+        '</div>' +
         '<div class="urunAlt"><div class="adetKutu"><button type="button" data-is="azalt">−</button><span>' + esc(u.adet) + '</span><button type="button" data-is="artir">+</button></div>' +
           '<span class="ipucu" style="flex:1;">etiket</span>' +
           '<button type="button" data-is="ac" style="padding:8px 12px; font-size:13px;">' + (ac ? '▲ Kapat' : '✏️ Düzenle') + '</button></div>' +
@@ -1564,6 +1607,7 @@
     if(b.getAttribute('data-is') === 'sil'){ durum.liste = durum.liste.filter(function(x){ return x.id !== u.id; }); }
     else if(b.getAttribute('data-is') === 'bicim'){ u.bicim = b.getAttribute('data-f'); u.basildi = ''; }
     else if(b.getAttribute('data-is') === 'tekrar'){ u.basildi = ''; }
+    else if(b.getAttribute('data-is') === 'bosluk'){ u.ustBosluk = !urunBosluk(u, urunBicim(u)); u.basildi = ''; }
     else if(b.getAttribute('data-is') === 'tr'){ u.yer = 'Türkiye'; bilgiHatirla(u); }
     else if(b.getAttribute('data-is') === 'ac'){ acik[u.id] = !acik[u.id]; listeCiz(); return; }
     else if(b.getAttribute('data-is') === 'artir'){ u.adet = Math.min(99, (parseInt(u.adet, 10) || 1) + 1); }
@@ -1573,9 +1617,17 @@
       if(dz){ u.indirim = true; u.onceki = String(dz.onceki).replace('.', ','); u.tarih = dz.tarih; if(!u.bitis) u.bitis = $('topluBitis').value || ''; }
     }
     else if(b.getAttribute('data-is') === 'grup' || b.getAttribute('data-is') === 'grupGenis'){
-      var uyeler = [{ barkod: u.barkod, ad: u.katalogAd || u.ad }].concat(benzerBul(u, b.getAttribute('data-is') === 'grupGenis'));
+      var uyeler = [{ barkod: u.barkod, ad: u.katalogAd || u.ad }].concat(benzerBul(u, b.getAttribute('data-is') === 'grupGenis')), atilan = 0;
+      // Koli afişi seçiliyse yalnızca koli fiyatı bu ürünle AYNI olan çeşitler alınır; yoksa afiş düz A5'e dönerdi.
+      var kt0 = u.bicim === 'a5y' ? koliTeklif(u) : null;
+      if(kt0){
+        var hepsi = uyeler.length;
+        uyeler = uyeler.filter(function(x){ var o = koliTeklifKatalog(katalogHarita[String(x.barkod)], sayi(u.fiyat)); return !!o && o.n === kt0.n && Math.abs(o.fiyat - kt0.fiyat) <= 0.004; });
+        atilan = hepsi - uyeler.length;
+      }
+      if(uyeler.length < 2){ toast('Koli fiyatı bu ürünle aynı olan başka çeşit yok', 'uyari'); return; }
       u.grup = uyeler; u.ad = grupAdiOner(uyeler);
-      toast(uyeler.length + ' çeşit tek etikette toplandı — listeyi ve adı kontrol et');
+      toast(uyeler.length + ' çeşit tek etikette toplandı' + (atilan ? ' (' + atilan + ' çeşidin koli fiyatı farklı, alınmadı)' : '') + ' — adı kontrol et');
     }
     else if(b.getAttribute('data-is') === 'gcikar'){
       var cb = b.getAttribute('data-b');
@@ -2207,7 +2259,7 @@
   (function(){
     var kart = function(id){ var el = $(id); return el ? el.closest('.kart') : null; };
     var ata = function(el, ad){ if(el) el.setAttribute('data-sek', ad); };
-    ata(kart('ara'), 'urun'); ata(kart('liste'), 'urun'); ata($('varsayilanKart'), 'urun');
+    ata(kart('ara'), 'urun'); ata(kart('liste'), 'urun');
     ata($('yazdirKart'), 'yazdir'); ata($('onizleKart'), 'yazdir');
     ata(kart('dogrulaBtn'), 'kontrol'); ata($('kuyrukKart'), 'kontrol'); ata($('topluKart'), 'kontrol');
     ata(kart('bicimSecim'), 'ayar'); ata($('baskiKart'), 'ayar');
@@ -2218,6 +2270,7 @@
       durum.varsayilan = b.getAttribute('data-f'); kaydet(); varsayilanCiz();
     });
   })();
+  $('listeIslemAc').addEventListener('click', function(){ $('listeIslem').classList.toggle('gizli'); });
   function varsayilanCiz(){
     $('varsayilanSec').innerHTML = BICIM_SIRA.filter(function(f){ return f !== 'raf' && f !== 'a5y'; }).map(function(f){
       return '<button type="button" data-f="' + f + '"' + (durum.varsayilan === f ? ' class="secili"' : '') + '>' + BICIM_KISA[f] + '</button>'; }).join('');
