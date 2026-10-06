@@ -220,7 +220,7 @@
   .bSatir small{grid-column:1 / -1; display:flex; justify-content:space-between; align-items:baseline; font-size:.2em; font-weight:700; min-height:.2em;}
   .bSatir small span:first-child{font-size:1.5em;} .bSatir small s{text-decoration-thickness:.09em;} .bSatir small b{font-weight:900; border:.08em solid #000; padding:0 .3em; margin-left:.5em;}
   .bAlt{flex-shrink:0; display:flex; justify-content:space-between; align-items:flex-end; gap:3em; border-top:.45em solid #000; padding-top:2em; font-size:3.2em; line-height:1.45; font-weight:600;}
-  .bAlt b{font-weight:900;} .bAlt .yerli{height:2.8em; width:7em; flex-shrink:0;}
+  .bAlt b{font-weight:900;} .bAlt .yerli{height:2.8em; width:7em; flex-shrink:0;} .bSag{display:flex; align-items:flex-end; gap:.8em; flex-shrink:0;} .bSag .qr{width:5em; height:5em;}
   /* Dökme kartı (132 × 105 mm; 1em = 1mm). Levhanın çerçevesi kenardan ~4 mm kapatır. */
   .dKart{display:flex; flex-direction:column; height:100%; padding:7em 8em 6em; box-sizing:border-box;}
   .dAd{height:30em; flex-shrink:0; display:flex; align-items:center; justify-content:center; text-align:center;}
@@ -228,8 +228,9 @@
   .dOrta{flex:1; min-height:0; display:flex;} .dFiyatKutu{flex:1; min-width:0; display:flex; align-items:center; justify-content:center;}
   .dFiyat{font-weight:900; line-height:.9; white-space:nowrap; letter-spacing:-.035em; display:inline-flex; align-items:flex-start;}
   .dFiyat .kurus{font-size:.5em; line-height:1; margin-left:.04em;} .dFiyat .tl{font-size:.36em; line-height:1.35; margin-left:.12em; font-weight:800;}
-  .dAlt{flex-shrink:0; display:flex; justify-content:space-between; align-items:baseline; gap:3em; border-top:.5em solid #000; padding-top:1.6em;}
-  .dAlt b{font-size:5.4em; font-weight:900; white-space:nowrap;} .dAlt span{font-size:2.5em; font-weight:600; text-align:right;}
+  .dAlt{flex-shrink:0; display:flex; justify-content:space-between; align-items:flex-end; gap:3em; border-top:.5em solid #000; padding-top:1.6em;}
+  .dAlt b{font-size:5.4em; font-weight:900; white-space:nowrap;} .dAlt span{font-size:2.5em; font-weight:600;} .dSol{display:flex; flex-direction:column; gap:.6em; min-width:0;}
+  .dAlt .dSkt{font-size:4.4em; font-weight:900; white-space:nowrap;} .dAlt .qr{width:17em; height:17em; flex-shrink:0;}
   /* A5 yatay koli afişi (210 × 148 mm; 1em = 0,5 mm): solda büyük koli fiyatı, sağda tek/koli adet karşılaştırması */
   .kAfis{position:relative; display:flex; flex-direction:column; height:100%; padding:12em 14em 10em; box-sizing:border-box; --kk:#000;}
   .kBas{display:flex; align-items:center; gap:8em; height:32em; flex-shrink:0;}
@@ -614,7 +615,7 @@
   // yalnızca katalogdan gelir; sunucu da baskı işini katalogla karşılaştırır.
   var YONETICI = kullanici.role === 'yonetici';
   function yt(ad){ return YONETICI || (kullanici.permissions || []).indexOf(ad) !== -1; }
-  var ALAN_YETKI = { ad: 'etiket_duzenle', yer: 'etiket_duzenle', mik: 'etiket_duzenle', birim: 'etiket_duzenle', koli: 'etiket_duzenle', bfKip: 'etiket_duzenle', tarih: 'etiket_duzenle',
+  var ALAN_YETKI = { ad: 'etiket_duzenle', yer: 'etiket_duzenle', mik: 'etiket_duzenle', birim: 'etiket_duzenle', koli: 'etiket_duzenle', bfKip: 'etiket_duzenle', tarih: 'etiket_duzenle', sktTur: 'etiket_duzenle', sktTarih: 'etiket_duzenle',
     baslik: 'etiket_duzenle', ozel: 'etiket_duzenle', indirim: 'etiket_indirim', bitis: 'etiket_indirim', onceki: '#yonetici' };
   var IS_YETKI = { tr: 'etiket_duzenle', grup: 'etiket_cesit', grupGenis: 'etiket_cesit', grupEkle: 'etiket_cesit', grupKayitli: 'etiket_cesit', dagit: 'etiket_cesit', gcikar: 'etiket_cesit', indirimYaz: 'etiket_indirim' };
   function yetkiVar(kural){ return !kural || (kural === '#yonetici' ? YONETICI : yt(kural)); }
@@ -1281,6 +1282,7 @@
       if(!u.bitis) e.push('indirim bitiş tarihi'); else if(u.bitis < bugun()) e.push('indirim bitiş tarihi geçmiş');
       else if(u.tarih && u.bitis < u.tarih) e.push('bitiş tarihi başlangıçtan önce');
     }
+    if(urunBicim(u) === 'dokme' && u.sktTur){ if(!u.sktTarih) e.push((u.sktTur === 'tett' ? 'TETT' : 'SKT') + ' tarihi'); else if(u.sktTarih < bugun()) e.push((u.sktTur === 'tett' ? 'TETT' : 'SKT') + ' tarihi geçmiş'); }
     var fark = grupFiyatFarki(u);
     if(fark.length) e.push('gruptaki ' + fark.length + ' ürünün fiyatı artık farklı (' + fark[0].ad + ') — onu gruptan çıkar');
     return e;
@@ -1320,6 +1322,9 @@
               '<b style="font-family:var(--mono); white-space:nowrap;">' + para(r.f) + ' ₺</b>' +
               (r.b !== String(u.barkod) ? '<button type="button" data-is="boyCikar" data-b="' + esc(r.b) + '" style="padding:0 6px; font-size:12px; border:none; background:transparent; color:var(--red); flex-shrink:0;">✕</button>' : '<span style="width:22px;"></span>') + '</div>'; }).join('') +
             '<button type="button" data-is="boyEkle" class="kisaBtn" style="margin-top:6px;">➕ Başka boy ekle (ör. 15\'li)</button></div>' : '') +
+        (urunBicim(u) === 'dokme' ? '<div class="satir" style="margin-top:8px;"><div><label>Karttaki tarih</label><select data-al="sktTur">' +
+            [['', 'Tarih yazma'], ['skt', 'SKT (son kullanma)'], ['tett', 'TETT (tavsiye edilen tüketim)']].map(function(o){ return '<option value="' + o[0] + '"' + ((u.sktTur || '') === o[0] ? ' selected' : '') + '>' + o[1] + '</option>'; }).join('') + '</select></div>' +
+            (u.sktTur ? '<div><label>' + (u.sktTur === 'tett' ? 'TETT' : 'SKT') + ' tarihi</label><input data-al="sktTarih" type="date" class="' + (u.sktTarih ? '' : 'eksik') + '" value="' + esc(u.sktTarih || '') + '"></div>' : '') + '</div>' : '') +
         (eks.length ? '<div class="uyari kirmizi" style="margin:8px 0 0;">Eksik: ' + esc(eks.join(', ')) + '</div>' : '') +
         (koliEngel(u) ? '<div class="ipucu" style="margin-top:8px;">Koli afişi çıkmıyor: <b>' + esc(koliEngel(u)) + '</b> çeşidinin koli fiyatı yok ya da ötekilerden farklı. Koli afişi için o çeşidi gruptan çıkar.</div>' : '') +
         (benzer.length ? '<button type="button" data-is="grup" class="kisaBtn">🧩 Aynı fiyatlı ' + benzer.length + ' çeşidi tek etikette topla</button>' : '') +
@@ -2827,7 +2832,7 @@
         var oran = r.o > r.f + 0.004 ? Math.round((1 - r.f / r.o) * 100) : 0;     // indirimli satış: önceki fiyat üstü çizili + yüzde
         return '<div class="bSatir"><span class="bEt">' + esc(r.e) + '</span><span class="bFiyat">' + fiyatHtml(r.f) + '</span>' +
           '<small><span>' + (oran > 0 ? 'önceki fiyat <s>' + para(r.o) + ' ₺</s><b>%' + oran + '</b>' : '') + '</span><span>' + (adet ? 'adedi ' + para(adet) + ' ₺' : '') + '</span></small></div>'; }).join('') + '</div></div>' +
-      '<div class="bAlt"><div><div><b>Üretim yeri:</b> ' + esc(String(u.yer || '').trim()) + '</div><div><b>' + (u.indirim ? 'İndirim tarihleri' : 'Fiyat değişiklik tarihi') + ':</b> ' + tarihTr(u.tarih) + (u.indirim && u.bitis ? ' – ' + tarihTr(u.bitis) : '') + ' &nbsp;·&nbsp; Fiyatlara KDV dâhildir.</div></div>' + yerliHtml(u) + '</div>' +
+      '<div class="bAlt"><div><div><b>Üretim yeri:</b> ' + esc(String(u.yer || '').trim()) + '</div><div><b>' + (u.indirim ? 'İndirim tarihleri' : 'Fiyat değişiklik tarihi') + ':</b> ' + tarihTr(u.tarih) + (u.indirim && u.bitis ? ' – ' + tarihTr(u.bitis) : '') + ' &nbsp;·&nbsp; Fiyatlara KDV dâhildir.</div></div><div class="bSag">' + afisQr(u) + yerliHtml(u) + '</div></div>' +
     '</div></div>';
   }
   // Dökme kartı (132 × 105 mm; sarı fiyat levhasına takılır). 1em = 1mm.
@@ -2838,7 +2843,10 @@
     return '<div class="sayfa" style="width:132mm; height:105mm; font-size:1mm;"><div class="dKart">' +
       '<div class="dAd sig" data-em="14" data-min="6"><span class="yazi">' + adHtml(u) + '</span></div>' +
       '<div class="dOrta"><div class="dFiyatKutu sig" data-em="50" data-min="18"><span class="dFiyat yazi">' + fiyatHtml(u.fiyat) + '</span></div></div>' +
-      '<div class="dAlt"><b>' + esc(olcu) + '</b><span>Üretim yeri: ' + esc(String(u.yer || '').trim()) + ' · ' + tarihTr(u.tarih) + ' · KDV dâhil</span></div>' +
+      // SKT (son kullanma) ya da TETT (tavsiye edilen tüketim) — ürüne göre seçilir, tarih elle girilir.
+      '<div class="dAlt"><div class="dSol"><b>' + esc(olcu) + '</b>' +
+          (u.sktTur && u.sktTarih ? '<span class="dSkt">' + (u.sktTur === 'tett' ? 'TETT' : 'SKT') + ': ' + tarihTr(u.sktTarih) + '</span>' : '') +
+          '<span>Üretim yeri: ' + esc(String(u.yer || '').trim()) + ' · Fiyat tarihi: ' + tarihTr(u.tarih) + ' · KDV dâhil</span></div>' + afisQr(u) + '</div>' +
     '</div></div>';
   }
   function zebraKare(){ return !!IS_NO && !GORUNTU && durum.zebra.w > durum.zebra.h; }
