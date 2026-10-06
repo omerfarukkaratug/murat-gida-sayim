@@ -209,14 +209,16 @@
   .bAfis{display:flex; flex-direction:column; height:100%; padding:6em 7em 5em; box-sizing:border-box;}
   .bUst{height:11em; flex-shrink:0;} .bUst .aLogo{height:100%; width:auto;}
   .bAd{height:38em; flex-shrink:0; display:flex; align-items:center; justify-content:center; text-align:center; margin-top:2em;}
-  .bAd .yazi{display:block; width:100%; font-weight:900; line-height:1.05; text-transform:uppercase; overflow-wrap:anywhere; text-wrap:balance;}
-  .bSatirlar{flex:1; min-height:0; display:flex; flex-direction:column; justify-content:center; gap:.5em;}
+  .bAd .yazi{display:block; width:100%; font-weight:900; line-height:1.05; text-transform:uppercase; overflow-wrap:normal; word-break:keep-all;}
+  .bSatirlar{flex:1; min-height:0; display:flex; flex-direction:column; justify-content:center; overflow:hidden;}
+  .bIc{display:flex; flex-direction:column; gap:.5em;}
   .bSatir{display:grid; grid-template-columns:auto 1fr; align-items:baseline; column-gap:.5em; border-top:.05em solid #000; padding-top:.25em;}
   .bSatir:first-child{border-top:none;}
   .bEt{font-weight:900; white-space:nowrap; font-size:.72em;}
   .bFiyat{font-weight:900; white-space:nowrap; text-align:right; letter-spacing:-.03em; line-height:1;}
   .bFiyat .kurus{font-size:.5em; vertical-align:.85em; margin-left:.04em;} .bFiyat .tl{font-size:.42em; vertical-align:1.1em; margin-left:.1em; font-weight:800;}
-  .bSatir small{grid-column:1 / -1; text-align:right; font-size:.2em; font-weight:700; min-height:.2em;}
+  .bSatir small{grid-column:1 / -1; display:flex; justify-content:space-between; align-items:baseline; font-size:.2em; font-weight:700; min-height:.2em;}
+  .bSatir small span:first-child{font-size:1.5em;} .bSatir small s{text-decoration-thickness:.09em;} .bSatir small b{font-weight:900; border:.08em solid #000; padding:0 .3em; margin-left:.5em;}
   .bAlt{flex-shrink:0; display:flex; justify-content:space-between; align-items:flex-end; gap:3em; border-top:.45em solid #000; padding-top:2em; font-size:3.2em; line-height:1.45; font-weight:600;}
   .bAlt b{font-weight:900;} .bAlt .yerli{height:2.8em; width:7em; flex-shrink:0;}
   /* Dökme kartı (132 × 105 mm; 1em = 1mm). Levhanın çerçevesi kenardan ~4 mm kapatır. */
@@ -983,10 +985,10 @@
   // Satırlar: [{ b, e (yazı), f (fiyat), n (içindeki adet; bilinmiyorsa 0) }] — çok adetli olan üstte.
   function boySatirlari(u){
     if(u.boySatir && !katalogHarita[String(u.barkod)]) return u.boySatir;      // baskı programı: iş içinde hazır gelir
-    var l = [{ b: String(u.barkod), e: u.boyEtiket || boyEtiketOner(u.katalogAd || u.ad) || String(u.katalogAd || u.ad), f: sayi(u.fiyat) }];
+    var l = [{ b: String(u.barkod), e: u.boyEtiket || boyEtiketOner(u.katalogAd || u.ad) || String(u.katalogAd || u.ad), f: sayi(u.fiyat), o: u.indirim ? sayi(u.onceki) : NaN }];
     (u.boylar || []).forEach(function(x){
       var k = katalogHarita[String(x.barkod)], f = k ? sayi(k.price) : NaN;
-      if(k && f > 0) l.push({ b: String(x.barkod), e: x.etiket || boyEtiketOner(k.name) || k.name, f: f });
+      if(k && f > 0) l.push({ b: String(x.barkod), e: x.etiket || boyEtiketOner(k.name) || k.name, f: f, o: u.indirim ? sayi(x.onceki) : NaN });
     });
     l.forEach(function(r){ var m = /^(\d+)\s*'?\s*L/.exec(String(r.e).toLocaleUpperCase('tr-TR')); r.n = m ? Number(m[1]) : 0; });
     l.sort(function(a, c){ return c.n - a.n; });
@@ -1313,6 +1315,8 @@
             '<div class="ipucu" style="margin-bottom:4px;"><b>Afişteki boylar</b> — soldaki yazı afişte çıkar, fiyat katalogdan gelir:</div>' +
             boySatirlari(u).map(function(r){ return '<div style="display:flex; align-items:center; gap:8px; padding:3px 0;">' +
               '<input data-boyet="' + esc(r.b) + '" value="' + esc(r.e) + '" style="flex:1; min-width:0; padding:6px 8px; font-size:13px;">' +
+              (u.indirim ? (r.b === String(u.barkod) ? '<span class="ipucu" style="white-space:nowrap;">önceki ' + esc(u.onceki || '—') + '</span>'
+                : '<input data-boyonceki="' + esc(r.b) + '" type="text" inputmode="decimal" value="' + esc(((u.boylar || []).filter(function(x){ return String(x.barkod) === r.b; })[0] || {}).onceki || '') + '" placeholder="önceki ₺" style="width:78px; padding:6px 8px; font-size:13px;">') : '') +
               '<b style="font-family:var(--mono); white-space:nowrap;">' + para(r.f) + ' ₺</b>' +
               (r.b !== String(u.barkod) ? '<button type="button" data-is="boyCikar" data-b="' + esc(r.b) + '" style="padding:0 6px; font-size:12px; border:none; background:transparent; color:var(--red); flex-shrink:0;">✕</button>' : '<span style="width:22px;"></span>') + '</div>'; }).join('') +
             '<button type="button" data-is="boyEkle" class="kisaBtn" style="margin-top:6px;">➕ Başka boy ekle (ör. 15\'li)</button></div>' : '') +
@@ -1669,6 +1673,13 @@
   // Alan bırakılınca / seçim değişince: listeyi de yeniden çiz (eksik uyarıları, birim fiyat güncellensin).
   $('liste').addEventListener('change', function(e){ if(e.target.getAttribute('data-al')) alanDegisti(e.target, true); });
   $('liste').addEventListener('change', function(e){
+    var bo = e.target.getAttribute('data-boyonceki');
+    if(bo){
+      var uo = urunBul(e.target); if(!uo || !yetkiVar(ALAN_YETKI.onceki)) return;
+      var vo = String(e.target.value || '').trim();
+      (uo.boylar || []).forEach(function(x){ if(String(x.barkod) === bo) x.onceki = vo; });
+      uo.basildi = ''; kaydet(); listeCiz(); ciz(); return;
+    }
     var bb = e.target.getAttribute('data-boyet'); if(!bb) return;
     var u = urunBul(e.target); if(!u || !yetkiVar('etiket_duzenle')) return;
     var v = String(e.target.value || '').trim().substring(0, 24);
@@ -2807,15 +2818,16 @@
   // A4 boy listesi: üstte ortak ad, altında her boy kendi fiyatıyla. Adet bilinen boyda "adedi" de yazılır.
   function afisBoyHtml(u){
     var l = boySatirlari(u), bosluk = urunBosluk(u, 'a4b') ? UST_BOSLUK_MM : 0;
-    var em = l.length <= 2 ? 15 : l.length === 3 ? 12 : l.length === 4 ? 9.6 : 7.8;
     return '<div class="sayfa" style="width:210mm; height:297mm; font-size:2.1mm; padding-top:' + bosluk + 'mm;"><div class="bAfis">' +
       '<div class="bUst">' + (durum.logo && magazaLogoVar ? '<img class="aLogo" src="' + MAGAZA_LOGO + '" alt="">' : '') + '</div>' +
-      '<div class="bAd sig" data-em="16" data-min="7"><span class="yazi">' + esc(u.ad) + '</span></div>' +
-      '<div class="bSatirlar" style="font-size:' + em + 'em;">' + l.map(function(r){
+      '<div class="bAd sig" data-em="16" data-min="6"><span class="yazi">' + esc(u.ad) + '</span></div>' +
+      // Satırlar alana sığana kadar küçültülür (sigdir): çizgiler yazının üstüne binmez.
+      '<div class="bSatirlar sigKap" data-em="15" data-min="5"><div class="bIc">' + l.map(function(r){
         var adet = r.n > 1 ? Math.round(r.f / r.n * 100) / 100 : 0;
+        var oran = r.o > r.f + 0.004 ? Math.round((1 - r.f / r.o) * 100) : 0;     // indirimli satış: önceki fiyat üstü çizili + yüzde
         return '<div class="bSatir"><span class="bEt">' + esc(r.e) + '</span><span class="bFiyat">' + fiyatHtml(r.f) + '</span>' +
-          (adet ? '<small>adedi ' + para(adet) + ' ₺</small>' : '<small></small>') + '</div>'; }).join('') + '</div>' +
-      '<div class="bAlt"><div><div><b>Üretim yeri:</b> ' + esc(String(u.yer || '').trim()) + '</div><div><b>Fiyat değişiklik tarihi:</b> ' + tarihTr(u.tarih) + ' &nbsp;·&nbsp; Fiyatlara KDV dâhildir.</div></div>' + yerliHtml(u) + '</div>' +
+          '<small><span>' + (oran > 0 ? 'önceki fiyat <s>' + para(r.o) + ' ₺</s><b>%' + oran + '</b>' : '') + '</span><span>' + (adet ? 'adedi ' + para(adet) + ' ₺' : '') + '</span></small></div>'; }).join('') + '</div></div>' +
+      '<div class="bAlt"><div><div><b>Üretim yeri:</b> ' + esc(String(u.yer || '').trim()) + '</div><div><b>' + (u.indirim ? 'İndirim tarihleri' : 'Fiyat değişiklik tarihi') + ':</b> ' + tarihTr(u.tarih) + (u.indirim && u.bitis ? ' – ' + tarihTr(u.bitis) : '') + ' &nbsp;·&nbsp; Fiyatlara KDV dâhildir.</div></div>' + yerliHtml(u) + '</div>' +
     '</div></div>';
   }
   // Dökme kartı (132 × 105 mm; sarı fiyat levhasına takılır). 1em = 1mm.
@@ -2893,7 +2905,16 @@
       var y = kutu.querySelector('.yazi'); if(!y) return;
       var em = Number(kutu.getAttribute('data-em')), min = Number(kutu.getAttribute('data-min')) || em * .4, n = 0;
       y.style.fontSize = em + 'em';
-      while((y.offsetHeight > kutu.clientHeight + 1 || y.offsetWidth > kutu.clientWidth + 1) && em > min && n++ < 80){ em *= .96; y.style.fontSize = em + 'em'; }
+      while((y.offsetHeight > kutu.clientHeight + 1 || y.offsetWidth > kutu.clientWidth + 1 || y.scrollWidth > kutu.clientWidth + 1) && em > min && n++ < 80){ em *= .96; y.style.fontSize = em + 'em'; }
+    });
+  }
+  // Satır kümesini (A4 boy listesi) alanına sığana kadar küçült.
+  function sigdirKap(kok){
+    Array.prototype.forEach.call(kok.querySelectorAll('.sigKap'), function(kap){
+      var ic = kap.firstElementChild; if(!ic) return;
+      var em = Number(kap.getAttribute('data-em')), min = Number(kap.getAttribute('data-min')) || em * .4, n = 0;
+      kap.style.fontSize = em + 'em';
+      while((ic.offsetHeight > kap.clientHeight + 1 || ic.scrollWidth > kap.clientWidth + 1) && em > min && n++ < 80){ em *= .96; kap.style.fontSize = em + 'em'; }
     });
   }
   function ciz(){
@@ -2929,7 +2950,7 @@
     }
     var baski = $('baski');
     baski.innerHTML = html;
-    sigdir(baski);
+    sigdir(baski); sigdirKap(baski);
     // Önizleme: ilk sayfanın kopyası, ekrana sığacak kadar küçültülmüş.
     var ilk = baski.querySelector('.sayfa'), on = $('onizle'), kutu = $('onizleKutu');
     var sayfaAdedi = baski.querySelectorAll('.sayfa').length;
