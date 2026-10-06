@@ -72,66 +72,57 @@ function Yazici-Adlari {
 }
 
 function Bitti($id, $durum, $mesaj) {
-    for ($i = 1; $i -le 3; $i++) {
+    for ($i = 1; $i -le 6; $i++) {
         try { Sor @{ action = "baski_ajan_bitti"; anahtar = $Anahtar; id = $id; durum = $durum; mesaj = $mesaj } | Out-Null; return }
-        catch { Start-Sleep -Seconds 5 }
+        catch { Start-Sleep -Seconds (5 * $i) }
     }
     Yaz-Log "UYARI: Is sonucu sunucuya yazilamadi (is $id, $durum)."
 }
 
-function Pdf-Uret($id, $pdf) {
-    $url = $SayfaUrl + "?is=" + $id + "&anahtar=" + [uri]::EscapeDataString($Anahtar) + "&t=" + (Get-Date).Ticks
-    # Yeni Chrome/Edge "--headless=new" ister; eski surum icin ikinci deneme "--headless".
+# Bu programin tarayici profiliyle acik kalmis eski tarayici islemlerini kapatir.
+# (Ayni profille ikinci bir tarayici acilinca yenisi isi eskisine devredip HEMEN kapanir, cikti olusmaz;
+#  program da bos yere bir dakika beklerdi.)
+function Eski-Tarayicilari-Kapat {
+    try {
+        Get-WmiObject Win32_Process -ErrorAction Stop | Where-Object { $_.CommandLine -and $_.CommandLine.IndexOf($Profil, [StringComparison]::OrdinalIgnoreCase) -ge 0 } |
+            ForEach-Object { try { [void]$_.Terminate() } catch {} }
+    } catch {}
+}
+# Basliksiz tarayiciyi calistirir, $cikti dosyasi olusup yazimi bitene kadar bekler. Basarili: $true.
+function Tarayici-Calistir($ekArg, $cikti, $ne) {
+    $bas = Get-Date
     foreach ($bassiz in @("--headless=new", "--headless")) {
-        if (Test-Path $pdf) { Remove-Item $pdf -Force }
+        Eski-Tarayicilari-Kapat
+        if (Test-Path $cikti) { Remove-Item $cikti -Force }
         # --do-not-de-elevate: program yonetici olarak calisiyorsa Chrome kendini yeniden baslatip
         # ilk islemi hemen kapatir; bu bayrak onu engeller.
-        $arg = @($bassiz, "--disable-gpu", "--no-first-run", "--do-not-de-elevate", "--no-pdf-header-footer", "--print-to-pdf-no-header",
-                 "--user-data-dir=$Profil", "--virtual-time-budget=25000", "--print-to-pdf=$pdf", "`"$url`"")
+        $arg = @($bassiz, "--disable-gpu", "--no-first-run", "--do-not-de-elevate", "--user-data-dir=$Profil", "--virtual-time-budget=15000") + $ekArg
         $p = Start-Process -FilePath $Tarayici -ArgumentList $arg -PassThru -WindowStyle Hidden
-        if (-not $p.WaitForExit(120000)) { try { $p.Kill() } catch {} }
-        # Tarayici islemi erken kapansa bile PDF arka planda yaziliyor olabilir: dosya gelene kadar beklenir.
-        $son = -1
+        if (-not $p.WaitForExit(90000)) { try { $p.Kill() } catch {} }
+        # Tarayici kapandiktan sonra dosya en gec birkac saniyede gelir; gelmezse beklemeden oteki denemeye gecilir.
+        $son = -1; $yok = 0
         for ($bekle = 0; $bekle -lt 60; $bekle++) {
-            if (Test-Path $pdf) {
-                $boyut = (Get-Item $pdf).Length
-                if ($boyut -gt 800 -and $boyut -eq $son) { return $true }   # boyut artik degismiyor: yazma bitti
+            if (Test-Path $cikti) {
+                $boyut = (Get-Item $cikti).Length
+                if ($boyut -gt 800 -and $boyut -eq $son) {
+                    Yaz-Log ("$ne hazir: " + [Math]::Round(((Get-Date) - $bas).TotalSeconds, 1) + " sn ($bassiz)")
+                    return $true
+                }
                 $son = $boyut
-            }
-            Start-Sleep -Seconds 1
+            } else { $yok++; if ($yok -ge 16) { break } }      # 8 sn icinde dosya hic olusmadi
+            Start-Sleep -Milliseconds 500
         }
-        Yaz-Log "UYARI: $bassiz ile PDF olusmadi (tarayici cikis kodu: $($p.ExitCode))."
+        Yaz-Log "UYARI: $bassiz ile $ne olusmadi (tarayici cikis kodu: $($p.ExitCode))."
     }
     return $false
 }
-
-# ---------- Zebra (rulo etiket): PDF yerine goruntu ----------
-# SumatraPDF yatik etiket sayfasini cevirdigi ve kagit boyunu sayfadan aldigi icin rulo etikette kullanilmaz.
-# Etiket sayfasi "goruntu kipi"nde acilir (1 mm = 8 nokta, etiketler alt alta, bos yer kirmizi),
-# ekran goruntusu alinir ve her etiket yaziciya kendi boyunda tek sayfa olarak cizilir.
-Add-Type -AssemblyName System.Drawing
-$ZebraParcaBoy = 40      # bir goruntudeki en fazla etiket (etiket.html PARCA_BOY ile ayni olmali)
-
+function Pdf-Uret($id, $pdf) {
+    $url = $SayfaUrl + "?is=" + $id + "&anahtar=" + [uri]::EscapeDataString($Anahtar) + "&t=" + (Get-Date).Ticks
+    return (Tarayici-Calistir @("--no-pdf-header-footer", "--print-to-pdf-no-header", "--print-to-pdf=$pdf", "`"$url`"") $pdf "PDF")
+}
 function Goruntu-Uret($id, $png, $parca, $genPx, $yukPx) {
     $url = $SayfaUrl + "?is=" + $id + "&anahtar=" + [uri]::EscapeDataString($Anahtar) + "&goruntu=1&parca=" + $parca + "&t=" + (Get-Date).Ticks
-    foreach ($bassiz in @("--headless=new", "--headless")) {
-        if (Test-Path $png) { Remove-Item $png -Force }
-        $arg = @($bassiz, "--disable-gpu", "--no-first-run", "--do-not-de-elevate", "--hide-scrollbars", "--force-device-scale-factor=1", "--disable-lcd-text",
-                 "--user-data-dir=$Profil", "--virtual-time-budget=25000", "--window-size=$genPx,$yukPx", "--screenshot=$png", "`"$url`"")
-        $p = Start-Process -FilePath $Tarayici -ArgumentList $arg -PassThru -WindowStyle Hidden
-        if (-not $p.WaitForExit(120000)) { try { $p.Kill() } catch {} }
-        $son = -1
-        for ($bekle = 0; $bekle -lt 60; $bekle++) {
-            if (Test-Path $png) {
-                $boyut = (Get-Item $png).Length
-                if ($boyut -gt 800 -and $boyut -eq $son) { return $true }
-                $son = $boyut
-            }
-            Start-Sleep -Seconds 1
-        }
-        Yaz-Log "UYARI: $bassiz ile goruntu olusmadi (tarayici cikis kodu: $($p.ExitCode))."
-    }
-    return $false
+    return (Tarayici-Calistir @("--hide-scrollbars", "--force-device-scale-factor=1", "--disable-lcd-text", "--window-size=$genPx,$yukPx", "--screenshot=$png", "`"$url`"") $png "Goruntu")
 }
 
 # Goruntudeki etiketleri yaziciya basar; basilan etiket sayisini dondurur (0 = goruntude etiket yok).
@@ -209,8 +200,13 @@ function Bas($is) {
     if (-not (Pdf-Uret $id $pdf)) { Bitti $id "hata" "Etiket sayfasi hazirlanamadi (tarayici/Internet)"; Yaz-Log "HATA: PDF uretilemedi."; return }
 
     # Sayfa etiketleri cizemediyse isi kendisi "hata" yapar; o zaman bos kagit basilmaz.
-    try { $k = Sor @{ action = "baski_ajan_bitti"; anahtar = $Anahtar; id = $id; durum = "kontrol" } } catch { $k = $null }
-    if (-not $k -or $k.status -ne "ok") { Yaz-Log "Is basilmadi: sayfa hata bildirdi ya da is iptal edildi."; return }
+    # Sunucuya ulasilamazsa is "basiliyor"da takili kalmasin: uc kez denenir, olmazsa hata olarak bildirilir.
+    $k = $null
+    for ($d = 1; $d -le 3 -and -not $k; $d++) {
+        try { $k = Sor @{ action = "baski_ajan_bitti"; anahtar = $Anahtar; id = $id; durum = "kontrol" } } catch { $k = $null; Start-Sleep -Seconds 4 }
+    }
+    if (-not $k) { Yaz-Log "HATA: basmadan onceki kontrol icin sunucuya ulasilamadi."; Bitti $id "hata" "Baski programi sunucuya ulasamadi - yeniden gonder"; return }
+    if ($k.status -ne "ok") { Yaz-Log "Is basilmadi: sayfa hata bildirdi ya da is iptal edildi."; return }
 
     # Kagit: A6/A5 afisler A4'e dizili gelir (a4diz); dizili A5 de dik A4 sayfadir.
     $dizili = $false
@@ -223,12 +219,13 @@ function Bas($is) {
     # Zebra (rulo etiket): kagit boyutu yazicinin kendi ayarindan gelir, yalnizca olcek korunur.
     if ($bicim -eq "zebra") { $ayar = "noscale"; $kagit = "rulo etiket" }
 
+    $yBas = Get-Date
     $p = Start-Process -FilePath $Sumatra -ArgumentList @("-print-to", "`"$yazici`"", "-print-settings", "`"$ayar`"", "-silent", "`"$pdf`"") -PassThru -WindowStyle Hidden
     if (-not $p.WaitForExit(120000)) { try { $p.Kill() } catch {}; Bitti $id "hata" "Yaziciya gonderme zaman asimina ugradi"; Yaz-Log "HATA: SumatraPDF zaman asimi."; return }
     if ($p.ExitCode -ne 0) { Bitti $id "hata" "Yazici isi kabul etmedi (kod $($p.ExitCode))"; Yaz-Log "HATA: SumatraPDF cikis kodu $($p.ExitCode)."; return }
 
     Bitti $id "basildi" ""
-    Yaz-Log "Yaziciya gonderildi: $id ($kagit)"
+    Yaz-Log ("Yaziciya gonderildi: $id ($kagit) - yaziciya verme " + [Math]::Round(((Get-Date) - $yBas).TotalSeconds, 1) + " sn")
 }
 
 Yaz-Log "Baski programi basladi. Bilgisayar: $env:COMPUTERNAME, tarayici: $Tarayici"

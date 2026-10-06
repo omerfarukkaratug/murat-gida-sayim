@@ -8,7 +8,7 @@
 // bir sürüm dağıttıktan sonra /exec adresini boş açtığında burada yazan
 // numarayı görmelisin; index.html'in üstündeki "build" numarasıyla
 // eşleşecek şekilde ben her ikisini birlikte güncelliyorum.
-var GS_VERSION = 'build150';
+var GS_VERSION = 'build153';
 
 // Sheets'te "Saat" sütunu zaman biçimli olarak algılanırsa, hücre değeri düz
 // metin değil bir Date nesnesi olarak gelir ve String(...) çirkin bir çıktı
@@ -798,8 +798,30 @@ function baskiIsEkle(data, gonderen, auth) {
   return jsonCikti({ status: 'ok', id: id });
 }
 // Uygulama: yazıcılar + son işler (durum ekranı ve telefondaki takip).
+// Takılan işler: program işi alıp ("basılıyor") 5 dakika içinde sonuç bildirmediyse (program kapandı, bilgisayar
+// uyudu, internet koptu) iş "hata"ya çekilir; yoksa telefonda sonsuza dek "basılıyor" görünürdü.
+var BASKI_TAKILMA_MS = 5 * 60 * 1000;
+function baskiZamanMs(v) {
+  if (v instanceof Date) return v.getTime();
+  var m = /^(\d{2})\.(\d{2})\.(\d{4}) (\d{2}):(\d{2}):(\d{2})$/.exec(String(v || ''));
+  return m ? new Date(Number(m[3]), Number(m[2]) - 1, Number(m[1]), Number(m[4]), Number(m[5]), Number(m[6])).getTime() : NaN;
+}
+function baskiTakilanlariKapat(sheet, satirlar) {
+  var simdi = baskiZamanMs(baskiZaman()), n = 0;      // aynı biçimden okunur: saat dilimi farkı karışmaz
+  for (var i = 0; i < satirlar.length; i++) {
+    if (String(satirlar[i][6]) !== 'basiliyor') continue;
+    var z = baskiZamanMs(satirlar[i][8]);
+    if (isNaN(z) || isNaN(simdi) || simdi - z < BASKI_TAKILMA_MS) continue;
+    var mesaj = 'Bilgisayardan sonuç gelmedi (5 dk) — baskı programını kontrol et, yeniden gönder';
+    sheet.getRange(i + 2, 7, 1, 3).setNumberFormat('@').setValues([['hata', mesaj, baskiZaman()]]);
+    satirlar[i][6] = 'hata'; satirlar[i][7] = mesaj; n++;
+  }
+  return n;
+}
 function baskiDurum(callback) {
-  var isler = baskiSatirlar(baskiSayfa(BASKI_IS_SEKME, BASKI_IS_BASLIK), 9).map(baskiIsOzet).reverse().slice(0, 15);
+  var bdSheet = baskiSayfa(BASKI_IS_SEKME, BASKI_IS_BASLIK), bdSatir = baskiSatirlar(bdSheet, 9);
+  try { baskiTakilanlariKapat(bdSheet, bdSatir); } catch (te) { /* okuma yine de sürer */ }
+  var isler = bdSatir.map(baskiIsOzet).reverse().slice(0, 15);
   return outJson({ status: 'ok', yazicilar: baskiYazicilar(), isler: isler }, callback);
 }
 function baskiIsGuncelle(id, fn) {
@@ -861,6 +883,7 @@ function baskiAjanAl(bilgisayar, yazicilarJson, callback) {
       benim[kimlik] = wad;
     });
     var isheet = baskiSayfa(BASKI_IS_SEKME, BASKI_IS_BASLIK), ir = baskiSatirlar(isheet, 10);
+    baskiTakilanlariKapat(isheet, ir);
     for (var j = 0; j < ir.length; j++) {
       if (String(ir[j][6]) !== 'bekliyor' || !benim[String(ir[j][3])]) continue;
       isheet.getRange(j + 2, 7, 1, 3).setNumberFormat('@').setValues([['basiliyor', '', baskiZaman()]]);
