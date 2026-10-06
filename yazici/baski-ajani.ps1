@@ -72,9 +72,9 @@ function Yazici-Adlari {
 }
 
 function Bitti($id, $durum, $mesaj) {
-    for ($i = 1; $i -le 3; $i++) {
+    for ($i = 1; $i -le 6; $i++) {
         try { Sor @{ action = "baski_ajan_bitti"; anahtar = $Anahtar; id = $id; durum = $durum; mesaj = $mesaj } | Out-Null; return }
-        catch { Start-Sleep -Seconds 5 }
+        catch { Start-Sleep -Seconds (5 * $i) }
     }
     Yaz-Log "UYARI: Is sonucu sunucuya yazilamadi (is $id, $durum)."
 }
@@ -200,8 +200,13 @@ function Bas($is) {
     if (-not (Pdf-Uret $id $pdf)) { Bitti $id "hata" "Etiket sayfasi hazirlanamadi (tarayici/Internet)"; Yaz-Log "HATA: PDF uretilemedi."; return }
 
     # Sayfa etiketleri cizemediyse isi kendisi "hata" yapar; o zaman bos kagit basilmaz.
-    try { $k = Sor @{ action = "baski_ajan_bitti"; anahtar = $Anahtar; id = $id; durum = "kontrol" } } catch { $k = $null }
-    if (-not $k -or $k.status -ne "ok") { Yaz-Log "Is basilmadi: sayfa hata bildirdi ya da is iptal edildi."; return }
+    # Sunucuya ulasilamazsa is "basiliyor"da takili kalmasin: uc kez denenir, olmazsa hata olarak bildirilir.
+    $k = $null
+    for ($d = 1; $d -le 3 -and -not $k; $d++) {
+        try { $k = Sor @{ action = "baski_ajan_bitti"; anahtar = $Anahtar; id = $id; durum = "kontrol" } } catch { $k = $null; Start-Sleep -Seconds 4 }
+    }
+    if (-not $k) { Yaz-Log "HATA: basmadan onceki kontrol icin sunucuya ulasilamadi."; Bitti $id "hata" "Baski programi sunucuya ulasamadi - yeniden gonder"; return }
+    if ($k.status -ne "ok") { Yaz-Log "Is basilmadi: sayfa hata bildirdi ya da is iptal edildi."; return }
 
     # Kagit: A6/A5 afisler A4'e dizili gelir (a4diz); dizili A5 de dik A4 sayfadir.
     $dizili = $false

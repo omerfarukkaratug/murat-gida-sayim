@@ -2327,7 +2327,9 @@
       : d.durum === 'iptal' ? 'Baskı iptal edildi.'
       : d.durum === 'onay_bekliyor' ? 'Bilgisayardaki kişinin onayı bekleniyor.'
       : d.durum === 'bekliyor' && yz && !yz.cevrimici ? 'Bilgisayar kapalı ya da baskı programı çalışmıyor — açılınca basılacak.'
-      : bitti ? 'Yazıcıya verildi — çıkan etiketleri say.' : '';
+      : bitti ? 'Yazıcıya verildi — çıkan etiketleri say.'
+      : (Date.now() - (d.zaman || Date.now()) > 5 * 60 * 1000) ? 'Bu iş takıldı: bilgisayardan sonuç gelmedi. Baskı programının açık olduğuna bak ve yeniden "Yazdır"a bas.' : '';
+    if(!bitti && !kotu && Date.now() - (d.zaman || Date.now()) > 5 * 60 * 1000) kotu = true;
     return '<div class="adimKutu' + (kotu ? ' kotu' : bitti ? ' bitti' : '') + '">' +
       '<div class="adimUst"><b>' + d.adet + ' adet</b>' + (d.yazici ? ' · ' + esc(d.yazici) : '') +
         '<span class="adimSure"' + (bitti || kotu ? '' : ' data-gecen="' + (d.zaman || 0) + '"') + '>' + (bitti || kotu ? '' : gecenYazi(d.zaman)) + '</span></div>' +
