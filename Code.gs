@@ -8,7 +8,7 @@
 // bir sürüm dağıttıktan sonra /exec adresini boş açtığında burada yazan
 // numarayı görmelisin; index.html'in üstündeki "build" numarasıyla
 // eşleşecek şekilde ben her ikisini birlikte güncelliyorum.
-var GS_VERSION = 'build148';
+var GS_VERSION = 'build150';
 
 // Sheets'te "Saat" sütunu zaman biçimli olarak algılanırsa, hücre değeri düz
 // metin değil bir Date nesnesi olarak gelir ve String(...) çirkin bir çıktı
@@ -37,7 +37,7 @@ function doGet(e) {
   }
   if (P.action === 'iade_bekleyen') {
     k = kapi('bekleyen iade okuma'); if (!k.ok) return kimlikRed(k, P.callback);
-    return iadeBekleyenGetir(P.cari, P.callback);
+    return iadeBekleyenGetir(P.cari, P.ad, P.callback);
   }
   if (P.action === 'cari') {
     k = kapi('cari okuma'); if (!k.ok) return kimlikRed(k, P.callback);
@@ -425,16 +425,23 @@ function iadeBulkKaydet(fisler) {
   tabloyuDegistir(sheet, IADE_BASLIK, rows);
   return jsonCikti({ status: 'ok', saved: rows.length });
 }
-function iadeBekleyenGetir(cariKod, callback) {
-  var sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(IADE_SEKME), fisler = [], kod = String(cariKod || '').trim();
-  if (sheet && sheet.getLastRow() >= 2 && kod) {
-    sheet.getRange(2, 1, sheet.getLastRow() - 1, IADE_BASLIK.length).getValues().forEach(function (r) {
-      if (String(r[0]).trim() !== kod) return;
+// Cari eşleştirme: önce kod (boşluk/büyük-küçük harf farkı sayılmaz), kod tutmazsa birebir cari adı.
+// (Sheets bazı kodları sayıya çevirebildiği için yalnızca koda güvenilmez.)
+function iadeBekleyenGetir(cariKod, cariAd, callback) {
+  var sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(IADE_SEKME), fisler = [], kayitli = 0;
+  var sade = function (v) { return String(v == null ? '' : v).replace(/\s+/g, '').toLocaleUpperCase('tr-TR'); };
+  var kod = sade(cariKod), ad = sade(cariAd);
+  if (sheet && sheet.getLastRow() >= 2 && (kod || ad)) {
+    var satirlarTum = sheet.getRange(2, 1, sheet.getLastRow() - 1, IADE_BASLIK.length).getValues();
+    kayitli = satirlarTum.length;
+    satirlarTum.forEach(function (r) {
+      var rk = sade(r[0]), ra = sade(r[1]);
+      if (!((kod && rk && rk === kod) || (ad && ra && ra === ad))) return;
       var satirlar = []; try { satirlar = JSON.parse(String(r[5] || '[]')); } catch (e) { satirlar = []; }
       fisler.push({ belgeNo: String(r[2] || ''), tarih: fiyatTarihiMetni(r[3]) || String(r[3] || ''), toplam: cleanNum(r[4]), satirlar: satirlar });
     });
   }
-  return outJson({ status: 'ok', fisler: fisler }, callback);
+  return outJson({ status: 'ok', fisler: fisler, kayitli: kayitli }, callback);
 }
 function getCari(callback, bakiyeGoster) {
   if (bakiyeGoster === undefined) bakiyeGoster = true;
