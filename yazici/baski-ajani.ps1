@@ -21,7 +21,7 @@ $Sumatra       = Join-Path $Klasor "SumatraPDF.exe"
 $IsKlasoru     = Join-Path $Klasor "is"
 $Profil        = Join-Path $Klasor "tarayici-profil"
 $BeklemeSn     = 5      # iki sorgu arasi bekleme
-$AjanSurum     = "161"  # sunucuya bildirilir; uygulama eski programi uyarir
+$AjanSurum     = "162"  # sunucuya bildirilir; uygulama eski programi uyarir
 # Uygulamada GORUNMEYECEK yazicilar (sanal yazicilar)
 $YaziciHaric   = 'PDF|XPS|OneNote|Fax|Send To'
 
@@ -192,8 +192,13 @@ function Zebra-Is($is, $id, $yazici) {
         $png = Join-Path $IsKlasoru ($id + "-" + $parca + ".png")
         if (-not (Goruntu-Uret $id $png $parca $genPx $yukPx)) { Bitti $id "hata" "Etiket sayfasi hazirlanamadi (tarayici/Internet)"; Yaz-Log "HATA: goruntu uretilemedi."; return }
         if ($parca -eq 0) {
-            try { $k = Sor @{ action = "baski_ajan_bitti"; anahtar = $Anahtar; id = $id; durum = "kontrol" } } catch { $k = $null }
-            if (-not $k -or $k.status -ne "ok") { Yaz-Log "Is basilmadi: sayfa hata bildirdi ya da is iptal edildi."; return }
+            # Sunucuya ulasilamazsa is "basiliyor"da takili kalmasin: uc kez denenir, olmazsa hata olarak bildirilir.
+            $k = $null
+            for ($d = 1; $d -le 3 -and -not $k; $d++) {
+                try { $k = Sor @{ action = "baski_ajan_bitti"; anahtar = $Anahtar; id = $id; durum = "kontrol" } } catch { $k = $null; Yaz-Log "UYARI: kontrol sorgusu basarisiz ($d): $($_.Exception.Message)"; Start-Sleep -Seconds 4 }
+            }
+            if (-not $k) { Yaz-Log "HATA: basmadan onceki kontrol icin sunucuya ulasilamadi."; Bitti $id "hata" "Baski programi sunucuya ulasamadi - yeniden gonder"; return }
+            if ($k.status -ne "ok") { Yaz-Log "Is basilmadi: sayfa hata bildirdi ya da is iptal edildi."; return }
         }
         try { $n = [int](Zebra-Bas $png $yazici $w $h) }
         catch { Bitti $id "hata" ("Yazici isi kabul etmedi: " + $_.Exception.Message); Yaz-Log "HATA: Zebra baski: $($_.Exception.Message)"; return }
