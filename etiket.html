@@ -103,6 +103,9 @@
   .bicimSec{display:flex; gap:5px; flex-wrap:wrap; margin-top:8px;}
   .bicimSec button{padding:5px 11px; font-size:12.5px; font-weight:700; border-radius:999px;}
   .bicimSec button.secili{background:var(--accent); border-color:var(--accent); color:#fff;}
+  .bicimSec button.etk{border-color:var(--amber); color:var(--amber);} .bicimSec button.etk.secili{background:var(--amber); border-color:var(--amber); color:#fff;}
+  .taslakSec{display:flex; gap:5px; flex-wrap:wrap; align-items:center; margin-top:6px; padding:6px 8px; border-radius:10px; background:rgba(127,127,127,.09);}
+  .taslakSec span{font-size:11.5px; font-weight:700; opacity:.7;} .taslakSec button{padding:4px 10px; font-size:12px; font-weight:700; border-radius:8px;} .taslakSec button.secili{background:var(--text); border-color:var(--text); color:var(--panel);}
   .urun.basildi{opacity:.62;}
   .basildiBant{margin-top:8px; font-size:13px; font-weight:700; color:var(--green); display:flex; align-items:center; gap:8px;}
   .basildiBant button{padding:3px 9px; font-size:12px;}
@@ -381,7 +384,8 @@
     <div id="katalogBilgi" class="ipucu" style="margin:0 2px 10px;"></div>
 
     <div class="kart" style="padding-top:12px; padding-bottom:12px;">
-      <button type="button" id="dogrulaBtn" style="width:100%; font-weight:800;">✅ QR etiket doğrulama</button>
+      <div class="kartBaslik">📷 Raftaki etiket doğru mu?</div>
+      <button type="button" id="dogrulaBtn" style="width:100%; font-weight:800;">Etiketin QR kodunu okut</button>
       <div class="ipucu" style="margin-top:6px;">Raftaki etiketin QR kodunu okut: etikette yazan fiyat güncel mi, anında yeşil/kırmızı görürsün.</div>
     </div>
 
@@ -451,25 +455,27 @@
       <div id="sonuclar"></div>
       <div id="araSecBar" class="gizli"><button type="button" class="ana" id="araSecEkle" style="flex:1;"></button><button type="button" id="araSecTemizle" style="flex:none; font-size:12.5px;">Seçimi temizle</button></div>
       <div class="ekSatir"><span class="ipucu">Yeni ürün:</span><div class="bicimSec" id="varsayilanSec" style="margin:0;"></div></div>
-      <button type="button" id="elleBtn" class="baglanti">Katalogda olmayan ürünü elle ekle</button>
+      <button type="button" id="elleBtn" class="baglanti gizli">Katalogda olmayan ürünü elle ekle</button>
     </div>
 
     <!-- Basılacak etiketler: fiyatı değişip etiketi henüz basılmamış ürünler (bütün cihazlarda ortak) -->
     <div class="kart gizli" id="kuyrukKart" style="border:2px solid var(--amber);">
-      <div class="kartBaslik">🔔 Basılacak etiketler</div>
+      <div class="kartBaslik">🔔 Fiyatı değişti, etiketi basılmadı</div>
+      <div id="kuyrukBos" class="ipucu gizli">✅ Fiyatı değişip etiketi basılmamış ürün yok. Bir ürünün fiyatı değişince burada görünür; etiketini basınca listeden düşer.</div>
       <div id="kuyrukGrupKutu" class="gizli" style="margin-bottom:10px;">
         <div id="kuyrukGrupBilgi" style="font-size:14px; margin-bottom:8px;"></div>
         <button type="button" id="kuyrukGrupBtn" class="ana" style="width:100%;">Çeşitli etiketleri düzelt ve listeye ekle</button>
       </div>
       <div id="kuyrukBilgi" style="font-size:14px; margin-bottom:8px;"></div>
       <div class="satir">
-        <button type="button" id="kuyrukEkleBtn" style="flex:1.6;">Listeyi aç</button>
-        <button type="button" id="kuyrukAtlaBtn" style="flex:1; font-size:13px;">Basıldı say</button>
+        <button type="button" id="kuyrukEkleBtn" class="ana" style="flex:1.6;">Ürünleri gör, seç ve bas</button>
+        <button type="button" id="kuyrukAtlaBtn" style="flex:1; font-size:13px;">Hepsini basıldı say</button>
       </div>
     </div>
 
     <div class="kart" id="topluKart">
-      <div class="kartBaslik">Toplu ekle</div>
+      <button type="button" id="topluAcBtn" style="width:100%; display:flex; justify-content:space-between; align-items:center;"><span>🗓️ Geçmişe göre toplu ekle (son günlerde fiyatı değişenler)</span><span>▼</span></button>
+      <div id="topluIc" class="gizli" style="margin-top:10px;">
       <div id="topluBilgi" class="ipucu" style="margin-bottom:8px;"></div>
       <div class="satir">
         <div style="flex:1.1;"><label for="topluGun">Fiyatı değişenler</label>
@@ -481,6 +487,7 @@
         <button type="button" id="topluDusenBtn" style="flex:1.6; font-size:13px;">📉 Fiyatı düşenleri listele</button>
       </div>
       <button type="button" id="topluTrBtn" style="width:100%; margin-top:10px; font-size:13px; border-style:dashed;">Üretim yeri boş olanlara "Türkiye" yaz</button>
+      </div>
     </div>
 
     <div class="kart">
@@ -542,7 +549,7 @@
 <div class="cubuk gizli" id="cubuk">
   <button type="button" data-sekme="urun"><span class="sekSimge">🛒</span>Ürünler<i data-sayac="urun"></i></button>
   <button type="button" data-sekme="yazdir"><span class="sekSimge">🖨️</span>Yazdır<i data-sayac="yazdir"></i></button>
-  <button type="button" data-sekme="kontrol"><span class="sekSimge">🔔</span>Kontrol<i data-sayac="kontrol"></i></button>
+  <button type="button" data-sekme="kontrol"><span class="sekSimge">🔔</span>Fiyat takibi<i data-sayac="kontrol"></i></button>
   <button type="button" data-sekme="ayar"><span class="sekSimge">⚙️</span>Ayarlar</button>
 </div>
 <div class="gizli"><button type="button" id="gonderBtn"></button><button type="button" id="yazdirBtn"></button></div>
@@ -1312,9 +1319,7 @@
           '<div style="text-align:right;"><div class="urunFiyat">' + para(u.fiyat) + ' ₺</div>' +
           '<button type="button" data-is="sil" style="padding:3px 8px; font-size:12px; margin-top:4px; border:none; background:transparent; color:var(--red);">✕ çıkar</button></div></div>' +
         (u.basildi ? '<div class="basildiBant">✅ ' + esc(u.basildi) + ' basıldı <button type="button" data-is="tekrar">tekrar bas</button></div>' : '') +
-        '<div class="bicimSec">' + BICIM_SIRA.filter(function(f){ return f === 'a5y' ? !!koliTeklif(u) : f === 'a4b' ? (!u.grup && !u.elle && !!u.barkod) : (f !== 'raf' || urunBicim(u) === 'raf'); }).map(function(f){
-          return '<button type="button" data-is="bicim" data-f="' + f + '"' + (urunBicim(u) === f ? ' class="secili"' : '') + '>' + BICIM_KISA[f] + '</button>'; }).join('') +
-          (AFIS_BICIM[urunBicim(u)] ? '<button type="button" data-is="bosluk" title="Üstte 2 cm boşluk bırak (askı / raf rayı için)" style="border-style:dashed;"' + (urunBosluk(u, urunBicim(u)) ? ' class="secili"' : '') + '>↥ 2 cm boşluk</button>' : '') + '</div>' +
+        bicimSecHtml(u) +
         (urunBicim(u) === 'a4b' ? '<div style="margin-top:8px; border:1px dashed var(--line); border-radius:12px; padding:8px 10px;">' +
             '<div class="ipucu" style="margin-bottom:4px;"><b>Afişteki boylar</b> — soldaki yazı afişte çıkar, fiyat katalogdan gelir:</div>' +
             boySatirlari(u).map(function(r){ return '<div style="display:flex; align-items:center; gap:8px; padding:3px 0;">' +
@@ -1383,6 +1388,19 @@
     Array.prototype.forEach.call(kutu.querySelectorAll('[data-al]'), function(el){ if(!yetkiVar(ALAN_YETKI[el.getAttribute('data-al')])){ el.disabled = true; el.title = 'Bu alanı değiştirme yetkin yok'; } });
     Array.prototype.forEach.call(kutu.querySelectorAll('button[data-is]'), function(el){ if(!yetkiVar(IS_YETKI[el.getAttribute('data-is')])) el.classList.add('yetkiGizli'); });
     yazdirCiz();
+  }
+  // Biçim seçimi iki basamak: önce KÂĞIT (Etiket ayrı renkte; sonra A6 A5 A4 A3), altında o kâğıdın TASLAKLARI.
+  var KAGIT = { zebra: 'etiket', raf: 'etiket', a6: 'a6', dokme: 'a6', a5: 'a5', a5y: 'a5', a4: 'a4', a4b: 'a4', a3: 'a3' };
+  var TASLAK = { etiket: [['zebra', 'Zebra rulo'], ['raf', 'Raf (A4 yaprak)']], a6: [['a6', 'Standart'], ['dokme', 'Dökme kartı']], a5: [['a5', 'Standart'], ['a5y', 'Koli fiyatı (yatay)']], a4: [['a4', 'Standart'], ['a4b', 'Boy listesi (30\'lu / 15\'li)']], a3: [['a3', 'Standart']] };
+  function bicimSecHtml(u){
+    var f = urunBicim(u), kg = KAGIT[f];
+    var uygun = function(x){ return x === 'a5y' ? !!koliTeklif(u) : x === 'a4b' ? (!u.grup && !u.elle && !!u.barkod) : (x !== 'raf' || f === 'raf'); };
+    var ts = TASLAK[kg].filter(function(t){ return uygun(t[0]); });
+    return '<div class="bicimSec">' + ['etiket', 'a6', 'a5', 'a4', 'a3'].map(function(k){
+        return '<button type="button" data-is="bicim" data-f="' + (k === 'etiket' ? 'zebra' : k) + '" class="' + (k === 'etiket' ? 'etk' : '') + (kg === k ? ' secili' : '') + '">' + (k === 'etiket' ? '🏷️ Etiket' : k.toUpperCase()) + '</button>'; }).join('') + '</div>' +
+      (ts.length > 1 || AFIS_BICIM[f] || f === 'dokme' ? '<div class="taslakSec">' + (ts.length > 1 ? '<span>Taslak:</span>' + ts.map(function(t){
+        return '<button type="button" data-is="bicim" data-f="' + t[0] + '"' + (f === t[0] ? ' class="secili"' : '') + '>' + t[1] + '</button>'; }).join('') : '') +
+        (AFIS_BICIM[f] ? '<button type="button" data-is="bosluk" title="Üstte 2 cm boşluk bırak (askı / raf rayı için)" style="border-style:dashed;"' + (urunBosluk(u, f) ? ' class="secili"' : '') + '>↥ 2 cm boşluk</button>' : '') + '</div>' : '');
   }
   function urunBul(el){ var k = el.closest('.urun'); if(!k) return null; var id = k.getAttribute('data-id'); return durum.liste.filter(function(u){ return u.id === id; })[0] || null; }
   // ---------- Ortak etiket bilgisi (bütün cihazlar) ----------
@@ -1698,7 +1716,7 @@
     var u = urunBul(b); if(!u) return;
     if(!yetkiVar(IS_YETKI[b.getAttribute('data-is')])){ toast('Bu işlem için yetkin yok', 'uyari'); return; }
     if(b.getAttribute('data-is') === 'sil'){ durum.liste = durum.liste.filter(function(x){ return x.id !== u.id; }); }
-    else if(b.getAttribute('data-is') === 'bicim'){ u.bicim = b.getAttribute('data-f'); u.basildi = ''; }
+    else if(b.getAttribute('data-is') === 'bicim'){ var yf = b.getAttribute('data-f'); if(b.parentNode.className === 'bicimSec' && KAGIT[urunBicim(u)] === KAGIT[yf]) return; u.bicim = yf; u.basildi = ''; }
     else if(b.getAttribute('data-is') === 'tekrar'){ u.basildi = ''; }
     else if(b.getAttribute('data-is') === 'bosluk'){ u.ustBosluk = !urunBosluk(u, urunBicim(u)); u.basildi = ''; }
     else if(b.getAttribute('data-is') === 'tr'){ u.yer = 'Türkiye'; bilgiHatirla(u); }
@@ -2049,7 +2067,7 @@
   }
   function kuyrukCiz(){
     var l = kuyrukListe(), kart = $('kuyrukKart'), bg = bozukGruplar();
-    kart.classList.toggle('gizli', !l.length && !bg.length);
+    kart.classList.remove('gizli'); $('kuyrukBos').classList.toggle('gizli', !!(l.length || bg.length)); kart.style.borderColor = (l.length || bg.length) ? 'var(--amber)' : 'var(--line)';
     Array.prototype.forEach.call(document.querySelectorAll('[data-sayac="kontrol"]'), function(el){ var n = l.length + bg.length; el.textContent = n && yt('etiket_kuyruk') ? String(n) : ''; });
     $('kuyrukGrupKutu').classList.toggle('gizli', !bg.length);
     if(bg.length) $('kuyrukGrupBilgi').innerHTML = '<b>' + bg.length + '</b> çeşitli etiket GEÇERSİZ (fiyat değişti):' +
@@ -2422,6 +2440,8 @@
     ata(kart('ara'), 'urun'); ata(kart('liste'), 'urun');
     ata($('yazdirKart'), 'yazdir'); ata($('onizleKart'), 'yazdir');
     ata(kart('dogrulaBtn'), 'kontrol'); ata($('kuyrukKart'), 'kontrol'); ata($('topluKart'), 'kontrol');
+    $('topluKart').parentNode.insertBefore(kart('dogrulaBtn'), $('topluKart'));       // sıra: basılmayanlar → etiket doğrulama → toplu ekle
+    $('topluAcBtn').addEventListener('click', function(){ $('topluIc').classList.toggle('gizli'); });
     ata(kart('bicimSecim'), 'ayar'); ata($('baskiKart'), 'ayar');
     if(!yt('etiket_ayar') && !yt('etiket_yazici')){ var ab = document.querySelector('#cubuk button[data-sekme="ayar"]'); if(ab) ab.classList.add('yetkiGizli'); }
     $('cubuk').addEventListener('click', function(e){ var b = e.target.closest('button[data-sekme]'); if(b) sekmeAc(b.getAttribute('data-sekme')); });
@@ -2432,8 +2452,8 @@
   })();
   $('listeIslemAc').addEventListener('click', function(){ $('listeIslem').classList.toggle('gizli'); });
   function varsayilanCiz(){
-    $('varsayilanSec').innerHTML = BICIM_SIRA.filter(function(f){ return f !== 'raf' && f !== 'a5y' && f !== 'a4b'; }).map(function(f){
-      return '<button type="button" data-f="' + f + '"' + (durum.varsayilan === f ? ' class="secili"' : '') + '>' + BICIM_KISA[f] + '</button>'; }).join('');
+    $('varsayilanSec').innerHTML = ['zebra', 'a6', 'a5', 'a4', 'a3'].map(function(f){
+      return '<button type="button" data-f="' + f + '" class="' + (f === 'zebra' ? 'etk' : '') + (KAGIT[durum.varsayilan] === KAGIT[f] ? ' secili' : '') + '">' + (f === 'zebra' ? '🏷️ Etiket' : f.toUpperCase()) + '</button>'; }).join('');
   }
   // ---------- Yetkiye göre ekran ----------
   (function(){
