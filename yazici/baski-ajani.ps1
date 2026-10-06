@@ -21,7 +21,8 @@ $Sumatra       = Join-Path $Klasor "SumatraPDF.exe"
 $IsKlasoru     = Join-Path $Klasor "is"
 $Profil        = Join-Path $Klasor "tarayici-profil"
 $BeklemeSn     = 5      # iki sorgu arasi bekleme
-$AjanSurum     = "163"  # sunucuya bildirilir; uygulama eski programi uyarir
+$AjanSurum     = "164"  # sunucuya bildirilir; uygulama eski programi uyarir
+Add-Type -AssemblyName System.Drawing   # Zebra etiketi goruntu olarak basilir
 $ZebraParcaBoy = 40     # bir goruntudeki en fazla etiket (etiket.html PARCA_BOY ile ayni olmali)
 # Uygulamada GORUNMEYECEK yazicilar (sanal yazicilar)
 $YaziciHaric   = 'PDF|XPS|OneNote|Fax|Send To'
