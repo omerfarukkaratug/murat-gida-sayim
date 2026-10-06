@@ -351,7 +351,7 @@
   <header style="border:none; padding:0 0 16px; background:transparent; display:flex; align-items:flex-start; justify-content:space-between;">
     <div>
       <h1><img src="logo-header.png" alt="Murat Gıda" style="height:30px; width:auto; display:block;"></h1>
-      <div class="sub">MK ERP · Murat Gıda • offline • Android • build 148</div>
+      <div class="sub">MK ERP · Murat Gıda • offline • Android • build 149</div>
     </div>
     <button type="button" id="themeToggleBtn" title="Tema seç" style="background:var(--panel2); border:1.5px solid var(--line); color:var(--text); width:34px; height:34px; border-radius:50%; font-size:15px; padding:0; display:flex; align-items:center; justify-content:center; flex-shrink:0;">🎨</button>
   </header>
@@ -4052,10 +4052,22 @@
     var toplam = malItems.reduce(function(sum, it){ return sum + it.miktar; }, 0);
     var fiyatHtml = '';
     if(canSeePrice() && malItems.length){
-      var tutar = 0, fiyatsiz = 0;
-      malItems.forEach(function(it){ var f = malFiyat(it); if(f === null) fiyatsiz++; else tutar += f * it.miktar; });
-      fiyatHtml = '<div style="font-family:var(--mono); font-weight:800; font-size:14px; margin-top:2px;">Toplam tutar: ' + fmtPara(tutar) +
-        (fiyatsiz ? ' <span style="color:var(--amber); font-size:11px; font-weight:700;">(' + fiyatsiz + ' satırda fiyat yok)</span>' : '') + '</div>';
+      var tutar = 0, fiyatsiz = 0, kdvTutar = 0, kdvsiz = 0;
+      malItems.forEach(function(it){
+        var f = malFiyat(it); if(f === null){ fiyatsiz++; return; }
+        tutar += f * it.miktar;
+        var k = (it.kdv === '' || it.kdv === null || it.kdv === undefined) ? NaN : Number(it.kdv);
+        if(isNaN(k)) kdvsiz++; else kdvTutar += f * it.miktar * k / 100;
+      });
+      var uyariHtml = (fiyatsiz ? ' <span style="color:var(--amber); font-size:11px; font-weight:700;">(' + fiyatsiz + ' satırda fiyat yok)</span>' : '');
+      if(malTip === 'giris'){
+        // Mal girişte fiyatlar KDV HARİÇ son alış fiyatıdır: fatura gibi ara toplam + KDV = genel toplam.
+        fiyatHtml = '<div style="font-family:var(--mono); font-size:12.5px; margin-top:2px; color:var(--muted);">Ara toplam (KDV hariç): <b style="color:var(--text);">' + fmtPara(tutar) + '</b> · KDV: <b style="color:var(--text);">' + fmtPara(kdvTutar) + '</b>' +
+          (kdvsiz ? ' <span style="color:var(--amber); font-size:11px; font-weight:700;">(' + kdvsiz + ' satırda KDV oranı yok)</span>' : '') + '</div>' +
+          '<div style="font-family:var(--mono); font-weight:800; font-size:15px;">Genel toplam (KDV dâhil): ' + fmtPara(tutar + kdvTutar) + uyariHtml + '</div>';
+      } else {
+        fiyatHtml = '<div style="font-family:var(--mono); font-weight:800; font-size:14px; margin-top:2px;">Toplam tutar: ' + fmtPara(tutar) + uyariHtml + '</div>';
+      }
     }
     document.getElementById('malHareketMeta').innerHTML =
       '<div style="font-weight:800; font-size:13px;">' + escapeHtml(malBelge) + (malFatura ? ' · No ' + escapeHtml(malFatura) : '') + '</div>' +
