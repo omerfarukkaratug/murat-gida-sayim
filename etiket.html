@@ -1986,6 +1986,7 @@
           var d = durum.isDurum[f], is2 = d && baski.isler.filter(function(i){ return i.id === d.id; })[0];
           if(!is2 || d.durum === is2.durum) return;
           d.durum = is2.durum; d.mesaj = is2.mesaj || ''; degisti = true;
+          if(is2.durum === 'basildi' || is2.durum === 'hata') d.bitis = Date.now();
           if(is2.durum === 'basildi'){
             var saat = new Date(), damga = ('0' + saat.getHours()).slice(-2) + ':' + ('0' + saat.getMinutes()).slice(-2);
             durum.liste.forEach(function(u){ if((d.idler || []).indexOf(u.id) !== -1) u.basildi = damga; });
@@ -2110,7 +2111,7 @@
   }
   // Bir biçimin basılacak ürünlerini yazıcısına gönderir (yazıcı listesi yüklenmiş olmalı). sormadan: yazıcı penceresi açılmaz.
   // Yazıcı durumu iki ayrı şeydir: (1) bilgisayardaki baskı programı çalışıyor mu, (2) Windows yazıcıyı görüyor mu.
-  var AJAN_SURUM = 164, WIN_DURUM = { kapali: 'yazıcı kapalı ya da kablosu takılı değil', kagit: 'kâğıt / etiket sorunu', hata: 'yazıcı hata veriyor' };
+  var AJAN_SURUM = 165, WIN_DURUM = { kapali: 'yazıcı kapalı ya da kablosu takılı değil', kagit: 'kâğıt / etiket sorunu', hata: 'yazıcı hata veriyor' };
   function yzDurumHtml(y){
     if(!y.cevrimici) return '<span style="color:var(--red);">● bilgisayar ya da baskı programı kapalı</span>';
     if(WIN_DURUM[y.winDurum]) return '<span style="color:var(--amber);">● ' + WIN_DURUM[y.winDurum] + '</span>';
@@ -2494,12 +2495,12 @@
       : d.durum === 'iptal' ? 'Baskı iptal edildi.'
       : d.durum === 'onay_bekliyor' ? 'Bilgisayardaki kişinin onayı bekleniyor.'
       : d.durum === 'bekliyor' && yz && !yz.cevrimici ? 'Bilgisayar kapalı ya da baskı programı çalışmıyor — açılınca basılacak.'
-      : bitti ? 'Yazıcıya verildi — çıkan etiketleri say.' + (yz && WIN_DURUM[yz.winDurum] ? ' <b>Dikkat: ' + WIN_DURUM[yz.winDurum] + '</b> — düzelince kendiliğinden basılır, yeniden gönderme.' : '')
+      : bitti ? 'Yazıcıya verildi — çıkan etiketleri say.' + (d.mesaj ? '<br><span style="opacity:.7; font-weight:400;">' + esc(d.mesaj) + '</span>' : '') + (yz && WIN_DURUM[yz.winDurum] ? ' <b>Dikkat: ' + WIN_DURUM[yz.winDurum] + '</b> — düzelince kendiliğinden basılır, yeniden gönderme.' : '')
       : (Date.now() - (d.zaman || Date.now()) > 5 * 60 * 1000) ? 'Bu iş takıldı: bilgisayardan sonuç gelmedi. Baskı programının açık olduğuna bak ve yeniden "Yazdır"a bas.' : '';
     if(!bitti && !kotu && Date.now() - (d.zaman || Date.now()) > 5 * 60 * 1000) kotu = true;
     return '<div class="adimKutu' + (kotu ? ' kotu' : bitti ? ' bitti' : '') + '">' +
       '<div class="adimUst"><b>' + d.adet + ' adet</b>' + (d.yazici ? ' · ' + esc(d.yazici) : '') +
-        '<span class="adimSure"' + (bitti || kotu ? '' : ' data-gecen="' + (d.zaman || 0) + '"') + '>' + (bitti || kotu ? '' : gecenYazi(d.zaman)) + '</span></div>' +
+        '<span class="adimSure"' + (bitti || kotu ? '' : ' data-gecen="' + (d.zaman || 0) + '"') + '>' + (bitti && d.bitis && d.zaman ? 'toplam ' + Math.round((d.bitis - d.zaman) / 1000) + ' sn' : bitti || kotu ? '' : gecenYazi(d.zaman)) + '</span></div>' +
       '<div class="adimlar">' + ADIMLAR.map(function(a, n){
         var tamam = !kotu && n < sira, simdi = !kotu && !bitti && n === sira;
         return '<div class="adim' + (tamam ? ' tamam' : simdi ? ' simdi' : '') + '"><i>' + (tamam ? '✓' : (n + 1)) + '</i><span>' + a + '</span></div>'; }).join('') + '</div>' +
