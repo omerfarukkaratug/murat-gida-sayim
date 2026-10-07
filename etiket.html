@@ -195,14 +195,15 @@
   .dar .aLogoKutu.sloganli .aLogo{height:9.2em;} .dar .aSlogan{font-size:2.6em;}
   .aBasKutu{flex:1; min-width:0; height:17em; display:flex; align-items:center; justify-content:flex-end;}
   .aBaslik{font-size:5.6em; background:#c8102e; color:#fff; font-weight:900; line-height:1; padding:.42em .7em; border-radius:.35em; letter-spacing:.02em; white-space:nowrap; display:inline-block;}
-  .aAd{height:34em; margin-top:3em; flex-shrink:0; display:flex; align-items:center;}
+  /* Yer daralınca (üst boşluk, uzun ad, çeşit listesi, indirim) ürün adı ve çeşitler küçülür; FİYAT alanı en az 26em kalır. */
+  .aAd{height:34em; margin-top:3em; flex-shrink:1; min-height:12em; display:flex; align-items:center;}
   .cesitli .aAd{height:24em;}
   /* Grup etiketinde kapsanan çeşitlerin küçük yazıyla listesi */
-  .aCesit{height:11em; margin-top:1em; flex-shrink:0;}
+  .aCesit{height:11em; margin-top:1em; flex-shrink:1; min-height:5em; overflow:hidden;}
   .aCesit .yazi{font-size:3.4em; display:block; line-height:1.28; font-weight:600; overflow-wrap:anywhere;}
   .aCesit b{font-weight:900;}
   .aAd .yazi{font-size:9.6em; display:block; width:100%; font-weight:900; line-height:1.08; text-transform:uppercase; overflow-wrap:anywhere;}
-  .aOrta{flex:1; display:flex; flex-direction:column; min-height:0; padding-top:1.5em;}
+  .aOrta{flex:1 1 0; display:flex; flex-direction:column; min-height:26em; padding-top:1.5em;}
   .aOnceki{font-size:6.4em; font-weight:800; display:flex; align-items:center; gap:.5em; margin-bottom:.25em;}
   .aOnceki .eski{text-decoration:line-through; text-decoration-thickness:.09em;}
   .aOnceki .oran{background:#000; color:#fff; padding:.08em .35em; border-radius:.2em; font-size:.8em;}
@@ -2943,7 +2944,7 @@
     var bf = birimFiyat(u), bas = baslikMetni(u), onceki = sayi(u.onceki);
     var oran = (u.indirim && onceki > u.fiyat) ? Math.round((1 - u.fiyat / onceki) * 100) : 0;
     var bosluk = urunBosluk(u, f || durum.bicim) ? UST_BOSLUK_MM : 0;
-    var dar = (B.h - bosluk) / (B.w / 100) < 126;           // kullanılabilir yükseklik (em)
+    var dar = (B.h - bosluk) / (B.w / 100) < 132;           // kullanılabilir yükseklik (em)
     var cesit = cesitAdlari(u);
     return '<div class="sayfa' + (dar ? ' dar' : '') + (cesit.length ? ' cesitli' : '') + '" style="width:' + B.w + 'mm; height:' + B.h + 'mm; font-size:' + (B.w / 100) + 'mm; padding-top:' + bosluk + 'mm;">' + (bosluk ? KAT_CIZGI : '') + '<div class="afis">' +
       '<div class="aUst">' + ((durum.logo && magazaLogoVar)
