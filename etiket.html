@@ -173,6 +173,7 @@
      tasarım A5, A4 ve A3'te birebir aynı oranla büyür/küçülür. */
   #baski{position:absolute; left:-20000px; top:0;}
   .dizgi{display:flex; flex-wrap:wrap; align-content:flex-start;}
+  .katCizgi{position:absolute; left:0; right:0; top:20mm; height:0; border-top:.12mm solid #9a9a9a; z-index:2;}
   .dizgi .parca{outline:.25mm dashed #999; outline-offset:-.125mm;}
   .dizgi .donuk{outline:.25mm dashed #999; outline-offset:-.125mm;}
   .donuk{box-sizing:border-box; background:#fff; color:#000; overflow:hidden; position:absolute; top:0; transform-origin:top left; transform:rotate(90deg); font-family:Arial, Helvetica, "Segoe UI", sans-serif;}
@@ -658,7 +659,7 @@
   function yaziciBicim(f){ return f === 'a5y' ? 'a5' : (f === 'a4b' || f === 'dokme' || f === 'karma') ? 'a4' : f; }
   // Karışık dizgi: A4'ten küçük afişler aynı A4 kâğıtlarda birleştirilir (kâğıt israfı olmasın).
   var KARMA = { a6: 1, a5: 1, a5y: 1, dokme: 1 }, YAZDIR_SIRA = BICIM_SIRA.concat(['karma']);
-  function baskiBicim(u){ var f = urunBicim(u); return (durum.karma !== false && KARMA[f]) ? 'karma' : f; }   // yazıcı ve sunucu için: yatay koli afişi de A5 işidir
+  function baskiBicim(u){ var f = urunBicim(u); return (durum.a4diz !== false && KARMA[f]) ? 'karma' : f; }   // yazıcı ve sunucu için: yatay koli afişi de A5 işidir
   if(BICIM_SIRA.indexOf(durum.varsayilan) === -1 || durum.varsayilan === 'a5y' || durum.varsayilan === 'a4b') durum.varsayilan = 'zebra';
   if(!durum.isDurum) durum.isDurum = {};          // biçim -> { id, adet, zaman, durum, mesaj, idler }
   function urunBicim(u){
@@ -673,6 +674,8 @@
   if(durum.slogan === undefined) durum.slogan = "1987'den beri";  // logonun altındaki yazı
   if(durum.bosluk === undefined) durum.bosluk = true;   // A6/A5'te üstte 2 cm boşluk
   var UST_BOSLUK_MM = 20;
+  // Üst boşluğun bittiği yerde çok ince bir çizgi: personel kâğıdı oradan düz katlar.
+  var KAT_CIZGI = '<i class="katCizgi"></i>';
   function boslukVar(){ return !!durum.bosluk && (durum.bicim === 'a6' || durum.bicim === 'a5'); }
   // Üstte 2 cm boşluk ürün bazındadır (bütün afiş biçimlerinde). Kartta hiç işaretlenmediyse genel ayar geçerli (yalnız A6/A5).
   var AFIS_BICIM = { a6: 1, a5: 1, a5y: 1, a4: 1, a4b: 1, a3: 1 };
@@ -852,7 +855,8 @@
     if(u.bfKip === 'yazma') return null;
     // Kendiliğinden: ağırlık/hacim/uzunlukla ölçülen ürünler ile bez, tuvalet kâğıdı, kâğıt havlu, peçete.
     // Tencere seti gibi adetle satılan eşyada ve birim fiyat satış fiyatıyla aynıyken yazılmaz.
-    if(Math.abs(bf.tutar - f) < 0.005) return null;
+    // Ağırlık/hacimle satılan üründe birim fiyat satış fiyatıyla aynı olsa da (ör. 1 L) yazılır: etikette eksik görünmesin.
+    if(bf.birim === 'adet' && Math.abs(bf.tutar - f) < 0.005) return null;
     if(bf.birim === 'adet' && !/(^|\s)bez[i]?(\s|$)|tuvalet kag|kagit havlu|havlu kag|pecete/.test(normTr(u.ad))) return null;
     return bf;
   }
@@ -1986,6 +1990,7 @@
           var d = durum.isDurum[f], is2 = d && baski.isler.filter(function(i){ return i.id === d.id; })[0];
           if(!is2 || d.durum === is2.durum) return;
           d.durum = is2.durum; d.mesaj = is2.mesaj || ''; degisti = true;
+          if(is2.durum === 'basildi' || is2.durum === 'hata') d.bitis = Date.now();
           if(is2.durum === 'basildi'){
             var saat = new Date(), damga = ('0' + saat.getHours()).slice(-2) + ':' + ('0' + saat.getMinutes()).slice(-2);
             durum.liste.forEach(function(u){ if((d.idler || []).indexOf(u.id) !== -1) u.basildi = damga; });
@@ -2110,7 +2115,7 @@
   }
   // Bir biçimin basılacak ürünlerini yazıcısına gönderir (yazıcı listesi yüklenmiş olmalı). sormadan: yazıcı penceresi açılmaz.
   // Yazıcı durumu iki ayrı şeydir: (1) bilgisayardaki baskı programı çalışıyor mu, (2) Windows yazıcıyı görüyor mu.
-  var AJAN_SURUM = 164, WIN_DURUM = { kapali: 'yazıcı kapalı ya da kablosu takılı değil', kagit: 'kâğıt / etiket sorunu', hata: 'yazıcı hata veriyor' };
+  var AJAN_SURUM = 165, WIN_DURUM = { kapali: 'yazıcı kapalı ya da kablosu takılı değil', kagit: 'kâğıt / etiket sorunu', hata: 'yazıcı hata veriyor' };
   function yzDurumHtml(y){
     if(!y.cevrimici) return '<span style="color:var(--red);">● bilgisayar ya da baskı programı kapalı</span>';
     if(WIN_DURUM[y.winDurum]) return '<span style="color:var(--amber);">● ' + WIN_DURUM[y.winDurum] + '</span>';
@@ -2122,7 +2127,7 @@
     var son = yt('etiket_yazici') ? uygun.filter(function(y){ return y.kimlik === (durum.yaziciSon || {})[f]; })[0] : null;
     return { secili: son || uygun[0] || null, uygun: uygun, kayitli: !!son };
   }
-  $('yazdirOzet').addEventListener('click', function(e){ var kb = e.target.closest('button[data-kagit]'); if(!kb) return; durum.karma = kb.getAttribute('data-kagit') === 'a4'; durum.a4diz = durum.karma; if(durum.bicim === 'karma' || KARMA[durum.bicim]) durum.bicim = 'zebra'; kaydet(); yazdirCiz(); ciz(); });
+  $('yazdirOzet').addEventListener('click', function(e){ var kb = e.target.closest('button[data-kagit]'); if(!kb) return; if(!YONETICI){ toast('Kâğıt seçimini yalnızca yönetici değiştirebilir', 'uyari'); return; } durum.a4diz = kb.getAttribute('data-kagit') === 'a4'; if(durum.bicim === 'karma' || KARMA[durum.bicim]) durum.bicim = 'zebra'; kaydet(); yazdirCiz(); ciz(); });
   function bicimSec(f){ if(durum.bicim !== f){ durum.bicim = f; kaydet(); } bicimCiz(); ciz(); }
   function bicimGonder(f, sormadan){
     bicimSec(f);
@@ -2494,12 +2499,12 @@
       : d.durum === 'iptal' ? 'Baskı iptal edildi.'
       : d.durum === 'onay_bekliyor' ? 'Bilgisayardaki kişinin onayı bekleniyor.'
       : d.durum === 'bekliyor' && yz && !yz.cevrimici ? 'Bilgisayar kapalı ya da baskı programı çalışmıyor — açılınca basılacak.'
-      : bitti ? 'Yazıcıya verildi — çıkan etiketleri say.' + (yz && WIN_DURUM[yz.winDurum] ? ' <b>Dikkat: ' + WIN_DURUM[yz.winDurum] + '</b> — düzelince kendiliğinden basılır, yeniden gönderme.' : '')
+      : bitti ? 'Yazıcıya verildi — çıkan etiketleri say.' + (d.mesaj ? '<br><span style="opacity:.7; font-weight:400;">' + esc(d.mesaj) + '</span>' : '') + (yz && WIN_DURUM[yz.winDurum] ? ' <b>Dikkat: ' + WIN_DURUM[yz.winDurum] + '</b> — düzelince kendiliğinden basılır, yeniden gönderme.' : '')
       : (Date.now() - (d.zaman || Date.now()) > 5 * 60 * 1000) ? 'Bu iş takıldı: bilgisayardan sonuç gelmedi. Baskı programının açık olduğuna bak ve yeniden "Yazdır"a bas.' : '';
     if(!bitti && !kotu && Date.now() - (d.zaman || Date.now()) > 5 * 60 * 1000) kotu = true;
     return '<div class="adimKutu' + (kotu ? ' kotu' : bitti ? ' bitti' : '') + '">' +
       '<div class="adimUst"><b>' + d.adet + ' adet</b>' + (d.yazici ? ' · ' + esc(d.yazici) : '') +
-        '<span class="adimSure"' + (bitti || kotu ? '' : ' data-gecen="' + (d.zaman || 0) + '"') + '>' + (bitti || kotu ? '' : gecenYazi(d.zaman)) + '</span></div>' +
+        '<span class="adimSure"' + (bitti || kotu ? '' : ' data-gecen="' + (d.zaman || 0) + '"') + '>' + (bitti && d.bitis && d.zaman ? 'toplam ' + Math.round((d.bitis - d.zaman) / 1000) + ' sn' : bitti || kotu ? '' : gecenYazi(d.zaman)) + '</span></div>' +
       '<div class="adimlar">' + ADIMLAR.map(function(a, n){
         var tamam = !kotu && n < sira, simdi = !kotu && !bitti && n === sira;
         return '<div class="adim' + (tamam ? ' tamam' : simdi ? ' simdi' : '') + '"><i>' + (tamam ? '✓' : (n + 1)) + '</i><span>' + a + '</span></div>'; }).join('') + '</div>' +
@@ -2518,10 +2523,10 @@
     Array.prototype.forEach.call(document.querySelectorAll('[data-sayac="urun"]'), function(el){ el.textContent = durum.liste.length ? String(durum.liste.length) : ''; });
     if(!sira.length){ kutu.innerHTML = '<div class="ipucu">Basılacak ürün yok. Önce <b>Ürünler</b> sekmesinden ürün ekle ve her ürünün biçimini seç.</div>'; return; }
     var kucuk = durum.liste.some(function(u){ return KARMA[urunBicim(u)] && !u.basildi; });
-    var a4e = durum.karma !== false;
+    var a4e = durum.a4diz !== false;
     kutu.innerHTML = (kucuk ? '<div style="margin:0 0 10px; padding:8px 10px; border:1px solid var(--line); border-radius:12px;"><div style="font-size:12.5px; font-weight:800; margin-bottom:6px;">A6 / A5 afişler hangi kâğıda basılsın?</div>' +
-        '<div class="bicimSec" style="margin:0;"><button type="button" data-kagit="a4"' + (a4e ? ' class="secili"' : '') + '>♻️ A4\'e sığdır, sonra kes</button><button type="button" data-kagit="kesik"' + (a4e ? '' : ' class="secili"') + '>✂️ Hazır kesilmiş kâğıt</button></div>' +
-        '<div class="ipucu" style="margin-top:6px;">' + (a4e ? 'A6, A5, koli afişi ve dökme kartları aynı A4 kâğıtlara sığdırılır; basınca kesik çizgiden kesersin.' : 'A6 afiş A6 kâğıda, A5 afiş A5 kâğıda tek tek basılır — yazıcıya o kâğıdı tak. Koli afişi ve dökme kartı yine A4\'e basılır.') + '</div></div>' : '') + (bekleyenBicim.length > 1 ? '<button type="button" class="ana" data-yz="hepsi" style="width:100%; margin-bottom:10px;">🖨️ Hepsini yazdır (' + topAdet + ' adet)</button>' : '') +
+        (YONETICI ? '<div class="bicimSec" style="margin:0;"><button type="button" data-kagit="a4"' + (a4e ? ' class="secili"' : '') + '>♻️ A4\'e sığdır, sonra kes</button><button type="button" data-kagit="kesik"' + (a4e ? '' : ' class="secili"') + '>✂️ Kendi boyunda kâğıt (A6→A6, A5→A5)</button></div>' : '<div style="font-size:13.5px; font-weight:800;">' + (a4e ? '♻️ A4\'e sığdır, sonra kes' : '✂️ Her afiş kendi boyundaki kâğıda') + ' <span class="ipucu" style="font-weight:400;">(yönetici belirler)</span></div>') +
+        '<div class="ipucu" style="margin-top:6px;">' + (a4e ? 'A6, A5, koli afişi ve dökme kartları aynı A4 kâğıtlara sığdırılır; basınca kesik çizgiden kesersin.' : 'A6 afiş A6 kâğıda, A5 afiş A5 kâğıda, A4 afiş A4 kâğıda tek tek basılır — yazıcıya o kâğıdı tak. Koli afişi ve dökme kartı yine A4\'e basılır.') + '</div></div>' : '') + (bekleyenBicim.length > 1 ? '<button type="button" class="ana" data-yz="hepsi" style="width:100%; margin-bottom:10px;">🖨️ Hepsini yazdır (' + topAdet + ' adet)</button>' : '') +
       sira.map(function(f){
         var g = o[f], d = durum.isDurum[f], yz = baski.hazir ? bicimYazici(f) : null;
         return '<div class="yzSatir' + (durum.bicim === f ? ' secili' : '') + '">' +
@@ -2630,7 +2635,7 @@
         AYAR_ALAN.forEach(function(k){ if(a[k] !== undefined) durum[k] = k === 'slogan' ? String(a[k]) : !!a[k]; });
         if(a.zebra) Object.keys(ZEBRA_VARSAYILAN).forEach(function(k){ if(a.zebra[k] !== undefined) durum.zebra[k] = a.zebra[k]; });
         ayarSon = JSON.stringify(ayarOzet());
-        kaydet(); bicimCiz(); ciz();
+        kaydet(); bicimCiz(); ciz(); yazdirCiz();
       } else if(yt('etiket_ayar') && JSON.stringify(durum.zebra) !== JSON.stringify(ZEBRA_VARSAYILAN)) ayarGonder(true);   // ilk kurulum: ayarlanmış cihaz sunucuya yazar
     });
   }
@@ -2933,7 +2938,7 @@
     var bosluk = urunBosluk(u, f || durum.bicim) ? UST_BOSLUK_MM : 0;
     var dar = (B.h - bosluk) / (B.w / 100) < 126;           // kullanılabilir yükseklik (em)
     var cesit = cesitAdlari(u);
-    return '<div class="sayfa' + (dar ? ' dar' : '') + (cesit.length ? ' cesitli' : '') + '" style="width:' + B.w + 'mm; height:' + B.h + 'mm; font-size:' + (B.w / 100) + 'mm; padding-top:' + bosluk + 'mm;"><div class="afis">' +
+    return '<div class="sayfa' + (dar ? ' dar' : '') + (cesit.length ? ' cesitli' : '') + '" style="width:' + B.w + 'mm; height:' + B.h + 'mm; font-size:' + (B.w / 100) + 'mm; padding-top:' + bosluk + 'mm;">' + (bosluk ? KAT_CIZGI : '') + '<div class="afis">' +
       '<div class="aUst">' + ((durum.logo && magazaLogoVar)
           ? '<div class="aLogoKutu' + (durum.slogan ? ' sloganli' : '') + '"><img class="aLogo" src="' + MAGAZA_LOGO + '" alt="">' + (durum.slogan ? '<div class="aSlogan">' + esc(durum.slogan) + '</div>' : '') + '</div>'
           : '<span></span>') +
@@ -2964,7 +2969,7 @@
     var kt = koliTeklif(u) || { n: 0, ad: 'Koli', fiyat: NaN, adet: NaN }, bfm = birimFiyatMetni(u, ' / '), tek = sayi(u.fiyat);
     var yuzde = Math.floor((1 - kt.adet / tek) * 100 + 1e-6), kazanc = Math.round((tek * kt.n - kt.fiyat) * 100) / 100, AD = esc(kt.ad.toLocaleUpperCase('tr-TR'));
     var satir = function(etk, f, sinif){ return '<div class="kSatir' + (sinif ? ' ' + sinif : '') + '"><span>' + etk + '</span><b>' + para(f) + '<i>₺</i></b></div>'; };
-    return '<div class="sayfa" style="width:210mm; height:148mm; font-size:.5mm; padding-top:' + (urunBosluk(u, 'a5y') ? UST_BOSLUK_MM : 0) + 'mm;"><div class="kAfis' + (yuzde >= 1 ? '' : ' duz') + (urunBosluk(u, 'a5y') ? ' sik' : '') + '">' +
+    return '<div class="sayfa" style="width:210mm; height:148mm; font-size:.5mm; padding-top:' + (urunBosluk(u, 'a5y') ? UST_BOSLUK_MM : 0) + 'mm;">' + ((urunBosluk(u, 'a5y') ? UST_BOSLUK_MM : 0) ? KAT_CIZGI : '') + '<div class="kAfis' + (yuzde >= 1 ? '' : ' duz') + (urunBosluk(u, 'a5y') ? ' sik' : '') + '">' +
       '<div class="kBas">' + (durum.logo && magazaLogoVar ? '<img class="aLogo" src="' + MAGAZA_LOGO + '" alt="">' : '') + '<div class="kTur">' + AD + ' FİYATI</div></div>' +
       (yuzde >= 1 ? '<div class="kDaire"><b>%' + yuzde + '</b><span>' + AD + 'DE<br>DAHA UCUZ</span></div>' : '') +
       '<div class="kAd sig" data-em="24" data-min="10"><span class="yazi">' + adHtml(u) + '</span></div>' +
@@ -2982,7 +2987,7 @@
   // A4 boy listesi: üstte ortak ad, altında her boy kendi fiyatıyla. Adet bilinen boyda "adedi" de yazılır.
   function afisBoyHtml(u){
     var l = boySatirlari(u), bosluk = urunBosluk(u, 'a4b') ? UST_BOSLUK_MM : 0;
-    return '<div class="sayfa" style="width:210mm; height:297mm; font-size:2.1mm; padding-top:' + bosluk + 'mm;"><div class="bAfis">' +
+    return '<div class="sayfa" style="width:210mm; height:297mm; font-size:2.1mm; padding-top:' + bosluk + 'mm;">' + (bosluk ? KAT_CIZGI : '') + '<div class="bAfis">' +
       '<div class="bUst">' + (durum.logo && magazaLogoVar ? '<img class="aLogo" src="' + MAGAZA_LOGO + '" alt="">' : '') + '</div>' +
       '<div class="bAd sig" data-em="16" data-min="6"><span class="yazi">' + esc(u.ad) + '</span></div>' +
       // Satırlar alana sığana kadar küçültülür (sigdir): çizgiler yazının üstüne binmez.
@@ -3000,14 +3005,14 @@
     var olcu = (birim === 'kg' && mik === 1) ? 'KİLOSU' : (birim === 'l' && mik === 1) ? 'LİTRESİ' : (birim === 'adet' && mik === 1) ? 'ADEDİ'
       : (!isNaN(mik) && mik > 0 ? String(mik).replace('.', ',') + ' ' + (birim === 'l' ? 'L' : birim) : '');
     var onceki = sayi(u.onceki), oran = (u.indirim && onceki > u.fiyat) ? Math.round((1 - u.fiyat / onceki) * 100) : 0, brk = u.grup ? '' : tartiBarkod(u);
-    return '<div class="sayfa" style="width:132mm; height:105mm; font-size:1mm; padding-top:' + (urunBosluk(u, 'dokme') ? UST_BOSLUK_MM : 0) + 'mm;"><div class="dKart">' +
+    return '<div class="sayfa" style="width:132mm; height:105mm; font-size:1mm; padding-top:' + (urunBosluk(u, 'dokme') ? UST_BOSLUK_MM : 0) + 'mm;">' + ((urunBosluk(u, 'dokme') ? UST_BOSLUK_MM : 0) ? KAT_CIZGI : '') + '<div class="dKart">' +
       '<div class="dUst">' + (durum.logo && magazaLogoVar ? '<img class="aLogo" src="' + MAGAZA_LOGO + '" alt="">' : '') + '<div class="dAd sig" data-em="13" data-min="5"><span class="yazi">' + adHtml(u) + '</span></div></div>' +
       '<div class="dOrta">' + (oran > 0 ? '<div class="dOnceki"><s>' + para(onceki) + ' ₺</s><b>%' + oran + '</b><i>indirimden<br>önceki fiyat</i></div>' : '') +
         '<div class="dFiyatKutu sig" data-em="50" data-min="18"><span class="dFiyat yazi">' + fiyatHtml(u.fiyat) + '</span></div></div>' +
       // SKT (son kullanma) ya da TETT (tavsiye edilen tüketim) — ürüne göre seçilir, tarih elle girilir.
       '<div class="dAlt"><div class="dSol"><b>' + esc(olcu) + '</b>' +
           (u.sktTur && u.sktTarih ? '<span class="dSkt">' + (u.sktTur === 'tett' ? 'TETT' : 'SKT') + ': ' + tarihTr(u.sktTarih) + '</span>' : '') +
-          '<span>Üretim yeri: ' + esc(String(u.yer || '').trim()) + ' · ' + (u.indirim ? 'İndirim: ' + tarihTr(u.tarih) + (u.bitis ? ' – ' + tarihTr(u.bitis) : '') : 'Fiyat tarihi: ' + tarihTr(u.tarih)) + ' · KDV dâhil</span></div>' +
+          '<span>' + (birimFiyatMetni(u, '/') ? 'Birim fiyatı: ' + birimFiyatMetni(u, '/') + ' · ' : '') + 'Üretim yeri: ' + esc(String(u.yer || '').trim()) + ' · ' + (u.indirim ? 'İndirim: ' + tarihTr(u.tarih) + (u.bitis ? ' – ' + tarihTr(u.bitis) : '') : 'Fiyat tarihi: ' + tarihTr(u.tarih)) + ' · KDV dâhil</span></div>' +
         (brk && barkodSvg(brk) ? '<div class="dBrk">' + barkodSvg(brk) + '<div>' + esc(brk) + '</div></div>' : '') + afisQr(u) + yerliHtml(u) + '</div>' +
     '</div></div>';
   }

@@ -20,8 +20,8 @@ $LogFile       = Join-Path $Klasor "baski-log.txt"
 $Sumatra       = Join-Path $Klasor "SumatraPDF.exe"
 $IsKlasoru     = Join-Path $Klasor "is"
 $Profil        = Join-Path $Klasor "tarayici-profil"
-$BeklemeSn     = 5      # iki sorgu arasi bekleme
-$AjanSurum     = "164"  # sunucuya bildirilir; uygulama eski programi uyarir
+$BeklemeSn     = 3      # iki sorgu arasi bekleme
+$AjanSurum     = "165"  # sunucuya bildirilir; uygulama eski programi uyarir
 Add-Type -AssemblyName System.Drawing   # Zebra etiketi goruntu olarak basilir
 $ZebraParcaBoy = 40     # bir goruntudeki en fazla etiket (etiket.html PARCA_BOY ile ayni olmali)
 # Uygulamada GORUNMEYECEK yazicilar (sanal yazicilar)
@@ -90,6 +90,14 @@ function Yazici-Durumlari {
     return $d
 }
 
+# Isin nerede ne kadar surdugu: telefonda ve gunlukte gorunur (yavaslik nerede, oradan anlasilir).
+function Sure-Ozeti {
+    $t = [Math]::Round(((Get-Date) - $script:IsBas).TotalSeconds, 1)
+    $o = "Bilgisayarda $t sn: " + $script:Sure + "gerisi sunucu sorgulari ve yazici"
+    Yaz-Log "Sure: $o"
+    return $o
+}
+
 function Bitti($id, $durum, $mesaj) {
     for ($i = 1; $i -le 6; $i++) {
         try { Sor @{ action = "baski_ajan_bitti"; anahtar = $Anahtar; id = $id; durum = $durum; mesaj = $mesaj } | Out-Null; return }
@@ -116,20 +124,24 @@ function Tarayici-Calistir($ekArg, $cikti, $ne) {
         # --do-not-de-elevate: program yonetici olarak calisiyorsa Chrome kendini yeniden baslatip
         # ilk islemi hemen kapatir; bu bayrak onu engeller.
         $arg = @($bassiz, "--disable-gpu", "--no-first-run", "--do-not-de-elevate", "--no-default-browser-check", "--disable-extensions", "--disable-sync", "--disable-component-update", "--user-data-dir=$Profil", "--virtual-time-budget=15000") + $ekArg
+        $tHazirlik = [Math]::Round(((Get-Date) - $bas).TotalSeconds, 1); $tBas = Get-Date
         $p = Start-Process -FilePath $Tarayici -ArgumentList $arg -PassThru -WindowStyle Hidden
         if (-not $p.WaitForExit(90000)) { try { $p.Kill() } catch {} }
+        $tTarayici = [Math]::Round(((Get-Date) - $tBas).TotalSeconds, 1)
         # Tarayici kapandiktan sonra dosya en gec birkac saniyede gelir; gelmezse beklemeden oteki denemeye gecilir.
         $son = -1; $yok = 0
         for ($bekle = 0; $bekle -lt 60; $bekle++) {
             if (Test-Path $cikti) {
                 $boyut = (Get-Item $cikti).Length
                 if ($boyut -gt 800 -and $boyut -eq $son) {
-                    Yaz-Log ("$ne hazir: " + [Math]::Round(((Get-Date) - $bas).TotalSeconds, 1) + " sn ($bassiz)")
+                    $tToplam = [Math]::Round(((Get-Date) - $bas).TotalSeconds, 1)
+                    Yaz-Log ("$ne hazir: $tToplam sn (on hazirlik $tHazirlik, tarayici $tTarayici) ($bassiz)")
+                    $script:Sure += "sayfa $tToplam sn (tarayici $tTarayici); " 
                     return $true
                 }
                 $son = $boyut
-            } else { $yok++; if ($yok -ge 16) { break } }      # 8 sn icinde dosya hic olusmadi
-            Start-Sleep -Milliseconds 500
+            } else { $yok++; if ($yok -ge 32) { break } }      # 8 sn icinde dosya hic olusmadi
+            Start-Sleep -Milliseconds 250
         }
         Yaz-Log "UYARI: $bassiz ile $ne olusmadi (tarayici cikis kodu: $($p.ExitCode))."
     }
@@ -208,7 +220,7 @@ function Zebra-Is($is, $id, $yazici) {
         if ($n -lt $ZebraParcaBoy) { break }
     }
     if ($toplam -eq 0) { Bitti $id "hata" "Etiket goruntusu bos cikti"; Yaz-Log "HATA: goruntude etiket yok."; return }
-    Bitti $id "basildi" ""
+    Bitti $id "basildi" (Sure-Ozeti)
     Yaz-Log "Yaziciya gonderildi: $id (rulo etiket, $toplam adet)"
 }
 
@@ -217,6 +229,7 @@ function Bas($is) {
     $yazici = [string]$is.windowsAdi
     $bicim = [string]$is.bicim
     $pdf = Join-Path $IsKlasoru ($id + ".pdf")
+    $script:IsBas = Get-Date; $script:Sure = ""
     Yaz-Log "Is alindi: $id ($bicim) -> $yazici"
 
     if (-not (Yazici-Adlari | Where-Object { $_ -eq $yazici })) { Bitti $id "hata" "Yazici bu bilgisayarda bulunamadi: $yazici"; Yaz-Log "HATA: yazici yok: $yazici"; return }
@@ -250,11 +263,11 @@ function Bas($is) {
     if (-not $p.WaitForExit(120000)) { try { $p.Kill() } catch {}; Bitti $id "hata" "Yaziciya gonderme zaman asimina ugradi"; Yaz-Log "HATA: SumatraPDF zaman asimi."; return }
     if ($p.ExitCode -ne 0) { Bitti $id "hata" "Yazici isi kabul etmedi (kod $($p.ExitCode))"; Yaz-Log "HATA: SumatraPDF cikis kodu $($p.ExitCode)."; return }
 
-    Bitti $id "basildi" ""
+    Bitti $id "basildi" (Sure-Ozeti)
     Yaz-Log ("Yaziciya gonderildi: $id ($kagit) - yaziciya verme " + [Math]::Round(((Get-Date) - $yBas).TotalSeconds, 1) + " sn")
 }
 
-Yaz-Log "Baski programi basladi. Bilgisayar: $env:COMPUTERNAME, tarayici: $Tarayici"
+Yaz-Log "Baski programi basladi (surum $AjanSurum). Bilgisayar: $env:COMPUTERNAME, tarayici: $Tarayici"
 Yaz-Log ("Yazicilar: " + ((Yazici-Adlari) -join " | "))
 $hataSayisi = 0
 while ($true) {
