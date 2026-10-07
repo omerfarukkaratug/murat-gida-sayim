@@ -195,14 +195,15 @@
   .dar .aLogoKutu.sloganli .aLogo{height:9.2em;} .dar .aSlogan{font-size:2.6em;}
   .aBasKutu{flex:1; min-width:0; height:17em; display:flex; align-items:center; justify-content:flex-end;}
   .aBaslik{font-size:5.6em; background:#c8102e; color:#fff; font-weight:900; line-height:1; padding:.42em .7em; border-radius:.35em; letter-spacing:.02em; white-space:nowrap; display:inline-block;}
-  .aAd{height:34em; margin-top:3em; flex-shrink:0; display:flex; align-items:center;}
+  /* Yer daralınca (üst boşluk, uzun ad, çeşit listesi, indirim) ürün adı ve çeşitler küçülür; FİYAT alanı en az 26em kalır. */
+  .aAd{height:34em; margin-top:3em; flex-shrink:1; min-height:12em; display:flex; align-items:center;}
   .cesitli .aAd{height:24em;}
   /* Grup etiketinde kapsanan çeşitlerin küçük yazıyla listesi */
-  .aCesit{height:11em; margin-top:1em; flex-shrink:0;}
+  .aCesit{height:11em; margin-top:1em; flex-shrink:1; min-height:5em; overflow:hidden;}
   .aCesit .yazi{font-size:3.4em; display:block; line-height:1.28; font-weight:600; overflow-wrap:anywhere;}
   .aCesit b{font-weight:900;}
   .aAd .yazi{font-size:9.6em; display:block; width:100%; font-weight:900; line-height:1.08; text-transform:uppercase; overflow-wrap:anywhere;}
-  .aOrta{flex:1; display:flex; flex-direction:column; min-height:0; padding-top:1.5em;}
+  .aOrta{flex:1 1 0; display:flex; flex-direction:column; min-height:26em; padding-top:1.5em;}
   .aOnceki{font-size:6.4em; font-weight:800; display:flex; align-items:center; gap:.5em; margin-bottom:.25em;}
   .aOnceki .eski{text-decoration:line-through; text-decoration-thickness:.09em;}
   .aOnceki .oran{background:#000; color:#fff; padding:.08em .35em; border-radius:.2em; font-size:.8em;}
@@ -335,10 +336,11 @@
   .zTarih{text-align:right; white-space:nowrap; overflow:hidden; height:2.4em;}
   .zTarih span{font-size:1.75em;}
   .zSol{display:flex; flex-direction:column; justify-content:space-between; overflow:hidden;}
-  .zSol .barkod{width:100%; max-width:36em; height:8em;}
+  .zSol .barkod{width:100%; max-width:36em; height:8.6em; display:block;}
+  .zAltBlok{display:flex; align-items:flex-end; justify-content:space-between; gap:.6em;} .zAltSol{flex:1; min-width:0; display:flex; flex-direction:column; gap:.5em;}
   .zBrkSatir{display:flex; align-items:flex-start; justify-content:space-between; gap:.6em;}
   .qr{display:block;}
-  .zBrk{font-family:"Courier New", monospace; font-size:2.1em; letter-spacing:.14em; line-height:1.1;}
+  .zBrk{font-family:"Courier New", monospace; font-size:3em; font-weight:700; letter-spacing:.06em; line-height:1.05;}
   .zCesit{font-size:1.9em; font-weight:700; line-height:1.15; max-height:11em; overflow:hidden;}
   .zLogolar{display:flex; align-items:center; gap:2em; height:4.6em;}
   .zLogolar .yerli{height:4.4em; width:11.2em;}
@@ -2893,8 +2895,9 @@
     kod.forEach(function(k){ var g = C128[k]; for(var j = 0; j < g.length; j++) m += new Array(Number(g.charAt(j)) + 1).join(j % 2 === 0 ? '1' : '0'); });
     return { m: m, bos: 10 };
   }
-  function barkodSvg(b){
+  function barkodSvg(b, bosOz){
     var k = barkodModul(b); if(!k) return '';
+    if(bosOz !== undefined) k = { m: k.m, bos: bosOz };
     var d = '', i = 0, n = k.m.length;
     while(i < n){
       if(k.m.charAt(i) !== '1'){ i++; continue; }
@@ -2907,7 +2910,12 @@
   // Genişlik, modül başına tam 2 ya da 3 nokta olacak şekilde seçilir; sığmıyorsa eski davranış (kutuya yayılır).
   function zebraBarkod(b, enCokEm){
     var k = barkodModul(b), svg = barkodSvg(b); if(!k || !svg) return svg;
+    // Önce modül başına 3 nokta (0,375 mm — okuyucunun rahat okuduğu boy): sığması için boş kenar 2 modüle iner;
+    // etiketin kendi beyaz kenarı ve sarı kutuya kadarki boşluk okuyucu için yeterli boşluğu sağlar.
+    var dar = k.m.length + 4;
+    if(dar * 3 / 8 <= enCokEm) return barkodSvg(b, 2).replace('<svg class="barkod"', '<svg class="barkod" style="width:' + (dar * 3 / 8) + 'em; max-width:none;"');
     var n = k.m.length + 2 * k.bos, nokta = Math.min(3, Math.floor(enCokEm * 8 / n));
+    if(nokta < 2 && dar * 2 / 8 <= enCokEm) return barkodSvg(b, 2).replace('<svg class="barkod"', '<svg class="barkod" style="width:' + (dar * 2 / 8) + 'em; max-width:none;"');
     return nokta < 2 ? svg : svg.replace('<svg class="barkod"', '<svg class="barkod" style="width:' + (n * nokta / 8) + 'em; max-width:none;"');
   }
   function koliYazi(u){
@@ -2936,7 +2944,7 @@
     var bf = birimFiyat(u), bas = baslikMetni(u), onceki = sayi(u.onceki);
     var oran = (u.indirim && onceki > u.fiyat) ? Math.round((1 - u.fiyat / onceki) * 100) : 0;
     var bosluk = urunBosluk(u, f || durum.bicim) ? UST_BOSLUK_MM : 0;
-    var dar = (B.h - bosluk) / (B.w / 100) < 126;           // kullanılabilir yükseklik (em)
+    var dar = (B.h - bosluk) / (B.w / 100) < 132;           // kullanılabilir yükseklik (em)
     var cesit = cesitAdlari(u);
     return '<div class="sayfa' + (dar ? ' dar' : '') + (cesit.length ? ' cesitli' : '') + '" style="width:' + B.w + 'mm; height:' + B.h + 'mm; font-size:' + (B.w / 100) + 'mm; padding-top:' + bosluk + 'mm;">' + (bosluk ? KAT_CIZGI : '') + '<div class="afis">' +
       '<div class="aUst">' + ((durum.logo && magazaLogoVar)
@@ -3045,11 +3053,13 @@
         '<span>' + (u.indirim ? '<b>İNDİRİM</b> ' + tarihTr(u.tarih).slice(0, 5) + '–' + tarihTr(u.bitis) : 'Fiyat değişim tarihi: ' + tarihTr(u.tarih)) + '</span></div>' +
       '<div class="zSol" style="left:2em; top:' + solUst + 'em; width:' + solEn + 'em; height:' + Math.max(8, kullanH - solUst - 1) + 'em;">' +
         (cesit.length ? '<div class="zBrkSatir"><div class="zCesit" style="flex:1; min-width:0;">' + esc(cesit.join(' · ')) + '</div>' + zebraQr(u) + '</div>'
-          : (u.barkod ? '<div class="zBrkSatir"><div>' + zebraBarkod(u.barkod, solEn - zebraQrKenar(u)) + '<div class="zBrk">' + esc(u.barkod) + '</div></div>' + zebraQr(u) + '</div>' : '<div></div>')) +
+          : (u.barkod ? '<div>' + zebraBarkod(u.barkod, solEn) + '<div class="zBrk">' + esc(u.barkod) + '</div></div>' : '<div></div>')) +
+        '<div class="zAltBlok"><div class="zAltSol">' +
         '<div class="zLogolar">' + (yerli && yerliLogoVar ? '<img class="yerli" src="' + YERLI_LOGO + '" alt="">' : '') +
           (durum.logo && magazaLogoVar ? '<img class="zMagaza" src="' + MAGAZA_LOGO + '" alt="">' : '<span class="zMagazaYazi">' + esc(MAGAZA_ADI) + '</span>') + '</div>' +
         '<div class="zYer">' + (yerli ? 'Bu ürün Türkiye\'de üretilmiştir.' : 'Üretim yeri: ' + esc(String(u.yer || '').trim())) + '</div>' +
         '<div class="zAlt">' + (stokKodu(u) ? 'Stok kodu: ' + esc(stokKodu(u)) : (grupKodu(u) ? 'Etiket kodu: ' + grupKodYazi(grupKodu(u)) : '')) + (koliYazi(u) ? (stokKodu(u) ? ' · ' : '') + koliYazi(u) : '') + '</div>' +
+        '</div>' + (cesit.length ? '' : zebraQr(u)) + '</div>' +
       '</div>' +
       '<div class="zKutu' + (Z.cerceve ? ' cerceve' : '') + '" style="left:' + Z.kx + 'em; top:' + Z.ky + 'em; width:' + Z.kw + 'em; height:' + Z.kh + 'em;">' +
         (u.indirim && onceki > u.fiyat ? '<div class="zOnceki">' + para(onceki) + ' ₺</div>' : (bas ? '<div class="zBaslik">' + esc(bas) + '</div>' : '')) +
