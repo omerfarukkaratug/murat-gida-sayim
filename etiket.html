@@ -177,6 +177,7 @@
   .dizgi .parca{outline:.25mm dashed #999; outline-offset:-.125mm;}
   .dizgi .donuk{outline:.25mm dashed #999; outline-offset:-.125mm;}
   .donuk{box-sizing:border-box; background:#fff; color:#000; overflow:hidden; position:absolute; top:0; transform-origin:top left; transform:rotate(90deg); font-family:Arial, Helvetica, "Segoe UI", sans-serif;}
+  .donuk.orta{transform-origin:center;}
   .sayfa, .parca{box-sizing:border-box; background:#fff; color:#000; overflow:hidden; position:relative; font-family:Arial, Helvetica, "Segoe UI", sans-serif;}
   .sayfa *{box-sizing:border-box;}
 
@@ -260,9 +261,9 @@
   .kAfis.uc .kOrta{margin:2em 0 3em;} .kAfis.uc .kSag{gap:2em;} .kAfis.uc .kSatir{padding:1.2em 4em 1.6em;}
   .kAfis.uc .kSatir b{font-size:17em;} .kAfis.uc .kSatir.vurgu b{font-size:23em;} .kAfis.uc .kSatir span{font-size:5.8em;} .kAfis.uc .kKazanc{font-size:6.4em;}
   /* Dik koli afişi (A4 / A3): ad geniş, fiyat ortada büyük, karşılaştırma kutuları altta yan yana */
-  .kAfis.dik{padding:16em 18em 12em;} .kAfis.dik .kAlt{zoom:1.35;} .kAfis.dik .kBas{height:40em;} .kAfis.dik .kBas .aLogo{height:38em; width:56em;} .kAfis.dik .kTur{font-size:11em;}
-  .kAfis.dik .kDaire{top:12em; right:14em; width:84em; height:84em;} .kAfis.dik .kDaire b{font-size:34em;} .kAfis.dik .kDaire span{font-size:9.4em;}
-  .kAfis.dik .kAd{height:110em; margin-top:10em; padding-right:0;} .kAfis.dik .kCesit{height:26em; padding-right:0;}
+  .kAfis.dik{padding:16em 18em 12em;} .kAfis.dik .kAlt{zoom:1.35;} .kAfis.dik .kBas{height:80em; gap:12em;} .kAfis.dik .kBas .aLogo{height:74em; width:108em; max-width:none;} .kAfis.dik .kTur{font-size:14em;}
+  .kAfis.dik .kDaire{top:14em; right:16em; width:80em; height:80em;} .kAfis.dik .kDaire b{font-size:32em;} .kAfis.dik .kDaire span{font-size:8.8em;}
+  .kAfis.dik .kAd{height:92em; margin-top:8em; padding-right:0;} .kAfis.dik .kCesit{height:26em; padding-right:0;}
   .kAfis.dik .kOrta{flex-direction:column; gap:6em; margin:6em 0 8em;} .kAfis.dik .kSolEtk{font-size:14em;}
   .kAfis.dik .kSag{width:auto; flex-direction:row; flex-wrap:wrap; justify-content:center; align-items:stretch; gap:5em;}
   .kAfis.dik .kSatir{flex:1 1 0; min-width:0; justify-content:center; padding:3em 3em 3.5em;} .kAfis.dik .kSatir span{font-size:7.4em; text-align:center; line-height:1.15;}
@@ -3213,13 +3214,17 @@
       else if(durum.bicim === 'karma'){
         // Yarım sayfalık parçalar (A5, koli afişi) ve çeyrek sayfalık parçalar (A6, dökme kartı) satır satır dizilir;
         // her A4'e iki satır sığar. Dik A5 ve dökme kartı 90° çevrilerek yerine oturur.
-        var yarim = [], ceyrek = [], sar = function(h, gen, sol){ return '<div class="parca" style="width:' + gen + 'mm; height:148mm;">' + h.replace('<div class="sayfa', '<div class="donuk').replace('style="', 'style="left:' + sol + 'mm; ') + '</div>'; };
+        var yarim = [], ceyrek = [], sar = function(h, gen, iw, ih){
+          // Çevrilen parçanın (iw × ih mm) YERLEŞİM kutusu parçanın alt kenarını aşmamalı: aşarsa yazdırmada taşan kısım
+          // yeni bir sayfa açar (2 A5 basınca boş/bozuk 2. kâğıt). Kutu yukarı alınır, fark çevirmeyle birlikte geri kaydırılır.
+          var l = (ih - iw) / 2, t = (iw - ih) / 2, d = Math.max(0, t + ih - 148);
+          return '<div class="parca" style="width:' + gen + 'mm; height:148mm;">' + h.replace('<div class="sayfa', '<div class="donuk orta').replace('style="', 'style="left:' + l + 'mm; top:' + (t - d) + 'mm; transform:translateY(' + d + 'mm) rotate(90deg); ') + '</div>'; };
         et.forEach(function(u){
           var f = u.kBicim || urunBicim(u);
           if(f === 'a5y') yarim.push(koliAfisHtml(u).replace('<div class="sayfa', '<div class="parca'));
-          else if(f === 'a5k') yarim.push(sar(koliAfisHtml(u, 'a5k'), 210, 210));
-          else if(f === 'a5') yarim.push(sar(afisHtml(u, BICIM.a5, 'a5'), 210, 210));
-          else if(f === 'dokme') ceyrek.push(sar(dokmeHtml(u), 105, 105));
+          else if(f === 'a5k') yarim.push(sar(koliAfisHtml(u, 'a5k'), 210, 148, 210));
+          else if(f === 'a5') yarim.push(sar(afisHtml(u, BICIM.a5, 'a5'), 210, 148, 210));
+          else if(f === 'dokme') ceyrek.push(sar(dokmeHtml(u), 105, 132, 105));
           else ceyrek.push(afisHtml(u, BICIM.a6, 'a6').replace('<div class="sayfa', '<div class="parca'));
         });
         var satirK = yarim.slice();
