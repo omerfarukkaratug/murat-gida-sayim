@@ -21,7 +21,7 @@ $Sumatra       = Join-Path $Klasor "SumatraPDF.exe"
 $IsKlasoru     = Join-Path $Klasor "is"
 $Profil        = Join-Path $Klasor "tarayici-profil"
 $BeklemeSn     = 3      # iki sorgu arasi bekleme
-$AjanSurum     = "165"  # sunucuya bildirilir; uygulama eski programi uyarir
+$AjanSurum     = "166"  # sunucuya bildirilir; uygulama eski programi uyarir
 Add-Type -AssemblyName System.Drawing   # Zebra etiketi goruntu olarak basilir
 $ZebraParcaBoy = 40     # bir goruntudeki en fazla etiket (etiket.html PARCA_BOY ile ayni olmali)
 # Uygulamada GORUNMEYECEK yazicilar (sanal yazicilar)
@@ -147,6 +147,135 @@ function Tarayici-Calistir($ekArg, $cikti, $ne) {
     }
     return $false
 }
+# >>> HIZLI YOL: hazir bekleyen tarayici
+# Tarayici her is icin bastan acilmaz: program acilirken bir kez (gorunmez) baslatilir ve acik kalir.
+# Is gelince yeni bir sekmede etiket sayfasi acilir; isin verisi sayfaya dogrudan verilir (sayfa sunucuya
+# tekrar sormaz), sayfa hazir olunca goruntu / PDF yine bu baglantidan alinir. Bir sey ters giderse
+# program o is icin kendiliginden eski yola (tarayiciyi bastan acma) doner.
+$CdpPort = 9333
+$script:CdpNo = 0
+if (-not (Test-Path variable:TarayiciEk)) { $TarayiciEk = @() }   # yalnizca deneme ortami icin ek bayraklar
+function Cdp-Http($yol, $metot) {
+    $wc = New-Object System.Net.WebClient
+    $wc.Proxy = $null
+    $wc.Encoding = [Text.Encoding]::UTF8
+    try {
+        if ($metot -eq "PUT") { return $wc.UploadString("http://127.0.0.1:$CdpPort$yol", "PUT", "") }
+        return $wc.DownloadString("http://127.0.0.1:$CdpPort$yol")
+    } finally { $wc.Dispose() }
+}
+function Cdp-Hazir { try { [void](Cdp-Http "/json/version" "GET"); return $true } catch { return $false } }
+function Cdp-Baslat {
+    if (Cdp-Hazir) { return $true }
+    Eski-Tarayicilari-Kapat
+    $arg = @("--headless=new", "--remote-debugging-port=$CdpPort", "--remote-allow-origins=*", "--disable-gpu", "--no-first-run", "--do-not-de-elevate",
+             "--no-default-browser-check", "--disable-extensions", "--disable-sync", "--disable-component-update", "--hide-scrollbars",
+             "--force-device-scale-factor=1", "--disable-lcd-text", "--user-data-dir=$Profil") + $TarayiciEk + @("about:blank")
+    [void](Start-Process -FilePath $Tarayici -ArgumentList $arg -PassThru -WindowStyle Hidden)
+    for ($i = 0; $i -lt 80; $i++) { Start-Sleep -Milliseconds 250; if (Cdp-Hazir) { Yaz-Log "Tarayici hazir bekliyor (hizli yol)."; return $true } }
+    return $false
+}
+function Cdp-Kapat { Eski-Tarayicilari-Kapat }
+# Komutu gonderir, AYNI numarali yaniti bekler (aradaki olay bildirimleri atlanir). Yanit ham metin olarak doner.
+function Cdp-Gonder($ws, $metot, $param, $zamanSn) {
+    $script:CdpNo++
+    $no = $script:CdpNo
+    $govde = (@{ id = $no; method = $metot; params = $param } | ConvertTo-Json -Compress -Depth 8)
+    $bayt = [Text.Encoding]::UTF8.GetBytes($govde)
+    $seg = New-Object 'System.ArraySegment[byte]' -ArgumentList @(, $bayt)
+    [void]$ws.SendAsync($seg, [System.Net.WebSockets.WebSocketMessageType]::Text, $true, [Threading.CancellationToken]::None).GetAwaiter().GetResult()
+    $son = (Get-Date).AddSeconds($zamanSn)
+    $tampon = New-Object byte[] 262144
+    $tseg = New-Object 'System.ArraySegment[byte]' -ArgumentList @(, $tampon)
+    while ((Get-Date) -lt $son) {
+        $ms = New-Object System.IO.MemoryStream
+        do {
+            $kalan = [int](($son - (Get-Date)).TotalMilliseconds) + 500
+            $iptal = New-Object Threading.CancellationTokenSource
+            $iptal.CancelAfter($kalan)
+            $r = $ws.ReceiveAsync($tseg, $iptal.Token).GetAwaiter().GetResult()
+            $ms.Write($tampon, 0, $r.Count)
+        } while (-not $r.EndOfMessage)
+        $metin = [Text.Encoding]::UTF8.GetString($ms.ToArray())
+        $ms.Dispose()
+        $bas = $metin.Substring(0, [Math]::Min(40, $metin.Length))
+        if ($bas -match ('"id":' + $no + '[,}]')) { return $metin }
+    }
+    throw "tarayici yanit vermedi: $metot"
+}
+# Yanittaki "data" alanini (base64) dosyaya yazar. Buyuk yanit oldugu icin JSON cozucusu kullanilmaz.
+function Cdp-Dosya($metin, $cikti) {
+    $i = $metin.IndexOf('"data":"')
+    if ($i -lt 0) { throw ("tarayici cikti vermedi: " + $metin.Substring(0, [Math]::Min(200, $metin.Length))) }
+    $b = $i + 8; $s = $metin.IndexOf('"', $b)
+    [IO.File]::WriteAllBytes($cikti, [Convert]::FromBase64String($metin.Substring($b, $s - $b)))
+}
+# Sayfayi acar, hazir olmasini bekler, ciktiyi dosyaya yazar. $genPx > 0: etiket goruntusu (PNG); degilse PDF.
+# Donus: @{ durum = "ok"; adet = sayfadaki etiket/sayfa sayisi } ya da @{ durum = "hata"; mesaj = ... }
+function Cdp-Sayfa($url, $veriJson, $cikti, $genPx, $yukPx, $satirPx) {
+    $hedefMetin = $null
+    try { $hedefMetin = Cdp-Http "/json/new?about:blank" "PUT" } catch { $hedefMetin = Cdp-Http "/json/new?about:blank" "GET" }
+    $hedef = $hedefMetin | ConvertFrom-Json
+    $ws = New-Object System.Net.WebSockets.ClientWebSocket
+    try {
+        [void]$ws.ConnectAsync([Uri]$hedef.webSocketDebuggerUrl, [Threading.CancellationToken]::None).GetAwaiter().GetResult()
+        [void](Cdp-Gonder $ws "Page.enable" @{} 10)
+        [void](Cdp-Gonder $ws "Page.addScriptToEvaluateOnNewDocument" @{ source = ("window.MK_IS_VERI=" + $veriJson + ";") } 10)
+        if ($genPx -gt 0) { [void](Cdp-Gonder $ws "Emulation.setDeviceMetricsOverride" @{ width = [int]$genPx; height = [int]$yukPx; deviceScaleFactor = 1; mobile = $false } 10) }
+        [void](Cdp-Gonder $ws "Page.navigate" @{ url = $url } 30)
+        $baslik = ""; $adet = 0
+        $son = (Get-Date).AddSeconds(40)
+        while ((Get-Date) -lt $son) {
+            Start-Sleep -Milliseconds 120
+            $y = Cdp-Gonder $ws "Runtime.evaluate" @{ expression = "document.title + '|' + document.querySelectorAll('#baski .sayfa').length"; returnByValue = $true } 10
+            $deger = $null
+            try { $deger = [string](($y | ConvertFrom-Json).result.result.value) } catch { $deger = $null }
+            if (-not $deger) { continue }
+            if ($deger.StartsWith("HAZIR") -or $deger.StartsWith("HATA")) {
+                $k = $deger.LastIndexOf("|")
+                $baslik = $deger.Substring(0, $k); $adet = [int]$deger.Substring($k + 1)
+                break
+            }
+        }
+        if (-not $baslik) { throw "sayfa 40 saniyede hazir olmadi" }
+        if ($baslik.StartsWith("HATA")) { return @{ durum = "hata"; mesaj = $baslik.Substring(4).Trim() } }
+        if ($genPx -gt 0) {
+            if ($adet -gt 0) {
+                $y = Cdp-Gonder $ws "Page.captureScreenshot" @{ format = "png"; captureBeyondViewport = $true; clip = @{ x = 0; y = 0; width = [int]$genPx; height = [int]($adet * $satirPx); scale = 1 } } 60
+                Cdp-Dosya $y $cikti
+            }
+        } else {
+            $y = Cdp-Gonder $ws "Page.printToPDF" @{ printBackground = $true; preferCSSPageSize = $true; displayHeaderFooter = $false; marginTop = 0; marginBottom = 0; marginLeft = 0; marginRight = 0 } 90
+            Cdp-Dosya $y $cikti
+        }
+        return @{ durum = "ok"; adet = $adet }
+    } finally {
+        try { $ws.Dispose() } catch {}
+        try { [void](Cdp-Http ("/json/close/" + $hedef.id) "GET") } catch {}
+    }
+}
+# Is icin sayfayi hizli yoldan hazirlar. Donus durumu: "ok" (dosya yazildi), "hata" (sayfa isi reddetti), "yok" (hizli yol kullanilamadi).
+function Hizli-Sayfa($is, $id, $cikti, $parca, $genPx, $yukPx) {
+    if (-not $is.veri) { return @{ durum = "yok" } }
+    $bas = Get-Date
+    try {
+        if (Test-Path $cikti) { Remove-Item $cikti -Force }
+        if (-not (Cdp-Baslat)) { throw "tarayici baslatilamadi" }
+        $url = $SayfaUrl + "?is=" + $id + "&anahtar=" + [uri]::EscapeDataString($Anahtar)
+        if ($parca -ge 0) { $url += "&goruntu=1&parca=" + $parca }
+        $url += "&t=" + (Get-Date).Ticks
+        $s = Cdp-Sayfa $url ([string]$is.veri) $cikti $genPx $yukPx ([int]($yukPx / $ZebraParcaBoy))
+        $sn = [Math]::Round(((Get-Date) - $bas).TotalSeconds, 1)
+        if ($s.durum -eq "ok") { Yaz-Log "Sayfa hazir (hizli yol): $sn sn"; $script:Sure += "sayfa $sn sn (hizli yol); " }
+        return $s
+    } catch {
+        Yaz-Log "UYARI: hizli yol calismadi, eski yola geciliyor: $($_.Exception.Message)"
+        try { Cdp-Kapat } catch {}
+        return @{ durum = "yok" }
+    }
+}
+# <<< HIZLI YOL
+
 function Pdf-Uret($id, $pdf) {
     $url = $SayfaUrl + "?is=" + $id + "&anahtar=" + [uri]::EscapeDataString($Anahtar) + "&t=" + (Get-Date).Ticks
     return (Tarayici-Calistir @("--no-pdf-header-footer", "--print-to-pdf-no-header", "--print-to-pdf=$pdf", "`"$url`"") $pdf "PDF")
@@ -201,9 +330,16 @@ function Zebra-Is($is, $id, $yazici) {
     $w = 80.0; $h = 34.0
     try { if ($is.ayar -and $is.ayar.zebra) { if ([double]$is.ayar.zebra.w -gt 0) { $w = [double]$is.ayar.zebra.w }; if ([double]$is.ayar.zebra.h -gt 0) { $h = [double]$is.ayar.zebra.h } } } catch {}
     $genPx = [int]($w * 8); $yukPx = [int]($h * 8) * $ZebraParcaBoy
-    $toplam = 0
+    $toplam = 0; $hizli = $true
     for ($parca = 0; $parca -lt 50; $parca++) {
         $png = Join-Path $IsKlasoru ($id + "-" + $parca + ".png")
+        $hz = @{ durum = "yok" }
+        if ($hizli) { $hz = Hizli-Sayfa $is $id $png $parca $genPx $yukPx }
+        if ($hz.durum -eq "hata") { Bitti $id "hata" $hz.mesaj; Yaz-Log "Is basilmadi: sayfa hata bildirdi: $($hz.mesaj)"; return }
+        if ($hz.durum -eq "ok") {
+            if ($hz.adet -eq 0) { break }      # bu parcada etiket yok
+        } else {
+        $hizli = $false
         if (-not (Goruntu-Uret $id $png $parca $genPx $yukPx)) { Bitti $id "hata" "Etiket sayfasi hazirlanamadi (tarayici/Internet)"; Yaz-Log "HATA: goruntu uretilemedi."; return }
         if ($parca -eq 0) {
             # Sunucuya ulasilamazsa is "basiliyor"da takili kalmasin: uc kez denenir, olmazsa hata olarak bildirilir.
@@ -213,6 +349,7 @@ function Zebra-Is($is, $id, $yazici) {
             }
             if (-not $k) { Yaz-Log "HATA: basmadan onceki kontrol icin sunucuya ulasilamadi."; Bitti $id "hata" "Baski programi sunucuya ulasamadi - yeniden gonder"; return }
             if ($k.status -ne "ok") { Yaz-Log "Is basilmadi: sayfa hata bildirdi ya da is iptal edildi."; return }
+        }
         }
         try { $n = [int](Zebra-Bas $png $yazici $w $h) }
         catch { Bitti $id "hata" ("Yazici isi kabul etmedi: " + $_.Exception.Message); Yaz-Log "HATA: Zebra baski: $($_.Exception.Message)"; return }
@@ -236,6 +373,9 @@ function Bas($is) {
     $wd = (Yazici-Durumlari)[$yazici]
     if ($wd) { Yaz-Log "UYARI: Windows bu yaziciyi '$wd' gosteriyor: $yazici (is yine de gonderiliyor)" }
     if ($bicim -eq "zebra") { Zebra-Is $is $id $yazici; return }
+    $hz = Hizli-Sayfa $is $id $pdf -1 0 0
+    if ($hz.durum -eq "hata") { Bitti $id "hata" $hz.mesaj; Yaz-Log "Is basilmadi: sayfa hata bildirdi: $($hz.mesaj)"; return }
+    if ($hz.durum -ne "ok") {
     if (-not (Pdf-Uret $id $pdf)) { Bitti $id "hata" "Etiket sayfasi hazirlanamadi (tarayici/Internet)"; Yaz-Log "HATA: PDF uretilemedi."; return }
 
     # Sayfa etiketleri cizemediyse isi kendisi "hata" yapar; o zaman bos kagit basilmaz.
@@ -246,6 +386,8 @@ function Bas($is) {
     }
     if (-not $k) { Yaz-Log "HATA: basmadan onceki kontrol icin sunucuya ulasilamadi."; Bitti $id "hata" "Baski programi sunucuya ulasamadi - yeniden gonder"; return }
     if ($k.status -ne "ok") { Yaz-Log "Is basilmadi: sayfa hata bildirdi ya da is iptal edildi."; return }
+
+    }
 
     # Kagit: A6/A5 afisler A4'e dizili gelir (a4diz); dizili A5 de dik A4 sayfadir.
     $dizili = $false
@@ -269,6 +411,7 @@ function Bas($is) {
 
 Yaz-Log "Baski programi basladi (surum $AjanSurum). Bilgisayar: $env:COMPUTERNAME, tarayici: $Tarayici"
 Yaz-Log ("Yazicilar: " + ((Yazici-Adlari) -join " | "))
+try { [void](Cdp-Baslat) } catch { Yaz-Log "UYARI: tarayici onceden baslatilamadi: $($_.Exception.Message)" }
 $hataSayisi = 0
 while ($true) {
     try {
