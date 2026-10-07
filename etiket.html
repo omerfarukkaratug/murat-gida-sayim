@@ -259,6 +259,15 @@
   .kAfis.sik .kSatir b{font-size:20em;} .kAfis.sik .kSatir.vurgu b{font-size:26em;} .kAfis.sik .kSatir span{font-size:6.6em;} .kAfis.sik .kKazanc{font-size:7em;}
   .kAfis.uc .kOrta{margin:2em 0 3em;} .kAfis.uc .kSag{gap:2em;} .kAfis.uc .kSatir{padding:1.2em 4em 1.6em;}
   .kAfis.uc .kSatir b{font-size:17em;} .kAfis.uc .kSatir.vurgu b{font-size:23em;} .kAfis.uc .kSatir span{font-size:5.8em;} .kAfis.uc .kKazanc{font-size:6.4em;}
+  /* Dik koli afişi (A4 / A3): ad geniş, fiyat ortada büyük, karşılaştırma kutuları altta yan yana */
+  .kAfis.dik{padding:16em 18em 12em;} .kAfis.dik .kAlt{zoom:1.35;} .kAfis.dik .kBas{height:40em;} .kAfis.dik .kBas .aLogo{height:38em; width:56em;} .kAfis.dik .kTur{font-size:11em;}
+  .kAfis.dik .kDaire{top:12em; right:14em; width:84em; height:84em;} .kAfis.dik .kDaire b{font-size:34em;} .kAfis.dik .kDaire span{font-size:9.4em;}
+  .kAfis.dik .kAd{height:110em; margin-top:10em; padding-right:0;} .kAfis.dik .kCesit{height:26em; padding-right:0;}
+  .kAfis.dik .kOrta{flex-direction:column; gap:6em; margin:6em 0 8em;} .kAfis.dik .kSolEtk{font-size:14em;}
+  .kAfis.dik .kSag{width:auto; flex-direction:row; flex-wrap:wrap; justify-content:center; align-items:stretch; gap:5em;}
+  .kAfis.dik .kSatir{flex:1 1 0; min-width:0; justify-content:center; padding:3em 3em 3.5em;} .kAfis.dik .kSatir span{font-size:7.4em; text-align:center; line-height:1.15;}
+  .kAfis.dik .kSatir b{font-size:30em;} .kAfis.dik .kSatir.vurgu b{font-size:38em;} .kAfis.dik .kKazanc{width:100%; font-size:10em;}
+  .kAfis.dik.uc .kSatir b{font-size:21em;} .kAfis.dik.uc .kSatir.vurgu b{font-size:27em;} .kAfis.dik.uc .kSatir span{font-size:5.4em;} .kAfis.dik.uc .kSag{gap:3em;} .kAfis.dik.uc .kSatir{padding:2.4em 2em 3em;}
   .kAfis.sik .kCesit{height:12em;} .kAfis.sik .kSolEtk{font-size:9.4em;}
   .kCesit{height:17em; flex-shrink:0; overflow:hidden; padding-right:74em;} .kAfis.duz .kCesit{padding-right:0;}
   .kCesit .yazi{display:block; font-weight:600; line-height:1.2;}
@@ -593,8 +602,8 @@
     zebra: { ad: 'Zebra etiket', w: 80, h: 34, kagit: 'rulo etiket', aciklama: 'Zebra (termal) yazıcıda rulo etikete tek tek basılır. Fiyat, ruloda hazır basılı sarı kutunun içine oturur. Ölçüleri aşağıdan ayarla; ilk seferde "deneme çerçevesi" ile bir etiket basıp sarı kutuya oturduğunu kontrol et.' },
     a6:  { ad: 'A6 afiş', w: 105, h: 148, kagit: 'A6', aciklama: 'Her ürün bir A6 sayfa (105 × 148 mm). Yazıcıya A6 kâğıt koy ve yazdırma penceresinde A6 seç.' },
     a5:  { ad: 'A5 afiş', w: 148, h: 210, kagit: 'A5', aciklama: 'Her ürün bir A5 sayfa (148 × 210 mm). Yazıcıya A5 kâğıt koy ve yazdırma penceresinde A5 seç.' },
-    a4k: { ad: 'A4 yatay koli afişi', w: 210, h: 297, kagit: 'A4', aciklama: 'Koli / paket fiyatlı ya da belli adette indirimli ürün için büyük afiş: tek adet fiyatı, koli fiyatı ve kolide adet fiyatı. A4 kâğıda yatay basılır.' },
-    a3k: { ad: 'A3 yatay koli afişi', w: 297, h: 420, kagit: 'A3', aciklama: 'Koli / paket fiyatlı ya da belli adette indirimli ürün için en büyük afiş. A3 kâğıda yatay basılır.' },
+    a4k: { ad: 'A4 koli afişi', w: 210, h: 297, kagit: 'A4', aciklama: 'Koli / paket fiyatlı ya da belli adette indirimli ürün için büyük afiş: tek adet fiyatı, koli fiyatı ve kolide adet fiyatı. A4 kâğıda dik basılır.' },
+    a3k: { ad: 'A3 koli afişi', w: 297, h: 420, kagit: 'A3', aciklama: 'Koli / paket fiyatlı ya da belli adette indirimli ürün için en büyük afiş. A3 kâğıda dik basılır.' },
     a5y: { ad: 'A5 yatay koli afişi', w: 210, h: 148, kagit: 'A5', aciklama: 'Koli fiyatlı afiş: tek adet fiyatı, koli fiyatı ve kolide adet fiyatı. Bir A4 kâğıda alt alta 2 tane basılır.' },
     a4b: { ad: 'A4 boy listesi', w: 210, h: 297, kagit: 'A4', aciklama: 'Aynı ürünün farklı boyları tek A4 afişte, her boy kendi fiyatıyla (ör. yumurta 30\'lu / 15\'li). Fiyatlar katalogdan gelir.' },
     karma: { ad: 'A4 · karışık dizgi (A6 + A5)', w: 210, h: 297, kagit: 'A4', aciklama: 'Kâğıt tasarrufu: A6, A5, koli afişi ve dökme kartları aynı A4 kâğıtlara sığdırılır; basınca kesik çizgiden kesilir.' },
@@ -662,7 +671,7 @@
   // ---------- Ürün bazında biçim (build 140) ----------
   // Her ürünün kendi biçimi vardır (Zebra etiket ya da bir afiş boyu). Yazdırma biçime göre gruplanır;
   // basılan ürün "basıldı" işaretlenir ve bir daha gönderilmez (kartındaki "tekrar bas" ile geri alınır).
-  var BICIM_SIRA = ['zebra', 'a6', 'dokme', 'a5', 'a5y', 'a4', 'a4b', 'a4k', 'a3', 'a3k', 'raf'], BICIM_KISA = { zebra: 'Zebra', a6: 'A6', dokme: 'A6 · dökme', a5: 'A5', a5y: 'A5 yatay · koli', a4k: 'A4 yatay · koli', a3k: 'A3 yatay · koli', a4: 'A4', a4b: 'A4 · boy listesi', a3: 'A3', raf: 'Raf' };
+  var BICIM_SIRA = ['zebra', 'a6', 'dokme', 'a5', 'a5y', 'a4', 'a4b', 'a4k', 'a3', 'a3k', 'raf'], BICIM_KISA = { zebra: 'Zebra', a6: 'A6', dokme: 'A6 · dökme', a5: 'A5', a5y: 'A5 yatay · koli', a4k: 'A4 · koli', a3k: 'A3 · koli', a4: 'A4', a4b: 'A4 · boy listesi', a3: 'A3', raf: 'Raf' };
   function yaziciBicim(f){ return f === 'a3k' ? 'a3' : f === 'a5y' ? 'a5' : (f === 'a4b' || f === 'a4k' || f === 'dokme' || f === 'karma') ? 'a4' : f; }
   // Karışık dizgi: A4'ten küçük afişler aynı A4 kâğıtlarda birleştirilir (kâğıt israfı olmasın).
   var KARMA = { a6: 1, a5: 1, a5y: 1, dokme: 1 }, YAZDIR_SIRA = BICIM_SIRA.concat(['karma']);
@@ -1508,7 +1517,7 @@
   }
   // Biçim seçimi iki basamak: önce KÂĞIT (Etiket ayrı renkte; sonra A6 A5 A4 A3), altında o kâğıdın TASLAKLARI.
   var KAGIT = { zebra: 'etiket', raf: 'etiket', a6: 'a6', dokme: 'a6', a5: 'a5', a5y: 'a5', a4: 'a4', a4b: 'a4', a4k: 'a4', a3: 'a3', a3k: 'a3' };
-  var TASLAK = { etiket: [['zebra', 'Zebra rulo'], ['raf', 'Raf (A4 yaprak)']], a6: [['a6', 'Standart'], ['dokme', 'Dökme kartı']], a5: [['a5', 'Standart'], ['a5y', 'Koli fiyatı (yatay)']], a4: [['a4', 'Standart'], ['a4b', 'Boy listesi (30\'lu / 15\'li)'], ['a4k', 'Koli fiyatı (yatay)']], a3: [['a3', 'Standart'], ['a3k', 'Koli fiyatı (yatay)']] };
+  var TASLAK = { etiket: [['zebra', 'Zebra rulo'], ['raf', 'Raf (A4 yaprak)']], a6: [['a6', 'Standart'], ['dokme', 'Dökme kartı']], a5: [['a5', 'Standart'], ['a5y', 'Koli fiyatı (yatay)']], a4: [['a4', 'Standart'], ['a4b', 'Boy listesi (30\'lu / 15\'li)'], ['a4k', 'Koli fiyatı']], a3: [['a3', 'Standart'], ['a3k', 'Koli fiyatı']] };
   function bicimSecHtml(u){
     var f = urunBicim(u), kg = KAGIT[f];
     var uygun = function(x){ return (x === 'a5y' || x === 'a4k' || x === 'a3k') ? !!koliTeklif(u) : x === 'a4b' ? (!u.grup && !u.elle && !!u.barkod) : (x !== 'raf' || f === 'raf'); };
@@ -3035,18 +3044,19 @@
   // hesaplanır (yüzde aşağı yuvarlanır). Siyah-beyazdır ve "indirim" sözü KULLANILMAZ: indirimli satış iddiası
   // önceki fiyat ve tarih göstermeyi gerektirir; burada yalnızca aynı afişteki iki adet fiyatı karşılaştırılır.
   function koliAfisHtml(u, f){
-    f = f || 'a5y';                               // 'a4k': aynı afiş A4 yatay boyda (1,414 kat)
-    var kb = f === 'a3k' ? { w: 420, h: 297, em: 1 } : f === 'a4k' ? { w: 297, h: 210, em: 0.70711 } : { w: 210, h: 148, em: 0.5 }, ub = urunBosluk(u, f) ? UST_BOSLUK_MM : 0;
+    f = f || 'a5y';                               // 'a4k' / 'a3k': aynı içerik, DİK sayfada (fiyat üstte, karşılaştırma kutuları altta yan yana)
+    var dik = f === 'a4k' || f === 'a3k';
+    var kb = f === 'a3k' ? { w: 297, h: 420, em: 0.70711 } : f === 'a4k' ? { w: 210, h: 297, em: 0.5 } : { w: 210, h: 148, em: 0.5 }, ub = urunBosluk(u, f) ? UST_BOSLUK_MM : 0;
     var kt = koliTeklif(u) || { n: 0, ad: 'Koli', fiyat: NaN, adet: NaN }, bfm = birimFiyatMetni(u, ' / '), tek = sayi(u.fiyat);
     var yuzde = Math.floor((1 - kt.adet / tek) * 100 + 1e-6), kazanc = Math.round((tek * kt.n - kt.fiyat) * 100) / 100, AD = esc(kt.ad.toLocaleUpperCase('tr-TR'));
     var satir = function(etk, f, sinif){ return '<div class="kSatir' + (sinif ? ' ' + sinif : '') + '"><span>' + etk + '</span><b>' + para(f) + '<i>₺</i></b></div>'; };
-    return '<div class="sayfa" style="width:' + kb.w + 'mm; height:' + kb.h + 'mm; font-size:' + kb.em + 'mm; padding-top:' + ub + 'mm;">' + (ub ? KAT_CIZGI : '') + '<div class="kAfis' + (yuzde >= 1 ? '' : ' duz') + (ub && f === 'a5y' ? ' sik' : '') + (kt.diger ? ' uc' : '') + '">' +
+    return '<div class="sayfa" style="width:' + kb.w + 'mm; height:' + kb.h + 'mm; font-size:' + kb.em + 'mm; padding-top:' + ub + 'mm;">' + (ub ? KAT_CIZGI : '') + '<div class="kAfis' + (yuzde >= 1 ? '' : ' duz') + (ub && f === 'a5y' ? ' sik' : '') + (kt.diger ? ' uc' : '') + (dik ? ' dik' : '') + '">' +
       '<div class="kBas">' + (durum.logo && magazaLogoVar ? '<img class="aLogo" src="' + MAGAZA_LOGO + '" alt="">' : '') + '<div class="kTur">' + AD + ' FİYATI</div></div>' +
       (yuzde >= 1 ? '<div class="kDaire"><b>%' + yuzde + '</b><span>' + AD + 'DE<br>DAHA UCUZ</span></div>' : '') +
-      '<div class="kAd sig" data-em="24" data-min="10"><span class="yazi">' + adHtml(u) + '</span></div>' +
-      (cesitAdlari(u).length ? '<div class="kCesit sig" data-em="6.4" data-min="3.6"><span class="yazi"><b>Çeşitler:</b> ' + cesitAdlari(u).map(esc).join(' · ') + '</span></div>' : '') +
+      '<div class="kAd sig" data-em="' + (dik ? 34 : 24) + '" data-min="10"><span class="yazi">' + adHtml(u) + '</span></div>' +
+      (cesitAdlari(u).length ? '<div class="kCesit sig data-em="6.4" data-min="3.6"><span class="yazi"><b>Çeşitler:</b> ' + cesitAdlari(u).map(esc).join(' · ') + '</span></div>' : '') +
       '<div class="kOrta"><div class="kSol"><div class="kSolEtk">' + kt.n + ' ADETLİ ' + AD + '<small>KDV dâhil</small></div>' +
-          '<div class="kFiyatKutu sig" data-em="120" data-min="40"><span class="kFiyat yazi">' + fiyatHtml(kt.fiyat) + '</span></div></div>' +
+          '<div class="kFiyatKutu sig" data-em="' + (dik ? 150 : 120) + '" data-min="40"><span class="kFiyat yazi">' + fiyatHtml(kt.fiyat) + '</span></div></div>' +
         '<div class="kSag">' + satir('TEK ALIRSAN ADEDİ', tek, '') + satir((kt.diger ? kt.n + ' ADET ' : AD + ' ') + 'ALIRSAN ADEDİ', kt.adet, 'vurgu') +
           (kt.diger ? satir(kt.diger.n + ' ADETLİ ' + esc(kt.diger.ad.toLocaleUpperCase('tr-TR')) + ': ' + para(kt.diger.fiyat) + ' ₺ · ADEDİ', kt.diger.adet, '') : '') +
           (kazanc > 0 ? '<div class="kKazanc">Tek tek almaya göre ' + para(kazanc) + ' ₺ ucuz</div>' : '') + '</div></div>' +
@@ -3220,8 +3230,7 @@
           else html += '<div class="sayfa" style="width:210mm; height:297mm;"><div class="dizgi" style="width:297mm; height:210mm; position:absolute; top:0; left:210mm; transform-origin:top left; transform:rotate(90deg);">' + ic + '</div></div>';
         }
       } else if(durum.bicim === 'a4k' || durum.bicim === 'a3k'){
-        // Yatay A4 afiş, dik A4 sayfanın içinde 90° çevrilmiş basılır (yazıcı sürücüsü "yatık" isteğini uygulamayabiliyor).
-        html = et.map(function(u){ return '<div class="sayfa" style="width:' + B.w + 'mm; height:' + B.h + 'mm;">' + koliAfisHtml(u, durum.bicim).replace('<div class="sayfa', '<div class="donuk').replace('style="', 'style="left:' + B.w + 'mm; ') + '</div>'; }).join('');
+        html = et.map(function(u){ return koliAfisHtml(u, durum.bicim); }).join('');
       } else html = et.map(function(u){ return durum.bicim === 'a4b' ? afisBoyHtml(u) : afisHtml(u, B); }).join('');
     }
     var baski = $('baski');
