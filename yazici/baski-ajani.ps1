@@ -21,7 +21,7 @@ $Sumatra       = Join-Path $Klasor "SumatraPDF.exe"
 $IsKlasoru     = Join-Path $Klasor "is"
 $Profil        = Join-Path $Klasor "tarayici-profil"
 $BeklemeSn     = 3      # iki sorgu arasi bekleme
-$AjanSurum     = "166"  # sunucuya bildirilir; uygulama eski programi uyarir
+$AjanSurum     = "167"  # sunucuya bildirilir; uygulama eski programi uyarir
 Add-Type -AssemblyName System.Drawing   # Zebra etiketi goruntu olarak basilir
 $ZebraParcaBoy = 40     # bir goruntudeki en fazla etiket (etiket.html PARCA_BOY ile ayni olmali)
 # Uygulamada GORUNMEYECEK yazicilar (sanal yazicilar)
@@ -96,6 +96,26 @@ function Sure-Ozeti {
     $o = "Bilgisayarda $t sn: " + $script:Sure + "gerisi sunucu sorgulari ve yazici"
     Yaz-Log "Sure: $o"
     return $o
+}
+
+# Windows yazici kuyrugu: "yaziciya verildi" demek isin Windows'a teslim edildigi demektir; kagida cikip cikmadigini
+# buradan anlamaya calisiriz. Is kuyrukta hata / cevrimdisi / kagit yok durumunda bekliyorsa telefona yazilir.
+function Kuyruk-Say($yazici) { try { return @(Get-PrintJob -PrinterName $yazici -ErrorAction Stop).Count } catch { return -1 } }
+function Kuyruk-Izle($yazici, $once) {
+    if ($once -lt 0) { return "kuyruk okunamadi" }
+    $gorulen = $false; $durum = ""; $n = 0
+    for ($i = 0; $i -lt 4; $i++) {
+        $isler = $null
+        try { $isler = @(Get-PrintJob -PrinterName $yazici -ErrorAction Stop) } catch { return "kuyruk okunamadi" }
+        $n = $isler.Count
+        if ($n -gt 0) { $gorulen = $true; $durum = (($isler | ForEach-Object { [string]$_.JobStatus } | Select-Object -Unique) -join "; ") }
+        if ($durum -match 'Error|Offline|PaperOut|Blocked|UserIntervention|Paused') { return "DIKKAT: is yazici kuyrugunda takili ($durum) - yaziciya bak" }
+        if ($gorulen -and $n -eq 0) { return "yazici isi aldi" }
+        Start-Sleep -Milliseconds 400
+    }
+    if ($n -gt 0) { return "is yazici kuyrugunda ($n is; $durum)" }
+    if ($gorulen) { return "yazici isi aldi" }
+    return "DIKKAT: yazici kuyrugunda is gorulmedi - kagit cikmadiysa yaziciyi ve secili yaziciyi kontrol et"
 }
 
 function Bitti($id, $durum, $mesaj) {
@@ -400,12 +420,17 @@ function Bas($is) {
     # Zebra (rulo etiket): kagit boyutu yazicinin kendi ayarindan gelir, yalnizca olcek korunur.
     if ($bicim -eq "zebra") { $ayar = "noscale"; $kagit = "rulo etiket" }
 
+    $pdfKb = 0; try { $pdfKb = [Math]::Round((Get-Item $pdf).Length / 1KB) } catch {}
+    if ($pdfKb -lt 1) { Bitti $id "hata" "Etiket dosyasi bos olustu - yeniden gonder"; Yaz-Log "HATA: PDF bos ($pdf)."; return }
+    $kOnce = Kuyruk-Say $yazici
     $yBas = Get-Date
     $p = Start-Process -FilePath $Sumatra -ArgumentList @("-print-to", "`"$yazici`"", "-print-settings", "`"$ayar`"", "-silent", "`"$pdf`"") -PassThru -WindowStyle Hidden
     if (-not $p.WaitForExit(120000)) { try { $p.Kill() } catch {}; Bitti $id "hata" "Yaziciya gonderme zaman asimina ugradi"; Yaz-Log "HATA: SumatraPDF zaman asimi."; return }
     if ($p.ExitCode -ne 0) { Bitti $id "hata" "Yazici isi kabul etmedi (kod $($p.ExitCode))"; Yaz-Log "HATA: SumatraPDF cikis kodu $($p.ExitCode)."; return }
 
-    Bitti $id "basildi" (Sure-Ozeti)
+    $kNot = Kuyruk-Izle $yazici $kOnce
+    Yaz-Log "Yazici kuyrugu: $kNot (PDF $pdfKb KB)"
+    Bitti $id "basildi" ((Sure-Ozeti) + " | " + $kNot)
     Yaz-Log ("Yaziciya gonderildi: $id ($kagit) - yaziciya verme " + [Math]::Round(((Get-Date) - $yBas).TotalSeconds, 1) + " sn")
 }
 
