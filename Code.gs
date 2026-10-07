@@ -8,7 +8,7 @@
 // bir sürüm dağıttıktan sonra /exec adresini boş açtığında burada yazan
 // numarayı görmelisin; index.html'in üstündeki "build" numarasıyla
 // eşleşecek şekilde ben her ikisini birlikte güncelliyorum.
-var GS_VERSION = 'build161';
+var GS_VERSION = 'build167';
 
 // Sheets'te "Saat" sütunu zaman biçimli olarak algılanırsa, hücre değeri düz
 // metin değil bir Date nesnesi olarak gelir ve String(...) çirkin bir çıktı
@@ -902,7 +902,7 @@ function baskiAjanAl(bilgisayar, yazicilarJson, callback, durumlarJson, surum) {
       var kimlik = pc + '|' + wad, sat = -1;
       for (var i = 0; i < yr.length; i++) if (String(yr[i][0]) === kimlik) { sat = i; break; }
       if (sat === -1) { yr.push([kimlik, wad, pc, wad, 'otomatik', simdi]); ysheet.getRange(yr.length + 1, 1, 1, 6).setValues([yr[yr.length - 1]]); }
-      else ysheet.getRange(sat + 2, 6).setValue(simdi);
+      else if (simdi - (Number(yr[sat][5]) || 0) > 60000) ysheet.getRange(sat + 2, 6).setValue(simdi);   // nabız önbellekte; sayfaya dakikada bir yazmak yeter (her sorguda yazmak sorguyu yavaşlatıyordu)
       benim[kimlik] = wad;
     });
     var isheet = baskiSayfa(BASKI_IS_SEKME, BASKI_IS_BASLIK), ir = baskiSatirlar(isheet, 10);
@@ -910,8 +910,9 @@ function baskiAjanAl(bilgisayar, yazicilarJson, callback, durumlarJson, surum) {
     for (var j = 0; j < ir.length; j++) {
       if (String(ir[j][6]) !== 'bekliyor' || !benim[String(ir[j][3])]) continue;
       isheet.getRange(j + 2, 7, 1, 3).setNumberFormat('@').setValues([['basiliyor', '', baskiZaman()]]);
-      var ayar = {}; try { ayar = (JSON.parse(String(ir[j][9])) || {}).ayar || {}; } catch (pe) { ayar = {}; }
-      return outJson({ status: 'ok', is: { id: String(ir[j][0]), windowsAdi: benim[String(ir[j][3])], bicim: String(ir[j][4]), ayar: ayar } }, callback);
+      // İşin verisi de aynı yanıtla gider (veri): baskı programı sayfaya doğrudan verir, sayfa sunucuya ikinci kez sormaz.
+      var ayar = {}, veri = ''; try { var hv = JSON.parse(String(ir[j][9])) || {}; ayar = hv.ayar || {}; veri = JSON.stringify({ status: 'ok', liste: hv.liste || [], ayar: ayar }); } catch (pe) { ayar = {}; veri = ''; }
+      return outJson({ status: 'ok', is: { id: String(ir[j][0]), windowsAdi: benim[String(ir[j][3])], bicim: String(ir[j][4]), ayar: ayar, veri: veri } }, callback);
     }
     return outJson({ status: 'ok', is: null }, callback);
   } finally { lock.releaseLock(); }
