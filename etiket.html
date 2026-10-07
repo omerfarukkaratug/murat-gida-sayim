@@ -173,6 +173,7 @@
      tasarım A5, A4 ve A3'te birebir aynı oranla büyür/küçülür. */
   #baski{position:absolute; left:-20000px; top:0;}
   .dizgi{display:flex; flex-wrap:wrap; align-content:flex-start;}
+  .katCizgi{position:absolute; left:0; right:0; top:20mm; height:0; border-top:.12mm solid #9a9a9a; z-index:2;}
   .dizgi .parca{outline:.25mm dashed #999; outline-offset:-.125mm;}
   .dizgi .donuk{outline:.25mm dashed #999; outline-offset:-.125mm;}
   .donuk{box-sizing:border-box; background:#fff; color:#000; overflow:hidden; position:absolute; top:0; transform-origin:top left; transform:rotate(90deg); font-family:Arial, Helvetica, "Segoe UI", sans-serif;}
@@ -673,6 +674,8 @@
   if(durum.slogan === undefined) durum.slogan = "1987'den beri";  // logonun altındaki yazı
   if(durum.bosluk === undefined) durum.bosluk = true;   // A6/A5'te üstte 2 cm boşluk
   var UST_BOSLUK_MM = 20;
+  // Üst boşluğun bittiği yerde çok ince bir çizgi: personel kâğıdı oradan düz katlar.
+  var KAT_CIZGI = '<i class="katCizgi"></i>';
   function boslukVar(){ return !!durum.bosluk && (durum.bicim === 'a6' || durum.bicim === 'a5'); }
   // Üstte 2 cm boşluk ürün bazındadır (bütün afiş biçimlerinde). Kartta hiç işaretlenmediyse genel ayar geçerli (yalnız A6/A5).
   var AFIS_BICIM = { a6: 1, a5: 1, a5y: 1, a4: 1, a4b: 1, a3: 1 };
@@ -852,7 +855,8 @@
     if(u.bfKip === 'yazma') return null;
     // Kendiliğinden: ağırlık/hacim/uzunlukla ölçülen ürünler ile bez, tuvalet kâğıdı, kâğıt havlu, peçete.
     // Tencere seti gibi adetle satılan eşyada ve birim fiyat satış fiyatıyla aynıyken yazılmaz.
-    if(Math.abs(bf.tutar - f) < 0.005) return null;
+    // Ağırlık/hacimle satılan üründe birim fiyat satış fiyatıyla aynı olsa da (ör. 1 L) yazılır: etikette eksik görünmesin.
+    if(bf.birim === 'adet' && Math.abs(bf.tutar - f) < 0.005) return null;
     if(bf.birim === 'adet' && !/(^|\s)bez[i]?(\s|$)|tuvalet kag|kagit havlu|havlu kag|pecete/.test(normTr(u.ad))) return null;
     return bf;
   }
@@ -2934,7 +2938,7 @@
     var bosluk = urunBosluk(u, f || durum.bicim) ? UST_BOSLUK_MM : 0;
     var dar = (B.h - bosluk) / (B.w / 100) < 126;           // kullanılabilir yükseklik (em)
     var cesit = cesitAdlari(u);
-    return '<div class="sayfa' + (dar ? ' dar' : '') + (cesit.length ? ' cesitli' : '') + '" style="width:' + B.w + 'mm; height:' + B.h + 'mm; font-size:' + (B.w / 100) + 'mm; padding-top:' + bosluk + 'mm;"><div class="afis">' +
+    return '<div class="sayfa' + (dar ? ' dar' : '') + (cesit.length ? ' cesitli' : '') + '" style="width:' + B.w + 'mm; height:' + B.h + 'mm; font-size:' + (B.w / 100) + 'mm; padding-top:' + bosluk + 'mm;">' + (bosluk ? KAT_CIZGI : '') + '<div class="afis">' +
       '<div class="aUst">' + ((durum.logo && magazaLogoVar)
           ? '<div class="aLogoKutu' + (durum.slogan ? ' sloganli' : '') + '"><img class="aLogo" src="' + MAGAZA_LOGO + '" alt="">' + (durum.slogan ? '<div class="aSlogan">' + esc(durum.slogan) + '</div>' : '') + '</div>'
           : '<span></span>') +
@@ -2965,7 +2969,7 @@
     var kt = koliTeklif(u) || { n: 0, ad: 'Koli', fiyat: NaN, adet: NaN }, bfm = birimFiyatMetni(u, ' / '), tek = sayi(u.fiyat);
     var yuzde = Math.floor((1 - kt.adet / tek) * 100 + 1e-6), kazanc = Math.round((tek * kt.n - kt.fiyat) * 100) / 100, AD = esc(kt.ad.toLocaleUpperCase('tr-TR'));
     var satir = function(etk, f, sinif){ return '<div class="kSatir' + (sinif ? ' ' + sinif : '') + '"><span>' + etk + '</span><b>' + para(f) + '<i>₺</i></b></div>'; };
-    return '<div class="sayfa" style="width:210mm; height:148mm; font-size:.5mm; padding-top:' + (urunBosluk(u, 'a5y') ? UST_BOSLUK_MM : 0) + 'mm;"><div class="kAfis' + (yuzde >= 1 ? '' : ' duz') + (urunBosluk(u, 'a5y') ? ' sik' : '') + '">' +
+    return '<div class="sayfa" style="width:210mm; height:148mm; font-size:.5mm; padding-top:' + (urunBosluk(u, 'a5y') ? UST_BOSLUK_MM : 0) + 'mm;">' + ((urunBosluk(u, 'a5y') ? UST_BOSLUK_MM : 0) ? KAT_CIZGI : '') + '<div class="kAfis' + (yuzde >= 1 ? '' : ' duz') + (urunBosluk(u, 'a5y') ? ' sik' : '') + '">' +
       '<div class="kBas">' + (durum.logo && magazaLogoVar ? '<img class="aLogo" src="' + MAGAZA_LOGO + '" alt="">' : '') + '<div class="kTur">' + AD + ' FİYATI</div></div>' +
       (yuzde >= 1 ? '<div class="kDaire"><b>%' + yuzde + '</b><span>' + AD + 'DE<br>DAHA UCUZ</span></div>' : '') +
       '<div class="kAd sig" data-em="24" data-min="10"><span class="yazi">' + adHtml(u) + '</span></div>' +
@@ -2983,7 +2987,7 @@
   // A4 boy listesi: üstte ortak ad, altında her boy kendi fiyatıyla. Adet bilinen boyda "adedi" de yazılır.
   function afisBoyHtml(u){
     var l = boySatirlari(u), bosluk = urunBosluk(u, 'a4b') ? UST_BOSLUK_MM : 0;
-    return '<div class="sayfa" style="width:210mm; height:297mm; font-size:2.1mm; padding-top:' + bosluk + 'mm;"><div class="bAfis">' +
+    return '<div class="sayfa" style="width:210mm; height:297mm; font-size:2.1mm; padding-top:' + bosluk + 'mm;">' + (bosluk ? KAT_CIZGI : '') + '<div class="bAfis">' +
       '<div class="bUst">' + (durum.logo && magazaLogoVar ? '<img class="aLogo" src="' + MAGAZA_LOGO + '" alt="">' : '') + '</div>' +
       '<div class="bAd sig" data-em="16" data-min="6"><span class="yazi">' + esc(u.ad) + '</span></div>' +
       // Satırlar alana sığana kadar küçültülür (sigdir): çizgiler yazının üstüne binmez.
@@ -3001,14 +3005,14 @@
     var olcu = (birim === 'kg' && mik === 1) ? 'KİLOSU' : (birim === 'l' && mik === 1) ? 'LİTRESİ' : (birim === 'adet' && mik === 1) ? 'ADEDİ'
       : (!isNaN(mik) && mik > 0 ? String(mik).replace('.', ',') + ' ' + (birim === 'l' ? 'L' : birim) : '');
     var onceki = sayi(u.onceki), oran = (u.indirim && onceki > u.fiyat) ? Math.round((1 - u.fiyat / onceki) * 100) : 0, brk = u.grup ? '' : tartiBarkod(u);
-    return '<div class="sayfa" style="width:132mm; height:105mm; font-size:1mm; padding-top:' + (urunBosluk(u, 'dokme') ? UST_BOSLUK_MM : 0) + 'mm;"><div class="dKart">' +
+    return '<div class="sayfa" style="width:132mm; height:105mm; font-size:1mm; padding-top:' + (urunBosluk(u, 'dokme') ? UST_BOSLUK_MM : 0) + 'mm;">' + ((urunBosluk(u, 'dokme') ? UST_BOSLUK_MM : 0) ? KAT_CIZGI : '') + '<div class="dKart">' +
       '<div class="dUst">' + (durum.logo && magazaLogoVar ? '<img class="aLogo" src="' + MAGAZA_LOGO + '" alt="">' : '') + '<div class="dAd sig" data-em="13" data-min="5"><span class="yazi">' + adHtml(u) + '</span></div></div>' +
       '<div class="dOrta">' + (oran > 0 ? '<div class="dOnceki"><s>' + para(onceki) + ' ₺</s><b>%' + oran + '</b><i>indirimden<br>önceki fiyat</i></div>' : '') +
         '<div class="dFiyatKutu sig" data-em="50" data-min="18"><span class="dFiyat yazi">' + fiyatHtml(u.fiyat) + '</span></div></div>' +
       // SKT (son kullanma) ya da TETT (tavsiye edilen tüketim) — ürüne göre seçilir, tarih elle girilir.
       '<div class="dAlt"><div class="dSol"><b>' + esc(olcu) + '</b>' +
           (u.sktTur && u.sktTarih ? '<span class="dSkt">' + (u.sktTur === 'tett' ? 'TETT' : 'SKT') + ': ' + tarihTr(u.sktTarih) + '</span>' : '') +
-          '<span>Üretim yeri: ' + esc(String(u.yer || '').trim()) + ' · ' + (u.indirim ? 'İndirim: ' + tarihTr(u.tarih) + (u.bitis ? ' – ' + tarihTr(u.bitis) : '') : 'Fiyat tarihi: ' + tarihTr(u.tarih)) + ' · KDV dâhil</span></div>' +
+          '<span>' + (birimFiyatMetni(u, '/') ? 'Birim fiyatı: ' + birimFiyatMetni(u, '/') + ' · ' : '') + 'Üretim yeri: ' + esc(String(u.yer || '').trim()) + ' · ' + (u.indirim ? 'İndirim: ' + tarihTr(u.tarih) + (u.bitis ? ' – ' + tarihTr(u.bitis) : '') : 'Fiyat tarihi: ' + tarihTr(u.tarih)) + ' · KDV dâhil</span></div>' +
         (brk && barkodSvg(brk) ? '<div class="dBrk">' + barkodSvg(brk) + '<div>' + esc(brk) + '</div></div>' : '') + afisQr(u) + yerliHtml(u) + '</div>' +
     '</div></div>';
   }
