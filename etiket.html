@@ -335,10 +335,11 @@
   .zTarih{text-align:right; white-space:nowrap; overflow:hidden; height:2.4em;}
   .zTarih span{font-size:1.75em;}
   .zSol{display:flex; flex-direction:column; justify-content:space-between; overflow:hidden;}
-  .zSol .barkod{width:100%; max-width:36em; height:8em;}
+  .zSol .barkod{width:100%; max-width:36em; height:8.6em; display:block;}
+  .zAltBlok{display:flex; align-items:flex-end; justify-content:space-between; gap:.6em;} .zAltSol{flex:1; min-width:0; display:flex; flex-direction:column; gap:.5em;}
   .zBrkSatir{display:flex; align-items:flex-start; justify-content:space-between; gap:.6em;}
   .qr{display:block;}
-  .zBrk{font-family:"Courier New", monospace; font-size:2.1em; letter-spacing:.14em; line-height:1.1;}
+  .zBrk{font-family:"Courier New", monospace; font-size:3em; font-weight:700; letter-spacing:.06em; line-height:1.05;}
   .zCesit{font-size:1.9em; font-weight:700; line-height:1.15; max-height:11em; overflow:hidden;}
   .zLogolar{display:flex; align-items:center; gap:2em; height:4.6em;}
   .zLogolar .yerli{height:4.4em; width:11.2em;}
@@ -2893,8 +2894,9 @@
     kod.forEach(function(k){ var g = C128[k]; for(var j = 0; j < g.length; j++) m += new Array(Number(g.charAt(j)) + 1).join(j % 2 === 0 ? '1' : '0'); });
     return { m: m, bos: 10 };
   }
-  function barkodSvg(b){
+  function barkodSvg(b, bosOz){
     var k = barkodModul(b); if(!k) return '';
+    if(bosOz !== undefined) k = { m: k.m, bos: bosOz };
     var d = '', i = 0, n = k.m.length;
     while(i < n){
       if(k.m.charAt(i) !== '1'){ i++; continue; }
@@ -2907,7 +2909,12 @@
   // Genişlik, modül başına tam 2 ya da 3 nokta olacak şekilde seçilir; sığmıyorsa eski davranış (kutuya yayılır).
   function zebraBarkod(b, enCokEm){
     var k = barkodModul(b), svg = barkodSvg(b); if(!k || !svg) return svg;
+    // Önce modül başına 3 nokta (0,375 mm — okuyucunun rahat okuduğu boy): sığması için boş kenar 2 modüle iner;
+    // etiketin kendi beyaz kenarı ve sarı kutuya kadarki boşluk okuyucu için yeterli boşluğu sağlar.
+    var dar = k.m.length + 4;
+    if(dar * 3 / 8 <= enCokEm) return barkodSvg(b, 2).replace('<svg class="barkod"', '<svg class="barkod" style="width:' + (dar * 3 / 8) + 'em; max-width:none;"');
     var n = k.m.length + 2 * k.bos, nokta = Math.min(3, Math.floor(enCokEm * 8 / n));
+    if(nokta < 2 && dar * 2 / 8 <= enCokEm) return barkodSvg(b, 2).replace('<svg class="barkod"', '<svg class="barkod" style="width:' + (dar * 2 / 8) + 'em; max-width:none;"');
     return nokta < 2 ? svg : svg.replace('<svg class="barkod"', '<svg class="barkod" style="width:' + (n * nokta / 8) + 'em; max-width:none;"');
   }
   function koliYazi(u){
@@ -3045,11 +3052,13 @@
         '<span>' + (u.indirim ? '<b>İNDİRİM</b> ' + tarihTr(u.tarih).slice(0, 5) + '–' + tarihTr(u.bitis) : 'Fiyat değişim tarihi: ' + tarihTr(u.tarih)) + '</span></div>' +
       '<div class="zSol" style="left:2em; top:' + solUst + 'em; width:' + solEn + 'em; height:' + Math.max(8, kullanH - solUst - 1) + 'em;">' +
         (cesit.length ? '<div class="zBrkSatir"><div class="zCesit" style="flex:1; min-width:0;">' + esc(cesit.join(' · ')) + '</div>' + zebraQr(u) + '</div>'
-          : (u.barkod ? '<div class="zBrkSatir"><div>' + zebraBarkod(u.barkod, solEn - zebraQrKenar(u)) + '<div class="zBrk">' + esc(u.barkod) + '</div></div>' + zebraQr(u) + '</div>' : '<div></div>')) +
+          : (u.barkod ? '<div>' + zebraBarkod(u.barkod, solEn) + '<div class="zBrk">' + esc(u.barkod) + '</div></div>' : '<div></div>')) +
+        '<div class="zAltBlok"><div class="zAltSol">' +
         '<div class="zLogolar">' + (yerli && yerliLogoVar ? '<img class="yerli" src="' + YERLI_LOGO + '" alt="">' : '') +
           (durum.logo && magazaLogoVar ? '<img class="zMagaza" src="' + MAGAZA_LOGO + '" alt="">' : '<span class="zMagazaYazi">' + esc(MAGAZA_ADI) + '</span>') + '</div>' +
         '<div class="zYer">' + (yerli ? 'Bu ürün Türkiye\'de üretilmiştir.' : 'Üretim yeri: ' + esc(String(u.yer || '').trim())) + '</div>' +
         '<div class="zAlt">' + (stokKodu(u) ? 'Stok kodu: ' + esc(stokKodu(u)) : (grupKodu(u) ? 'Etiket kodu: ' + grupKodYazi(grupKodu(u)) : '')) + (koliYazi(u) ? (stokKodu(u) ? ' · ' : '') + koliYazi(u) : '') + '</div>' +
+        '</div>' + (cesit.length ? '' : zebraQr(u)) + '</div>' +
       '</div>' +
       '<div class="zKutu' + (Z.cerceve ? ' cerceve' : '') + '" style="left:' + Z.kx + 'em; top:' + Z.ky + 'em; width:' + Z.kw + 'em; height:' + Z.kh + 'em;">' +
         (u.indirim && onceki > u.fiyat ? '<div class="zOnceki">' + para(onceki) + ' ₺</div>' : (bas ? '<div class="zBaslik">' + esc(bas) + '</div>' : '')) +
