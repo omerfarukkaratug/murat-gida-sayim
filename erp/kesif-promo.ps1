@@ -71,5 +71,6 @@ ORDER BY Adet DESC
 "@))
 
 [System.IO.File]::WriteAllText($Cikti, $sb.ToString(), [System.Text.Encoding]::UTF8)
-Write-Host ""; Write-Host "Bitti. Dosya: $Cikti"
+Write-Host ""; Write-Host "Bitti. Sonuc Not Defteri'nde aciliyor: hepsini sec (Ctrl+A), kopyala (Ctrl+C), Claude'a yapistir."
+try { Start-Process notepad.exe -ArgumentList $Cikti } catch {}
 Read-Host "Kapatmak icin Enter"
