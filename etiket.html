@@ -914,13 +914,13 @@
     var anahtar = u.barkod + '|' + u.fiyat + (farkliBoy ? '|karma' : '');
     if(benzerOnbellek[anahtar]) return benzerOnbellek[anahtar];
     var ben = katalogHarita[u.barkod]; if(!ben) return [];
-    var s0 = sozcukler(ben.name), m0 = miktarBul(ben.name), gorulen = {}, cikan = [];
+    var s0 = sozcukler(ben.name), m0 = miktarBul(ben.name), gorulen = {}, cikan = [], c0 = Number(ben.carpan) > 1 ? Number(ben.carpan) : 1;
     gorulen[normTr(ben.name)] = true;
     for(var i = 0; i < katalog.length; i++){
       var k = katalog[i];
       if(String(k.barcode) === u.barkod || k.price === '') continue;
       if(Math.abs(sayi(k.price) - u.fiyat) > 0.004) continue;            // fiyat birebir aynı
-      if(Number(k.carpan) > 1) continue;                                 // koli barkodu değil
+      if((Number(k.carpan) > 1 ? Number(k.carpan) : 1) !== c0) continue;      // aynı ambalaj: tekliye tekli, 6'lı pakete 6'lı paket
       if(ortakOnEk(s0, sozcukler(k.name)) < 1) continue;                 // adın ilk sözcüğü (marka) aynı: HARIBO SOLUCAN / HARIBO ALTIN AYICIK
       var m = miktarBul(k.name); if(!farkliBoy && (m.mik !== m0.mik || m.birim !== m0.birim)) continue; // net miktar aynı
       if(ben.yer && k.yer && normTr(ben.yer) !== normTr(k.yer)) continue;  // üretim yeri (ERP'de biliniyorsa) aynı
@@ -2407,10 +2407,10 @@
   function grupSecimCiz(){
     var u = secim.hedef, q = normTr($('secimAra').value).trim(), parca = q.split(/\s+/).filter(Boolean), satir = [], n = 0;
     var icinde = {}; (u.grup || [{ barkod: u.barkod }]).forEach(function(x){ icinde[String(x.barkod)] = true; });
-    var gorulen = {};
+    var gorulen = {}, kb = katalogHarita[String((u.grup ? u.grup[0] : u).barkod)], c0 = kb && Number(kb.carpan) > 1 ? Number(kb.carpan) : 1;
     for(var i = 0; i < katalog.length && n < GRUP_LISTE_SINIR; i++){
       var k = katalog[i], b = String(k.barcode);
-      if(icinde[b] || k.price === '' || Number(k.carpan) > 1) continue;
+      if(icinde[b] || k.price === '' || (Number(k.carpan) > 1 ? Number(k.carpan) : 1) !== c0) continue;   // aynı ambalaj (tekli / aynı adetli paket)
       var f = sayi(k.price); if(isNaN(f) || f <= 0) continue;
       var ayni = Math.abs(f - u.fiyat) <= 0.004;
       if(!parca.length && !ayni) continue;                       // arama yokken yalnızca aynı fiyatlılar
