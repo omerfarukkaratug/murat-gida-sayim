@@ -463,6 +463,7 @@
       <div id="hizliKutu" style="margin-top:10px; padding:8px 10px; border:2px solid var(--amber); border-radius:12px;">
         <label style="display:flex; align-items:center; gap:10px; margin:0; text-transform:none; letter-spacing:0; font-size:14px; color:var(--text);"><input id="hizliAc" type="checkbox" style="width:22px; height:22px;"> <span>⚡ <b>Hızlı etiket</b> — okutulan ürün Zebra etiketi olarak kendiliğinden yazıcıya gider</span></label>
         <div id="hizliDurum" class="gizli" style="display:flex; align-items:center; justify-content:space-between; gap:8px; margin-top:8px; font-size:13px; font-weight:700;"><span id="hizliYazi"></span><button type="button" id="hizliSimdi" class="ana" style="flex:none; padding:6px 12px; font-size:12.5px;">Şimdi gönder</button></div>
+        <div id="hizliEksik" class="gizli" style="margin-top:6px;"></div>
       </div>
       <div id="sonuclar"></div>
       <div id="araSecBar" class="gizli"><button type="button" class="ana" id="araSecEkle" style="flex:1;"></button><button type="button" id="araSecTemizle" style="flex:none; font-size:12.5px;">Seçimi temizle</button></div>
@@ -651,7 +652,7 @@
   function yt(ad){ return YONETICI || (kullanici.permissions || []).indexOf(ad) !== -1; }
   var ALAN_YETKI = { ad: 'etiket_duzenle', yer: 'etiket_duzenle', mik: 'etiket_duzenle', birim: 'etiket_duzenle', koli: 'etiket_duzenle', bfKip: 'etiket_duzenle', tarih: 'etiket_duzenle', sktTur: 'etiket_duzenle', sktTarih: 'etiket_duzenle',
     baslik: 'etiket_duzenle', ozel: 'etiket_duzenle', indirim: 'etiket_indirim', bitis: 'etiket_indirim', onceki: '#yonetici' };
-  var IS_YETKI = { tr: 'etiket_duzenle', grup: 'etiket_cesit', grupGenis: 'etiket_cesit', grupEkle: 'etiket_cesit', grupKayitli: 'etiket_cesit', dagit: 'etiket_cesit', gcikar: 'etiket_cesit', indirimYaz: 'etiket_indirim' };
+  var IS_YETKI = { tr: 'etiket_duzenle', yerOner: 'etiket_duzenle', grup: 'etiket_cesit', grupGenis: 'etiket_cesit', grupEkle: 'etiket_cesit', grupKayitli: 'etiket_cesit', dagit: 'etiket_cesit', gcikar: 'etiket_cesit', indirimYaz: 'etiket_indirim' };
   function yetkiVar(kural){ return !kural || (kural === '#yonetici' ? YONETICI : yt(kural)); }
 
   // ---------- Kayıtlı durum ----------
@@ -1102,6 +1103,25 @@
     katalog.forEach(function(k){ var y = String(k.yer || '').trim(); if(y && !g[normTr(y)]){ g[normTr(y)] = true; l.push(y); } });
     $('ulkeler').innerHTML = l.map(function(u){ return '<option value="' + esc(u) + '">'; }).join('');
   }
+  // Barkodun ilk üç hanesi barkodun KAYITLI olduğu ülkeyi gösterir; üretim yeri çoğu zaman aynıdır ama her zaman değil.
+  // Bu yüzden yalnızca ÖNERİ olarak sunulur: kişi dokunup onaylamadan etikete yazılmaz.
+  var GS1 = [[0, 139, 'ABD'], [300, 379, 'Fransa'], [380, 380, 'Bulgaristan'], [400, 440, 'Almanya'], [450, 459, 'Japonya'], [460, 469, 'Rusya'], [490, 499, 'Japonya'],
+    [500, 509, 'İngiltere'], [520, 521, 'Yunanistan'], [529, 529, 'Kıbrıs'], [539, 539, 'İrlanda'], [540, 549, 'Belçika'], [560, 560, 'Portekiz'], [570, 579, 'Danimarka'],
+    [590, 590, 'Polonya'], [594, 594, 'Romanya'], [599, 599, 'Macaristan'], [622, 622, 'Mısır'], [626, 626, 'İran'], [640, 649, 'Finlandiya'], [690, 699, 'Çin'],
+    [700, 709, 'Norveç'], [730, 739, 'İsveç'], [760, 769, 'İsviçre'], [789, 790, 'Brezilya'], [800, 839, 'İtalya'], [840, 849, 'İspanya'], [858, 858, 'Slovakya'],
+    [859, 859, 'Çekya'], [860, 860, 'Sırbistan'], [868, 869, 'Türkiye'], [870, 879, 'Hollanda'], [880, 880, 'Güney Kore'], [885, 885, 'Tayland'], [890, 890, 'Hindistan'],
+    [893, 893, 'Vietnam'], [899, 899, 'Endonezya'], [900, 919, 'Avusturya'], [930, 939, 'Avustralya'], [955, 955, 'Malezya']];
+  function barkodUlke(b){
+    b = String(b || ''); if(!/^\d{13}$/.test(b) || !eanGecerli(b)) return '';
+    var n = Number(b.substring(0, 3)), c = '';
+    GS1.some(function(r){ if(n >= r[0] && n <= r[1]){ c = r[2]; return true; } return false; });
+    return c;
+  }
+  function yerDugme(u){
+    var o = barkodUlke(u.barkod);
+    return (o && o !== 'Türkiye' ? '<button type="button" data-is="yerOner" data-y="' + esc(o) + '" style="flex:none; padding:10px; border-style:dashed;" title="Barkoda göre öneri — ambalajla aynıysa dokun">' + esc(o) + '?</button>' : '') +
+      '<button type="button" data-is="tr" style="flex:none; padding:10px;">Türkiye</button>';
+  }
   // barkodEkle sonucu: 'eklendi' | 'yok' | 'fiyatsiz'
   function barkodEkle(barkod){
     barkod = String(barkod || '').trim();
@@ -1445,7 +1465,7 @@
         '</div>' +
         // --- Özet: en çok gereken bilgiler; ayrıntı "Düzenle" ile açılır ---
         (!String(u.yer || '').trim() && !ac
-          ? '<div class="satir" style="margin-top:8px;"><div style="flex:1.5;"><input data-al="yer" class="eksik" list="ulkeler" value="" placeholder="Üretim yeri (ülke seç ya da yaz)"></div><button type="button" data-is="tr" style="flex:none; padding:10px;">Türkiye</button></div>'
+          ? '<div class="satir" style="margin-top:8px;"><div style="flex:1.5;"><input data-al="yer" class="eksik" list="ulkeler" value="" placeholder="Üretim yeri (ülke seç ya da yaz)"></div>' + yerDugme(u) + '</div>'
           : '<div class="ozet' + (ac ? '' : ' kisa') + '">Üretim yeri: <b>' + esc(String(u.yer || '').trim() || '—') + '</b>' + (u.barkodYer && u.yer === 'Türkiye' ? ' (barkoddan)' : '') +
             ' · Net: <b>' + (grupBoylari(u).length ? grupBoylari(u).map(boyYazi).join(', ') : esc(String(u.mik).replace('.', ',')) + ' ' + esc(u.birim)) + '</b> · Fiyat tarihi: <b>' + tarihTr(u.tarih) + '</b>' + (koliYazi(u) ? ' · <b>' + koliYazi(u) + '</b>' : '') +
             (u.indirim ? ' · <b style="color:var(--red);">İNDİRİM</b>' : '') + '</div>') +
@@ -1827,7 +1847,8 @@
     else if(b.getAttribute('data-is') === 'bicim'){ var yf = b.getAttribute('data-f'); if(b.parentNode.className === 'bicimSec' && KAGIT[urunBicim(u)] === KAGIT[yf]) return; u.bicim = yf; u.basildi = ''; }
     else if(b.getAttribute('data-is') === 'tekrar'){ u.basildi = ''; }
     else if(b.getAttribute('data-is') === 'bosluk'){ u.ustBosluk = !urunBosluk(u, urunBicim(u)); u.basildi = ''; }
-    else if(b.getAttribute('data-is') === 'tr'){ u.yer = 'Türkiye'; bilgiHatirla(u); }
+    else if(b.getAttribute('data-is') === 'tr'){ u.yer = 'Türkiye'; bilgiHatirla(u); if(durum.hizli) hizliPlanla(); }
+    else if(b.getAttribute('data-is') === 'yerOner'){ u.yer = b.getAttribute('data-y'); u.barkodYer = false; bilgiHatirla(u); if(durum.hizli) hizliPlanla(); }
     else if(b.getAttribute('data-is') === 'ac'){ acik[u.id] = !acik[u.id]; listeCiz(); return; }
     else if(b.getAttribute('data-is') === 'artir'){ u.adet = Math.min(99, (parseInt(u.adet, 10) || 1) + 1); }
     else if(b.getAttribute('data-is') === 'azalt'){ u.adet = Math.max(1, (parseInt(u.adet, 10) || 1) - 1); }
@@ -2176,7 +2197,18 @@
     var n = hizliBekleyen().filter(function(u){ return ucan.indexOf(u.id) === -1; }).length, eksik = durum.liste.filter(function(u){ return urunBicim(u) === 'zebra' && !u.basildi && eksikler(u).length; }).length, m = hizliMesgul();
     $('hizliDurum').classList.toggle('gizli', !durum.hizli || (!n && !eksik && !m));
     $('hizliYazi').innerHTML = (m ? '🖨️ Basılıyor…' + (n ? ' (' + n + ' etiket sırada)' : '') : n ? '⏳ ' + n + ' etiket birazdan yazıcıya gidecek' : '') +
-      (eksik ? (m || n ? '<br>' : '') + '<span style="color:var(--red);">' + eksik + ' üründe bilgi eksik — basılmaz, kartındaki kırmızı uyarıyı tamamla</span>' : '');
+      (eksik ? (m || n ? '<br>' : '') + '<span style="color:var(--red);">' + eksik + ' üründe bilgi eksik — aşağıdan tamamla, basılsın</span>' : '');
+    // Eksikler burada, tek dokunuşla tamamlanır (üretim yeri); personel listede aramak zorunda kalmaz.
+    var el = durum.hizli ? durum.liste.filter(function(u){ return urunBicim(u) === 'zebra' && !u.basildi && eksikler(u).length; }) : [];
+    $('hizliEksik').classList.toggle('gizli', !el.length);
+    $('hizliEksik').innerHTML = el.slice(0, 12).map(function(u){
+      var e = eksikler(u), yerEksik = !String(u.yer || '').trim(), o = barkodUlke(u.barkod);
+      return '<div data-hid="' + esc(u.id) + '" style="padding:8px 0; border-top:1px solid var(--line);"><div style="font-weight:800; font-size:13.5px;">' + esc(u.ad) + '</div>' +
+        '<div class="ipucu" style="color:var(--red);">Eksik: ' + esc(e.join(', ')) + '</div>' +
+        (yerEksik && yetkiVar('etiket_duzenle') ? '<div style="display:flex; gap:6px; flex-wrap:wrap; margin-top:6px;"><button type="button" data-hy="Türkiye" class="ana" style="padding:8px 12px; font-size:13px;">Türkiye</button>' +
+          (o && o !== 'Türkiye' ? '<button type="button" data-hy="' + esc(o) + '" style="padding:8px 12px; font-size:13px; border-style:dashed;">' + esc(o) + '? (barkoda göre)</button>' : '') +
+          '<input data-hyaz="1" list="ulkeler" placeholder="başka ülke yaz" style="flex:1; min-width:110px; padding:8px 10px; font-size:13px;"></div>' : '') +
+        '<button type="button" data-hcikar="1" style="margin-top:6px; padding:4px 10px; font-size:12px; border:none; background:transparent; color:var(--red);">✕ listeden çıkar</button></div>'; }).join('');
     $('hizliSimdi').classList.toggle('gizli', m || !n);
   }
   function hizliPlanla(sn){
@@ -2197,6 +2229,17 @@
   }
   $('hizliAc').addEventListener('change', function(){ durum.hizli = this.checked; kaydet(); if(durum.hizli) toast('Hızlı etiket açık — okuttuğun ürün yazıcıya gider'); hizliPlanla(); });
   $('hizliSimdi').addEventListener('click', hizliGonder);
+  function hizliYerYaz(el, yer){
+    var k = el.closest('[data-hid]'), u = k && durum.liste.filter(function(x){ return x.id === k.getAttribute('data-hid'); })[0];
+    yer = String(yer || '').trim(); if(!u || !yer || !yetkiVar('etiket_duzenle')) return;
+    u.yer = yer; u.barkodYer = false; bilgiHatirla(u); kaydet(); listeCiz(); ciz(); hizliPlanla();
+  }
+  $('hizliEksik').addEventListener('click', function(e){
+    var b = e.target.closest('button'); if(!b) return;
+    if(b.getAttribute('data-hy')) hizliYerYaz(b, b.getAttribute('data-hy'));
+    else if(b.getAttribute('data-hcikar')){ var k = b.closest('[data-hid]'); durum.liste = durum.liste.filter(function(x){ return x.id !== k.getAttribute('data-hid'); }); kaydet(); listeCiz(); ciz(); }
+  });
+  $('hizliEksik').addEventListener('change', function(e){ if(e.target.getAttribute('data-hyaz')) hizliYerYaz(e.target, e.target.value); });
   function gonderOnKontrol(){
     if(!navigator.onLine){ toast('İnternet yok', 'hata'); return false; }
     if(!kimlikBilgisi()){ toast('Oturum bilgisi yok — ana uygulamada çıkış yapıp yeniden giriş yap', 'hata'); return false; }
