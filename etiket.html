@@ -659,7 +659,7 @@
   function yaziciBicim(f){ return f === 'a5y' ? 'a5' : (f === 'a4b' || f === 'dokme' || f === 'karma') ? 'a4' : f; }
   // Karışık dizgi: A4'ten küçük afişler aynı A4 kâğıtlarda birleştirilir (kâğıt israfı olmasın).
   var KARMA = { a6: 1, a5: 1, a5y: 1, dokme: 1 }, YAZDIR_SIRA = BICIM_SIRA.concat(['karma']);
-  function baskiBicim(u){ var f = urunBicim(u); return (durum.karma !== false && KARMA[f]) ? 'karma' : f; }   // yazıcı ve sunucu için: yatay koli afişi de A5 işidir
+  function baskiBicim(u){ var f = urunBicim(u); return (durum.a4diz !== false && KARMA[f]) ? 'karma' : f; }   // yazıcı ve sunucu için: yatay koli afişi de A5 işidir
   if(BICIM_SIRA.indexOf(durum.varsayilan) === -1 || durum.varsayilan === 'a5y' || durum.varsayilan === 'a4b') durum.varsayilan = 'zebra';
   if(!durum.isDurum) durum.isDurum = {};          // biçim -> { id, adet, zaman, durum, mesaj, idler }
   function urunBicim(u){
@@ -2127,7 +2127,7 @@
     var son = yt('etiket_yazici') ? uygun.filter(function(y){ return y.kimlik === (durum.yaziciSon || {})[f]; })[0] : null;
     return { secili: son || uygun[0] || null, uygun: uygun, kayitli: !!son };
   }
-  $('yazdirOzet').addEventListener('click', function(e){ var kb = e.target.closest('button[data-kagit]'); if(!kb) return; durum.karma = kb.getAttribute('data-kagit') === 'a4'; durum.a4diz = durum.karma; if(durum.bicim === 'karma' || KARMA[durum.bicim]) durum.bicim = 'zebra'; kaydet(); yazdirCiz(); ciz(); });
+  $('yazdirOzet').addEventListener('click', function(e){ var kb = e.target.closest('button[data-kagit]'); if(!kb) return; if(!YONETICI){ toast('Kâğıt seçimini yalnızca yönetici değiştirebilir', 'uyari'); return; } durum.a4diz = kb.getAttribute('data-kagit') === 'a4'; if(durum.bicim === 'karma' || KARMA[durum.bicim]) durum.bicim = 'zebra'; kaydet(); yazdirCiz(); ciz(); });
   function bicimSec(f){ if(durum.bicim !== f){ durum.bicim = f; kaydet(); } bicimCiz(); ciz(); }
   function bicimGonder(f, sormadan){
     bicimSec(f);
@@ -2523,10 +2523,10 @@
     Array.prototype.forEach.call(document.querySelectorAll('[data-sayac="urun"]'), function(el){ el.textContent = durum.liste.length ? String(durum.liste.length) : ''; });
     if(!sira.length){ kutu.innerHTML = '<div class="ipucu">Basılacak ürün yok. Önce <b>Ürünler</b> sekmesinden ürün ekle ve her ürünün biçimini seç.</div>'; return; }
     var kucuk = durum.liste.some(function(u){ return KARMA[urunBicim(u)] && !u.basildi; });
-    var a4e = durum.karma !== false;
+    var a4e = durum.a4diz !== false;
     kutu.innerHTML = (kucuk ? '<div style="margin:0 0 10px; padding:8px 10px; border:1px solid var(--line); border-radius:12px;"><div style="font-size:12.5px; font-weight:800; margin-bottom:6px;">A6 / A5 afişler hangi kâğıda basılsın?</div>' +
-        '<div class="bicimSec" style="margin:0;"><button type="button" data-kagit="a4"' + (a4e ? ' class="secili"' : '') + '>♻️ A4\'e sığdır, sonra kes</button><button type="button" data-kagit="kesik"' + (a4e ? '' : ' class="secili"') + '>✂️ Hazır kesilmiş kâğıt</button></div>' +
-        '<div class="ipucu" style="margin-top:6px;">' + (a4e ? 'A6, A5, koli afişi ve dökme kartları aynı A4 kâğıtlara sığdırılır; basınca kesik çizgiden kesersin.' : 'A6 afiş A6 kâğıda, A5 afiş A5 kâğıda tek tek basılır — yazıcıya o kâğıdı tak. Koli afişi ve dökme kartı yine A4\'e basılır.') + '</div></div>' : '') + (bekleyenBicim.length > 1 ? '<button type="button" class="ana" data-yz="hepsi" style="width:100%; margin-bottom:10px;">🖨️ Hepsini yazdır (' + topAdet + ' adet)</button>' : '') +
+        (YONETICI ? '<div class="bicimSec" style="margin:0;"><button type="button" data-kagit="a4"' + (a4e ? ' class="secili"' : '') + '>♻️ A4\'e sığdır, sonra kes</button><button type="button" data-kagit="kesik"' + (a4e ? '' : ' class="secili"') + '>✂️ Kendi boyunda kâğıt (A6→A6, A5→A5)</button></div>' : '<div style="font-size:13.5px; font-weight:800;">' + (a4e ? '♻️ A4\'e sığdır, sonra kes' : '✂️ Her afiş kendi boyundaki kâğıda') + ' <span class="ipucu" style="font-weight:400;">(yönetici belirler)</span></div>') +
+        '<div class="ipucu" style="margin-top:6px;">' + (a4e ? 'A6, A5, koli afişi ve dökme kartları aynı A4 kâğıtlara sığdırılır; basınca kesik çizgiden kesersin.' : 'A6 afiş A6 kâğıda, A5 afiş A5 kâğıda, A4 afiş A4 kâğıda tek tek basılır — yazıcıya o kâğıdı tak. Koli afişi ve dökme kartı yine A4\'e basılır.') + '</div></div>' : '') + (bekleyenBicim.length > 1 ? '<button type="button" class="ana" data-yz="hepsi" style="width:100%; margin-bottom:10px;">🖨️ Hepsini yazdır (' + topAdet + ' adet)</button>' : '') +
       sira.map(function(f){
         var g = o[f], d = durum.isDurum[f], yz = baski.hazir ? bicimYazici(f) : null;
         return '<div class="yzSatir' + (durum.bicim === f ? ' secili' : '') + '">' +
@@ -2635,7 +2635,7 @@
         AYAR_ALAN.forEach(function(k){ if(a[k] !== undefined) durum[k] = k === 'slogan' ? String(a[k]) : !!a[k]; });
         if(a.zebra) Object.keys(ZEBRA_VARSAYILAN).forEach(function(k){ if(a.zebra[k] !== undefined) durum.zebra[k] = a.zebra[k]; });
         ayarSon = JSON.stringify(ayarOzet());
-        kaydet(); bicimCiz(); ciz();
+        kaydet(); bicimCiz(); ciz(); yazdirCiz();
       } else if(yt('etiket_ayar') && JSON.stringify(durum.zebra) !== JSON.stringify(ZEBRA_VARSAYILAN)) ayarGonder(true);   // ilk kurulum: ayarlanmış cihaz sunucuya yazar
     });
   }
