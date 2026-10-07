@@ -2168,7 +2168,7 @@
   }
   // Bir biçimin basılacak ürünlerini yazıcısına gönderir (yazıcı listesi yüklenmiş olmalı). sormadan: yazıcı penceresi açılmaz.
   // Yazıcı durumu iki ayrı şeydir: (1) bilgisayardaki baskı programı çalışıyor mu, (2) Windows yazıcıyı görüyor mu.
-  var AJAN_SURUM = 166, WIN_DURUM = { kapali: 'yazıcı kapalı ya da kablosu takılı değil', kagit: 'kâğıt / etiket sorunu', hata: 'yazıcı hata veriyor' };
+  var AJAN_SURUM = 167, WIN_DURUM = { kapali: 'yazıcı kapalı ya da kablosu takılı değil', kagit: 'kâğıt / etiket sorunu', hata: 'yazıcı hata veriyor' };
   function yzDurumHtml(y){
     if(!y.cevrimici) return '<span style="color:var(--red);">● bilgisayar ya da baskı programı kapalı</span>';
     if(WIN_DURUM[y.winDurum]) return '<span style="color:var(--amber);">● ' + WIN_DURUM[y.winDurum] + '</span>';
@@ -2574,7 +2574,7 @@
       : d.durum === 'iptal' ? 'Baskı iptal edildi.'
       : d.durum === 'onay_bekliyor' ? 'Bilgisayardaki kişinin onayı bekleniyor.'
       : d.durum === 'bekliyor' && yz && !yz.cevrimici ? 'Bilgisayar kapalı ya da baskı programı çalışmıyor — açılınca basılacak.'
-      : bitti ? 'Yazıcıya verildi — çıkan etiketleri say.' + (d.mesaj ? '<br><span style="opacity:.7; font-weight:400;">' + esc(d.mesaj) + '</span>' : '') + (yz && WIN_DURUM[yz.winDurum] ? ' <b>Dikkat: ' + WIN_DURUM[yz.winDurum] + '</b> — düzelince kendiliğinden basılır, yeniden gönderme.' : '')
+      : bitti ? 'Yazıcıya verildi — çıkan etiketleri say.' + (d.mesaj ? '<br><span style="font-weight:' + (/DIKKAT/.test(d.mesaj) ? '800; color:var(--red)' : '400; opacity:.7') + ';">' + esc(d.mesaj) + '</span>' : '') + (yz && WIN_DURUM[yz.winDurum] ? ' <b>Dikkat: ' + WIN_DURUM[yz.winDurum] + '</b> — düzelince kendiliğinden basılır, yeniden gönderme.' : '')
       : (Date.now() - (d.zaman || Date.now()) > 5 * 60 * 1000) ? 'Bu iş takıldı: bilgisayardan sonuç gelmedi. Baskı programının açık olduğuna bak ve yeniden "Yazdır"a bas.' : '';
     if(!bitti && !kotu && Date.now() - (d.zaman || Date.now()) > 5 * 60 * 1000) kotu = true;
     return '<div class="adimKutu' + (kotu ? ' kotu' : bitti ? ' bitti' : '') + '">' +
