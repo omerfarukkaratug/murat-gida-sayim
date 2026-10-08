@@ -296,11 +296,15 @@
   .kSagAlt .barkod{width:56em; height:13em; display:block;} .kSagAlt .brk{font-family:"Courier New", monospace; font-size:3.8em; letter-spacing:.12em;}
   .kSagAlt .qr{width:21em; height:21em;} .kSagAlt .yerli{height:17em; width:43em;}
   .aKdv{font-size:3em; font-weight:700; margin:.4em 0 .7em; flex-shrink:0;}
+  .aAdet{font-size:4.6em; font-weight:700; flex-shrink:0; display:flex; flex-wrap:wrap; align-items:baseline; gap:.2em .9em; margin:-.2em 0 .3em;}
+  .aAdet b{font-weight:900;} .aAdet .tek{font-size:.68em; font-weight:700;}
+  .yatay .aAdet{font-size:4em;}
   .aOnceki{flex-shrink:0;}
   /* DAR: kâğıdın kullanılabilir yüksekliği azsa (A6, üstte 2 cm boşluk) parçalar küçülür */
   .dar .afis{padding:4em 6.5em 4em;}
   .yatay .afis{padding:4.5em 8em 3.5em;} .yatay .aUst{height:12em;} .yatay .aLogo{height:11em;} .yatay .aBasKutu{height:12em;}
-  .yatay .aAd{height:22em; margin-top:1.5em;} .yatay.cesitli .aAd{height:16em;} .yatay .aCesit{height:7em;}
+  .yatay .aAd{height:22em; margin-top:1.5em;} .yatay.cesitli .aAd{height:14em;} .yatay .aCesit{height:10.5em;}
+  .yatay .aAlt{min-height:0; overflow:hidden;} .yatay .aAltIc{display:flex; flex-direction:column; gap:2em;}
   /* Yatay: fiyat solda büyük, bilgiler sağda dar bir sütunda (yükseklik fiyata kalır) */
   .yatay .afis{display:grid; grid-template-columns:minmax(0, 1fr) 42em; grid-template-rows:auto auto auto minmax(0, 1fr); column-gap:5em;}
   .yatay .aUst, .yatay .aAd, .yatay .aCesit{grid-column:1 / -1;}
@@ -803,7 +807,7 @@
       ? ('📦 ' + katalog.length + ' ürün' + (zaman ? ' · fiyatlar <b>' + esc(zaman) + '</b> itibarıyla' : '') + '. Sunucuda daha yeni fiyat varsa bu sayfa açılınca kendiliğinden indirilir.')
       : '⚠️ Bu telefonda katalog yok. Önce uygulamaya girip kataloğun inmesini bekle, sonra bu sayfaya dön. (Ürünü elle de ekleyebilirsin.)';
   }
-  var katalogHarita = {};   // barkod -> katalog kaydı
+  var katalogHarita = {}, tekliHarita = {};   // barkod -> katalog kaydı; stok kodu -> tekli fiyat
   function katalogKur(r){
     katalog = r; katalogHarita = {}; benzerOnbellek = {};
     r.forEach(function(k){ katalogHarita[String(k.barcode)] = k; });
@@ -824,6 +828,12 @@
       if(!l.some(function(x){ return x.n === c; })) l.push({ n: c, ad: birimAdi(k.birim), fiyat: f });
     });
     Object.keys(koliFiyatHarita).forEach(function(sk){ koliFiyatHarita[sk].sort(function(a, b){ return a.n - b.n; }); });
+    // stok kodu -> TEKLİ barkodun fiyatı (paket/koli afişinde "tek alırsan adedi" için)
+    tekliHarita = {};
+    r.forEach(function(k){
+      var c = Number(k.carpan), sk = String(k.stockCode || ''), f = sayi(k.price); if(!sk || c > 1 || isNaN(f) || f <= 0) return;
+      if(!(tekliHarita[sk] > 0)) tekliHarita[sk] = f;
+    });
     ulkeListesiDoldur();
     katalogBilgisi();
     topluBilgiCiz();
@@ -1033,7 +1043,19 @@
   }
   // Ürünün KENDİSİ koli/paket mi? (okutulan barkod koli barkoduysa fiyat da koli fiyatıdır) → { n: içindeki adet, ad: 'Koli' }
   function kendiAmbalaj(u){
-    if(!u || u.grup || u.elle || !u.barkod) return null;
+    if(!u || u.elle) return null;
+    if(u.grup && u.grup.length > 1){
+      // Çeşitli etiket: BÜTÜN çeşitler aynı adetli paket/koli barkoduysa etiket de paket etiketidir.
+      var n = 0, ad = '', uygun = true, katta = false;
+      u.grup.forEach(function(x){
+        var kk = katalogHarita[String(x.barkod)]; if(!kk){ uygun = false; return; } katta = true;
+        var cc = Number(kk.carpan); if(!(cc > 1)){ uygun = false; return; }
+        if(!n){ n = cc; ad = birimAdi(kk.birim); } else if(cc !== n) uygun = false;
+      });
+      if(katta) return uygun && n ? { n: n, ad: ad } : null;
+      return Number(u.kaN) > 1 ? { n: Number(u.kaN), ad: String(u.kaAd || 'Koli') } : null;
+    }
+    if(u.grup || !u.barkod) return null;
     var k = katalogHarita[String(u.barkod)], c = k ? Number(k.carpan) : 0;
     if(c > 1) return { n: c, ad: birimAdi(k.birim) };
     // Baskı programında katalog yoktur; bilgi işle birlikte gelir (kaN, kaAd).
@@ -1079,8 +1101,27 @@
     });
     return var_ ? engel : '';
   }
+  // Paket/koli barkodlu ürünün TEKLİ satış fiyatı (aynı stok kodunun tekli barkodu). Çeşitlide hepsi aynı olmalı.
+  // Baskı programında katalog yoktur; değer işle gelir (tkF).
+  function tekliFiyat(u){
+    var bl = u.grup && u.grup.length > 1 ? u.grup.map(function(x){ return x.barkod; }) : [u.barkod], f = NaN, katta = false, uygun = true;
+    bl.forEach(function(b){
+      var k = katalogHarita[String(b)]; if(!k){ uygun = false; return; } katta = true;
+      var t = tekliHarita[String(k.stockCode || '')];
+      if(!(t > 0)) uygun = false; else if(isNaN(f)) f = t; else if(Math.abs(t - f) > 0.004) uygun = false;
+    });
+    if(!katta) return sayi(u.tkF) > 0 ? sayi(u.tkF) : NaN;
+    return uygun ? f : NaN;
+  }
   function koliTeklif(u){
     if(!u || u.elle || !u.barkod || u.indirim) return null;
+    // Okutulan barkodun KENDİSİ paket/koli: afişte paket fiyatı büyük, karşılaştırma tekli fiyatla yapılır.
+    var ka0 = kendiAmbalaj(u);
+    if(ka0){
+      var tk = tekliFiyat(u), pf = sayi(u.fiyat);
+      if(!(tk > 0) || !(pf > 0) || pf / ka0.n >= tk - 0.004) return null;
+      return { n: ka0.n, ad: ka0.ad, fiyat: pf, adet: Math.round(pf / ka0.n * 100) / 100, tek: tk };
+    }
     var f = sayi(u.fiyat), t = null, cok = u.grup && u.grup.length > 1;
     var uyeler = cok ? u.grup.map(function(x){ return katalogHarita[String(x.barkod)]; }) : [katalogHarita[String(u.barkod)]];
     if(uyeler.some(function(k){ return !!k; })){
@@ -2161,7 +2202,7 @@
     if(dnm) gonderilen = gonderilen.slice(0, 1);
     var liste = gonderilen.map(function(u){
       var c = {}; Object.keys(u).forEach(function(a){ c[a] = u[a]; }); c.kod = stokKodu(u); if(u.grup && u.grup.length > 1) c.gKod = grupKodu(u);
-      var ka = kendiAmbalaj(u); c.kaN = ka ? ka.n : 0; c.kaAd = ka ? ka.ad : ''; if(dnm) c.adet = 1;
+      var ka = kendiAmbalaj(u); c.kaN = ka ? ka.n : 0; c.kaAd = ka ? ka.ad : ''; c.tkF = ka && tekliFiyat(u) > 0 ? tekliFiyat(u) : 0; if(dnm) c.adet = 1;
       var uf = gBicim === 'karma' ? urunBicim(u) : gBicim; if(gBicim === 'karma') c.kBicim = uf;
       c.ustBosluk = urunBosluk(u, uf);
       if(gBicim === 'a4b') c.boySatir = boySatirlari(u);
@@ -3117,27 +3158,30 @@
     var bosluk = urunBosluk(u, f || durum.bicim) ? UST_BOSLUK_MM : 0;
     var em = B.em || B.w / 100, yatay = B.w > B.h;
     var dar = (B.h - bosluk) / em < 132;           // kullanılabilir yükseklik (em)
-    var cesit = cesitAdlari(u);
+    var cesit = cesitAdlari(u), ka = kendiAmbalaj(u), tk = ka ? tekliFiyat(u) : NaN;
+    var altIc = yatay ? '<div class="aAltIc">' : '', altSon = yatay ? '</div>' : '';
     return '<div class="sayfa' + (dar ? ' dar' : '') + (yatay ? ' yatay' : '') + (cesit.length ? ' cesitli' : '') + '" style="width:' + B.w + 'mm; height:' + B.h + 'mm; font-size:' + em + 'mm; padding-top:' + bosluk + 'mm;">' + (bosluk ? KAT_CIZGI : '') + '<div class="afis">' +
       '<div class="aUst">' + ((durum.logo && magazaLogoVar)
           ? '<div class="aLogoKutu' + (durum.slogan ? ' sloganli' : '') + '"><img class="aLogo" src="' + MAGAZA_LOGO + '" alt="">' + (durum.slogan ? '<div class="aSlogan">' + esc(durum.slogan) + '</div>' : '') + '</div>'
           : '<span></span>') +
         (bas ? '<div class="aBasKutu sig" data-em="5.6" data-min="2.6"><span class="aBaslik yazi">' + esc(bas) + '</span></div>' : '') + '</div>' +
       '<div class="aAd sig" data-em="9.6" data-min="4"><span class="yazi">' + adHtml(u) + '</span></div>' +
-      (cesit.length ? '<div class="aCesit sig" data-em="3.4" data-min="2"><span class="yazi"><b>Çeşitler:</b> ' + cesit.map(esc).join(' · ') + '</span></div>' : '') +
+      (cesit.length ? '<div class="aCesit sig" data-em="3.4" data-min="' + (yatay ? 1.7 : 2) + '"><span class="yazi"><b>Çeşitler:</b> ' + cesit.map(esc).join(' · ') + '</span></div>' : '') +
       '<div class="aOrta">' +
         (u.indirim && oran > 0 ? '<div class="aOnceki"><span class="eski">' + para(onceki) + ' ₺</span><span class="oran">%' + oran + '</span><span class="etk">indirimden<br>önceki fiyat</span></div>' : '') +
         '<div class="aFiyatKutu sig" data-em="' + (yatay ? 56 : 38) + '" data-min="12"><span class="aFiyat yazi">' + fiyatHtml(u.fiyat) + '</span></div>' +
-        '<div class="aKdv">' + 'KDV dâhil satış fiyatı' + '</div>' +
+        '<div class="aKdv">' + (ka ? ka.n + ' adetli ' + esc(ka.ad.toLocaleLowerCase('tr-TR')) + ' · ' : '') + 'KDV dâhil satış fiyatı' + '</div>' +
+        (ka ? '<div class="aAdet"><span>ADEDİ <b>' + para(Math.round(sayi(u.fiyat) / ka.n * 100) / 100) + ' ₺</b></span>' +
+          (tk > sayi(u.fiyat) / ka.n + 0.004 ? '<span class="tek">Tek alırsan adedi ' + para(tk) + ' ₺</span>' : '') + '</div>' : '') +
       '</div>' +
-      '<div class="aAlt"><div class="aBilgi">' +
+      '<div class="aAlt' + (yatay ? ' sigKap" data-em="1" data-min=".55' : '') + '">' + altIc + '<div class="aBilgi">' +
         (birimFiyatMetni(u, ' / ') ? '<div><b>Birim fiyatı:</b> ' + birimFiyatMetni(u, ' / ') + '</div>' : '') +
         '<div><b>Üretim yeri:</b> ' + esc(String(u.yer || '').trim()) + (koliYazi(u) ? ' &nbsp;·&nbsp; <b>' + koliYazi(u) + '</b>' : '') + '</div>' +
         '<div><b>' + (u.indirim ? 'İndirim tarihleri' : 'Fiyat değişiklik tarihi') + ':</b> ' + tarihTr(u.tarih) + (u.indirim && u.bitis ? ' – ' + tarihTr(u.bitis) : '') + '</div>' +
         (u.barkod && !u.grup ? '<div class="brkSatir"><div>' + barkodSvg(u.barkod) + '<div class="brk">' + esc(u.barkod) + '</div></div>' +
           (stokKodu(u) ? '<div class="kodKutu">Stok kodu<b>' + esc(stokKodu(u)) + '</b></div>' : '') + '</div>'
           : (grupKodu(u) ? '<div class="brkSatir"><div class="kodKutu">Etiket kodu<b>' + grupKodYazi(grupKodu(u)) + '</b></div></div>' : '')) +
-      '</div><div class="aSag">' + afisQr(u) + yerliHtml(u) + '</div></div>' +
+      '</div><div class="aSag">' + afisQr(u) + yerliHtml(u) + '</div>' + altSon + '</div>' +
     '</div></div>';
   }
   // Zebra rulo etiketi (varsayılan 80×34 mm). Ölçüler mm; 1em = 1mm. Fiyat, ruloda hazır basılı sarı kutuya oturur.
@@ -3145,19 +3189,24 @@
   // indirim yüzdesi ve kolideki toplam kazanç gösterilir. Fiyatlar katalogdan gelir; yüzde ve kazanç onlardan
   // hesaplanır (yüzde aşağı yuvarlanır). Siyah-beyazdır ve "indirim" sözü KULLANILMAZ: indirimli satış iddiası
   // önceki fiyat ve tarih göstermeyi gerektirir; burada yalnızca aynı afişteki iki adet fiyatı karşılaştırılır.
+  // Türkçe bulunma eki (büyük harf): KOLİ→DE, PAKET→TE, KASA→DA
+  function bulunmaEki(s){
+    s = String(s || ''); var son = s.slice(-1), sesli = (s.match(/[AEIİOÖUÜ]/g) || []).pop() || 'E';
+    return ('FSTKÇŞHP'.indexOf(son) !== -1 ? 'T' : 'D') + ('AIOU'.indexOf(sesli) !== -1 ? 'A' : 'E');
+  }
   function koliAfisHtml(u, f){
     f = f || 'a5y';                               // 'a4k' / 'a3k': aynı içerik, DİK sayfada (fiyat üstte, karşılaştırma kutuları altta yan yana)
     var dik = f === 'a5k' || f === 'a4k' || f === 'a3k';
     var kb = { a5y: { w: 210, h: 148, em: 0.5 }, a5k: { w: 148, h: 210, em: 0.35238 }, a4k: { w: 210, h: 297, em: 0.5 }, a4y: { w: 297, h: 210, em: 0.70711 },
                a3k: { w: 297, h: 420, em: 0.70711 }, a3y: { w: 420, h: 297, em: 1 } }[f], ub = urunBosluk(u, f) ? UST_BOSLUK_MM : 0;
-    var kt = koliTeklif(u) || { n: 0, ad: 'Koli', fiyat: NaN, adet: NaN }, bfm = birimFiyatMetni(u, ' / '), tek = sayi(u.fiyat);
+    var kt = koliTeklif(u) || { n: 0, ad: 'Koli', fiyat: NaN, adet: NaN }, bfm = birimFiyatMetni(u, ' / '), tek = kt.tek || sayi(u.fiyat);
     var yuzde = Math.floor((1 - kt.adet / tek) * 100 + 1e-6), kazanc = Math.round((tek * kt.n - kt.fiyat) * 100) / 100, AD = esc(kt.ad.toLocaleUpperCase('tr-TR'));
     var satir = function(etk, f, sinif){ return '<div class="kSatir' + (sinif ? ' ' + sinif : '') + '"><span>' + etk + '</span><b>' + para(f) + '<i>₺</i></b></div>'; };
     return '<div class="sayfa" style="width:' + kb.w + 'mm; height:' + kb.h + 'mm; font-size:' + kb.em + 'mm; padding-top:' + ub + 'mm;">' + (ub ? KAT_CIZGI : '') + '<div class="kAfis' + (yuzde >= 1 ? '' : ' duz') + (ub && (f === 'a5y' || f === 'a5k') ? ' sik' : '') + (kt.diger ? ' uc' : '') + (dik ? ' dik' : '') + '">' +
       '<div class="kBas">' + (durum.logo && magazaLogoVar ? '<img class="aLogo" src="' + MAGAZA_LOGO + '" alt="">' : '') + '<div class="kTur">' + AD + ' FİYATI</div></div>' +
-      (yuzde >= 1 ? '<div class="kDaire"><b>%' + yuzde + '</b><span>' + AD + 'DE<br>DAHA UCUZ</span></div>' : '') +
+      (yuzde >= 1 ? '<div class="kDaire"><b>%' + yuzde + '</b><span>' + AD + bulunmaEki(AD) + '<br>DAHA UCUZ</span></div>' : '') +
       '<div class="kAd sig" data-em="' + (dik ? 34 : 24) + '" data-min="10"><span class="yazi">' + adHtml(u) + '</span></div>' +
-      (cesitAdlari(u).length ? '<div class="kCesit sig data-em="6.4" data-min="3.6"><span class="yazi"><b>Çeşitler:</b> ' + cesitAdlari(u).map(esc).join(' · ') + '</span></div>' : '') +
+      (cesitAdlari(u).length ? '<div class="kCesit sig" data-em="6.4" data-min="3.6"><span class="yazi"><b>Çeşitler:</b> ' + cesitAdlari(u).map(esc).join(' · ') + '</span></div>' : '') +
       '<div class="kOrta"><div class="kSol"><div class="kSolEtk">' + kt.n + ' ADETLİ ' + AD + '<small>KDV dâhil</small></div>' +
           '<div class="kFiyatKutu sig" data-em="' + (dik ? 150 : 120) + '" data-min="40"><span class="kFiyat yazi">' + fiyatHtml(kt.fiyat) + '</span></div></div>' +
         '<div class="kSag">' + satir('TEK ALIRSAN ADEDİ', tek, '') + satir((kt.diger ? kt.n + ' ADET ' : AD + ' ') + 'ALIRSAN ADEDİ', kt.adet, 'vurgu') +
