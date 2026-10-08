@@ -2196,7 +2196,7 @@
   }
   // Bir biçimin basılacak ürünlerini yazıcısına gönderir (yazıcı listesi yüklenmiş olmalı). sormadan: yazıcı penceresi açılmaz.
   // Yazıcı durumu iki ayrı şeydir: (1) bilgisayardaki baskı programı çalışıyor mu, (2) Windows yazıcıyı görüyor mu.
-  var AJAN_SURUM = 167, WIN_DURUM = { kapali: 'yazıcı kapalı ya da kablosu takılı değil', kagit: 'kâğıt / etiket sorunu', hata: 'yazıcı hata veriyor' };
+  var AJAN_SURUM = 169, WIN_DURUM = { kapali: 'yazıcı kapalı ya da kablosu takılı değil', kagit: 'kâğıt / etiket sorunu', hata: 'yazıcı hata veriyor' };
   function yzDurumHtml(y){
     if(!y.cevrimici) return '<span style="color:var(--red);">● bilgisayar ya da baskı programı kapalı</span>';
     if(WIN_DURUM[y.winDurum]) return '<span style="color:var(--amber);">● ' + WIN_DURUM[y.winDurum] + '</span>';
@@ -2623,7 +2623,7 @@
     basildi: '✅ yazıcıya gönderildi', hata: '❌ basılmadı', iptal: '⚠️ iptal edildi', ulasmadi: '❌ sunucuya ulaşmadı — tekrar dene' };
   // Baskı işinin yolu, adım adım: telefon → sunucu → bilgisayar → yazıcı. Geçen süre saniye saniye güncellenir.
   var ADIMLAR = ['Telefondan çıktı', 'Sunucuda', 'Bilgisayar aldı', 'Yazıcıya verildi'];
-  function adimHtml(d){
+  function adimHtml(d, f){
     var sira = { gonderildi: 1, bekliyor: 2, onay_bekliyor: 2, basiliyor: 3, basildi: 4 }[d.durum] || 0;
     var kotu = d.durum === 'hata' || d.durum === 'iptal' || d.durum === 'ulasmadi', bitti = d.durum === 'basildi';
     var yz = baski.hazir ? baski.yazicilar.filter(function(y){ return y.ad === d.yazici; })[0] : null;
@@ -2641,7 +2641,8 @@
       '<div class="adimlar">' + ADIMLAR.map(function(a, n){
         var tamam = !kotu && n < sira, simdi = !kotu && !bitti && n === sira;
         return '<div class="adim' + (tamam ? ' tamam' : simdi ? ' simdi' : '') + '"><i>' + (tamam ? '✓' : (n + 1)) + '</i><span>' + a + '</span></div>'; }).join('') + '</div>' +
-      (not ? '<div class="adimNot">' + not + '</div>' : '') + '</div>';
+      (not ? '<div class="adimNot">' + not + '</div>' : '') +
+      (!bitti && !kotu && f ? '<button type="button" class="yzKucuk" data-yz="iptal" data-f="' + f + '" style="margin-top:6px; color:var(--red);">✖ İptal et / durdur</button>' : '') + '</div>';
   }
   function gecenYazi(z){ var s2 = Math.max(0, Math.round((Date.now() - (z || Date.now())) / 1000)); return s2 < 60 ? s2 + ' sn' : Math.floor(s2 / 60) + ' dk ' + (s2 % 60) + ' sn'; }
   if(!IS_NO) setInterval(function(){
@@ -2669,7 +2670,7 @@
           (g.adet ? '<div class="ipucu">Yazıcı: ' + (yz ? (yz.secili ? '<b>' + esc(yz.secili.ad) + '</b> ' + yzDurumHtml(yz.secili) +
               (yt('etiket_yazici') && yz.uygun.length > 1 ? ' <button type="button" class="yzKucuk" data-yz="yazici" data-f="' + f + '">değiştir</button>' : '')
               : '<b style="color:var(--red);">tanımlı değil</b>') : 'yükleniyor…') + '</div>' : '') +
-          (d ? adimHtml(d) : '') +
+          (d ? adimHtml(d, f) : '') +
           '<div class="yzDugme">' + (g.adet ? '<button type="button" class="ana" data-yz="bas" data-f="' + f + '">🖨️ Yazdır</button>' : '') +
             '<button type="button" data-yz="onizle" data-f="' + f + '">Önizle</button>' +
             (g.adet && f === 'zebra' ? '<button type="button" data-yz="deneme" data-f="' + f + '">1 deneme etiketi</button>' : '') +
@@ -2686,6 +2687,24 @@
     if(is === 'onizle'){ bicimSec(f); yazdirCiz(); $('onizleKart').scrollIntoView({ behavior: 'smooth' }); return; }
     if(is === 'cihaz'){ bicimSec(f); $('yazdirBtn').click(); return; }
     if(is === 'yazici'){ bicimSec(f); ysYalnizSec = true; baskiYukle(function(){ yaziciSecAc(); }); return; }
+    // İptal: sunucuda iş "iptal" olur; bilgisayar basmadan önce sorduğu için basmaz. Kâğıt zaten çıkmışsa yalnızca takip durur.
+    if(is === 'iptal'){
+      var di = durum.isDurum[f]; if(!di) return;
+      if(!window.confirm('Bu baskı işi iptal edilsin mi?\n\nBilgisayar henüz basmadıysa basılmaz. Kâğıt çıktıysa sadece sayaç durur.')) return;
+      b.disabled = true; b.textContent = '⏳ İptal ediliyor…';
+      var yerelDurdur = function(m){
+        di.durum = 'iptal'; di.mesaj = m; di.bitis = Date.now();
+        if(izlenen[di.id]) izlenen[di.id].bitti = true;
+        kaydet(); yazdirCiz();
+      };
+      if(di.durum === 'gonderildi' || !di.id){ yerelDurdur('Telefonda durduruldu'); toast('Durduruldu', 'uyari'); return; }
+      sunucuSor({ action: 'baski_islem', id: di.id, islem: 'iptal' }, function(hata, veri){
+        if(!hata && veri && veri.status === 'ok'){ yerelDurdur('Telefondan iptal edildi'); toast('İptal edildi — basılmayacak', 'uyari'); }
+        else { yerelDurdur('Takip durduruldu — bilgisayar basmış olabilir, çıkanı kontrol et'); toast('Takip durduruldu (iş bitmiş ya da basılıyor olabilir — çıkanı kontrol et)', 'uyari'); }
+        baskiYukle();
+      });
+      return;
+    }
     // Çift basmayı önle: (1) gönderim sürerken düğme kilitlenir ve hemen "Gönderiliyor…" yazar;
     // (2) aynı biçimde önceki iş hâlâ sürüyorsa yenisi ancak onayla gönderilir (yoksa aynı etiketler iki kez çıkar).
     if(gonderimSuruyor){ toast('Gönderiliyor — bekle, tekrar basma', 'uyari'); return; }
