@@ -8,7 +8,7 @@
 // bir sürüm dağıttıktan sonra /exec adresini boş açtığında burada yazan
 // numarayı görmelisin; index.html'in üstündeki "build" numarasıyla
 // eşleşecek şekilde ben her ikisini birlikte güncelliyorum.
-var GS_VERSION = 'build167';
+var GS_VERSION = 'build168';
 
 // Sheets'te "Saat" sütunu zaman biçimli olarak algılanırsa, hücre değeri düz
 // metin değil bir Date nesnesi olarak gelir ve String(...) çirkin bir çıktı
@@ -864,7 +864,8 @@ function baskiIslem(id, islem, callback) {
   try {
     var ok = baskiIsGuncelle(id, function (durum) {
       if (islem === 'onayla' && durum === 'onay_bekliyor') return { durum: 'bekliyor' };
-      if (islem === 'iptal' && (durum === 'onay_bekliyor' || durum === 'bekliyor')) return { durum: 'iptal' };
+      // "basılıyor" da iptal edilebilir: program basmadan hemen önce sorar (kontrol), iptal görürse basmaz.
+      if (islem === 'iptal' && (durum === 'onay_bekliyor' || durum === 'bekliyor' || durum === 'basiliyor')) return { durum: 'iptal', mesaj: 'Telefondan iptal edildi' };
       if (islem === 'tekrar' && (durum === 'hata' || durum === 'basildi' || durum === 'iptal')) return { durum: 'bekliyor' };
       return null;
     });

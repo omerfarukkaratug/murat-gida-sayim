@@ -21,7 +21,7 @@ $Sumatra       = Join-Path $Klasor "SumatraPDF.exe"
 $IsKlasoru     = Join-Path $Klasor "is"
 $Profil        = Join-Path $Klasor "tarayici-profil"
 $BeklemeSn     = 3      # iki sorgu arasi bekleme
-$AjanSurum     = "168"  # sunucuya bildirilir; uygulama eski programi uyarir
+$AjanSurum     = "169"  # sunucuya bildirilir; uygulama eski programi uyarir
 Add-Type -AssemblyName System.Drawing   # Zebra etiketi goruntu olarak basilir
 $ZebraParcaBoy = 40     # bir goruntudeki en fazla etiket (etiket.html PARCA_BOY ile ayni olmali)
 # Uygulamada GORUNMEYECEK yazicilar (sanal yazicilar)
@@ -429,16 +429,16 @@ function Bas($is) {
     $pdfKb = 0; try { $pdfKb = [Math]::Round((Get-Item $pdf).Length / 1KB) } catch {}
     if ($pdfKb -lt 1) { Bitti $id "hata" "Etiket dosyasi bos olustu - yeniden gonder"; Yaz-Log "HATA: PDF bos ($pdf)."; return }
     Yaz-Log "Yaziciya veriliyor: $yazici ($kagit, PDF $pdfKb KB)..."
-    $kOnce = Kuyruk-Say $yazici
     $yBas = Get-Date
     $p = Start-Process -FilePath $Sumatra -ArgumentList @("-print-to", "`"$yazici`"", "-print-settings", "`"$ayar`"", "-silent", "`"$pdf`"") -PassThru -WindowStyle Hidden
     if (-not $p.WaitForExit(60000)) { try { $p.Kill() } catch {}; Bitti $id "hata" "Yazici 60 sn icinde isi almadi (SumatraPDF cevap vermedi) - yaziciyi kontrol edip yeniden gonder"; Yaz-Log "HATA: SumatraPDF 60 sn zaman asimi."; return }
     Yaz-Log "SumatraPDF bitti (kod $($p.ExitCode)), kuyruga bakiliyor..." 
     if ($p.ExitCode -ne 0) { Bitti $id "hata" "Yazici isi kabul etmedi (kod $($p.ExitCode))"; Yaz-Log "HATA: SumatraPDF cikis kodu $($p.ExitCode)."; return }
 
-    $kNot = Kuyruk-Izle $yazici $kOnce
+    # Sonuc HEMEN bildirilir (telefondaki sayac durur); kuyruk kontrolu sadece kayit icindir, telefonu bekletmez.
+    Bitti $id "basildi" (Sure-Ozeti)
+    $kNot = Kuyruk-Izle $yazici 0
     Yaz-Log "Yazici kuyrugu: $kNot (PDF $pdfKb KB)"
-    Bitti $id "basildi" ((Sure-Ozeti) + " | " + $kNot)
     Yaz-Log ("Yaziciya gonderildi: $id ($kagit) - yaziciya verme " + [Math]::Round(((Get-Date) - $yBas).TotalSeconds, 1) + " sn")
 }
 
