@@ -470,11 +470,6 @@
           <div id="dgAlt"><span id="dgSayac"></span><label style="margin:0; text-transform:none; letter-spacing:0; font-size:12.5px; color:inherit; display:flex; align-items:center; gap:6px;"><input id="dgOto" type="checkbox" style="width:auto;"> hatalıları listeye ekle</label></div>
         </div>
       </div>
-      <div id="hizliKutu" style="margin-top:10px; padding:8px 10px; border:2px solid var(--amber); border-radius:12px;">
-        <label style="display:flex; align-items:center; gap:10px; margin:0; text-transform:none; letter-spacing:0; font-size:14px; color:var(--text);"><input id="hizliAc" type="checkbox" style="width:22px; height:22px;"> <span>⚡ <b>Hızlı etiket</b> — okutulan ürün Zebra etiketi olarak kendiliğinden yazıcıya gider</span></label>
-        <div id="hizliDurum" class="gizli" style="display:flex; align-items:center; justify-content:space-between; gap:8px; margin-top:8px; font-size:13px; font-weight:700;"><span id="hizliYazi"></span><button type="button" id="hizliSimdi" class="ana" style="flex:none; padding:6px 12px; font-size:12.5px;">Şimdi gönder</button></div>
-        <div id="hizliEksik" class="gizli" style="margin-top:6px;"></div>
-      </div>
       <div id="sonuclar"></div>
       <div id="araSecBar" class="gizli"><button type="button" class="ana" id="araSecEkle" style="flex:1;"></button><button type="button" id="araSecTemizle" style="flex:none; font-size:12.5px;">Seçimi temizle</button></div>
       <div class="ekSatir"><span class="ipucu">Yeni ürün:</span><div class="bicimSec" id="varsayilanSec" style="margin:0;"></div></div>
@@ -517,6 +512,20 @@
       </div>
       <button type="button" id="topluTrBtn" style="width:100%; margin-top:10px; font-size:13px; border-style:dashed;">Üretim yeri boş olanlara "Türkiye" yaz</button>
       </div>
+    </div>
+
+    <!-- Hızlı etiket: kendi sekmesinde. Burada okutulan ürün Zebra etiketi olarak kendiliğinden yazıcıya gider;
+         sekmeden çıkınca kapanır (personel afiş okuturken yanlışlıkla açık kalmasın). -->
+    <div class="kart" id="hizliKart" style="border:2px solid var(--amber);">
+      <div class="kartBaslik">⚡ Hızlı raf etiketi</div>
+      <div class="ipucu" style="margin-bottom:10px;">Burada okuttuğun her ürün <b>Zebra raf etiketi</b> olarak birkaç saniye içinde kendiliğinden yazıcıya gider. Afiş basacaksan <b>Ürünler</b> sekmesini kullan.</div>
+      <button type="button" id="hizliKamBtn" class="ana" style="width:100%; font-size:17px; padding:14px;">📷 Okutmaya başla</button>
+      <div id="hizliKamYer" style="margin-top:8px;"></div>
+      <div class="satir" style="margin-top:8px;"><div style="flex:3;"><input id="hizliBarkod" type="search" inputmode="numeric" placeholder="Barkodu elle yaz, Enter" autocomplete="off"></div></div>
+      <div id="hizliDurum" class="gizli" style="display:flex; align-items:center; justify-content:space-between; gap:8px; margin-top:8px; font-size:13px; font-weight:700;"><span id="hizliYazi"></span><button type="button" id="hizliSimdi" class="ana" style="flex:none; padding:6px 12px; font-size:12.5px;">Şimdi gönder</button></div>
+        <div id="hizliEksik" class="gizli" style="margin-top:6px;"></div>
+      <div class="kartBaslik" style="margin-top:12px; font-size:14px;">Son okutulanlar</div>
+      <div id="hizliSon" class="ipucu">Henüz ürün okutulmadı.</div>
     </div>
 
     <div class="kart">
@@ -581,6 +590,7 @@
 </div>
 <div class="cubuk gizli" id="cubuk">
   <button type="button" data-sekme="urun"><span class="sekSimge">🛒</span>Ürünler<i data-sayac="urun"></i></button>
+  <button type="button" data-sekme="hizli"><span class="sekSimge">⚡</span>Hızlı<i data-sayac="hizli"></i></button>
   <button type="button" data-sekme="yazdir"><span class="sekSimge">🖨️</span>Yazdır<i data-sayac="yazdir"></i></button>
   <button type="button" data-sekme="kontrol"><span class="sekSimge">🔔</span>Fiyat takibi<i data-sayac="kontrol"></i></button>
   <button type="button" data-sekme="ayar"><span class="sekSimge">⚙️</span>Ayarlar</button>
@@ -1364,7 +1374,8 @@
         if(!(kod === sonKod && Date.now() - sonKodZaman < 3000)){
           sonKod = kod; sonKodZaman = Date.now();
           var zaten = durum.liste.some(function(x){ return x.barkod === kod || (x.grup && x.grup.some(function(g){ return g.barkod === kod; })); });
-          if(zaten) kamBildir(false, 'Zaten listede');
+          if(durum.hizli && !qk && katalogHarita[kod]){ var hs = hizliOkut(kod); kamBildir(hs !== 'zaten' && hs !== 'yok' && hs !== 'fiyatsiz', hs === 'tekrar' ? 'Tekrar basılacak: ' + katalogHarita[kod].name : hs === 'zaten' ? 'Zaten sırada' : '✓ ' + katalogHarita[kod].name + ' · ' + para(sayi(katalogHarita[kod].price)) + ' ₺'); }
+          else if(zaten) kamBildir(false, 'Zaten listede');
           else {
             var sonuc = barkodEkle(kod), kt = katalogHarita[kod];
             if(sonuc === 'grup') kamBildir(true, 'Çeşitli etiket ' + grupKodYazi(grupKodCoz(kod)));
@@ -1405,7 +1416,9 @@
         }).catch(function(e){ var h = new Error((e && e.message) || 'okuyucu'); h.okuyucu = true; throw h; });
       }).catch(kamHata);
   }
-  $('kameraBtn').addEventListener('click', function(){ if(akis){ kameraKapat(); return; } kameraAc(); });
+  $('kameraBtn').addEventListener('click', function(){ if(akis){ kameraKapat(); return; } kameraTasi(null); kameraAc(); });
+  // Sayfa arka plana geçince kamera bırakılır: iOS'ta kamera açık kalırsa uygulamanın öbür ekranlarında görüntü siyah kalıyor.
+  document.addEventListener('visibilitychange', function(){ if(document.hidden && akis) kameraKapat(); });
 
   // ---------- Liste (her ürünün etiket bilgileri) ----------
   function eksikler(u){
@@ -2205,14 +2218,13 @@
     return (d.durum === 'gonderildi' || d.durum === 'bekliyor' || d.durum === 'basiliyor' || d.durum === 'onay_bekliyor') && Date.now() - (d.zaman || 0) < 6 * 60 * 1000;
   }
   function hizliCiz(){
-    $('hizliAc').checked = !!durum.hizli;
     var ucan = hizliMesgul() ? ((durum.isDurum.zebra || {}).idler || []) : [];
     var n = hizliBekleyen().filter(function(u){ return ucan.indexOf(u.id) === -1; }).length, eksik = durum.liste.filter(function(u){ return urunBicim(u) === 'zebra' && !u.basildi && eksikler(u).length; }).length, m = hizliMesgul();
-    $('hizliDurum').classList.toggle('gizli', !durum.hizli || (!n && !eksik && !m));
+    $('hizliDurum').classList.toggle('gizli', !n && !eksik && !m);
     $('hizliYazi').innerHTML = (m ? '🖨️ Basılıyor…' + (n ? ' (' + n + ' etiket sırada)' : '') : n ? '⏳ ' + n + ' etiket birazdan yazıcıya gidecek' : '') +
       (eksik ? (m || n ? '<br>' : '') + '<span style="color:var(--red);">' + eksik + ' üründe bilgi eksik — aşağıdan tamamla, basılsın</span>' : '');
     // Eksikler burada, tek dokunuşla tamamlanır (üretim yeri); personel listede aramak zorunda kalmaz.
-    var el = durum.hizli ? durum.liste.filter(function(u){ return urunBicim(u) === 'zebra' && !u.basildi && eksikler(u).length; }) : [];
+    var el = true ? durum.liste.filter(function(u){ return urunBicim(u) === 'zebra' && !u.basildi && eksikler(u).length; }) : [];
     $('hizliEksik').classList.toggle('gizli', !el.length);
     $('hizliEksik').innerHTML = el.slice(0, 12).map(function(u){
       var e = eksikler(u), yerEksik = !String(u.yer || '').trim(), o = barkodUlke(u.barkod);
@@ -2223,6 +2235,12 @@
           '<input data-hyaz="1" list="ulkeler" placeholder="başka ülke yaz" style="flex:1; min-width:110px; padding:8px 10px; font-size:13px;"></div>' : '') +
         '<button type="button" data-hcikar="1" style="margin-top:6px; padding:4px 10px; font-size:12px; border:none; background:transparent; color:var(--red);">✕ listeden çıkar</button></div>'; }).join('');
     $('hizliSimdi').classList.toggle('gizli', m || !n);
+    var son = durum.liste.filter(function(u){ return u.hizliZaman; }).sort(function(a, b){ return b.hizliZaman - a.hizliZaman; }).slice(0, 20);
+    $('hizliSon').innerHTML = son.length ? son.map(function(u){
+      var d = u.basildi ? '<span style="color:var(--green);">✅ ' + esc(u.basildi) + '</span>' : eksikler(u).length ? '<span style="color:var(--red);">⚠️ eksik</span>' : ucan.indexOf(u.id) !== -1 ? '🖨️ basılıyor' : '⏳ sırada';
+      return '<div style="display:flex; justify-content:space-between; gap:8px; padding:5px 0; border-top:1px solid var(--line); font-size:13px;"><span style="min-width:0;">' + esc(u.ad) + ' · <b>' + para(u.fiyat) + ' ₺</b></span><span style="white-space:nowrap;">' + d + '</span></div>'; }).join('')
+      : 'Henüz ürün okutulmadı.';
+    Array.prototype.forEach.call(document.querySelectorAll('[data-sayac="hizli"]'), function(el){ var b = son.filter(function(u){ return !u.basildi; }).length; el.textContent = b ? String(b) : ''; });
   }
   function hizliPlanla(sn){
     clearTimeout(hizliZ);
@@ -2240,7 +2258,31 @@
       bicimGonder('zebra', true); hizliCiz();
     });
   }
-  $('hizliAc').addEventListener('change', function(){ durum.hizli = this.checked; kaydet(); if(durum.hizli) toast('Hızlı etiket açık — okuttuğun ürün yazıcıya gider'); hizliPlanla(); });
+  // Kamera kutusu Ürünler kartında durur; Hızlı sekmesinde oraya taşınır.
+  var kameraEv = null;
+  function kameraTasi(hedef){
+    var k = $('kamera'); if(!k) return;
+    if(!kameraEv) kameraEv = { ana: k.parentNode, sonraki: k.nextSibling };
+    if(hedef){ if(k.parentNode !== hedef) hedef.appendChild(k); }
+    else if(k.parentNode !== kameraEv.ana) kameraEv.ana.insertBefore(k, kameraEv.sonraki);
+  }
+  $('hizliKamBtn').addEventListener('click', function(){ if(akis){ kameraKapat(); return; } kameraTasi($('hizliKamYer')); kameraAc(); });
+  $('hizliBarkod').addEventListener('keydown', function(e){
+    if(e.key !== 'Enter') return;
+    var v = String(this.value || '').trim(); if(!v) return;
+    this.value = ''; hizliOkut(v);
+  });
+  // Hızlı sekmede okutulan barkod: listede yoksa eklenir; zaten basılmışsa yeniden basılmak üzere sıraya girer.
+  function hizliOkut(kod){
+    var u = durum.liste.filter(function(x){ return x.barkod === kod; })[0];
+    if(u){
+      if(u.basildi || urunBicim(u) !== 'zebra'){ u.basildi = ''; u.bicim = 'zebra'; u.hizliZaman = Date.now(); kaydet(); listeCiz(); hizliPlanla(); return 'tekrar'; }
+      return 'zaten';
+    }
+    var r = barkodEkle(kod);
+    if(r === 'eklendi' && durum.liste[0]){ durum.liste[0].hizliZaman = Date.now(); kaydet(); hizliCiz(); }
+    return r;
+  }
   $('hizliSimdi').addEventListener('click', hizliGonder);
   function hizliYerYaz(el, yer){
     var k = el.closest('[data-hid]'), u = k && durum.liste.filter(function(x){ return x.id === k.getAttribute('data-hid'); })[0];
@@ -2640,21 +2682,27 @@
     });
   });
   // ---------- Sekmeler ----------
-  var SEKMELER = ['urun', 'yazdir', 'kontrol', 'ayar'];
+  var SEKMELER = ['urun', 'hizli', 'yazdir', 'kontrol', 'ayar'];
   function sekmeAc(ad){
     if(IS_NO) return;
     if(SEKMELER.indexOf(ad) === -1) ad = 'urun';
+    // Hızlı etiket yalnızca kendi sekmesindeyken açıktır; kamera o sekmeye taşınır, çıkınca geri gelir.
+    var hizliydi = durum.hizli;
+    durum.hizli = ad === 'hizli';
+    if(hizliydi && !durum.hizli && akis && !dogrulaKip) kameraKapat();
+    kameraTasi(durum.hizli ? $('hizliKamYer') : null);
     durum.sekme = ad;
     Array.prototype.forEach.call(document.querySelectorAll('[data-sek]'), function(el){ el.classList.toggle('sekGizli', el.getAttribute('data-sek') !== ad); });
     Array.prototype.forEach.call(document.querySelectorAll('#cubuk button[data-sekme]'), function(el){ el.classList.toggle('secili', el.getAttribute('data-sekme') === ad); });
     if(ad === 'yazdir'){ yazdirCiz(); ciz(); if(navigator.onLine) baskiYukle(); }
     if(ad === 'kontrol') kuyrukCiz();
+    if(ad === 'hizli'){ hizliCiz(); hizliPlanla(); }
     window.scrollTo(0, 0);
   }
   (function(){
     var kart = function(id){ var el = $(id); return el ? el.closest('.kart') : null; };
     var ata = function(el, ad){ if(el) el.setAttribute('data-sek', ad); };
-    ata(kart('ara'), 'urun'); ata(kart('liste'), 'urun');
+    ata(kart('ara'), 'urun'); ata(kart('liste'), 'urun'); ata($('hizliKart'), 'hizli');
     ata($('yazdirKart'), 'yazdir'); ata($('onizleKart'), 'yazdir');
     ata(kart('dogrulaBtn'), 'kontrol'); ata($('kuyrukKart'), 'kontrol'); ata($('sktKart'), 'kontrol'); ata($('topluKart'), 'kontrol');
     $('sktListe').addEventListener('click', function(e){ var b = e.target.closest('button[data-skt]'); if(!b) return; var r = durum.sablon[b.getAttribute('data-skt')]; if(r){ delete r.sktTur; delete r.sktTarih; } durum.liste.forEach(function(u){ if(u.barkod === b.getAttribute('data-skt')){ u.sktTur = ''; u.sktTarih = ''; } }); kaydet(); listeCiz(); kuyrukCiz(); });

@@ -351,7 +351,7 @@
   <header style="border:none; padding:0 0 16px; background:transparent; display:flex; align-items:flex-start; justify-content:space-between;">
     <div>
       <h1><img src="logo-header.png" alt="Murat Gıda" style="height:30px; width:auto; display:block;"></h1>
-      <div class="sub">MK ERP · Murat Gıda • offline • Android • build 178</div>
+      <div class="sub">MK ERP · Murat Gıda • offline • Android • build 179</div>
     </div>
     <button type="button" id="themeToggleBtn" title="Tema seç" style="background:var(--panel2); border:1.5px solid var(--line); color:var(--text); width:34px; height:34px; border-radius:50%; font-size:15px; padding:0; display:flex; align-items:center; justify-content:center; flex-shrink:0;">🎨</button>
   </header>
@@ -1823,6 +1823,7 @@
         hareketCamStream = stream;
         var v = document.getElementById('hareketVideo');
         v.srcObject = stream;
+        kameraIzle(v, null);
         hareketCamTrack = stream.getVideoTracks()[0];
         var caps = hareketCamTrack.getCapabilities ? hareketCamTrack.getCapabilities() : {};
         document.getElementById('hareketTorchBtn').classList.toggle('hidden', !caps.torch);
@@ -3161,6 +3162,16 @@
   // çizgileri seçilemez. iPhone'da yüksek çözünürlük istenir (Android'e dokunulmadı:
   // orada yerleşik okuyucu zaten iyi çalışıyor).
   var IOS_CIHAZ = /iPad|iPhone|iPod/.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+  // iOS bazen kamerayı açar (üstte kamera simgesi yanar) ama görüntü siyah kalır. Video oynatılmaya zorlanır;
+  // 3 sn içinde görüntü gelmezse bir kez kapatılıp yeniden açılır, yine gelmezse kişiye söylenir.
+  function kameraIzle(v, yenidenAc){
+    try { var p = v.play(); if(p && p.catch) p.catch(function(){}); } catch(e){}
+    setTimeout(function(){
+      if(!v.srcObject || v.videoWidth > 0) return;
+      if(yenidenAc){ yenidenAc(); return; }
+      warnToast('Kamera görüntü vermiyor — telefonda kamerayı kullanan başka bir uygulama ya da sayfa açık olabilir. Onu kapatıp tekrar dene.');
+    }, 3000);
+  }
   var CAMERA_CONSTRAINTS = IOS_CIHAZ
     ? { video: { facingMode: 'environment', width: { ideal: 1920 }, height: { ideal: 1080 } } }
     : { video: { facingMode: 'environment' } };
@@ -3294,6 +3305,7 @@
         quickScanStream = stream;
         var v = document.getElementById('quickScanVideo');
         v.srcObject = stream;
+        kameraIzle(v, null);
         quickScanEngine = startBarcodeEngine(stream, v, function(val){
           if(navigator.vibrate) navigator.vibrate(30);
           var cb = quickScanOnResult;
@@ -3376,6 +3388,7 @@
         priceCamStream = stream;
         var v = document.getElementById('priceVideo');
         v.srcObject = stream;
+        kameraIzle(v, null);
         priceCamTrack = stream.getVideoTracks()[0];
         var caps = priceCamTrack.getCapabilities ? priceCamTrack.getCapabilities() : {};
         priceTorchBtn.classList.toggle('hidden', !caps.torch);
@@ -3603,7 +3616,7 @@
     }
     function build(){
       // İşlem tuşları SOLDA, rakamlar SAĞDA (sağ elle rakam, sol tarafta hesap).
-      var keys = ['⌫','7','8','9', '×','4','5','6', '+','1','2','3', '−', bulk ? ',' : '00','0','C'];
+      var keys = ['⌫','1','2','3', '×','4','5','6', '+','7','8','9', '−', bulk ? ',' : '00','0','C'];   // klasik dizilim: 1-2-3 üstte
       padEl.innerHTML = keys.map(function(k){
         var cls = 'calcKey' + (OPS.indexOf(k) !== -1 ? ' op' : '') + (k === '⌫' ? ' del' : '') + (k === 'C' ? ' clr' : '');
         return '<button type="button" class="' + cls + '" data-k="' + k + '">' + k + '</button>';
@@ -3684,13 +3697,15 @@
   document.getElementById('malStartScanBtn').addEventListener('click', malStartCamera);
   document.getElementById('malCloseCamBtn').addEventListener('click', function(){ malStopCamera(); showMalPlaceholder(); });
 
-  function malStartCamera(){
+  function malStartCamera(tekrar){
+    tekrar = tekrar === true;
     document.getElementById('malScanPlaceholder').classList.add('hidden');
     document.getElementById('malCamLive').classList.remove('hidden');
     navigator.mediaDevices.getUserMedia(CAMERA_CONSTRAINTS)
       .then(function(stream){
         malCameraStream = stream;
         malVideo.srcObject = stream;
+        kameraIzle(malVideo, tekrar ? null : function(){ malStopCamera(); malStartCamera(true); });
         malCameraTrack = stream.getVideoTracks()[0];
         setupMalTorch();
         malEngine = startBarcodeEngine(stream, malVideo, function(val){
@@ -5489,6 +5504,7 @@
       .then(function(stream){
         cameraStream = stream;
         video.srcObject = stream;
+        kameraIzle(video, null);
         cameraTrack = stream.getVideoTracks()[0];
         setupTorch();
         scanEngine = startBarcodeEngine(stream, video, function(val){
