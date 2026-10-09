@@ -2236,7 +2236,7 @@
       c.kv2N = kt && kt.diger ? kt.diger.n : 0; c.kv2Ad = kt && kt.diger ? kt.diger.ad : ''; c.kv2Fiyat = kt && kt.diger ? kt.diger.fiyat : 0; return c;
     });
     var govde = { type: 'baski_is', id: id, yazici: y.kimlik, liste: liste, kaynak: 'telefon: ' + (kullanici.name || '?'),
-      ayar: { bicim: yaziciBicim(durum.bicim), altBicim: durum.bicim, yatay: durum.bicim === 'a5y', kesim: durum.kesim, logo: durum.logo, slogan: durum.slogan, bosluk: durum.bosluk, a4diz: durum.bicim === 'a5y' ? true : durum.a4diz, baslangic: durum.baslangic, zebra: durum.zebra } };
+      ayar: { bicim: yaziciBicim(durum.bicim), altBicim: durum.bicim, yatay: durum.bicim === 'a5y', kesim: durum.kesim, logo: durum.logo, slogan: durum.slogan, bosluk: durum.bosluk, a4diz: durum.bicim === 'a5y' ? true : durum.a4diz, baslangic: durum.baslangic, zebra: durum.zebra, cift: ciftAktif() } };
     if(JSON.stringify(govde).length > 44000){ toast('Liste çok uzun — bir kısmını basıp çıkar, sonra kalanı gönder', 'hata'); return; }
     if(k){ govde.user = k.user; govde.pass = k.pass; }
     toast('Gönderiliyor…');
@@ -2263,7 +2263,7 @@
   }
   // Bir biçimin basılacak ürünlerini yazıcısına gönderir (yazıcı listesi yüklenmiş olmalı). sormadan: yazıcı penceresi açılmaz.
   // Yazıcı durumu iki ayrı şeydir: (1) bilgisayardaki baskı programı çalışıyor mu, (2) Windows yazıcıyı görüyor mu.
-  var AJAN_SURUM = 169, WIN_DURUM = { kapali: 'yazıcı kapalı ya da kablosu takılı değil', kagit: 'kâğıt / etiket sorunu', hata: 'yazıcı hata veriyor' };
+  var AJAN_SURUM = 170, WIN_DURUM = { kapali: 'yazıcı kapalı ya da kablosu takılı değil', kagit: 'kâğıt / etiket sorunu', hata: 'yazıcı hata veriyor' };
   function yzDurumHtml(y){
     if(!y.cevrimici) return '<span style="color:var(--red);">● bilgisayar ya da baskı programı kapalı</span>';
     if(WIN_DURUM[y.winDurum]) return '<span style="color:var(--amber);">● ' + WIN_DURUM[y.winDurum] + '</span>';
@@ -2745,9 +2745,16 @@
             (g.adet && yt('etiket_yazici') ? '<button type="button" data-yz="cihaz" data-f="' + f + '">Bu cihazdan</button>' : '') + '</div>' +
         '</div>';
       }).join('') +
+      (sira.some(function(f){ return f !== 'zebra' && f !== 'raf'; }) ? '<label style="display:flex; gap:10px; align-items:flex-start; margin-top:10px; padding:8px 10px; border:1px solid var(--line); border-radius:12px; font-size:13.5px; font-weight:700; cursor:pointer;">' +
+        '<input type="checkbox" data-cift="1"' + (durum.cift ? ' checked' : '') + ' style="width:20px; height:20px; flex:none; margin-top:1px;"><span>🔁 Arkalı önlü bas (asılan afişler)<br><span class="ipucu" style="font-weight:400;">Arka yüze aynı afiş basılır; misinada kâğıt dönünce de düz görünür. Zebra etiketine uygulanmaz. Yazıcı çift taraflı basmayı desteklemeli (EPSON M2170 destekler).</span></span></label>' : '') +
       '<div class="ipucu" style="margin-top:8px;">"Yazıcıya gönderildi" işin yazıcıya teslim edildiğini gösterir. Etiket ya da kâğıt bittiyse çıkmamış olabilir — çıkanı say.</div>' +
       (topBasilan ? '<button type="button" data-yz="temizle" style="width:100%; margin-top:10px; font-size:13px;">Basılan ' + topBasilan + ' ürünü listeden çıkar</button>' : '');
   }
+  $('yazdirOzet').addEventListener('change', function(e){
+    if(!e.target.hasAttribute('data-cift')) return;
+    durum.cift = e.target.checked; kaydet(); ciz(); yazdirCiz();
+    toast(durum.cift ? 'Arkalı önlü: her afişin arkasına aynısı basılacak' : 'Tek yüz baskı');
+  });
   $('yazdirOzet').addEventListener('click', function(e){
     var b = e.target.closest('button[data-yz]'); if(!b) return;
     var is = b.getAttribute('data-yz'), f = b.getAttribute('data-f');
@@ -3428,6 +3435,7 @@
     var baski = $('baski');
     baski.innerHTML = html;
     sigdir(baski); sigdirKap(baski);
+    if(ciftAktif()) Array.prototype.slice.call(baski.children).forEach(function(sf){ if(sf.classList.contains('sayfa')) baski.insertBefore(arkaYuz(sf), sf.nextSibling); });
     // Önizleme: ilk sayfanın kopyası, ekrana sığacak kadar küçültülmüş.
     var ilk = baski.querySelector('.sayfa'), on = $('onizle'), kutu = $('onizleKutu');
     var sayfaAdedi = baski.querySelectorAll('.sayfa').length;
@@ -3459,6 +3467,24 @@
     kutu.scrollTop = 0;
   }
   var ONIZLE_SINIR = 60;
+  // ---- Arkalı önlü baskı (misinayla asılan afişler) ----
+  // Her sayfanın arkasına aynı afiş basılır. Yazıcı "uzun kenardan çevir" ile basar; kâğıt asılıp döndüğünde arka yüz de
+  // DÜZ görünsün diye: sayfa yatay aynalanır (parçaların yeri arkada yer değiştirir), her parça kendi içinde geri aynalanır.
+  // Sonuç: dik duran parça arkada aynen, sayfada 90° çevrilmiş parça (yatay afiş, dizgideki A5) arkada 180° döner.
+  function ciftAktif(){ return !!durum.cift && durum.bicim !== 'zebra' && durum.bicim !== 'raf'; }
+  function arkaYuz(sf){
+    var secK = function(kok){ return Array.prototype.filter.call(kok.querySelectorAll('.donuk, .parca'), function(e){ return e.classList.contains('donuk') || !e.querySelector('.donuk'); }); };
+    var k = sf.cloneNode(true), kok = secK(sf), kk = secK(k);
+    k.classList.add('arkaYuz');
+    if(!kok.length) return k;                            // tek afişli düz sayfa: arkası aynısı
+    k.style.transform = 'scaleX(-1)';
+    kok.forEach(function(o, i){
+      var cs = getComputedStyle(o), t = cs.transform && cs.transform !== 'none' ? cs.transform + ' ' : '';
+      var solUst = /^0px 0px/.test(cs.transformOrigin);
+      kk[i].style.transform = t + (t && solUst ? 'translateX(' + o.offsetWidth + 'px) ' : '') + 'scaleX(-1)';
+    });
+    return k;
+  }
   window.addEventListener('resize', function(){ ciz(); });
 
   // ---------- Yazdır ----------
@@ -3504,7 +3530,7 @@
       var a = veri.ayar || {};
       durum.liste = veri.liste;
       if(BICIM[a.bicim]) durum.bicim = (a.altBicim && BICIM[a.altBicim] && yaziciBicim(a.altBicim) === a.bicim) ? a.altBicim : (a.bicim === 'a5' && a.yatay) ? 'a5y' : a.bicim;
-      ['kesim', 'logo', 'bosluk', 'a4diz'].forEach(function(k){ if(a[k] !== undefined) durum[k] = !!a[k]; });
+      ['kesim', 'logo', 'bosluk', 'a4diz', 'cift'].forEach(function(k){ if(a[k] !== undefined) durum[k] = !!a[k]; });
       if(a.slogan !== undefined) durum.slogan = String(a.slogan);
       // Telefonda ayarlanan Zebra ölçüleri (etiket ve sarı kutu) işle birlikte gelir.
       if(a.zebra && typeof a.zebra === 'object') Object.keys(ZEBRA_VARSAYILAN).forEach(function(k){

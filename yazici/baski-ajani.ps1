@@ -21,7 +21,7 @@ $Sumatra       = Join-Path $Klasor "SumatraPDF.exe"
 $IsKlasoru     = Join-Path $Klasor "is"
 $Profil        = Join-Path $Klasor "tarayici-profil"
 $BeklemeSn     = 3      # iki sorgu arasi bekleme
-$AjanSurum     = "169"  # sunucuya bildirilir; uygulama eski programi uyarir
+$AjanSurum     = "170"  # sunucuya bildirilir; uygulama eski programi uyarir
 Add-Type -AssemblyName System.Drawing   # Zebra etiketi goruntu olarak basilir
 $ZebraParcaBoy = 40     # bir goruntudeki en fazla etiket (etiket.html PARCA_BOY ile ayni olmali)
 # Uygulamada GORUNMEYECEK yazicilar (sanal yazicilar)
@@ -423,6 +423,8 @@ function Bas($is) {
     $ayar = "noscale,paper=$kagit"
     # Dizili A5 de DIK A4 sayfa olarak gelir (afisler sayfanin icinde cevrilmis); yazici surucusu "yatik" istegini uygulamayabiliyor.
     $ayar += ",portrait"
+    # Arkali onlu: sayfalar on/arka sirali gelir; arka yuzler "uzun kenardan cevir"e gore hazirlanmistir.
+    if ($is.ayar -and $is.ayar.cift -eq $true -and $bicim -ne "zebra") { $ayar += ",duplexlong"; $kagit += " arkali onlu" }
     # Zebra (rulo etiket): kagit boyutu yazicinin kendi ayarindan gelir, yalnizca olcek korunur.
     if ($bicim -eq "zebra") { $ayar = "noscale"; $kagit = "rulo etiket" }
 
