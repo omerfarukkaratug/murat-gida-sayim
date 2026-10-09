@@ -683,7 +683,7 @@
   if(!yetkili){ $('yetkiYok').classList.remove('gizli'); return; }
   $('icerik').classList.remove('gizli'); $('cubuk').classList.remove('gizli');
   // ---------- Etiket yetkileri (build 139) ----------
-  // etiket_duzenle: ad / üretim yeri / net miktar… · etiket_indirim · etiket_cesit (çok ürünlü etiket) ·
+  // etiket_duzenle: ad / üretim yeri / net miktar… · etiket_yer: yalnızca boş üretim yerini girme · etiket_indirim · etiket_cesit (çok ürünlü etiket) ·
   // etiket_ayar (ölçü, logo, yazı) · etiket_yazici (yazıcı seçme, işleri yönetme, bu cihazdan basma) ·
   // etiket_kuyruk (fiyatı değişenler, "basıldı say"). FİYAT, STOK KODU ve BARKOD hiçbir yetkiyle değiştirilemez:
   // yalnızca katalogdan gelir; sunucu da baskı işini katalogla karşılaştırır.
@@ -693,12 +693,15 @@
     baslik: 'etiket_duzenle', ozel: 'etiket_duzenle', indirim: 'etiket_indirim', bitis: 'etiket_indirim', onceki: '#yonetici' };
   var IS_YETKI = { tr: 'etiket_duzenle', yerOner: 'etiket_duzenle', grup: 'etiket_cesit', grupGenis: 'etiket_cesit', grupEkle: 'etiket_cesit', grupKayitli: 'etiket_cesit', dagit: 'etiket_cesit', gcikar: 'etiket_cesit', indirimYaz: 'etiket_indirim' };
   function yetkiVar(kural){ return !kural || (kural === '#yonetici' ? YONETICI : yt(kural)); }
-  // Üretim yeri zorunlu: boş gelen üründe düzenleme yetkisi olmayan personel de doldurabilir (yazım hatasını düzeltebilsin
-  // diye o ürün listede kaldıkça açık kalır). Dolu gelen üretim yerini değiştirmek yine yetki ister.
+  // Üretim yeri: "etiket_duzenle" her ürünü değiştirir. "etiket_yer" (yalnızca ülke girme) BOŞ gelen üretim yerini
+  // doldurur; yazım hatasını düzeltebilsin diye o ürün listede kaldıkça açık kalır. Dolu gelen (ERP / önceden girilmiş)
+  // üretim yerini değiştiremez.
   function yerYetki(u){
     if(!u) return false;
+    if(yetkiVar('etiket_duzenle')) return true;
+    if(!yetkiVar('etiket_yer')) return false;
     if(!String(u.yer || '').trim()) u.yerAcik = true;
-    return yetkiVar('etiket_duzenle') || !!u.yerAcik;
+    return !!u.yerAcik;
   }
 
   // ---------- Kayıtlı durum ----------
@@ -2309,9 +2312,10 @@
       var e = eksikler(u), yerEksik = !String(u.yer || '').trim(), o = barkodUlke(u.barkod);
       return '<div data-hid="' + esc(u.id) + '" style="padding:8px 0; border-top:1px solid var(--line);"><div style="font-weight:800; font-size:13.5px;">' + esc(u.ad) + '</div>' +
         '<div class="ipucu" style="color:var(--red);">Eksik: ' + esc(e.join(', ')) + '</div>' +
-        (yerEksik && yetkiVar('etiket_duzenle') ? '<div style="display:flex; gap:6px; flex-wrap:wrap; margin-top:6px;"><button type="button" data-hy="Türkiye" class="ana" style="padding:8px 12px; font-size:13px;">Türkiye</button>' +
+        (yerEksik && yerYetki(u) ? '<div style="display:flex; gap:6px; flex-wrap:wrap; margin-top:6px;"><button type="button" data-hy="Türkiye" class="ana" style="padding:8px 12px; font-size:13px;">Türkiye</button>' +
           (o && o !== 'Türkiye' ? '<button type="button" data-hy="' + esc(o) + '" style="padding:8px 12px; font-size:13px; border-style:dashed;">' + esc(o) + '? (barkoda göre)</button>' : '') +
-          '<input data-hyaz="1" list="ulkeler" placeholder="başka ülke yaz" style="flex:1; min-width:110px; padding:8px 10px; font-size:13px;"></div>' : '') +
+          '<input data-hyaz="1" list="ulkeler" placeholder="başka ülke yaz" style="flex:1; min-width:110px; padding:8px 10px; font-size:13px;"></div>' +
+          ulkeSecHtml(u).replace('data-ulke="1"', 'data-hyaz="1"') : '') +
         '<button type="button" data-hcikar="1" style="margin-top:6px; padding:4px 10px; font-size:12px; border:none; background:transparent; color:var(--red);">✕ listeden çıkar</button></div>'; }).join('');
     $('hizliSimdi').classList.toggle('gizli', m || !n);
     var son = durum.liste.filter(function(u){ return u.hizliZaman; }).sort(function(a, b){ return b.hizliZaman - a.hizliZaman; }).slice(0, 20);
@@ -2365,7 +2369,7 @@
   $('hizliSimdi').addEventListener('click', hizliGonder);
   function hizliYerYaz(el, yer){
     var k = el.closest('[data-hid]'), u = k && durum.liste.filter(function(x){ return x.id === k.getAttribute('data-hid'); })[0];
-    yer = String(yer || '').trim(); if(!u || !yer || !yetkiVar('etiket_duzenle')) return;
+    yer = String(yer || '').trim(); if(!u || !yer || !yerYetki(u)) return;
     u.yer = yer; u.barkodYer = false; bilgiHatirla(u); kaydet(); listeCiz(); ciz(); hizliPlanla();
   }
   $('hizliEksik').addEventListener('click', function(e){
