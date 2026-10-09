@@ -321,11 +321,19 @@
   .aBilgi b{font-weight:900;}
   .aBilgi .brk{font-family:"Courier New", monospace; font-size:.6em; font-weight:400; line-height:1.2; letter-spacing:.12em;}
   .barkod{display:block;}
-  .brkSatir{display:flex; align-items:flex-end; gap:1.4em; margin-top:.3em;}
+  .brkSatir{display:flex; align-items:flex-end; gap:1.4em; margin-top:.3em; min-width:0;}
   .brkSatir .barkod{margin-top:0 !important;}
   .aSag{display:flex; align-items:flex-end; gap:2.4em; flex-shrink:0;}
   .aSag .qr{width:10em; height:10em;} .dar .aSag .qr{width:8.6em; height:8.6em;}
-  .kodKutu{font-size:.58em; line-height:1.25; font-weight:400; white-space:nowrap; padding-bottom:.1em;}
+  .kodKutu{font-size:.58em; line-height:1.25; font-weight:400; padding-bottom:.1em; min-width:0; flex:0 1 auto;}
+  /* Dik afiş: bilgi satırları tam genişlik; QR ve yerli logo yalnızca barkod satırının yanında (yazı sıkışıp alt satıra kaymaz). */
+  .sayfa:not(.yatay) .aAlt{display:grid; grid-template-columns:minmax(0, 1fr) auto; grid-auto-flow:row dense; column-gap:3em; row-gap:0; align-items:end; align-content:end;}
+  .sayfa:not(.yatay) .aBilgi > .brkSatir{margin-top:.5em;}
+  .sayfa:not(.yatay) .aBilgi{display:contents;}
+  .sayfa:not(.yatay) .aBilgi > *{grid-column:1 / -1;}
+  .sayfa:not(.yatay) .aBilgi > .brkSatir{grid-column:1;}
+  .sayfa:not(.yatay) .aSag{grid-column:2;}
+  .kodAlt{font-size:.62em; line-height:1.2; font-weight:400; margin-top:.25em; width:0; min-width:100%;} .kodAlt b{font-weight:800;}
   .kodKutu b{display:block; font-size:1.3em; font-weight:800;}
   .aBilgi .barkod{width:8.6em; height:1.7em; margin-top:.3em;}
   .dar .aBilgi .barkod{width:9.8em; height:1.6em;}
@@ -3212,8 +3220,9 @@
         (birimFiyatMetni(u, ' / ') ? '<div><b>Birim fiyatı:</b> ' + birimFiyatMetni(u, ' / ') + '</div>' : '') +
         '<div><b>Üretim yeri:</b> ' + esc(String(u.yer || '').trim()) + (koliYazi(u) ? ' &nbsp;·&nbsp; <b>' + koliYazi(u) + '</b>' : '') + '</div>' +
         '<div><b>' + (u.indirim ? 'İndirim tarihleri' : 'Fiyat değişiklik tarihi') + ':</b> ' + tarihTr(u.tarih) + (u.indirim && u.bitis ? ' – ' + tarihTr(u.bitis) : '') + '</div>' +
-        (u.barkod && !u.grup ? '<div class="brkSatir"><div>' + barkodSvg(u.barkod) + '<div class="brk">' + esc(u.barkod) + '</div></div>' +
-          (stokKodu(u) ? '<div class="kodKutu">Stok kodu<b>' + esc(stokKodu(u)) + '</b></div>' : '') + '</div>'
+        // Stok kodu barkodun ALTINDA, barkod genişliğinde (uzun kod alt satıra geçer; QR / yerli logonun üstüne taşmaz).
+        (u.barkod && !u.grup ? '<div class="brkSatir"><div>' + barkodSvg(u.barkod) + '<div class="brk">' + esc(u.barkod) + '</div>' +
+          (stokKodu(u) ? '<div class="kodAlt">Stok kodu: <b>' + esc(stokKodu(u)) + '</b></div>' : '') + '</div></div>'
           : (grupKodu(u) ? '<div class="brkSatir"><div class="kodKutu">Etiket kodu<b>' + grupKodYazi(grupKodu(u)) + '</b></div></div>' : '')) +
       '</div><div class="aSag">' + afisQr(u) + yerliHtml(u) + '</div>' + altSon + '</div>' +
     '</div></div>';
