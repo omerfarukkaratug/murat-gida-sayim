@@ -21,7 +21,8 @@ returns jsonb language plpgsql stable as $$
 declare
   v_kaynak text; v_musteri boolean; v_bugun date := (now() at time zone 'Europe/Istanbul')::date;
   inv record; pay record;
-  i_tarih date[] := '{}'; i_vade date[] := '{}'; i_tutar numeric[] := '{}';
+  i_tarih date[] := '{}'; i_vade date[] := '{}'; i_tutar numeric[] := '{}'; i_tur text[] := '{}'; i_belge text[] := '{}'; i_fis bigint[] := '{}';
+  kapanan jsonb := '[]'::jsonb;
   p_tarih date[] := '{}'; p_tutar numeric[] := '{}';
   n int; m int; i int := 1; j int := 1; ri numeric; rp numeric; x numeric;
   eslesen numeric := 0; gun_top numeric := 0; vade_top numeric := 0; gec_top numeric := 0;
@@ -37,12 +38,13 @@ begin
 
   for inv in
     select (tarih at time zone 'Europe/Istanbul')::date as t, coalesce(vade, (tarih at time zone 'Europe/Istanbul')::date) as v,
-           case when v_musteri then borc else alacak end as a
+           case when v_musteri then borc else alacak end as a, tur, belge_no, fis_id
       from erp_cari_hareket
      where cari_kod = p_cari_kod and kaynak = v_kaynak and coalesce(doviz, '') in ('', 'TRY', 'TL')
        and tarih >= now() - interval '730 days' and (case when v_musteri then borc else alacak end) > 0
      order by tarih, detay_id
-  loop i_tarih := i_tarih || inv.t; i_vade := i_vade || inv.v; i_tutar := i_tutar || inv.a; end loop;
+  loop i_tarih := i_tarih || inv.t; i_vade := i_vade || inv.v; i_tutar := i_tutar || inv.a;
+       i_tur := i_tur || inv.tur; i_belge := i_belge || inv.belge_no; i_fis := i_fis || inv.fis_id; end loop;
   for pay in
     select (tarih at time zone 'Europe/Istanbul')::date as t, case when v_musteri then alacak else borc end as a
       from erp_cari_hareket
@@ -61,7 +63,11 @@ begin
     vade_top := vade_top + x * greatest(0, i_vade[i] - i_tarih[i]);
     gec_top := gec_top + x * greatest(0, p_tarih[j] - i_vade[i]);
     ri := ri - x; rp := rp - x;
-    if ri <= 0.004 then i := i + 1; if i <= n then ri := i_tutar[i]; end if; end if;
+    if ri <= 0.004 then
+      kapanan := jsonb_build_array(jsonb_build_array(to_char(i_tarih[i], 'DD.MM.YYYY'), i_tur[i], i_belge[i], i_tutar[i], to_char(i_vade[i], 'DD.MM.YYYY'),
+                   to_char(p_tarih[j], 'DD.MM.YYYY'), greatest(0, p_tarih[j] - i_tarih[i]), p_tarih[j] - i_vade[i], i_fis[i])) || kapanan;
+      i := i + 1; if i <= n then ri := i_tutar[i]; end if;
+    end if;
     if rp <= 0.004 then j := j + 1; if j <= m then rp := p_tutar[j]; end if; end if;
   end loop;
   if eslesen > 0 then
@@ -108,7 +114,9 @@ begin
     'sevk90', round(sevk90, 2), 'odeme90', round(odeme90, 2), 'oran90', oran,
     'acik', round(acik, 2), 'gecmis', round(gecmis, 2), 'enEskiGun', yas,
     'risk', risk, 'seviye', seviye, 'nedenler', to_jsonb(neden),
-    'puan', jsonb_build_object('gecikme', r1, 'odemeOrani', r2, 'vadesiGecmis', r3, 'aliskanlik', r4)
+    'puan', jsonb_build_object('gecikme', r1, 'odemeOrani', r2, 'vadesiGecmis', r3, 'aliskanlik', r4),
+    -- kapanan r: [belge tarihi, tür, no, tutar, vade, kapanış tarihi, kaç günde ödendi, vadeden kaç gün sonra (eksi: erken), fis_id] — yeniden eskiye, en çok 150
+    'kapanan', (select coalesce(jsonb_agg(e), '[]'::jsonb) from (select e from jsonb_array_elements(kapanan) e limit 150) z)
   );
 end $$;
 
