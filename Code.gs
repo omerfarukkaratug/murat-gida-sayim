@@ -8,7 +8,7 @@
 // bir sürüm dağıttıktan sonra /exec adresini boş açtığında burada yazan
 // numarayı görmelisin; index.html'in üstündeki "build" numarasıyla
 // eşleşecek şekilde ben her ikisini birlikte güncelliyorum.
-var GS_VERSION = 'build168';
+var GS_VERSION = 'build169';
 
 // Sheets'te "Saat" sütunu zaman biçimli olarak algılanırsa, hücre değeri düz
 // metin değil bir Date nesnesi olarak gelir ve String(...) çirkin bir çıktı
@@ -111,6 +111,9 @@ function doGet(e) {
   }
   if (e.parameter && e.parameter.action === 'urun_hareket') {
     return urunHareket(e.parameter, e.parameter.callback);
+  }
+  if (e.parameter && e.parameter.action === 'cari_hareket') {
+    return cariHareket(e.parameter, e.parameter.callback);
   }
   if (e.parameter && e.parameter.action === 'temizle') {
     return handleTemizle(e.parameter.user, e.parameter.pass, e.parameter.callback);
@@ -228,7 +231,7 @@ function outJson(obj, callback) {
 // tabloyu açan biri şifreleri okuyamaz. Şifre telefonda hâlâ saklanır ve her
 // istekte sunucuya gönderilir — tam oturum sistemi veri tabanı geçişinde.
 // ============================================================
-var ALL_PERMS = ['rapor', 'temizle', 'kullanici_yonetimi', 'ayarlar', 'canli_durum', 'duzelt', 'hareket', 'mesai', 'mesai_yonetim'];
+var ALL_PERMS = ['rapor', 'temizle', 'kullanici_yonetimi', 'ayarlar', 'canli_durum', 'duzelt', 'hareket', 'cari_hareket', 'mesai', 'mesai_yonetim'];
 
 // ---- ŞİFRE ÖZETİ ----
 // Şifreler tabloda artık DÜZ METİN durmaz: "s256$<tuz>$<özet>" biçiminde,
@@ -3227,6 +3230,31 @@ function urunHareket(p, callback) {
     return outJson(sonuc, callback);
   } catch (err) {
     gunlukYaz('veritabani', 'ürün hareketleri', 'Sorgu başarısız: ' + err, true);
+    return outJson({ status: 'error', message: 'Veri tabanına ulaşılamadı — biraz sonra tekrar dene' }, callback);
+  }
+}
+
+// ============================================================
+// CARİ HAREKETLERİ (cari hesap ekstresi): ERP12 FINANS_DETAY'dan
+// cari-hareket-gonder.ps1 ile veri tabanına yazılır. "cari_hareket" yetkisi
+// kontrol edilip gizli anahtarla okunur; telefon veri tabanına doğrudan erişemez.
+// ============================================================
+function cariHareket(p, callback) {
+  var auth = requirePermission(p.user, p.pass, 'cari_hareket');
+  if (!auth.ok) return outJson({ status: 'error', message: auth.message }, callback);
+  var props = PropertiesService.getScriptProperties();
+  var url = String(props.getProperty('DB_URL') || '').trim().replace(/\/+$/, '');
+  var anahtar = String(props.getProperty('DB_ANAHTAR') || '').trim();
+  if (!url || !anahtar) return outJson({ status: 'error', message: 'Veri tabanı ayarı yok (DB_URL / DB_ANAHTAR)' }, callback);
+  var kod = String(p.cariKod || '').trim().substring(0, 80);
+  if (!kod) return outJson({ status: 'error', message: 'Carinin kodu yok — ERP\'de cari koduna bak' }, callback);
+  var gun = parseInt(p.gun, 10); if (isNaN(gun) || gun < 0 || gun > 3650) gun = 90;
+  try {
+    var sonuc = dbCagir({ url: url, anahtar: anahtar }, 'cari_hareket', { p_cari_kod: kod, p_gun: gun, p_limit: 500 });
+    if (!sonuc || sonuc.status !== 'ok') return outJson({ status: 'error', message: (sonuc && sonuc.message) || 'Veri tabanı cevap vermedi' }, callback);
+    return outJson(sonuc, callback);
+  } catch (err) {
+    gunlukYaz('veritabani', 'cari hareketleri', 'Sorgu başarısız: ' + err, true);
     return outJson({ status: 'error', message: 'Veri tabanına ulaşılamadı — biraz sonra tekrar dene' }, callback);
   }
 }
