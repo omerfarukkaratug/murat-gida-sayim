@@ -371,7 +371,7 @@
   <header style="border:none; padding:0 0 16px; background:transparent; display:flex; align-items:flex-start; justify-content:space-between;">
     <div>
       <h1><img src="logo-header.png" alt="Murat Gıda" style="height:30px; width:auto; display:block;"></h1>
-      <div class="sub">MK ERP · Murat Gıda • offline • Android • build 200</div>
+      <div class="sub">MK ERP · Murat Gıda • offline • Android • build 201</div>
     </div>
     <button type="button" id="themeToggleBtn" title="Tema seç" style="background:var(--panel2); border:1.5px solid var(--line); color:var(--text); width:34px; height:34px; border-radius:50%; font-size:15px; padding:0; display:flex; align-items:center; justify-content:center; flex-shrink:0;">🎨</button>
   </header>
@@ -4255,6 +4255,7 @@
   }
   // ---- Ekstrelerde firma unvanı ve logo ----
   var FIRMA_UNVAN = 'Murat Pastane Bakliyat Ltd. Şti.';
+  var MK_ERP_IMZA = 'MK ERP ile hazırlanmıştır.';
   var FIRMA_LOGO = new Image(); FIRMA_LOGO.src = 'logo-header.png';
   var FIRMA_LOGO_PNG = null;
   function firmaLogoHazir(){ return FIRMA_LOGO.complete && FIRMA_LOGO.naturalWidth > 0; }
@@ -4294,7 +4295,7 @@
         }),
         toplam: ['TOPLAM', '', '', '', Number(d.acik || 0), '', ''],
         sonuc: { etiket: 'AÇIK BAKİYE', deger: acikB, metin: durum(acikB) },
-        notlar: ['Ödemeler en eski belgeleri kapatmış sayılır; listede henüz ödenmemiş (açık) kısımlar vardır.']
+        notlar: [MK_ERP_IMZA]
       });
       var kap = (d.odeme && d.odeme.kapanan) || [];
       if(kap.length) bolumler.push({
@@ -4305,7 +4306,7 @@
           var gec = Number(r[7]);
           return [r[0], r[1] || '', r[2] || '', bos(r[3]), r[4], r[5], Number(r[6]) || 0, { v: gec <= 0 ? 'Zamanında' + (gec < 0 ? ' (' + (-gec) + ' gün erken)' : '') : gec + ' gün geç', renk: gec <= 0 ? 'y' : 'k', kalin: true }];
         }),
-        notlar: ['Ödemeler en eski belgeleri kapatmış sayılır (FIFO).']
+        notlar: [MK_ERP_IMZA]
       });
     } else {
       var bak = d.bakiye || {}, dev = d.devreden || {};
@@ -4316,8 +4317,8 @@
         var b = Number(x[4]) || 0, a = Number(x[5]) || 0, y = Number(x[6]) || 0; topB += b; topA += a;
         sat.push([x[0], x[1] || '', x[2] || '', x[3] || '', x[8] && x[8] !== x[0] ? x[8] : '', bos(b), bos(a), Math.abs(y), ba(y)]);
       });
-      var notlar = ['B: Borç (cari bize borçlandı) · A: Alacak (cari ödedi / biz borçlandık).', 'Bu döküm ERP kayıtlarından alınmıştır.'];
-      if(Number(d.adet || 0) > satir.length) notlar.push('Not: dönemde ' + d.adet + ' hareket var, son ' + satir.length + ' hareket yazıldı.');
+      var notlar = [MK_ERP_IMZA];
+      if(Number(d.adet || 0) > satir.length) notlar.unshift('Not: dönemde ' + d.adet + ' hareket var, son ' + satir.length + ' hareket yazıldı.');
       bolumler.push({
         ad: 'Cari ekstre', baslik: 'Cari Hesap Ekstresi',
         bilgi: ust.concat([['Dönem', cariHrkGun ? 'Son ' + cariHrkGun + ' gün' : 'Tüm hareketler']]),
