@@ -272,14 +272,6 @@
   .chFisSatir{display:flex; justify-content:space-between; gap:10px; padding:3px 0;}
   .chFisSatir small{display:block; color:var(--muted); font-family:var(--mono); font-size:11px;}
   .chFisSatir b{white-space:nowrap; font-family:var(--mono);}
-  #yazdirAlani{display:none;}
-  @media print{
-    body.yazdiriliyor > *:not(#yazdirAlani){display:none !important;}
-    body.yazdiriliyor{background:#fff !important;}
-    body.yazdiriliyor #yazdirAlani{display:block; color:#000; background:#fff; font-family:Arial, Helvetica, sans-serif; padding:8mm;}
-    #yazdirAlani th, #yazdirAlani td{border-bottom:1px solid #ccc; padding:4px 5px; text-align:left; vertical-align:top;}
-    #yazdirAlani th{background:#eee; font-weight:700;}
-  }
   .chDeger{text-align:right; font-weight:800; font-family:var(--mono); font-size:13px;}
   .geriBtn{display:inline-flex; align-items:center; gap:6px; padding:7px 12px; margin:0 0 10px; border-radius:18px; border:1.5px solid var(--line); background:var(--panel); color:var(--text); font-size:13px; font-weight:800; max-width:100%; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;}
   .bkBtn{display:inline-flex; align-items:center; gap:4px; padding:4px 10px; margin-left:6px; border-radius:16px; border:1.5px solid var(--line); background:var(--panel2); color:var(--text); font-size:12px; font-weight:800; vertical-align:middle;}
@@ -379,7 +371,7 @@
   <header style="border:none; padding:0 0 16px; background:transparent; display:flex; align-items:flex-start; justify-content:space-between;">
     <div>
       <h1><img src="logo-header.png" alt="Murat Gıda" style="height:30px; width:auto; display:block;"></h1>
-      <div class="sub">MK ERP · Murat Gıda • offline • Android • build 197</div>
+      <div class="sub">MK ERP · Murat Gıda • offline • Android • build 198</div>
     </div>
     <button type="button" id="themeToggleBtn" title="Tema seç" style="background:var(--panel2); border:1.5px solid var(--line); color:var(--text); width:34px; height:34px; border-radius:50%; font-size:15px; padding:0; display:flex; align-items:center; justify-content:center; flex-shrink:0;">🎨</button>
   </header>
@@ -1198,7 +1190,6 @@
   <div id="barkodGosterDiger" style="display:flex; flex-wrap:wrap; gap:8px; justify-content:center; margin-top:16px;"></div>
   <div style="font-size:13px; color:#555; margin-top:18px; max-width:92vw;">Ekran parlaklığını sonuna kadar aç, okuyucuyu ekrana 10–20 cm uzaktan tut.</div>
 </div>
-<div id="yazdirAlani"></div>
 <div id="toast"></div>
 
 <script>
@@ -4103,7 +4094,7 @@
     if(s.hata){ cariHrkBodyEl.innerHTML = baslik + '<div class="hint" style="margin-top:14px; color:var(--red);">❌ ' + escapeHtml(s.hata) + '</div>'; return; }
     var d = s.veri || {};
     if(s.ne === 'stok'){ cariHrkBodyEl.innerHTML = baslik + cariHrkStokHtml(d); return; }
-    var paylasDugme = '<div style="display:flex; gap:8px; margin:10px 0 0;"><button type="button" class="geriBtn" data-chpaylas="excel" style="margin:0;">📤 Paylaş (Excel)</button><button type="button" class="geriBtn" data-chpaylas="pdf" style="margin:0;">🖨️ Yazdır</button></div>';
+    var paylasDugme = '<div style="display:flex; gap:8px; margin:10px 0 0;"><button type="button" class="geriBtn" data-chpaylas="excel" style="margin:0;">📤 Paylaş (Excel)</button><button type="button" class="geriBtn" data-chpaylas="pdf" style="margin:0;">🖨️ Yazdır (PDF)</button></div>';
     if(s.ne === 'vade'){ cariHrkBodyEl.innerHTML = baslik + (d.kalemler && d.kalemler.length ? paylasDugme : '') + cariHrkVadeHtml(d); return; }
     if(!perakende && (d.satirlar || []).length) baslik += paylasDugme;
     var satir = d.satirlar || [], bak = d.bakiye || {}, dev = d.devreden || {};
@@ -4138,28 +4129,14 @@
     var r = { riskli: ['🔴 Riskli', 'var(--red)'], dikkat: ['🟡 Dikkat', 'var(--amber)'], normal: ['🟢 Normal', 'var(--green)'] }[seviye] || ['—', 'var(--muted)'];
     return '<span style="font-weight:800; color:' + r[1] + ';">' + r[0] + (puan !== null && puan !== undefined ? ' · risk ' + puan + '/100' : '') + '</span>';
   }
-  // ---- Ekstreyi paylaş: Excel dosyası (telefonun paylaş menüsüyle) ya da yazdır (yazdırma penceresinden PDF de alınabilir) ----
-  function cariBakiyeMetni(b){ b = Number(b) || 0; return Math.abs(b) < 0.005 ? 'Hesap kapalı' : fmtMoney(Math.abs(b)) + (b > 0 ? ' (Borç)' : ' (Alacak)'); }
+  // ---- Ekstreyi paylaş: Excel (.xlsx) ya da yazdırmaya hazır PDF; ikisi de aynı düzende, telefonun paylaş menüsüyle ----
   function cariPaylas(tur){
     var s = cariHrkSecili; if(!s || !s.veri) return;
-    var d = s.veri, c = s.cari, bugun = new Date().toLocaleDateString('tr-TR');
-    var vade = s.ne === 'vade', bak = vade ? (d.yon === 'borc' ? -Number(d.acik || 0) : Number(d.acik || 0)) : Number((d.bakiye || {}).TRY || (d.bakiye || {}).TL || 0);
-    var satirlar = vade ? (d.kalemler || []) : (d.satirlar || []);
-    if(tur === 'excel'){ cariExcelPaylas(s); return; }
-    // PDF: yazdırma alanı doldurulup telefonun yazdır / PDF penceresi açılır.
-    var tablo = vade
-      ? '<tr><th>Belge tarihi</th><th>Belge</th><th>No</th><th>Vade</th><th style="text-align:right;">Açık tutar</th><th style="text-align:right;">Durum</th></tr>' + satirlar.map(function(r){
-          var g = Number(r[6]); return '<tr><td>' + escapeHtml(r[0]) + '</td><td>' + escapeHtml(r[1] || '') + '</td><td>' + escapeHtml(r[2] || '') + '</td><td>' + escapeHtml(r[5]) + '</td><td style="text-align:right;">' + escapeHtml(fmtMoney(r[4])) + '</td><td style="text-align:right;">' + (g < 0 ? (-g) + ' gün geçti' : g === 0 ? 'bugün' : g + ' gün var') + '</td></tr>'; }).join('')
-      : '<tr><th>Tarih</th><th>İşlem</th><th>No</th><th>Açıklama</th><th style="text-align:right;">Borç</th><th style="text-align:right;">Alacak</th><th style="text-align:right;">Bakiye</th></tr>' + satirlar.slice().reverse().map(function(r){
-          var y = Number(r[6]) || 0; return '<tr><td>' + escapeHtml(r[0]) + '</td><td>' + escapeHtml(r[1] || '') + '</td><td>' + escapeHtml(r[2] || '') + '</td><td>' + escapeHtml(r[3] || '') + '</td><td style="text-align:right;">' + (Number(r[4]) ? escapeHtml(fmtMoney(r[4])) : '') + '</td><td style="text-align:right;">' + (Number(r[5]) ? escapeHtml(fmtMoney(r[5])) : '') + '</td><td style="text-align:right;">' + escapeHtml(fmtMoney(Math.abs(y))) + (y > 0.005 ? ' B' : y < -0.005 ? ' A' : '') + '</td></tr>'; }).join('');
-    var alan = document.getElementById('yazdirAlani');
-    alan.innerHTML = '<div style="display:flex; justify-content:space-between; align-items:flex-end; border-bottom:2px solid #000; padding-bottom:8px; margin-bottom:10px;"><div><div style="font-size:20px; font-weight:800;">MURAT GIDA</div><div style="font-size:13px;">' + (vade ? 'Açık Fatura Listesi' : 'Cari Hesap Ekstresi') + '</div></div><div style="text-align:right; font-size:12px;">Tarih: ' + escapeHtml(bugun) + '</div></div>' +
-      '<div style="font-size:15px; font-weight:800;">' + escapeHtml(c.name) + '</div><div style="font-size:12px; margin-bottom:6px;">Cari kodu: ' + escapeHtml(c.code || '') + (vade ? '' : ' · Dönem: ' + (cariHrkGun ? 'son ' + cariHrkGun + ' gün' : 'tümü')) + '</div>' +
-      '<div style="font-size:14px; margin-bottom:10px;"><b>' + (vade ? 'Açık bakiye: ' : 'Güncel bakiye: ') + escapeHtml(cariBakiyeMetni(bak)) + '</b>' + (vade && Number(d.gecmis) > 0 ? ' · Vadesi geçmiş: <b>' + escapeHtml(fmtMoney(d.gecmis)) + '</b>' : '') + '</div>' +
-      '<table style="width:100%; border-collapse:collapse; font-size:11px;">' + tablo + '</table>' +
-      '<div style="font-size:10px; margin-top:10px; color:#444;">B: borç · A: alacak. Bu döküm bilgi amaçlıdır; ERP kayıtlarından alınmıştır.</div>';
-    document.body.classList.add('yazdiriliyor');
-    setTimeout(function(){ window.print(); }, 80);
+    var m = cariEkstreModel(s);
+    try {
+      if(tur === 'excel') dosyaPaylas(xlKitap(m.bolumler), m.dosya + '.xlsx', m.baslik);
+      else dosyaPaylas(pdfOlustur(m), m.dosya + '.pdf', m.baslik);
+    } catch(e){ errorToast((tur === 'excel' ? 'Excel' : 'PDF') + ' hazırlanamadı: ' + (e && e.message || e)); }
   }
   // ---- Excel (.xlsx) üretici: kütüphanesiz, sıkıştırmasız ZIP içinde düz XML ----
   var XL_CRC = null;
@@ -4189,7 +4166,7 @@
     var m = /^(\d{1,2})\.(\d{1,2})\.(\d{4})$/.exec(String(t || '')); if(!m) return null;
     return Math.round((Date.UTC(+m[3], +m[2] - 1, +m[1]) - Date.UTC(1899, 11, 30)) / 86400000);
   }
-  // Stiller: 0 düz · 1 büyük başlık · 2 kalın · 3 tablo başlığı · 4 metin (çerçeveli) · 5 para · 6 tarih · 7 kalın para (toplam) · 8 kalın metin (toplam) · 9 kırmızı metin · 10 yeşil metin · 11 tam sayı
+  // Stiller: 0 düz · 1 büyük başlık · 2 kalın · 3 tablo başlığı · 4 metin (çerçeveli) · 5 para · 6 tarih · 7 kalın para (toplam) · 8 kalın metin (toplam) · 9 kırmızı metin · 10 yeşil metin · 11 tam sayı · 12 işaretli kalın para (eksi kırmızı) · 13 kalın metin
   // Hücre: {v: değer, s: stil, t: 'n'|'d'|'s'} ya da düz metin/sayı.
   function xlSayfa(sayfa){
     var sat = sayfa.satirlar.map(function(r, ri){
@@ -4210,13 +4187,13 @@
   }
   function xlKitap(sayfalar){
     var stil = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><styleSheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">' +
-      '<numFmts count="2"><numFmt numFmtId="164" formatCode="#,##0.00\\ &quot;₺&quot;"/><numFmt numFmtId="165" formatCode="dd\\.mm\\.yyyy"/></numFmts>' +
+      '<numFmts count="3"><numFmt numFmtId="164" formatCode="#,##0.00\\ &quot;₺&quot;"/><numFmt numFmtId="165" formatCode="dd\\.mm\\.yyyy"/><numFmt numFmtId="166" formatCode="#,##0.00\\ &quot;₺&quot;;[Red]\\-#,##0.00\\ &quot;₺&quot;"/></numFmts>' +
       '<fonts count="5"><font><sz val="11"/><name val="Calibri"/></font><font><b/><sz val="16"/><name val="Calibri"/></font><font><b/><sz val="11"/><name val="Calibri"/></font>' +
       '<font><b/><sz val="11"/><color rgb="FFC00000"/><name val="Calibri"/></font><font><b/><sz val="11"/><color rgb="FF00804A"/><name val="Calibri"/></font></fonts>' +
       '<fills count="4"><fill><patternFill patternType="none"/></fill><fill><patternFill patternType="gray125"/></fill><fill><patternFill patternType="solid"><fgColor rgb="FFDDE7F5"/><bgColor indexed="64"/></patternFill></fill>' +
       '<fill><patternFill patternType="solid"><fgColor rgb="FFF2F2F2"/><bgColor indexed="64"/></patternFill></fill></fills>' +
       '<borders count="2"><border><left/><right/><top/><bottom/><diagonal/></border><border><left style="thin"><color rgb="FFBFBFBF"/></left><right style="thin"><color rgb="FFBFBFBF"/></right><top style="thin"><color rgb="FFBFBFBF"/></top><bottom style="thin"><color rgb="FFBFBFBF"/></bottom><diagonal/></border></borders>' +
-      '<cellStyleXfs count="1"><xf numFmtId="0" fontId="0" fillId="0" borderId="0"/></cellStyleXfs><cellXfs count="12">' +
+      '<cellStyleXfs count="1"><xf numFmtId="0" fontId="0" fillId="0" borderId="0"/></cellStyleXfs><cellXfs count="14">' +
       '<xf numFmtId="0" fontId="0" fillId="0" borderId="0" xfId="0"/>' +
       '<xf numFmtId="0" fontId="1" fillId="0" borderId="0" xfId="0" applyFont="1"/>' +
       '<xf numFmtId="0" fontId="2" fillId="0" borderId="0" xfId="0" applyFont="1"/>' +
@@ -4229,6 +4206,8 @@
       '<xf numFmtId="0" fontId="3" fillId="0" borderId="1" xfId="0" applyFont="1" applyBorder="1" applyAlignment="1"><alignment vertical="top"/></xf>' +
       '<xf numFmtId="0" fontId="4" fillId="0" borderId="1" xfId="0" applyFont="1" applyBorder="1" applyAlignment="1"><alignment vertical="top"/></xf>' +
       '<xf numFmtId="1" fontId="0" fillId="0" borderId="1" xfId="0" applyNumberFormat="1" applyBorder="1" applyAlignment="1"><alignment horizontal="center" vertical="top"/></xf>' +
+      '<xf numFmtId="166" fontId="2" fillId="3" borderId="1" xfId="0" applyNumberFormat="1" applyFont="1" applyFill="1" applyBorder="1"/>' +
+      '<xf numFmtId="0" fontId="2" fillId="0" borderId="0" xfId="0" applyFont="1"/>' +
       '</cellXfs><cellStyles count="1"><cellStyle name="Normal" xfId="0" builtinId="0"/></cellStyles></styleSheet>';
     var dosyalar = [
       ['[Content_Types].xml', '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/><Override PartName="/xl/workbook.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/><Override PartName="/xl/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.styles+xml"/>' +
@@ -4241,7 +4220,7 @@
         '<Relationship Id="rId' + (sayfalar.length + 1) + '" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles" Target="styles.xml"/></Relationships>'],
       ['xl/styles.xml', stil]
     ];
-    sayfalar.forEach(function(x, i){ dosyalar.push(['xl/worksheets/sheet' + (i + 1) + '.xml', xlSayfa(x)]); });
+    sayfalar.forEach(function(x, i){ dosyalar.push(['xl/worksheets/sheet' + (i + 1) + '.xml', xlSayfa(x.genislik ? x : xlBolum(x))]); });
     return xlZip(dosyalar);
   }
   function dosyaPaylas(blob, ad, baslik){
@@ -4258,66 +4237,188 @@
     setTimeout(function(){ URL.revokeObjectURL(url); a.remove(); }, 4000);
     successToast(ad + ' indirildi');
   }
-  // Cari ekstresini Excel olarak hazırlayıp paylaşır.
-  function cariExcelPaylas(s){
-    var d = s.veri || {}, c = s.cari, bugun = new Date().toLocaleDateString('tr-TR'), vade = s.ne === 'vade', sayfalar = [];
-    var H = function(v){ return { v: v, s: 3 }; }, M = function(v){ return { v: v, s: 4 }; }, T = function(v){ return { v: v, t: 'd' }; };
-    var P = function(v){ return v === null || v === undefined || v === '' || !Number(v) ? M('') : { v: Number(v), t: 'n' }; };
-    var ust = function(baslik){ return [[{ v: 'MURAT GIDA', s: 1 }], [{ v: baslik, s: 2 }], [], [{ v: 'Cari', s: 2 }, c.name], [{ v: 'Cari kodu', s: 2 }, c.code || ''], [{ v: 'Döküm tarihi', s: 2 }, bugun]]; };
-    var baYazi = function(b){ b = Number(b) || 0; return Math.abs(b) < 0.005 ? '' : b > 0 ? 'Borç' : 'Alacak'; };
+  // ---- Ekstre modeli: Excel ve PDF aynı modelden üretilir ----
+  // bolum: { ad (sayfa adı), baslik, bilgi: [[etiket, değer, ek]], sutunlar: [{ad, w, tur: 's'|'n'|'d'|'i', hiza}],
+  //          satirlar: [[hücre]], toplam: [hücre], sonuc: {etiket, deger (işaretli), metin}, notlar: [metin] }
+  // hücre: düz değer ya da {v, renk: 'k'(kırmızı)|'y'(yeşil), kalin, isaretli}
+  function cariEkstreModel(s){
+    var d = s.veri || {}, c = s.cari, bugun = new Date().toLocaleDateString('tr-TR'), vade = s.ne === 'vade', bolumler = [];
+    var durum = function(b){ b = Number(b) || 0; return Math.abs(b) < 0.005 ? 'Hesap kapalı' : b > 0 ? 'Cari BORÇLU (Murat Gıda alacaklı)' : 'Cari ALACAKLI (Murat Gıda borçlu)'; };
+    var ba = function(b){ b = Number(b) || 0; return b > 0.005 ? 'B' : b < -0.005 ? 'A' : ''; };
+    var bos = function(v){ return v === null || v === undefined || v === '' || !Number(v) ? '' : Number(v); };
+    var ust = [['Cari', c.name], ['Cari kodu', c.code || ''], ['Döküm tarihi', bugun]];
     if(vade){
       var acikB = d.yon === 'borc' ? -Number(d.acik || 0) : Number(d.acik || 0);
-      var r1 = ust(d.yon === 'borc' ? 'Ödenecek Faturalar (Açık Belgeler)' : 'Açık Fatura Listesi (Vade Durumu)');
-      r1.push([{ v: 'Açık bakiye', s: 2 }, { v: Math.abs(acikB), s: 7 }, { v: baYazi(acikB), s: 8 }]);
-      r1.push([{ v: 'Vadesi geçmiş', s: 2 }, { v: Number(d.gecmis || 0), s: 7 }]);
-      r1.push([{ v: '7 gün içinde', s: 2 }, { v: Number(d.hafta || 0), s: 7 }]);
-      r1.push([{ v: 'İleri vadeli', s: 2 }, { v: Number(d.ileri || 0), s: 7 }]);
-      r1.push([]);
-      var bas1 = r1.length + 1;
-      r1.push([H('Belge tarihi'), H('Belge türü'), H('Belge no'), H('Belge tutarı'), H('Açık (ödenmemiş)'), H('Vade tarihi'), H('Durum')]);
-      (d.kalemler || []).forEach(function(r){
-        var g = Number(r[6]);
-        r1.push([T(r[0]), M(r[1] || ''), M(r[2] || ''), P(r[3]), P(r[4]), T(r[5]), { v: g < 0 ? (-g) + ' gün geçti' : g === 0 ? 'Bugün' : g + ' gün var', s: g < 0 ? 9 : 4 }]);
+      bolumler.push({
+        ad: 'Açık belgeler', baslik: d.yon === 'borc' ? 'Ödenecek Faturalar (Açık Belgeler)' : 'Açık Fatura Listesi (Vade Durumu)',
+        bilgi: ust.concat([['Vadesi geçmiş', Number(d.gecmis || 0)], ['7 gün içinde', Number(d.hafta || 0)], ['İleri vadeli', Number(d.ileri || 0)]]),
+        sutunlar: [{ ad: 'Belge tarihi', w: 14, tur: 'd' }, { ad: 'Belge türü', w: 22 }, { ad: 'Belge no', w: 14 }, { ad: 'Belge tutarı', w: 16, tur: 'n' },
+                   { ad: 'Açık (ödenmemiş)', w: 18, tur: 'n' }, { ad: 'Vade tarihi', w: 13, tur: 'd' }, { ad: 'Durum', w: 16 }],
+        satirlar: (d.kalemler || []).map(function(r){
+          var g = Number(r[6]);
+          return [r[0], r[1] || '', r[2] || '', bos(r[3]), bos(r[4]), r[5], { v: g < 0 ? (-g) + ' gün geçti' : g === 0 ? 'Bugün' : g + ' gün var', renk: g < 0 ? 'k' : '', kalin: g < 0 }];
+        }),
+        toplam: ['TOPLAM', '', '', '', Number(d.acik || 0), '', ''],
+        sonuc: { etiket: 'AÇIK BAKİYE', deger: acikB, metin: durum(acikB) },
+        notlar: ['Ödemeler en eski belgeleri kapatmış sayılır; listede henüz ödenmemiş (açık) kısımlar vardır.', 'Bakiye eksi (−) ise cari alacaklıdır.']
       });
-      r1.push([{ v: 'TOPLAM', s: 8 }, { v: '', s: 8 }, { v: '', s: 8 }, { v: '', s: 8 }, { v: Number(d.acik || 0), s: 7 }, { v: '', s: 8 }, { v: '', s: 8 }]);
-      sayfalar.push({ ad: 'Açık belgeler', satirlar: r1, genislik: [14, 22, 14, 16, 18, 13, 16], donuk: bas1 });
       var kap = (d.odeme && d.odeme.kapanan) || [];
-      if(kap.length){
-        var r2 = ust('Ödenmiş Belgeler'); r2.push([]);
-        var bas2 = r2.length + 1;
-        r2.push([H('Belge tarihi'), H('Belge türü'), H('Belge no'), H('Tutar'), H('Vade tarihi'), H('Ödendiği tarih'), H('Kaç günde ödendi'), H('Durum')]);
-        kap.forEach(function(r){
+      if(kap.length) bolumler.push({
+        ad: 'Ödenmiş belgeler', baslik: 'Ödenmiş Belgeler', bilgi: ust,
+        sutunlar: [{ ad: 'Belge tarihi', w: 14, tur: 'd' }, { ad: 'Belge türü', w: 22 }, { ad: 'Belge no', w: 14 }, { ad: 'Tutar', w: 16, tur: 'n' },
+                   { ad: 'Vade tarihi', w: 13, tur: 'd' }, { ad: 'Ödendiği tarih', w: 15, tur: 'd' }, { ad: 'Kaç günde', w: 11, tur: 'i' }, { ad: 'Durum', w: 22 }],
+        satirlar: kap.map(function(r){
           var gec = Number(r[7]);
-          r2.push([T(r[0]), M(r[1] || ''), M(r[2] || ''), P(r[3]), T(r[4]), T(r[5]), { v: Number(r[6]) || 0, s: 11 }, { v: gec <= 0 ? 'Zamanında' + (gec < 0 ? ' (' + (-gec) + ' gün erken)' : '') : gec + ' gün geç', s: gec <= 0 ? 10 : 9 }]);
-        });
-        r2.push([], [{ v: 'Ödemeler en eski belgeleri kapatmış sayılır (FIFO).', s: 0 }]);
-        sayfalar.push({ ad: 'Ödenmiş belgeler', satirlar: r2, genislik: [14, 22, 14, 16, 13, 15, 16, 22], donuk: bas2 });
-      }
+          return [r[0], r[1] || '', r[2] || '', bos(r[3]), r[4], r[5], Number(r[6]) || 0, { v: gec <= 0 ? 'Zamanında' + (gec < 0 ? ' (' + (-gec) + ' gün erken)' : '') : gec + ' gün geç', renk: gec <= 0 ? 'y' : 'k', kalin: true }];
+        }),
+        notlar: ['Ödemeler en eski belgeleri kapatmış sayılır (FIFO).']
+      });
     } else {
       var bak = d.bakiye || {}, dev = d.devreden || {};
       var bakT = Number(bak.TRY !== undefined ? bak.TRY : (bak.TL || 0)) || 0, devT = Number(dev.TRY !== undefined ? dev.TRY : (dev.TL || 0)) || 0;
-      var r = ust('Cari Hesap Ekstresi');
-      r.push([{ v: 'Dönem', s: 2 }, cariHrkGun ? 'Son ' + cariHrkGun + ' gün' : 'Tüm hareketler']);
-      r.push([{ v: 'Güncel bakiye', s: 2 }, { v: Math.abs(bakT), s: 7 }, { v: baYazi(bakT) || 'Hesap kapalı', s: 8 }]);
-      r.push([]);
-      var bas = r.length + 1;
-      r.push([H('Tarih'), H('İşlem'), H('Belge no'), H('Açıklama'), H('Vade'), H('Borç'), H('Alacak'), H('Bakiye'), H('B/A')]);
-      if(cariHrkGun > 0) r.push([M(''), { v: 'Devreden bakiye', s: 8 }, M(''), M(''), M(''), M(''), M(''), { v: Math.abs(devT), t: 'n' }, M(baYazi(devT) === 'Borç' ? 'B' : baYazi(devT) ? 'A' : '')]);
-      var satir = (d.satirlar || []).slice().reverse(), topB = 0, topA = 0;
+      var satir = (d.satirlar || []).slice().reverse(), topB = 0, topA = 0, sat = [];
+      if(cariHrkGun > 0) sat.push(['', { v: 'Devreden bakiye', kalin: true }, '', '', '', '', '', Math.abs(devT), ba(devT)]);
       satir.forEach(function(x){
         var b = Number(x[4]) || 0, a = Number(x[5]) || 0, y = Number(x[6]) || 0; topB += b; topA += a;
-        r.push([T(x[0]), M(x[1] || ''), M(x[2] || ''), M(x[3] || ''), x[8] && x[8] !== x[0] ? T(x[8]) : M(''), P(b), P(a), { v: Math.abs(y), t: 'n' }, M(y > 0.005 ? 'B' : y < -0.005 ? 'A' : '')]);
+        sat.push([x[0], x[1] || '', x[2] || '', x[3] || '', x[8] && x[8] !== x[0] ? x[8] : '', bos(b), bos(a), Math.abs(y), ba(y)]);
       });
-      r.push([{ v: 'TOPLAM', s: 8 }, { v: '', s: 8 }, { v: '', s: 8 }, { v: '', s: 8 }, { v: '', s: 8 }, { v: topB, s: 7 }, { v: topA, s: 7 }, { v: Math.abs(bakT), s: 7 }, { v: bakT > 0.005 ? 'B' : bakT < -0.005 ? 'A' : '', s: 8 }]);
-      r.push([], ['B: Borç (cari bize borçlandı) · A: Alacak (cari ödedi / biz borçlandık). Bu döküm ERP kayıtlarından alınmıştır.']);
-      if(Number(d.adet || 0) > satir.length) r.push(['Not: dönemde ' + d.adet + ' hareket var, son ' + satir.length + ' hareket yazıldı.']);
-      sayfalar.push({ ad: 'Cari ekstre', satirlar: r, genislik: [13, 20, 12, 24, 12, 14, 14, 15, 6], donuk: bas });
+      var notlar = ['B: Borç (cari bize borçlandı) · A: Alacak (cari ödedi / biz borçlandık).', 'Toplam bakiye eksi (−) ise cari alacaklıdır. Bu döküm ERP kayıtlarından alınmıştır.'];
+      if(Number(d.adet || 0) > satir.length) notlar.push('Not: dönemde ' + d.adet + ' hareket var, son ' + satir.length + ' hareket yazıldı.');
+      bolumler.push({
+        ad: 'Cari ekstre', baslik: 'Cari Hesap Ekstresi',
+        bilgi: ust.concat([['Dönem', cariHrkGun ? 'Son ' + cariHrkGun + ' gün' : 'Tüm hareketler']]),
+        sutunlar: [{ ad: 'Tarih', w: 13, tur: 'd' }, { ad: 'İşlem', w: 20 }, { ad: 'Belge no', w: 12 }, { ad: 'Açıklama', w: 24 }, { ad: 'Vade', w: 12, tur: 'd' },
+                   { ad: 'Borç', w: 14, tur: 'n' }, { ad: 'Alacak', w: 14, tur: 'n' }, { ad: 'Bakiye', w: 15, tur: 'n' }, { ad: 'B/A', w: 6, hiza: 'c' }],
+        satirlar: sat,
+        toplam: ['TOPLAM', '', '', '', '', topB, topA, { v: bakT, isaretli: true }, ba(bakT)],
+        sonuc: { etiket: 'BAKİYE', deger: bakT, metin: durum(bakT) },
+        notlar: notlar
+      });
     }
-    var ad = (vade ? 'Acik_Faturalar_' : 'Ekstre_') + String(c.name || 'cari').replace(/[\\\/:*?"<>|]+/g, '').replace(/\s+/g, '_').slice(0, 40) + '_' + bugun.replace(/\./g, '-') + '.xlsx';
-    try { dosyaPaylas(xlKitap(sayfalar), ad, c.name + ' — ' + (vade ? 'Açık faturalar' : 'Cari ekstre')); }
-    catch(e){ errorToast('Excel hazırlanamadı: ' + (e && e.message || e)); }
+    var dosya = (vade ? 'Acik_Faturalar_' : 'Ekstre_') + String(c.name || 'cari').replace(/[\\\/:*?"<>|]+/g, '').replace(/\s+/g, '_').slice(0, 40) + '_' + bugun.replace(/\./g, '-');
+    return { bolumler: bolumler, dosya: dosya, baslik: c.name + ' — ' + (vade ? 'Açık faturalar' : 'Cari ekstre') };
   }
-  window.addEventListener('afterprint', function(){ document.body.classList.remove('yazdiriliyor'); var a = document.getElementById('yazdirAlani'); if(a) a.innerHTML = ''; });
+  // Model bölümü → Excel sayfası
+  function xlBolum(b){
+    var r = [[{ v: 'MURAT GIDA', s: 1 }], [{ v: b.baslik, s: 2 }], []];
+    b.bilgi.forEach(function(x){ r.push([{ v: x[0], s: 2 }, typeof x[1] === 'number' ? { v: x[1], s: 7 } : x[1]]); });
+    r.push([]);
+    var bas = r.length + 1;
+    r.push(b.sutunlar.map(function(k){ return { v: k.ad, s: 3 }; }));
+    var hucre = function(h, k, toplam){
+      var o = (h && typeof h === 'object') ? h : { v: h }, v = o.v;
+      if(toplam){
+        if(o.isaretli) return { v: Number(v) || 0, s: 12 };
+        return (typeof v === 'number') ? { v: v, s: 7 } : { v: v === '' || v === null || v === undefined ? '' : v, s: 8 };
+      }
+      if(v === '' || v === null || v === undefined) return { v: '', s: 4 };
+      if(k.tur === 'd') return { v: v, t: 'd' };
+      if(k.tur === 'i') return { v: Number(v) || 0, s: 11 };
+      if(k.tur === 'n' && typeof v === 'number') return { v: v, t: 'n' };
+      return { v: v, s: o.renk === 'k' ? 9 : o.renk === 'y' ? 10 : o.kalin ? 8 : 4 };
+    };
+    b.satirlar.forEach(function(x){ r.push(x.map(function(h, i){ return hucre(h, b.sutunlar[i], false); })); });
+    if(b.toplam) r.push(b.toplam.map(function(h, i){ return hucre(h, b.sutunlar[i], true); }));
+    if(b.sonuc){ r.push([]); r.push([{ v: b.sonuc.etiket, s: 13 }, { v: b.sonuc.deger, s: 12 }, { v: b.sonuc.metin, s: 13 }]); }
+    if(b.notlar && b.notlar.length){ r.push([]); b.notlar.forEach(function(n){ r.push([n]); }); }
+    return { ad: b.ad, satirlar: r, genislik: b.sutunlar.map(function(k){ return k.w; }), donuk: bas };
+  }
+  // ---- PDF: model A4 sayfalara çizilir (tuval), her sayfa JPEG olarak PDF'e konur. Türkçe harfler sorunsuz. ----
+  function pdfOlustur(m){
+    var W = 1240, H = 1754, KN = 64, IW = W - 2 * KN, SH = 30, sayfalar = [], cv, cx, y, no = 0;
+    var bugun = new Date().toLocaleDateString('tr-TR');
+    var para = function(v, isaretli){ var n = Number(v) || 0; return (isaretli && n < -0.004 ? '−' : '') + fmtMoney(Math.abs(n)); };
+    function yeniSayfa(){
+      cv = document.createElement('canvas'); cv.width = W; cv.height = H; cx = cv.getContext('2d');
+      cx.fillStyle = '#fff'; cx.fillRect(0, 0, W, H); cx.textBaseline = 'middle'; sayfalar.push(cv); no++; y = KN;
+    }
+    function yazi(t, x, yy, boy, kalin, renk, hiza, maxW){
+      cx.font = (kalin ? 'bold ' : '') + boy + 'px Arial, Helvetica, sans-serif'; cx.fillStyle = renk || '#000'; cx.textAlign = hiza || 'left';
+      t = String(t === null || t === undefined ? '' : t);
+      if(maxW && cx.measureText(t).width > maxW){ while(t.length > 1 && cx.measureText(t + '…').width > maxW) t = t.slice(0, -1); t += '…'; }
+      cx.fillText(t, x, yy);
+    }
+    m.bolumler.forEach(function(b, bi){
+      yeniSayfa();
+      var top = 0; b.sutunlar.forEach(function(k){ top += k.w; });
+      var gen = b.sutunlar.map(function(k){ return k.w / top * IW; });
+      function ustBaslik(devam){
+        yazi('MURAT GIDA', KN, y + 18, 36, true); yazi('Döküm tarihi: ' + bugun, W - KN, y + 18, 17, false, '#333', 'right');
+        y += 46; yazi(b.baslik + (devam ? ' (devam)' : ''), KN, y, 21, true, '#222'); y += 18;
+        cx.fillStyle = '#000'; cx.fillRect(KN, y, IW, 3); y += 22;
+      }
+      function tabloBaslik(){
+        var x = KN; cx.fillStyle = '#DDE7F5'; cx.fillRect(KN, y, IW, SH + 6); cx.strokeStyle = '#9FB3CF'; cx.lineWidth = 1; cx.strokeRect(KN, y, IW, SH + 6);
+        b.sutunlar.forEach(function(k, i){ yazi(k.ad, x + gen[i] / 2, y + (SH + 6) / 2, 16, true, '#000', 'center', gen[i] - 8); x += gen[i]; });
+        y += SH + 6;
+      }
+      function satirCiz(r, toplam){
+        var x = KN;
+        if(toplam){ cx.fillStyle = '#F2F2F2'; cx.fillRect(KN, y, IW, SH); }
+        cx.strokeStyle = '#C8C8C8'; cx.lineWidth = 1; cx.beginPath(); cx.moveTo(KN, y + SH); cx.lineTo(KN + IW, y + SH); cx.stroke();
+        b.sutunlar.forEach(function(k, i){
+          var h = r[i], o = (h && typeof h === 'object') ? h : { v: h }, v = o.v, t = '', hiza = k.hiza === 'c' ? 'center' : 'left', renk = '#000', kalin = toplam || o.kalin;
+          if(v !== '' && v !== null && v !== undefined){
+            if(typeof v === 'number' && (k.tur === 'n' || toplam && k.tur === 'n')){ t = para(v, o.isaretli); hiza = 'right'; if(o.isaretli && v < -0.004) renk = '#C00000'; }
+            else if(k.tur === 'i'){ t = String(v); hiza = 'center'; }
+            else { t = v; if(k.tur === 'd') hiza = 'center'; }
+          }
+          if(o.renk === 'k') renk = '#C00000'; else if(o.renk === 'y') renk = '#00804A';
+          var tx = hiza === 'right' ? x + gen[i] - 6 : hiza === 'center' ? x + gen[i] / 2 : x + 6;
+          yazi(t, tx, y + SH / 2, 15, kalin, renk, hiza, gen[i] - 10);
+          x += gen[i];
+        });
+        cx.beginPath(); var xx = KN; cx.moveTo(xx, y); cx.lineTo(xx, y + SH); b.sutunlar.forEach(function(k, i){ xx += gen[i]; cx.moveTo(xx, y); cx.lineTo(xx, y + SH); }); cx.stroke();
+        y += SH;
+      }
+      ustBaslik(false);
+      b.bilgi.forEach(function(x){ yazi(x[0], KN, y, 17, true); yazi(typeof x[1] === 'number' ? para(x[1]) : x[1], KN + 190, y, 17, false, '#000', 'left', IW - 200); y += 28; });
+      y += 14; tabloBaslik();
+      var altSinir = H - KN - 40;
+      b.satirlar.forEach(function(r){
+        if(y + SH > altSinir){ yeniSayfa(); ustBaslik(true); tabloBaslik(); }
+        satirCiz(r, false);
+      });
+      if(b.toplam){ if(y + SH > altSinir){ yeniSayfa(); ustBaslik(true); tabloBaslik(); } satirCiz(b.toplam, true); }
+      var ekBoy = (b.sonuc ? 70 : 0) + (b.notlar ? b.notlar.length * 24 + 16 : 0);
+      if(y + ekBoy > altSinir){ yeniSayfa(); ustBaslik(true); }
+      if(b.sonuc){
+        y += 18; var neg = Number(b.sonuc.deger) < -0.004, renk = Math.abs(Number(b.sonuc.deger)) < 0.005 ? '#000' : neg ? '#C00000' : '#000';
+        cx.fillStyle = '#F2F2F2'; cx.fillRect(KN, y, IW, 44); cx.strokeStyle = '#000'; cx.lineWidth = 2; cx.strokeRect(KN, y, IW, 44);
+        yazi(b.sonuc.etiket + ':', KN + 14, y + 22, 20, true); yazi(para(b.sonuc.deger, true), KN + 260, y + 22, 22, true, renk);
+        yazi(b.sonuc.metin, W - KN - 14, y + 22, 18, true, '#222', 'right', IW - 560);
+        y += 52;
+      }
+      if(b.notlar){ y += 10; b.notlar.forEach(function(n){ yazi(n, KN, y, 14, false, '#444', 'left', IW); y += 24; }); }
+    });
+    // sayfa numaraları
+    sayfalar.forEach(function(c, i){
+      cx = c.getContext('2d'); cx.textBaseline = 'middle';
+      yazi('Sayfa ' + (i + 1) + ' / ' + sayfalar.length, W - KN, H - KN + 10, 14, false, '#666', 'right');
+      yazi('MURAT GIDA · ' + m.baslik, KN, H - KN + 10, 14, false, '#666', 'left', IW - 200);
+    });
+    // PDF yaz
+    var enc = new TextEncoder(), parca = [], uz = 0, ofs = [];
+    function ekle(x){ var b = typeof x === 'string' ? enc.encode(x) : x; parca.push(b); uz += b.length; }
+    function nesne(n, govde){ ofs[n] = uz; ekle(n + ' 0 obj\n'); govde(); ekle('\nendobj\n'); }
+    var n = sayfalar.length, kids = [];
+    for(var i = 0; i < n; i++) kids.push((3 + i * 3) + ' 0 R');
+    ekle('%PDF-1.4\n'); ekle(new Uint8Array([37, 226, 227, 207, 211, 10]));
+    nesne(1, function(){ ekle('<< /Type /Catalog /Pages 2 0 R >>'); });
+    nesne(2, function(){ ekle('<< /Type /Pages /Kids [' + kids.join(' ') + '] /Count ' + n + ' >>'); });
+    sayfalar.forEach(function(c, i){
+      var p = 3 + i * 3, b64 = c.toDataURL('image/jpeg', 0.88).split(',')[1], bin = atob(b64), img = new Uint8Array(bin.length);
+      for(var k = 0; k < bin.length; k++) img[k] = bin.charCodeAt(k);
+      var icerik = 'q 595.28 0 0 841.89 0 0 cm /Im0 Do Q';
+      nesne(p, function(){ ekle('<< /Type /Page /Parent 2 0 R /MediaBox [0 0 595.28 841.89] /Resources << /XObject << /Im0 ' + (p + 2) + ' 0 R >> >> /Contents ' + (p + 1) + ' 0 R >>'); });
+      nesne(p + 1, function(){ ekle('<< /Length ' + icerik.length + ' >>\nstream\n' + icerik + '\nendstream'); });
+      nesne(p + 2, function(){ ekle('<< /Type /XObject /Subtype /Image /Width ' + W + ' /Height ' + H + ' /ColorSpace /DeviceRGB /BitsPerComponent 8 /Filter /DCTDecode /Length ' + img.length + ' >>\nstream\n'); ekle(img); ekle('\nendstream'); });
+    });
+    var top = 3 + n * 3, xref = uz, x = 'xref\n0 ' + top + '\n0000000000 65535 f \n';
+    for(var j = 1; j < top; j++) x += ('0000000000' + ofs[j]).slice(-10) + ' 00000 n \n';
+    ekle(x + 'trailer\n<< /Size ' + top + ' /Root 1 0 R >>\nstartxref\n' + xref + '\n%%EOF');
+    return new Blob(parca, { type: 'application/pdf' });
+  }
   // Ödenmiş (kapanmış) belgeler. r: [belge tarihi, tür, no, tutar, vade, kapanış tarihi, kaç günde, vadeden kaç gün sonra, fis_id]
   function cariKapananHtml(o){
     var l = (o && o.kapanan) || []; if(!l.length) return '';
