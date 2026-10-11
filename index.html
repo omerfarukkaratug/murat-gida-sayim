@@ -371,7 +371,7 @@
   <header style="border:none; padding:0 0 16px; background:transparent; display:flex; align-items:flex-start; justify-content:space-between;">
     <div>
       <h1><img src="logo-header.png" alt="Murat Gıda" style="height:30px; width:auto; display:block;"></h1>
-      <div class="sub">MK ERP · Murat Gıda • offline • Android • build 198</div>
+      <div class="sub">MK ERP · Murat Gıda • offline • Android • build 199</div>
     </div>
     <button type="button" id="themeToggleBtn" title="Tema seç" style="background:var(--panel2); border:1.5px solid var(--line); color:var(--text); width:34px; height:34px; border-radius:50%; font-size:15px; padding:0; display:flex; align-items:center; justify-content:center; flex-shrink:0;">🎨</button>
   </header>
@@ -4145,12 +4145,12 @@
     var crc = 0xFFFFFFFF; for(var i = 0; i < b.length; i++) crc = XL_CRC[(crc ^ b[i]) & 0xFF] ^ (crc >>> 8);
     return (crc ^ 0xFFFFFFFF) >>> 0;
   }
-  function xlZip(dosyalar){ // dosyalar: [[ad, metin]]
+  function xlZip(dosyalar){ // dosyalar: [[ad, metin ya da Uint8Array]]
     var enc = new TextEncoder(), parcalar = [], merkez = [], ofs = 0;
     function u16(v){ return [v & 255, (v >>> 8) & 255]; }
     function u32(v){ return [v & 255, (v >>> 8) & 255, (v >>> 16) & 255, (v >>> 24) & 255]; }
     dosyalar.forEach(function(f){
-      var ad = enc.encode(f[0]), veri = enc.encode(f[1]), crc = xlCrc(veri);
+      var ad = enc.encode(f[0]), veri = typeof f[1] === 'string' ? enc.encode(f[1]) : f[1], crc = xlCrc(veri);
       var bas = [].concat(u32(0x04034b50), u16(20), u16(0x0800), u16(0), u16(0), u16(0x21), u32(crc), u32(veri.length), u32(veri.length), u16(ad.length), u16(0));
       parcalar.push(new Uint8Array(bas), ad, veri);
       merkez.push(new Uint8Array([].concat(u32(0x02014b50), u16(20), u16(20), u16(0x0800), u16(0), u16(0), u16(0x21), u32(crc), u32(veri.length), u32(veri.length), u16(ad.length), u16(0), u16(0), u16(0), u16(0), u32(0), u32(ofs))), ad);
@@ -4170,7 +4170,8 @@
   // Hücre: {v: değer, s: stil, t: 'n'|'d'|'s'} ya da düz metin/sayı.
   function xlSayfa(sayfa){
     var sat = sayfa.satirlar.map(function(r, ri){
-      return '<row r="' + (ri + 1) + '">' + r.map(function(h, ci){
+      var yk = sayfa.yukseklik && sayfa.yukseklik[ri];
+      return '<row r="' + (ri + 1) + '"' + (yk ? ' ht="' + yk + '" customHeight="1"' : '') + '>' + r.map(function(h, ci){
         if(h === null || h === undefined || h === '') return '';
         if(typeof h !== 'object') h = { v: h };
         var ref = xlSutun(ci) + (ri + 1), st = h.s || 0;
@@ -4183,9 +4184,10 @@
     var gen = '<cols>' + sayfa.genislik.map(function(w, i){ return '<col min="' + (i + 1) + '" max="' + (i + 1) + '" width="' + w + '" customWidth="1"/>'; }).join('') + '</cols>';
     return '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><sheetPr><pageSetUpPr fitToPage="1"/></sheetPr>' +
       don + '<sheetFormatPr defaultRowHeight="15"/>' + gen + '<sheetData>' + sat + '</sheetData>' +
-      '<pageMargins left="0.4" right="0.4" top="0.5" bottom="0.5" header="0.3" footer="0.3"/><pageSetup paperSize="9" orientation="portrait" fitToWidth="1" fitToHeight="0"/></worksheet>';
+      '<pageMargins left="0.4" right="0.4" top="0.5" bottom="0.5" header="0.3" footer="0.3"/><pageSetup paperSize="9" orientation="portrait" fitToWidth="1" fitToHeight="0"/>' + (sayfa.cizim ? '<drawing r:id="rId1"/>' : '') + '</worksheet>';
   }
   function xlKitap(sayfalar){
+    var logo = firmaLogoPng(), RNS = 'http://schemas.openxmlformats.org/officeDocument/2006/relationships';
     var stil = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><styleSheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">' +
       '<numFmts count="3"><numFmt numFmtId="164" formatCode="#,##0.00\\ &quot;₺&quot;"/><numFmt numFmtId="165" formatCode="dd\\.mm\\.yyyy"/><numFmt numFmtId="166" formatCode="#,##0.00\\ &quot;₺&quot;;[Red]\\-#,##0.00\\ &quot;₺&quot;"/></numFmts>' +
       '<fonts count="5"><font><sz val="11"/><name val="Calibri"/></font><font><b/><sz val="16"/><name val="Calibri"/></font><font><b/><sz val="11"/><name val="Calibri"/></font>' +
@@ -4210,8 +4212,9 @@
       '<xf numFmtId="0" fontId="2" fillId="0" borderId="0" xfId="0" applyFont="1"/>' +
       '</cellXfs><cellStyles count="1"><cellStyle name="Normal" xfId="0" builtinId="0"/></cellStyles></styleSheet>';
     var dosyalar = [
-      ['[Content_Types].xml', '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/><Override PartName="/xl/workbook.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/><Override PartName="/xl/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.styles+xml"/>' +
-        sayfalar.map(function(x, i){ return '<Override PartName="/xl/worksheets/sheet' + (i + 1) + '.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/>'; }).join('') + '</Types>'],
+      ['[Content_Types].xml', '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/><Default Extension="png" ContentType="image/png"/><Override PartName="/xl/workbook.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/><Override PartName="/xl/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.styles+xml"/>' +
+        sayfalar.map(function(x, i){ return '<Override PartName="/xl/worksheets/sheet' + (i + 1) + '.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/>' +
+          (logo ? '<Override PartName="/xl/drawings/drawing' + (i + 1) + '.xml" ContentType="application/vnd.openxmlformats-officedocument.drawing+xml"/>' : ''); }).join('') + '</Types>'],
       ['_rels/.rels', '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="xl/workbook.xml"/></Relationships>'],
       ['xl/workbook.xml', '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><sheets>' +
         sayfalar.map(function(x, i){ return '<sheet name="' + xlEsc(x.ad.slice(0, 31)) + '" sheetId="' + (i + 1) + '" r:id="rId' + (i + 1) + '"/>'; }).join('') + '</sheets></workbook>'],
@@ -4220,7 +4223,20 @@
         '<Relationship Id="rId' + (sayfalar.length + 1) + '" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles" Target="styles.xml"/></Relationships>'],
       ['xl/styles.xml', stil]
     ];
-    sayfalar.forEach(function(x, i){ dosyalar.push(['xl/worksheets/sheet' + (i + 1) + '.xml', xlSayfa(x.genislik ? x : xlBolum(x))]); });
+    sayfalar.forEach(function(x, i){
+      var sy = x.genislik ? x : xlBolum(x, !!logo); sy.cizim = !!logo;
+      dosyalar.push(['xl/worksheets/sheet' + (i + 1) + '.xml', xlSayfa(sy)]);
+      if(logo){
+        var gx = Math.round(logo.g * 9525), gy = Math.round(logo.y * 9525);
+        dosyalar.push(['xl/worksheets/_rels/sheet' + (i + 1) + '.xml.rels', '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="' + RNS + '/drawing" Target="../drawings/drawing' + (i + 1) + '.xml"/></Relationships>']);
+        dosyalar.push(['xl/drawings/_rels/drawing' + (i + 1) + '.xml.rels', '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="' + RNS + '/image" Target="../media/logo.png"/></Relationships>']);
+        dosyalar.push(['xl/drawings/drawing' + (i + 1) + '.xml', '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><xdr:wsDr xmlns:xdr="http://schemas.openxmlformats.org/drawingml/2006/spreadsheetDrawing" xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" xmlns:r="' + RNS + '">' +
+          '<xdr:oneCellAnchor><xdr:from><xdr:col>0</xdr:col><xdr:colOff>28575</xdr:colOff><xdr:row>0</xdr:row><xdr:rowOff>28575</xdr:rowOff></xdr:from><xdr:ext cx="' + gx + '" cy="' + gy + '"/>' +
+          '<xdr:pic><xdr:nvPicPr><xdr:cNvPr id="2" name="Logo"/><xdr:cNvPicPr><a:picLocks noChangeAspect="1"/></xdr:cNvPicPr></xdr:nvPicPr><xdr:blipFill><a:blip r:embed="rId1"/><a:stretch><a:fillRect/></a:stretch></xdr:blipFill>' +
+          '<xdr:spPr><a:xfrm><a:off x="0" y="0"/><a:ext cx="' + gx + '" cy="' + gy + '"/></a:xfrm><a:prstGeom prst="rect"><a:avLst/></a:prstGeom></xdr:spPr></xdr:pic><xdr:clientData/></xdr:oneCellAnchor></xdr:wsDr>']);
+      }
+    });
+    if(logo) dosyalar.push(['xl/media/logo.png', logo.png]);
     return xlZip(dosyalar);
   }
   function dosyaPaylas(blob, ad, baslik){
@@ -4237,13 +4253,31 @@
     setTimeout(function(){ URL.revokeObjectURL(url); a.remove(); }, 4000);
     successToast(ad + ' indirildi');
   }
+  // ---- Ekstrelerde firma unvanı ve logo ----
+  var FIRMA_UNVAN = 'Murat Pastane Bakliyat Ltd. Şti.';
+  var FIRMA_LOGO = new Image(); FIRMA_LOGO.src = 'logo-header.png';
+  var FIRMA_LOGO_PNG = null;
+  function firmaLogoHazir(){ return FIRMA_LOGO.complete && FIRMA_LOGO.naturalWidth > 0; }
+  // Excel'e konacak küçük PNG (en çok 300 px genişlik); g/y: Excel'deki görünen boyut (px)
+  function firmaLogoPng(){
+    if(FIRMA_LOGO_PNG) return FIRMA_LOGO_PNG;
+    if(!firmaLogoHazir()) return null;
+    try {
+      var w = Math.min(300, FIRMA_LOGO.naturalWidth), h = Math.round(w * FIRMA_LOGO.naturalHeight / FIRMA_LOGO.naturalWidth);
+      var c = document.createElement('canvas'); c.width = w; c.height = h; c.getContext('2d').drawImage(FIRMA_LOGO, 0, 0, w, h);
+      var bin = atob(c.toDataURL('image/png').split(',')[1]), b = new Uint8Array(bin.length);
+      for(var i = 0; i < bin.length; i++) b[i] = bin.charCodeAt(i);
+      var yy = 48; FIRMA_LOGO_PNG = { png: b, y: yy, g: Math.round(yy * w / h) };
+      return FIRMA_LOGO_PNG;
+    } catch(e){ return null; }
+  }
   // ---- Ekstre modeli: Excel ve PDF aynı modelden üretilir ----
   // bolum: { ad (sayfa adı), baslik, bilgi: [[etiket, değer, ek]], sutunlar: [{ad, w, tur: 's'|'n'|'d'|'i', hiza}],
   //          satirlar: [[hücre]], toplam: [hücre], sonuc: {etiket, deger (işaretli), metin}, notlar: [metin] }
   // hücre: düz değer ya da {v, renk: 'k'(kırmızı)|'y'(yeşil), kalin, isaretli}
   function cariEkstreModel(s){
     var d = s.veri || {}, c = s.cari, bugun = new Date().toLocaleDateString('tr-TR'), vade = s.ne === 'vade', bolumler = [];
-    var durum = function(b){ b = Number(b) || 0; return Math.abs(b) < 0.005 ? 'Hesap kapalı' : b > 0 ? 'Cari BORÇLU (Murat Gıda alacaklı)' : 'Cari ALACAKLI (Murat Gıda borçlu)'; };
+    var durum = function(b){ b = Number(b) || 0; return Math.abs(b) < 0.005 ? 'Hesap kapalı' : b > 0 ? 'Cari BORÇLU (firmamız alacaklı)' : 'Cari ALACAKLI (firmamız borçlu)'; };
     var ba = function(b){ b = Number(b) || 0; return b > 0.005 ? 'B' : b < -0.005 ? 'A' : ''; };
     var bos = function(v){ return v === null || v === undefined || v === '' || !Number(v) ? '' : Number(v); };
     var ust = [['Cari', c.name], ['Cari kodu', c.code || ''], ['Döküm tarihi', bugun]];
@@ -4299,8 +4333,8 @@
     return { bolumler: bolumler, dosya: dosya, baslik: c.name + ' — ' + (vade ? 'Açık faturalar' : 'Cari ekstre') };
   }
   // Model bölümü → Excel sayfası
-  function xlBolum(b){
-    var r = [[{ v: 'MURAT GIDA', s: 1 }], [{ v: b.baslik, s: 2 }], []];
+  function xlBolum(b, logoVar){
+    var r = logoVar ? [['', { v: FIRMA_UNVAN, s: 1 }], ['', { v: b.baslik, s: 2 }], []] : [[{ v: FIRMA_UNVAN, s: 1 }], [{ v: b.baslik, s: 2 }], []];
     b.bilgi.forEach(function(x){ r.push([{ v: x[0], s: 2 }, typeof x[1] === 'number' ? { v: x[1], s: 7 } : x[1]]); });
     r.push([]);
     var bas = r.length + 1;
@@ -4321,7 +4355,9 @@
     if(b.toplam) r.push(b.toplam.map(function(h, i){ return hucre(h, b.sutunlar[i], true); }));
     if(b.sonuc){ r.push([]); r.push([{ v: b.sonuc.etiket, s: 13 }, { v: b.sonuc.deger, s: 12 }, { v: b.sonuc.metin, s: 13 }]); }
     if(b.notlar && b.notlar.length){ r.push([]); b.notlar.forEach(function(n){ r.push([n]); }); }
-    return { ad: b.ad, satirlar: r, genislik: b.sutunlar.map(function(k){ return k.w; }), donuk: bas };
+    var gen = b.sutunlar.map(function(k){ return k.w; });
+    if(logoVar && gen[0] < 14) gen[0] = 14; // logo A sütununa sığsın
+    return { ad: b.ad, satirlar: r, genislik: gen, donuk: bas, yukseklik: logoVar ? { 0: 26, 1: 18 } : null };
   }
   // ---- PDF: model A4 sayfalara çizilir (tuval), her sayfa JPEG olarak PDF'e konur. Türkçe harfler sorunsuz. ----
   function pdfOlustur(m){
@@ -4343,8 +4379,19 @@
       var top = 0; b.sutunlar.forEach(function(k){ top += k.w; });
       var gen = b.sutunlar.map(function(k){ return k.w / top * IW; });
       function ustBaslik(devam){
-        yazi('MURAT GIDA', KN, y + 18, 36, true); yazi('Döküm tarihi: ' + bugun, W - KN, y + 18, 17, false, '#333', 'right');
-        y += 46; yazi(b.baslik + (devam ? ' (devam)' : ''), KN, y, 21, true, '#222'); y += 18;
+        var lx = KN;
+        if(firmaLogoHazir()){
+          var lh = devam ? 60 : 96, lw = Math.round(lh * FIRMA_LOGO.naturalWidth / FIRMA_LOGO.naturalHeight);
+          cx.drawImage(FIRMA_LOGO, KN, y, lw, lh); lx = KN + lw + 26;
+          var orta = y + lh / 2;
+          yazi(FIRMA_UNVAN, lx, orta - (devam ? 12 : 16), devam ? 24 : 30, true, '#000', 'left', W - KN - lx - 230);
+          yazi(b.baslik + (devam ? ' (devam)' : ''), lx, orta + (devam ? 16 : 22), devam ? 18 : 21, true, '#333', 'left', W - KN - lx - 230);
+          yazi('Döküm tarihi: ' + bugun, W - KN, orta - (devam ? 12 : 16), 17, false, '#333', 'right');
+          y += lh + 12;
+        } else {
+          yazi(FIRMA_UNVAN, KN, y + 18, 30, true); yazi('Döküm tarihi: ' + bugun, W - KN, y + 18, 17, false, '#333', 'right');
+          y += 46; yazi(b.baslik + (devam ? ' (devam)' : ''), KN, y, 21, true, '#222'); y += 18;
+        }
         cx.fillStyle = '#000'; cx.fillRect(KN, y, IW, 3); y += 22;
       }
       function tabloBaslik(){
@@ -4395,7 +4442,7 @@
     sayfalar.forEach(function(c, i){
       cx = c.getContext('2d'); cx.textBaseline = 'middle';
       yazi('Sayfa ' + (i + 1) + ' / ' + sayfalar.length, W - KN, H - KN + 10, 14, false, '#666', 'right');
-      yazi('MURAT GIDA · ' + m.baslik, KN, H - KN + 10, 14, false, '#666', 'left', IW - 200);
+      yazi(FIRMA_UNVAN + ' · ' + m.baslik, KN, H - KN + 10, 14, false, '#666', 'left', IW - 200);
     });
     // PDF yaz
     var enc = new TextEncoder(), parca = [], uz = 0, ofs = [];
