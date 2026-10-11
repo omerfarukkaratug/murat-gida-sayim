@@ -368,7 +368,7 @@
   <header style="border:none; padding:0 0 16px; background:transparent; display:flex; align-items:flex-start; justify-content:space-between;">
     <div>
       <h1><img src="logo-header.png" alt="Murat Gıda" style="height:30px; width:auto; display:block;"></h1>
-      <div class="sub">MK ERP · Murat Gıda • offline • Android • build 189</div>
+      <div class="sub">MK ERP · Murat Gıda • offline • Android • build 190</div>
     </div>
     <button type="button" id="themeToggleBtn" title="Tema seç" style="background:var(--panel2); border:1.5px solid var(--line); color:var(--text); width:34px; height:34px; border-radius:50%; font-size:15px; padding:0; display:flex; align-items:center; justify-content:center; flex-shrink:0;">🎨</button>
   </header>
@@ -748,7 +748,7 @@
         <button type="button" id="stokHrkCloseBtn" aria-label="Kapat" style="width:34px; height:34px; border-radius:50%; background:var(--panel2); border:1.5px solid var(--line); color:var(--text); font-size:18px; line-height:1; padding:0; display:flex; align-items:center; justify-content:center;">✕</button>
       </div>
       <div style="display:flex; gap:8px;">
-        <input type="tel" id="stokHrkInput" inputmode="numeric" autocomplete="off" placeholder="Barkod yaz, ✓ ya da Ara" style="flex:1; min-width:0; font-family:var(--mono); font-size:17px; font-weight:700;">
+        <input type="tel" id="stokHrkInput" inputmode="numeric" enterkeyhint="search" autocomplete="off" placeholder="Barkod okut ya da yaz" style="flex:1; min-width:0; font-family:var(--mono); font-size:17px; font-weight:700;">
         <button type="button" id="stokHrkAraBtn" style="flex-shrink:0; padding:0 14px; background:var(--accent); color:#fff; border:none; border-radius:var(--r-sm); font-weight:800;">Ara</button>
         <button type="button" id="stokHrkAdBtn" class="priceModeBtn" title="Ürün adıyla ara">
           <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.3" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
@@ -759,6 +759,19 @@
       </div>
       <div id="stokHrkDonem" class="hareketDonem">
         <button type="button" data-gun="30">1 ay</button><button type="button" data-gun="90" class="on">3 ay</button><button type="button" data-gun="365">12 ay</button><button type="button" data-gun="0">Tümü</button>
+      </div>
+    </div>
+    <div id="stokHrkCamLive" class="hidden">
+      <div class="camWrap">
+        <video id="stokHrkVideo" class="camVideo" playsinline autoplay muted></video>
+        <div id="stokHrkFlash" class="camFlash"></div>
+        <div class="scanFrame"></div>
+        <button id="stokHrkTorchBtn" class="hidden camTorchBtn">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M13 2 3 14h9l-1 8 10-12h-9l1-8Z"/></svg>
+        </button>
+        <button id="stokHrkCloseCamBtn" class="camCloseBtn">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M18 6 6 18M6 6l12 12"/></svg>
+        </button>
       </div>
     </div>
     <div id="stokHrkBody" style="flex:1; overflow-y:auto; padding:12px 14px 24px;"><div class="hint">Ürünü okut, barkodunu yaz ya da 🔍 ile adından ara.</div></div>
@@ -4043,6 +4056,9 @@
   var stokHrkScreenEl = document.getElementById('stokHrkScreen');
   var stokHrkInputEl = document.getElementById('stokHrkInput');
   var stokHrkBodyEl = document.getElementById('stokHrkBody');
+  var stokHrkSekme = 'tumu';
+  // Belge türünün adından grup: alış (alış fatura/irsaliye/fiş, alıştan iade, müstahsil) · satış (satış, satıştan iade, perakende).
+  function stokHrkGrup(tur){ var t = normTr(tur || ''); return /alis|mustahsil/.test(t) ? 'alis' : /satis|perakende|parekende/.test(t) ? 'satis' : 'diger'; }
   var stokHrkGun = 90, stokHrkSon = null, stokHrkIstekNo = 0, stokHrkOnbellek = {}, stokHrkAcikFis = {};
   function openStokHrkScreen(){
     if(!canSeeStokHrk()){ warnToast(hasPerm('stok_hareket') ? 'Şube dışında stok hareketleri gizli' : 'Stok Hareketleri yetkin yok — yöneticinden iste'); return; }
@@ -4050,13 +4066,59 @@
     hizliGecisCiz();
     if(!stokHrkSon) setTimeout(function(){ stokHrkInputEl.focus(); }, 80);
   }
-  function closeStokHrkScreen(){ var el = document.getElementById('stokHrkScreen'); if(el) el.classList.add('hidden'); }
+  function closeStokHrkScreen(){ stokHrkKameraKapat(); var el = document.getElementById('stokHrkScreen'); if(el) el.classList.add('hidden'); }
+  // Kamera: Ürün Hareketleri'ndeki gibi ekranın üstünde, açık kaldıkça okur.
+  var stokHrkCam = { stream: null, motor: null, track: null, fener: false };
+  function stokHrkFlash(renk){ var f = document.getElementById('stokHrkFlash'); f.className = 'camFlash ' + renk; f.style.opacity = 1; setTimeout(function(){ f.style.opacity = 0; }, 140); }
+  function stokHrkKameraAc(){
+    if(stokHrkCam.stream) return;
+    if(document.activeElement) document.activeElement.blur();
+    document.getElementById('stokHrkCamLive').classList.remove('hidden');
+    navigator.mediaDevices.getUserMedia(CAMERA_CONSTRAINTS).then(function(stream){
+      if(document.getElementById('stokHrkScreen').classList.contains('hidden')){ stream.getTracks().forEach(function(t){ t.stop(); }); return; }
+      stokHrkCam.stream = stream;
+      var v = document.getElementById('stokHrkVideo'); v.srcObject = stream; kameraIzle(v, null);
+      stokHrkCam.track = stream.getVideoTracks()[0];
+      var caps = stokHrkCam.track.getCapabilities ? stokHrkCam.track.getCapabilities() : {};
+      document.getElementById('stokHrkTorchBtn').classList.toggle('hidden', !caps.torch);
+      stokHrkCam.motor = startBarcodeEngine(stream, v, function(val){
+        val = (val || '').trim();
+        if(!val || (stokHrkSon && stokHrkSon.barkod === val)) return;
+        var var_ = catalogMap.has(val);
+        stokHrkFlash(var_ ? 'green' : 'amber');
+        if(var_) beep(1046, 90, 0.16); else beep(220, 320, 0.16);
+        if(navigator.vibrate) navigator.vibrate(30);
+        stokHrkAra(val);
+      }, function(){ errorToast('Barkod tarayıcı yüklenemedi — internete bağlanıp tekrar dene, ya da elle yaz'); stokHrkKameraKapat(); });
+    }).catch(function(){ errorToast('Kamera açılamadı — izinleri kontrol edin'); stokHrkKameraKapat(); });
+  }
+  function stokHrkKameraKapat(){
+    if(stokHrkCam.motor){ stokHrkCam.motor.stop(); stokHrkCam.motor = null; }
+    if(stokHrkCam.stream){ stokHrkCam.stream.getTracks().forEach(function(t){ t.stop(); }); stokHrkCam.stream = null; }
+    stokHrkCam.track = null; stokHrkCam.fener = false;
+    var tb = document.getElementById('stokHrkTorchBtn'); if(tb) tb.classList.remove('on');
+    var cl = document.getElementById('stokHrkCamLive'); if(cl) cl.classList.add('hidden');
+  }
+  document.getElementById('stokHrkTorchBtn').addEventListener('click', function(){
+    if(!stokHrkCam.track) return;
+    stokHrkCam.fener = !stokHrkCam.fener;
+    stokHrkCam.track.applyConstraints({ advanced: [{ torch: stokHrkCam.fener }] }).catch(function(){ warnToast('El feneri bu cihazda desteklenmiyor'); stokHrkCam.fener = false; });
+    this.classList.toggle('on', stokHrkCam.fener);
+  });
+  document.getElementById('stokHrkCloseCamBtn').addEventListener('click', stokHrkKameraKapat);
   document.getElementById('menuStokHrkBtn').addEventListener('click', openStokHrkScreen);
   document.getElementById('stokHrkCloseBtn').addEventListener('click', closeStokHrkScreen);
   document.getElementById('stokHrkAraBtn').addEventListener('click', function(){ var v = stokHrkInputEl.value.trim(); if(v) stokHrkAra(v); });
-  stokHrkInputEl.addEventListener('keydown', function(e){ if(e.key === 'Enter'){ e.preventDefault(); var v = stokHrkInputEl.value.trim(); if(v) stokHrkAra(v); } });
+  stokHrkInputEl.addEventListener('keydown', function(e){ if(e.key === 'Enter' || e.keyCode === 13){ e.preventDefault(); var v = stokHrkInputEl.value.trim(); if(v){ stokHrkAra(v); stokHrkInputEl.blur(); } } });
   document.getElementById('stokHrkAdBtn').addEventListener('click', function(){ openNameSearch('stok'); });
-  document.getElementById('stokHrkKameraBtn').addEventListener('click', function(){ startQuickScan(function(val){ stokHrkAra(val); }); });
+  document.getElementById('stokHrkKameraBtn').addEventListener('click', function(){ if(stokHrkCam.stream) stokHrkKameraKapat(); else stokHrkKameraAc(); });
+  // Telefonun sayı klavyesinde "ara/enter" tuşu olmayabiliyor: tam bir barkod yazılınca (8/12/13/14 hane) kendiliğinden aranır.
+  var stokHrkYazZ = null;
+  stokHrkInputEl.addEventListener('input', function(){
+    clearTimeout(stokHrkYazZ);
+    var v = stokHrkInputEl.value.replace(/\s/g, '');
+    if(/^(\d{8}|\d{12,14})$/.test(v) && (!stokHrkSon || stokHrkSon.barkod !== v)) stokHrkYazZ = setTimeout(function(){ if(stokHrkInputEl.value.replace(/\s/g, '') === v){ stokHrkAra(v); stokHrkInputEl.blur(); } }, 700);
+  });
   document.getElementById('stokHrkDonem').addEventListener('click', function(e){
     var b = e.target.closest('button[data-gun]'); if(!b) return;
     stokHrkGun = Number(b.getAttribute('data-gun'));
@@ -4064,6 +4126,8 @@
     if(stokHrkSon) stokHrkAra(stokHrkSon.barkod);
   });
   stokHrkBodyEl.addEventListener('click', function(e){
+    var sk = e.target.closest('button[data-sksekme]');
+    if(sk){ stokHrkSekme = sk.getAttribute('data-sksekme'); stokHrkCiz(); return; }
     var sat = e.target.closest('[data-fis]'); if(!sat) return;
     var fis = sat.getAttribute('data-fis'), kaynak = sat.getAttribute('data-kaynak') || '';
     if(!fis) return;
@@ -4079,7 +4143,7 @@
       stokHrkAcikFis[fis] = { veri: data }; stokHrkCiz();
     }, 30000);
   });
-  function stokHrkAra(barkod){
+  function stokHrkAra(barkod, tekrar){
     barkod = String(barkod || '').trim(); if(!barkod) return;
     var auth = currentAuth();
     if(!auth){ warnToast('Önce giriş yap'); return; }
@@ -4092,10 +4156,12 @@
     var anahtar = stokHrkSon.stokKodu + '|' + barkod + '|' + stokHrkGun, ob = stokHrkOnbellek[anahtar];
     if(ob && Date.now() - ob.zaman < 120000){ stokHrkSon.veri = ob.veri; stokHrkCiz(); return; }
     if(!navigator.onLine){ stokHrkSon.hata = 'İnternet yok'; stokHrkCiz(); return; }
-    var no = ++stokHrkIstekNo;
-    stokHrkCiz(true);
+    var no = tekrar ? stokHrkIstekNo : ++stokHrkIstekNo;
+    if(!tekrar) stokHrkCiz(true);
     jsonpRequestP(state.serverUrl || DEFAULT_SERVER_URL, { action: 'stok_hareket', user: auth.user, pass: auth.pass, stokKodu: stokHrkSon.stokKodu, barkod: barkod, gun: stokHrkGun }, function(err, data){
       if(no !== stokHrkIstekNo) return;
+      // Sunucu / veri tabanı bazen ilk istekte geç uyanır: bir kez kendiliğinden yeniden denenir.
+      if((err || !data || data.status !== 'ok') && !tekrar && !(data && /yetki/i.test(data.message || ''))){ setTimeout(function(){ if(no === stokHrkIstekNo) stokHrkAra(barkod, true); }, 1500); return; }
       if(err || !data || data.status !== 'ok'){ stokHrkSon.hata = err || (data && data.message) || 'bilinmeyen hata'; stokHrkCiz(); return; }
       stokHrkOnbellek[anahtar] = { zaman: Date.now(), veri: data };
       stokHrkSon.veri = data; stokHrkCiz();
@@ -4108,17 +4174,24 @@
       '<div class="hint" style="font-family:var(--mono); margin:2px 0 0;">' + escapeHtml(h.barkod) + (h.stokKodu ? ' · ' + escapeHtml(h.stokKodu) : '') + '</div>';
     if(yukleniyor){ stokHrkBodyEl.innerHTML = baslik + '<div class="hint" style="margin-top:14px;">⏳ Yükleniyor…</div>'; return; }
     if(h.hata){ stokHrkBodyEl.innerHTML = baslik + '<div class="hint" style="margin-top:14px; color:var(--red);">❌ ' + escapeHtml(h.hata) + '</div>'; return; }
-    var d = h.veri || {}, satir = d.satirlar || [];
+    var d = h.veri || {}, tum = d.satirlar || [];
     var stokVar = canSeeStock() && h.stok !== '' && h.stok !== undefined && !isNaN(Number(h.stok));
+    // Yürüyen stok bütün hareketlerden hesaplanır; sekme yalnızca hangi satırların görüneceğini seçer.
+    var kalanT = stokVar ? Number(h.stok) : null;
+    tum.forEach(function(r){ r._stok = kalanT; r._grup = stokHrkGrup(r[1]); if(kalanT !== null) kalanT -= Number(r[4]) || 0; });
+    var say = { alis: 0, satis: 0 }, mik = { alis: 0, satis: 0 };
+    tum.forEach(function(r){ if(say[r._grup] !== undefined){ say[r._grup]++; mik[r._grup] += Number(r[4]) || 0; } });
+    var satir = stokHrkSekme === 'tumu' ? tum : tum.filter(function(r){ return r._grup === stokHrkSekme; });
     var html = baslik + '<div class="chOzet" style="margin-top:12px;"><div>📥 GİREN<b>' + escapeHtml(fmtQty(d.giris || 0)) + '</b></div><div>📤 ÇIKAN<b>' + escapeHtml(fmtQty(d.cikis || 0)) + '</b></div>' +
       (stokVar ? '<div>📦 STOK<b>' + escapeHtml(fmtQty(h.stok)) + '</b></div>' : '') + '</div>';
     if(Number(d.perakende || 0)) html += '<div class="hint" style="margin:-4px 0 8px;">Çıkanın ' + escapeHtml(fmtQty(d.perakende)) + ' tanesi perakende (kasa) satışı.</div>';
+    html += '<div class="hrkSekmeler" style="margin:0 0 10px;">' + [['alis', '📥 Alışlar', mik.alis], ['satis', '📤 Satışlar', -mik.satis], ['tumu', '📋 Tümü', null]].map(function(x){
+      return '<button type="button" class="hrkSekme' + (stokHrkSekme === x[0] ? ' on' : '') + '" data-sksekme="' + x[0] + '" style="padding:8px 4px;"><small>' + x[1] + '</small><b style="font-size:16px;">' + (x[2] === null ? tum.length : escapeHtml(fmtQty(Math.round(x[2] * 1000) / 1000))) + '</b></button>';
+    }).join('') + '</div>';
     // r: [tarih, belge türü, belge no, cari, miktar (+/−), KDV dahil birim fiyat, tutar, fis_id, kaynak]
-    var kalan = stokVar ? Number(h.stok) : null;
     html += satir.length ? satir.map(function(r){
       var m = Number(r[4]) || 0, fis = r[7] ? String(r[7]) : '';
-      var stokYazi = kalan !== null ? 'stok ' + fmtQty(Math.round(kalan * 1000) / 1000) : '';
-      if(kalan !== null) kalan -= m;          // bu hareketten önceki stok = bir alttaki satırın "sonrası"
+      var stokYazi = r._stok !== null && r._stok !== undefined ? 'stok ' + fmtQty(Math.round(r._stok * 1000) / 1000) : '';
       var alt = [r[3] || '', r[2] ? (/satır$/.test(r[2]) ? r[2] : 'No ' + r[2]) : '', r[5] !== null && r[5] !== undefined ? fmtMoney(r[5]) : ''].filter(Boolean).join(' · ');
       return '<div class="chSatir"' + (fis ? ' data-fis="' + escapeHtml(fis) + '" data-kaynak="' + escapeHtml(r[8] || '') + '" style="cursor:pointer;"' : '') + '>' +
         '<div class="ust"><span style="min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">' + escapeHtml(r[0] + ' · ' + (r[1] || 'Belge')) + (fis ? ' 📄' : '') + '</span>' +
@@ -4126,8 +4199,8 @@
         '<div class="alt"><span style="min-width:0; overflow:hidden; text-overflow:ellipsis;">' + escapeHtml(alt || '—') + '</span>' +
         (stokYazi ? '<span style="white-space:nowrap; font-family:var(--mono); font-weight:700;">' + escapeHtml(stokYazi) + '</span>' : '') + '</div>' +
         (fis ? fisDetayHtml(stokHrkAcikFis[fis]) : '') + '</div>';
-    }).join('') : '<div class="hint">Bu dönemde hareket yok.</div>';
-    if(Number(d.adet || 0) > satir.length) html += '<div class="hint">Son ' + satir.length + ' hareket gösteriliyor (dönemde ' + d.adet + ' hareket var) — daha kısa dönem seç.</div>';
+    }).join('') : '<div class="hint">' + (stokHrkSekme === 'alis' ? 'Bu dönemde alış yok.' : stokHrkSekme === 'satis' ? 'Bu dönemde satış yok.' : 'Bu dönemde hareket yok.') + '</div>';
+    if(Number(d.adet || 0) > tum.length) html += '<div class="hint">Son ' + tum.length + ' hareket gösteriliyor (dönemde ' + d.adet + ' hareket var) — daha kısa dönem seç.</div>';
     html += '<div class="hint" style="margin-top:10px; font-size:11px;">+ stoğa giren · − stoktan çıkan. Fiyatlar KDV dahil birim fiyat. 📄 olan satıra dokun: belgenin tamamı.' +
       (stokVar ? ' "stok": o hareketten sonraki miktar, güncel stoktan geriye hesaplanır.' : '') + (d.sonVeri ? ' ERP verisi: ' + escapeHtml(d.sonVeri) : '') + '</div>';
     stokHrkBodyEl.innerHTML = html;
