@@ -294,10 +294,10 @@
 
   #toast{position:fixed; left:16px; right:16px; bottom:84px; background:var(--ink); color:#fff;
     padding:13px 16px; border-radius:var(--r-md); font-size:13.5px; font-weight:700; text-align:center;
-    transform:translateY(140px); transition:transform .25s; z-index:70; box-shadow:var(--sh-md); line-height:1.4;}
-  #toast.show{transform:translateY(0);}
+    transform:translateY(calc(100% + 120px)); opacity:0; visibility:hidden; transition:transform .25s, opacity .25s, visibility 0s .25s; z-index:70; box-shadow:var(--sh-md); line-height:1.4;}
+  #toast.show{transform:translateY(0); opacity:1; visibility:visible; transition:transform .25s, opacity .25s, visibility 0s;}
   /* Alttan açılan kart (hesap makinesi) açıkken uyarı kartın ÜSTÜNDE görünsün. */
-  body.sheetOpen #toast{bottom:auto; top:16px; transform:translateY(-160px);}
+  body.sheetOpen #toast{bottom:auto; top:16px; transform:translateY(calc(-100% - 40px));}
   body.sheetOpen #toast.show{transform:translateY(0);}
   #toast.error{background:var(--red); box-shadow:0 8px 22px rgba(220,38,38,.4);}
   #toast.warn{background:var(--amber); color:#241a02; box-shadow:0 8px 22px rgba(217,127,30,.35);}
@@ -368,7 +368,7 @@
   <header style="border:none; padding:0 0 16px; background:transparent; display:flex; align-items:flex-start; justify-content:space-between;">
     <div>
       <h1><img src="logo-header.png" alt="Murat Gıda" style="height:30px; width:auto; display:block;"></h1>
-      <div class="sub">MK ERP · Murat Gıda • offline • Android • build 191</div>
+      <div class="sub">MK ERP · Murat Gıda • offline • Android • build 192</div>
     </div>
     <button type="button" id="themeToggleBtn" title="Tema seç" style="background:var(--panel2); border:1.5px solid var(--line); color:var(--text); width:34px; height:34px; border-radius:50%; font-size:15px; padding:0; display:flex; align-items:center; justify-content:center; flex-shrink:0;">🎨</button>
   </header>
@@ -3253,6 +3253,8 @@
     try { var p = v.play(); if(p && p.catch) p.catch(function(){}); } catch(e){}
     setTimeout(function(){
       if(!v.srcObject || v.videoWidth > 0) return;
+      var izler = v.srcObject.getVideoTracks ? v.srcObject.getVideoTracks() : [];
+      if(!izler.length || izler.every(function(t){ return t.readyState === 'ended'; }) || !v.offsetParent) return;   // kamera kapatılmış / ekran değişmiş
       if(yenidenAc){ yenidenAc(); return; }
       warnToast('Kamera görüntü vermiyor — telefonda kamerayı kullanan başka bir uygulama ya da sayfa açık olabilir. Onu kapatıp tekrar dene.');
     }, 3000);
