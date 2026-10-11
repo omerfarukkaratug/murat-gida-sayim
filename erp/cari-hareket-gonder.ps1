@@ -172,8 +172,8 @@ GROUP BY CONVERT(char(10), F.TARIH, 23), FD.FINANS_ISLEM_TURU, FD.DOVIZ_AD
 
     # --- 3) Belge satirlari (fatura/irsaliye/fis detayi, carinin ve urunun stok hareketleri) ---
     # Stoga etki eden TUM belgeler (FIS_TURU.GIRIS = +1 / -1; Finans 18 haric): alis, satis, iade, depo, sarf, fire, sayim...
-    # Perakende (kasa fisleri 11/12, perakende fatura/irsaliye 35/36, Pesin Satis carisinin belgeleri) burada DEGIL,
-    # 4. adimda urun + gun toplami olarak gider.
+    # Perakende (Pesin Satis carisinin belgeleri + carisi OLMAYAN kasa/perakende belgeleri 11/12/35/36) burada DEGIL,
+    # 4. adimda urun + gun toplami olarak gider. Bir cariye kesilmis kasa fisi / perakende fatura burada kalir.
     $kolD = @((Sql-Tablo $baglanti "SELECT COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_NAME = 'FIS_DETAY'") | ForEach-Object { [string]$_.COLUMN_NAME })
     $kolS = @((Sql-Tablo $baglanti "SELECT COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_NAME = 'STOK'") | ForEach-Object { [string]$_.COLUMN_NAME })
     $miktar = @("MIKTAR_FIS", "MIKTAR", "MIKTAR1", "ADET") | Where-Object { $kolD -contains $_ } | Select-Object -First 1
@@ -195,8 +195,9 @@ LEFT JOIN dbo.CARI C ON C.ID = f.CARI
 JOIN dbo.FIS_TURU FT ON FT.ID = f.FIS_TURU
 LEFT JOIN dbo.STOK s ON s.ID = d.STOK
 WHERE f.FIS_TARIHI >= '$basSql' AND f.FIS_TARIHI < '$bitSql'
-  AND FT.GIRIS IN (1, -1) AND f.FIS_TURU NOT IN (18, 11, 12, 35, 36)
-  AND ISNULL(f.CARI, 0) <> COALESCE((SELECT TOP 1 VARSAYILANCARI FROM dbo.FIRMASABITLERI), -1)
+  AND FT.GIRIS IN (1, -1) AND f.FIS_TURU <> 18
+  AND NOT (ISNULL(C.ID, 0) = COALESCE((SELECT TOP 1 VARSAYILANCARI FROM dbo.FIRMASABITLERI), -1)
+           OR (C.ID IS NULL AND f.FIS_TURU IN (11, 12, 35, 36)))
 "@
         $dtF = Sql-Tablo $baglanti $sqlF
         $fs = New-Object System.Collections.ArrayList
@@ -227,8 +228,10 @@ FROM dbo.FIS f
 JOIN dbo.FIS_DETAY d ON d.FIS = f.ID
 JOIN dbo.STOK s ON s.ID = d.STOK
 JOIN dbo.FIS_TURU FT ON FT.ID = f.FIS_TURU
+LEFT JOIN dbo.CARI C ON C.ID = f.CARI
 WHERE f.FIS_TARIHI >= '$pBasSql' AND f.FIS_TARIHI < '$bitSql' AND FT.GIRIS IN (1, -1) AND f.FIS_TURU <> 18
-  AND (f.FIS_TURU IN (11, 12, 35, 36) OR ISNULL(f.CARI, 0) = COALESCE((SELECT TOP 1 VARSAYILANCARI FROM dbo.FIRMASABITLERI), -1))
+  AND (ISNULL(C.ID, 0) = COALESCE((SELECT TOP 1 VARSAYILANCARI FROM dbo.FIRMASABITLERI), -1)
+       OR (C.ID IS NULL AND f.FIS_TURU IN (11, 12, 35, 36)))
 GROUP BY s.KOD, CONVERT(char(10), f.FIS_TARIHI, 23)
 "@
         try {
