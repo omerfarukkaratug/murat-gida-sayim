@@ -33,3 +33,12 @@ Cari ekstresi: seçilen carinin borç / alacak hareketleri ve yürüyen bakiyesi
   faturaların ortalama vade günü (son 365 gün). Ekranda carinin "📅 Vade" sekmesi.
 - `vade_raporu('alacak' | 'borc')`: bütün cariler; ekranda "📅 Vade" düğmesi (Alacaklarımız / Borçlarımız).
 - `Code.gs` (build172): `action=cari_hareket&ne=vade|vadeRapor`.
+
+## Ödeme alışkanlığı ve risk (build 195, 009_odeme_risk.sql)
+- `cari_odeme(kod)`: son 2 yılın ödemeleri belgelerle FIFO eşleştirilir → gerçek ödeme günü (ağırlıklı ort.),
+  anlaşılan vade günü, vadeden sonra ortalama gecikme; son 90 gün sevk / ödeme oranı; risk 0–100 ve nedenleri.
+- Risk carinin KENDİ alışkanlığına göredir: en eski açık belge her zamanki ödeme gününü aştı mı (40),
+  90 günlük ödeme/sevk oranı (30), vadesi geçmiş oranı (20), genel gecikme eğilimi (10).
+  0–24 normal (yeşil) · 25–49 dikkat (sarı) · 50+ riskli (kırmızı).
+- `vade_raporu('alacak')` satırlarına risk eklendi; riskliler en üstte.
+- `Code.gs` (build173): vade sekmesi cevabına `odeme` eklenir.

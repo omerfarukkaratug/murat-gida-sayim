@@ -272,6 +272,7 @@
   .chFisSatir{display:flex; justify-content:space-between; gap:10px; padding:3px 0;}
   .chFisSatir small{display:block; color:var(--muted); font-family:var(--mono); font-size:11px;}
   .chFisSatir b{white-space:nowrap; font-family:var(--mono);}
+  .chDeger{text-align:right; font-weight:800; font-family:var(--mono); font-size:13px;}
   .geriBtn{display:inline-flex; align-items:center; gap:6px; padding:7px 12px; margin:0 0 10px; border-radius:18px; border:1.5px solid var(--line); background:var(--panel); color:var(--text); font-size:13px; font-weight:800; max-width:100%; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;}
   .bkBtn{display:inline-flex; align-items:center; gap:4px; padding:4px 10px; margin-left:6px; border-radius:16px; border:1.5px solid var(--line); background:var(--panel2); color:var(--text); font-size:12px; font-weight:800; vertical-align:middle;}
   .hrkSatir{background:var(--panel); border-radius:12px; padding:10px 12px; margin-bottom:8px; box-shadow:var(--sh-sm);}
@@ -370,7 +371,7 @@
   <header style="border:none; padding:0 0 16px; background:transparent; display:flex; align-items:flex-start; justify-content:space-between;">
     <div>
       <h1><img src="logo-header.png" alt="Murat Gıda" style="height:30px; width:auto; display:block;"></h1>
-      <div class="sub">MK ERP · Murat Gıda • offline • Android • build 194</div>
+      <div class="sub">MK ERP · Murat Gıda • offline • Android • build 195</div>
     </div>
     <button type="button" id="themeToggleBtn" title="Tema seç" style="background:var(--panel2); border:1.5px solid var(--line); color:var(--text); width:34px; height:34px; border-radius:50%; font-size:15px; padding:0; display:flex; align-items:center; justify-content:center; flex-shrink:0;">🎨</button>
   </header>
@@ -3997,12 +3998,14 @@
     var d = R.veri || {}, sat = d.satirlar || [];
     html += '<div class="chOzet"><div>⏰ VADESİ GEÇMİŞ<b style="color:var(--red);">' + escapeHtml(fmtMoney(d.gecmis || 0)) + '</b></div><div>📆 7 GÜN İÇİNDE<b style="color:var(--amber);">' + escapeHtml(fmtMoney(d.hafta || 0)) + '</b></div><div>⏳ İLERİ VADE<b>' + escapeHtml(fmtMoney(d.ileri || 0)) + '</b></div></div>' +
       '<div class="hint" style="margin:-4px 0 10px;">Toplam açık: <b>' + escapeHtml(fmtMoney(d.toplam || 0)) + '</b> · ' + sat.length + ' cari</div>';
+    if(alacak && (d.riskli || d.dikkat)) html += '<div class="hint" style="margin:-6px 0 10px;"><b style="color:var(--red);">🔴 ' + (d.riskli || 0) + ' riskli</b> · <b style="color:var(--amber);">🟡 ' + (d.dikkat || 0) + ' dikkat</b> — riskliler en üstte.</div>';
     html += sat.length ? sat.map(function(r){
       return '<div class="chSatir" data-rcari="' + escapeHtml(r[0]) + '" data-rad="' + escapeHtml(r[1]) + '" style="cursor:pointer;"><div class="ust"><span style="min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">' + escapeHtml(r[1] || r[0]) + '</span>' +
         '<span style="white-space:nowrap; font-family:var(--mono);">' + escapeHtml(fmtMoney(r[2])) + '</span></div>' +
         '<div class="alt"><span>' + (Number(r[3]) > 0 ? '<b style="color:var(--red);">geçmiş ' + escapeHtml(fmtMoney(r[3])) + (r[6] ? ' · ort. ' + r[6] + ' gün' : '') + '</b>' : 'vadesi geçmiş yok') +
           (Number(r[4]) > 0 ? ' · <span style="color:var(--amber); font-weight:700;">7 gün: ' + escapeHtml(fmtMoney(r[4])) + '</span>' : '') + '</span>' +
-        '<span style="white-space:nowrap;">ort. vade ' + escapeHtml(r[7] || '—') + '</span></div></div>';
+        '<span style="white-space:nowrap;">ort. vade ' + escapeHtml(r[7] || '—') + '</span></div>' +
+        (alacak && r[9] ? '<div class="alt" style="margin-top:4px;">' + riskRozet(r[9], r[8]) + '<span style="white-space:nowrap;">' + (r[10] !== null && r[10] !== undefined ? 'normalde ' + r[10] + ' günde öder' : 'ödeme geçmişi yok') + '</span></div>' : '') + '</div>';
     }).join('') : '<div class="hint">Açık bakiye yok.</div>';
     html += '<div class="hint" style="margin-top:10px; font-size:11px;">Ödemeler en eski borçları kapatmış sayılır; açık kalan bakiye en yeni belgelerden oluşur. Vadesi olmayan belgede vade = belge tarihi. Cariye dokun: açık kalemleri.' + (d.sonVeri ? ' ERP verisi: ' + escapeHtml(d.sonVeri) : '') + '</div>';
     cariHrkBodyEl.innerHTML = html;
@@ -4119,12 +4122,38 @@
     html += '<div class="hint" style="margin-top:10px; font-size:11px;">' + (perakende ? 'Perakende: kasa satışları ve tahsilatları, gün ve hareket türü başına toplam.' : 'B: borç (cari bize borçlandı) · A: alacak (cari ödedi / biz borçlandık). 📄 olan satıra dokun: belgenin ürünleri.') + (d.sonVeri ? ' ERP verisi: ' + escapeHtml(d.sonVeri) : '') + '</div>';
     cariHrkBodyEl.innerHTML = html;
   }
+  function riskRozet(seviye, puan){
+    var r = { riskli: ['🔴 Riskli', 'var(--red)'], dikkat: ['🟡 Dikkat', 'var(--amber)'], normal: ['🟢 Normal', 'var(--green)'] }[seviye] || ['—', 'var(--muted)'];
+    return '<span style="font-weight:800; color:' + r[1] + ';">' + r[0] + (puan !== null && puan !== undefined ? ' · risk ' + puan + '/100' : '') + '</span>';
+  }
+  // Ödeme alışkanlığı + risk kartı (Code.gs vade cevabına "odeme" olarak ekler).
+  function cariOdemeHtml(o){
+    if(!o || !o.bulundu) return '';
+    var musteri = o.musteri, renk = { riskli: 'var(--red)', dikkat: 'var(--amber)', normal: 'var(--green)' }[o.seviye] || 'var(--muted)';
+    var g = function(x){ return x === null || x === undefined ? '—' : x + ' gün'; };
+    var html = '<div class="chBakiye" style="margin-top:12px; text-align:left; border-left:5px solid ' + (musteri ? renk : 'var(--line)') + ';">' +
+      '<small>' + (musteri ? 'ÖDEME ALIŞKANLIĞI VE RİSK' : 'BİZİM BU CARİYE ÖDEME ALIŞKANLIĞIMIZ') + '</small>' +
+      (musteri ? '<div style="display:flex; align-items:center; gap:10px; margin:4px 0 6px;">' + riskRozet(o.seviye, o.risk) +
+        '<div style="flex:1; height:8px; border-radius:4px; background:var(--panel2); overflow:hidden;"><div style="height:100%; width:' + Math.min(100, o.risk || 0) + '%; background:' + renk + ';"></div></div></div>' : '') +
+      '<div style="display:grid; grid-template-columns:1fr 1fr; gap:4px 12px; font-size:13px;">' +
+        '<span>Anlaşılan vade (ort.)</span><span class="chDeger">' + g(o.ortVadeGun) + '</span>' +
+        '<span>Gerçek ödeme (ort.)</span><span class="chDeger">' + g(o.ortOdemeGun) + '</span>' +
+        '<span>Vadeden sonra (ort.)</span><span class="chDeger">' + g(o.ortGecikme) + '</span>' +
+        '<span>Son 90 gün ' + (musteri ? 'gönderilen' : 'gelen') + '</span><span class="chDeger">' + escapeHtml(fmtMoney(o.sevk90 || 0)) + '</span>' +
+        '<span>Son 90 gün ödenen</span><span class="chDeger">' + escapeHtml(fmtMoney(o.odeme90 || 0)) + (o.oran90 !== null && o.oran90 !== undefined ? ' (%' + Math.round(o.oran90 * 100) + ')' : '') + '</span>' +
+        (o.enEskiGun !== null && o.enEskiGun !== undefined ? '<span>En eski açık belge</span><span class="chDeger">' + o.enEskiGun + ' gün önce</span>' : '') +
+      '</div>' +
+      (musteri && o.nedenler && o.nedenler.length ? '<ul style="margin:8px 0 0; padding-left:18px; font-size:12.5px; color:var(--text);">' + o.nedenler.map(function(n){ return '<li>' + escapeHtml(n) + '</li>'; }).join('') + '</ul>'
+        : musteri ? '<div style="font-size:12.5px; margin-top:8px; color:var(--green); font-weight:700;">Her zamanki ödeme düzeninde.</div>' : '') +
+      '</div>';
+    return html;
+  }
   // Carinin açık kalemleri. r: [belge tarihi, tür, belge no, belge tutarı, açık tutar, vade, gün (eksi: geçmiş), fis_id]
   function cariHrkVadeHtml(d){
     var k = d.kalemler || [];
-    if(!k.length) return '<div class="chBakiye" style="margin-top:12px;"><small>VADE</small><b style="color:var(--green);">Açık bakiye yok</b><span>Hesap kapalı ya da ödemeler borcu karşılıyor.</span></div>';
+    if(!k.length) return cariOdemeHtml(d.odeme) + '<div class="chBakiye" style="margin-top:12px;"><small>VADE</small><b style="color:var(--green);">Açık bakiye yok</b><span>Hesap kapalı ya da ödemeler borcu karşılıyor.</span></div>';
     var alacak = d.yon === 'alacak';
-    var html = '<div class="chBakiye" style="margin-top:12px;"><small>' + (alacak ? 'CARİNİN BİZE AÇIK BORCU' : 'BİZİM CARİYE AÇIK BORCUMUZ') + '</small><b style="color:' + (alacak ? 'var(--red)' : 'var(--green)') + ';">' + escapeHtml(fmtMoney(d.acik || 0)) + '</b>' +
+    var html = cariOdemeHtml(d.odeme) + '<div class="chBakiye" style="margin-top:12px;"><small>' + (alacak ? 'CARİNİN BİZE AÇIK BORCU' : 'BİZİM CARİYE AÇIK BORCUMUZ') + '</small><b style="color:' + (alacak ? 'var(--red)' : 'var(--green)') + ';">' + escapeHtml(fmtMoney(d.acik || 0)) + '</b>' +
       '<span>Ağırlıklı ortalama vade: ' + escapeHtml(d.ortVadeTarihi || '—') + (d.ortVadeGun ? ' · faturalarda ortalama ' + d.ortVadeGun + ' gün vade' : '') + '</span></div>' +
       '<div class="chOzet"><div>⏰ GEÇMİŞ<b style="color:var(--red);">' + escapeHtml(fmtMoney(d.gecmis || 0)) + '</b>' + (d.ortGecikme ? '<span style="font-size:10.5px;">ort. ' + d.ortGecikme + ' gün</span>' : '') + '</div>' +
         '<div>📆 7 GÜN İÇİNDE<b style="color:var(--amber);">' + escapeHtml(fmtMoney(d.hafta || 0)) + '</b></div><div>⏳ İLERİ<b>' + escapeHtml(fmtMoney(d.ileri || 0)) + '</b></div></div>';
