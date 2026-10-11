@@ -272,6 +272,7 @@
   .chFisSatir{display:flex; justify-content:space-between; gap:10px; padding:3px 0;}
   .chFisSatir small{display:block; color:var(--muted); font-family:var(--mono); font-size:11px;}
   .chFisSatir b{white-space:nowrap; font-family:var(--mono);}
+  .geriBtn{display:inline-flex; align-items:center; gap:6px; padding:7px 12px; margin:0 0 10px; border-radius:18px; border:1.5px solid var(--line); background:var(--panel); color:var(--text); font-size:13px; font-weight:800; max-width:100%; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;}
   .bkBtn{display:inline-flex; align-items:center; gap:4px; padding:4px 10px; margin-left:6px; border-radius:16px; border:1.5px solid var(--line); background:var(--panel2); color:var(--text); font-size:12px; font-weight:800; vertical-align:middle;}
   .hrkSatir{background:var(--panel); border-radius:12px; padding:10px 12px; margin-bottom:8px; box-shadow:var(--sh-sm);}
   .hrkSatir .ust{display:flex; justify-content:space-between; gap:8px; font-weight:800; font-size:14px;}
@@ -369,7 +370,7 @@
   <header style="border:none; padding:0 0 16px; background:transparent; display:flex; align-items:flex-start; justify-content:space-between;">
     <div>
       <h1><img src="logo-header.png" alt="Murat Gıda" style="height:30px; width:auto; display:block;"></h1>
-      <div class="sub">MK ERP · Murat Gıda • offline • Android • build 193</div>
+      <div class="sub">MK ERP · Murat Gıda • offline • Android • build 194</div>
     </div>
     <button type="button" id="themeToggleBtn" title="Tema seç" style="background:var(--panel2); border:1.5px solid var(--line); color:var(--text); width:34px; height:34px; border-radius:50%; font-size:15px; padding:0; display:flex; align-items:center; justify-content:center; flex-shrink:0;">🎨</button>
   </header>
@@ -3930,7 +3931,27 @@
     }).join('') : '<div class="hint" style="padding:12px;">' + (cariList.length ? 'Eşleşen cari yok — yazımı kontrol et.' : 'Cari listesi henüz inmedi — biraz bekle.') + '</div>';
     cariHrkSonucEl.classList.remove('hidden');
   }
+  // Geri: cari ↔ vade raporu ↔ başka cari arasında gezinilen ekranlar sırayla geri açılır.
+  var cariHrkGecmis = [];
+  function cariHrkGorunum(){ return cariHrkSecili ? { tip: 'cari', cari: cariHrkSecili.cari, sekme: cariHrkSekme } : cariHrkRapor ? { tip: 'rapor', yon: cariHrkRapor.yon } : null; }
+  function cariHrkGecmiseEkle(yeni){
+    var g = cariHrkGorunum(); if(!g) return;
+    if(g.tip === 'rapor' && yeni === 'rapor') return;                              // raporda sekme değişimi
+    if(g.tip === 'cari' && yeni && yeni.code !== undefined && yeni.code === g.cari.code) return;
+    cariHrkGecmis.push(g); if(cariHrkGecmis.length > 20) cariHrkGecmis.shift();
+  }
+  function cariHrkGeri(){
+    var g = cariHrkGecmis.pop(); if(!g) return false;
+    if(g.tip === 'rapor') cariHrkRaporAc(g.yon, true);
+    else { cariHrkSekme = g.sekme; cariHrkSec({ name: g.cari.name, code: g.cari.code, balance: g.cari.balance, geri: true }); }
+    return true;
+  }
+  function cariHrkGeriBtn(){
+    var g = cariHrkGecmis[cariHrkGecmis.length - 1]; if(!g) return '';
+    return '<button type="button" class="geriBtn" data-chgeri="1">← Geri: ' + escapeHtml(g.tip === 'rapor' ? 'Vade raporu' : (g.cari.name || g.cari.code)) + '</button>';
+  }
   function cariHrkSec(c){
+    if(!c.geri) cariHrkGecmiseEkle(c);
     cariHrkSonucEl.classList.add('hidden');
     cariHrkInputEl.value = ''; cariHrkInputEl.blur();   // seçilen cari aşağıda yazar; kutu bir sonraki arama için boş kalır
     cariHrkAcikFis = {}; cariHrkRapor = null;
@@ -3947,8 +3968,9 @@
   // ---- VADE RAPORU (bütün cariler): açık bakiyelerin vadesi. Ödemeler en eski borçları kapatmış sayılır (FIFO). ----
   var cariHrkRapor = null;    // { yon: 'alacak' | 'borc', veri, hata, yukleniyor }
   document.getElementById('cariHrkVadeBtn').addEventListener('click', function(){ cariHrkRaporAc(cariHrkRapor ? cariHrkRapor.yon : 'alacak'); });
-  function cariHrkRaporAc(yon){
+  function cariHrkRaporAc(yon, geri){
     var auth = currentAuth(); if(!auth){ warnToast('Önce giriş yap'); return; }
+    if(!geri) cariHrkGecmiseEkle('rapor');
     cariHrkSecili = null; cariHrkSonucEl.classList.add('hidden');
     var ob = cariHrkOnbellek['rapor|' + yon];
     cariHrkRapor = { yon: yon, veri: ob && Date.now() - ob.zaman < 120000 ? ob.veri : null, hata: '' };
@@ -3967,7 +3989,7 @@
   function cariHrkRaporCiz(){
     var R = cariHrkRapor; if(!R) return;
     var alacak = R.yon === 'alacak';
-    var html = '<div style="font-weight:800; font-size:16px;">📅 Vade raporu</div>' +
+    var html = cariHrkGeriBtn() + '<div style="font-weight:800; font-size:16px;">📅 Vade raporu</div>' +
       '<div class="hrkSekmeler" style="margin:10px 0;"><button type="button" class="hrkSekme' + (alacak ? ' on' : '') + '" data-rapor="alacak" style="padding:9px 6px;"><b style="font-size:13.5px; font-family:inherit;">📥 Alacaklarımız</b><small>müşteriler bize borçlu</small></button>' +
         '<button type="button" class="hrkSekme' + (!alacak ? ' on' : '') + '" data-rapor="borc" style="padding:9px 6px;"><b style="font-size:13.5px; font-family:inherit;">📤 Borçlarımız</b><small>tedarikçilere</small></button></div>';
     if(R.yukleniyor){ cariHrkBodyEl.innerHTML = html + '<div class="hint">⏳ Hesaplanıyor…</div>'; return; }
@@ -3992,6 +4014,7 @@
     if(cariHrkSecili) cariHrkGetir(cariHrkSecili.cari);
   });
   cariHrkBodyEl.addEventListener('click', function(e){
+    if(e.target.closest('button[data-chgeri]')){ cariHrkGeri(); return; }
     var rp = e.target.closest('button[data-rapor]'); if(rp){ cariHrkRaporAc(rp.getAttribute('data-rapor')); return; }
     var rc = e.target.closest('[data-rcari]');
     if(rc){ var kod = rc.getAttribute('data-rcari'), bul = cariList.filter(function(c){ return c.code === kod; })[0];
@@ -4058,7 +4081,7 @@
     var s = cariHrkSecili;
     if(!s){ if(cariHrkRapor){ cariHrkRaporCiz(); return; } cariHrkBodyEl.innerHTML = '<div class="hint">Cariyi adından ya da kodundan ara, listeden seç. Kasa satışları için 🛒 Perakende, bütün carilerin vadeleri için 📅 Vade.</div>'; return; }
     var perakende = s.cari.code === CARI_PERAKENDE.code;
-    var baslik = '<div style="font-weight:800; font-size:16px; line-height:1.3;">' + escapeHtml(s.cari.name) + '</div>' +
+    var baslik = cariHrkGeriBtn() + '<div style="font-weight:800; font-size:16px; line-height:1.3;">' + escapeHtml(s.cari.name) + '</div>' +
       (perakende ? '' : '<div class="hint" style="font-family:var(--mono); margin:2px 0 0;">' + escapeHtml(s.cari.code || 'kod yok') + '</div>') +
       (perakende ? '' : '<div class="hrkSekmeler" style="margin:10px 0 0; gap:6px;"><button type="button" class="hrkSekme' + (s.ne === 'hareket' ? ' on' : '') + '" data-chsekme="hesap" style="padding:9px 4px;"><b style="font-size:13px; font-family:inherit;">💳 Hesap</b></button>' +
         '<button type="button" class="hrkSekme' + (s.ne === 'vade' ? ' on' : '') + '" data-chsekme="vade" style="padding:9px 4px;"><b style="font-size:13px; font-family:inherit;">📅 Vade</b></button>' +
@@ -4212,6 +4235,7 @@
     if(stokHrkSon) stokHrkAra(stokHrkSon.barkod);
   });
   stokHrkBodyEl.addEventListener('click', function(e){
+    if(e.target.closest('button[data-skgeri]')){ stokHrkGeri(); return; }
     var sk = e.target.closest('button[data-sksekme]');
     if(sk){ stokHrkSekme = sk.getAttribute('data-sksekme'); stokHrkCiz(); return; }
     var sat = e.target.closest('[data-fis]'); if(!sat) return;
@@ -4229,8 +4253,11 @@
       stokHrkAcikFis[fis] = { veri: data }; stokHrkCiz();
     }, 30000);
   });
-  function stokHrkAra(barkod, tekrar){
+  var stokHrkGecmis = [];   // daha önce bakılan ürünler (← Önceki ürün)
+  function stokHrkGeri(){ var b = stokHrkGecmis.pop(); if(!b) return false; stokHrkAra(b, false, true); return true; }
+  function stokHrkAra(barkod, tekrar, geri){
     barkod = String(barkod || '').trim(); if(!barkod) return;
+    if(!tekrar && !geri && stokHrkSon && stokHrkSon.barkod !== barkod){ stokHrkGecmis.push(stokHrkSon.barkod); if(stokHrkGecmis.length > 20) stokHrkGecmis.shift(); }
     var auth = currentAuth();
     if(!auth){ warnToast('Önce giriş yap'); return; }
     if(!canSeeStokHrk()){ closeStokHrkScreen(); return; }
@@ -4247,7 +4274,7 @@
     jsonpRequestP(state.serverUrl || DEFAULT_SERVER_URL, { action: 'stok_hareket', user: auth.user, pass: auth.pass, stokKodu: stokHrkSon.stokKodu, barkod: barkod, gun: stokHrkGun }, function(err, data){
       if(no !== stokHrkIstekNo) return;
       // Sunucu / veri tabanı bazen ilk istekte geç uyanır: bir kez kendiliğinden yeniden denenir.
-      if((err || !data || data.status !== 'ok') && !tekrar && !(data && /yetki/i.test(data.message || ''))){ setTimeout(function(){ if(no === stokHrkIstekNo) stokHrkAra(barkod, true); }, 1500); return; }
+      if((err || !data || data.status !== 'ok') && !tekrar && !(data && /yetki/i.test(data.message || ''))){ setTimeout(function(){ if(no === stokHrkIstekNo) stokHrkAra(barkod, true, true); }, 1500); return; }
       if(err || !data || data.status !== 'ok'){ stokHrkSon.hata = err || (data && data.message) || 'bilinmeyen hata'; stokHrkCiz(); return; }
       stokHrkOnbellek[anahtar] = { zaman: Date.now(), veri: data };
       stokHrkSon.veri = data; stokHrkCiz();
@@ -4256,7 +4283,9 @@
   function stokHrkCiz(yukleniyor){
     var h = stokHrkSon;
     if(!h){ stokHrkBodyEl.innerHTML = '<div class="hint">Ürünü okut, barkodunu yaz ya da 🔍 ile adından ara.</div>'; return; }
-    var baslik = '<div style="font-weight:800; font-size:16px; line-height:1.3;">' + escapeHtml(h.ad || 'Katalogda olmayan barkod') + '</div>' +
+    var oncekiB = stokHrkGecmis[stokHrkGecmis.length - 1], oncekiU = oncekiB ? catalogMap.get(oncekiB) : null;
+    var baslik = (oncekiB ? '<button type="button" class="geriBtn" data-skgeri="1">← Önceki ürün: ' + escapeHtml(oncekiU ? oncekiU.name : oncekiB) + '</button>' : '') +
+      '<div style="font-weight:800; font-size:16px; line-height:1.3;">' + escapeHtml(h.ad || 'Katalogda olmayan barkod') + '</div>' +
       '<div class="hint" style="font-family:var(--mono); margin:2px 0 0;">' + escapeHtml(h.barkod) + (h.stokKodu ? ' · ' + escapeHtml(h.stokKodu) : '') + '<button type="button" class="bkBtn" data-bkgoster="' + escapeHtml(h.barkod) + '">▌▍▌ Barkod</button></div>';
     if(yukleniyor){ stokHrkBodyEl.innerHTML = baslik + '<div class="hint" style="margin-top:14px;">⏳ Yükleniyor…</div>'; return; }
     if(h.hata){ stokHrkBodyEl.innerHTML = baslik + '<div class="hint" style="margin-top:14px; color:var(--red);">❌ ' + escapeHtml(h.hata) + '</div>'; return; }
@@ -5948,6 +5977,37 @@
   // Stok / Ürün Hareketleri: iPhone sayı klavyesinin ✓ (Bitti) tuşu da aratır.
   klavyeKapaninca(stokHrkInputEl, function(v){ if(!stokHrkSon || stokHrkSon.barkod !== v) stokHrkAra(v); });
   klavyeKapaninca(hareketInputEl, function(v){ if(!hareketSon || hareketSon.barkod !== v) hareketAra(v); });
+
+  // ---------- TELEFONUN GERİ TUŞU ----------
+  // Açık bir ekran / pencere varken geri tuşu (Android) ya da geri hareketi uygulamadan çıkmaz:
+  // önce ekranın kendi içindeki "geri"si (cari/vade, önceki ürün), yoksa en üstteki ekran kapanır.
+  var GERI_KATMAN = [
+    ['barkodGoster', function(){ document.getElementById('barkodGoster').classList.add('hidden'); }],
+    ['nameSearchScreen', function(){ document.getElementById('nameSearchScreen').classList.add('hidden'); }],
+    ['quickScanOverlay', function(){ stopQuickScan(); }],
+    ['cariHrkScreen', function(){ if(!cariHrkGeri()) closeCariHrkScreen(); }],
+    ['stokHrkScreen', function(){ if(!stokHrkGeri()) closeStokHrkScreen(); }],
+    ['hareketScreen', function(){ closeHareketScreen(); }],
+    ['priceScreen', function(){ closePriceScreen(); }],
+    ['mesaiScreen', function(){ closeMesaiScreen(); }],
+    ['malHareketScreen', function(){ if(!malSaving) closeMalHareketScreen(); }]
+  ];
+  var geriKayitli = false, geriYutuluyor = false;
+  function acikKatman(){ for(var i = 0; i < GERI_KATMAN.length; i++){ var el = document.getElementById(GERI_KATMAN[i][0]); if(el && !el.classList.contains('hidden')) return GERI_KATMAN[i]; } return null; }
+  function geriDurumu(){
+    if(acikKatman()){ if(!geriKayitli){ try { history.pushState({ mkGeri: 1 }, ''); geriKayitli = true; } catch(e){} } }
+    else if(geriKayitli){ geriKayitli = false; geriYutuluyor = true; try { history.back(); } catch(e){ geriYutuluyor = false; } }
+  }
+  window.addEventListener('popstate', function(){
+    if(geriYutuluyor){ geriYutuluyor = false; return; }
+    geriKayitli = false;
+    var k = acikKatman(); if(k) k[1]();
+    setTimeout(geriDurumu, 60);
+  });
+  if(window.MutationObserver){
+    var geriGozcu = new MutationObserver(function(){ setTimeout(geriDurumu, 0); });
+    GERI_KATMAN.forEach(function(k){ var el = document.getElementById(k[0]); if(el) geriGozcu.observe(el, { attributes: true, attributeFilter: ['class'] }); });
+  }
 
   // ---------- BARKODU EKRANDA GÖSTER ----------
   // Ürünün üstündeki barkod düşmüş/okunmuyorsa: uygulamadan ürün bulunur, barkodu büyük gösterilir,
