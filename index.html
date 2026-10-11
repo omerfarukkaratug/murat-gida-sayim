@@ -81,6 +81,15 @@
   header .sub{font-size:11px; color:var(--muted); font-family:var(--mono);}
   .screen{height:calc(100dvh - 4px); display:flex; flex-direction:column;}
   .hidden{display:none !important;}
+  /* YAN ÇEVİRME: telefon yan dönünce düzen değişmesin — ekranlar ortada telefon
+     genişliğinde bir sütun olarak kalır, yazılar büyümez. */
+  html{-webkit-text-size-adjust:100%; text-size-adjust:100%;}
+  @media (orientation: landscape) and (max-height: 600px) and (pointer: coarse){
+    .screen{max-width:480px; margin-left:auto; margin-right:auto; box-shadow:0 0 0 1px var(--line);}
+    [id$="Screen"]{left:max(0px, calc(50vw - 240px)) !important; right:max(0px, calc(50vw - 240px)) !important; box-shadow:0 0 0 1px var(--line);}
+    #toast{left:max(16px, calc(50vw - 224px)); right:max(16px, calc(50vw - 224px));}
+    .stripes{max-width:480px; margin:0 auto;}
+  }
 
   /* SETUP */
   #setup{padding:18px 16px 28px; overflow-y:auto; background:var(--bg);}
@@ -371,7 +380,7 @@
   <header style="border:none; padding:0 0 16px; background:transparent; display:flex; align-items:flex-start; justify-content:space-between;">
     <div>
       <h1><img src="logo-header.png" alt="Murat Gıda" style="height:30px; width:auto; display:block;"></h1>
-      <div class="sub">MK ERP · Murat Gıda • offline • Android • build 201</div>
+      <div class="sub">MK ERP · Murat Gıda • offline • Android • build 202</div>
     </div>
     <button type="button" id="themeToggleBtn" title="Tema seç" style="background:var(--panel2); border:1.5px solid var(--line); color:var(--text); width:34px; height:34px; border-radius:50%; font-size:15px; padding:0; display:flex; align-items:center; justify-content:center; flex-shrink:0;">🎨</button>
   </header>
@@ -7058,34 +7067,11 @@
   updatePendingBadge();
   setInterval(updateStatus, 8000);
 
-  // ---------- DİKEY KULLANIM ----------
-  // Android'de ana ekrana eklenmiş uygulama manifest ("orientation":"portrait")
-  // ile zaten dönmez; ayrıca kilitlemeyi deniyoruz. iPhone kilitlemeye izin
-  // vermez: telefon yan çevrilince üstte "dik tutun" perdesi çıkar (arkadaki
-  // uygulama ve veriler aynen kalır, telefon düzelince perde kalkar).
-  // Not: klavye açılınca ekran yüksekliği küçülür; bu yüzden ekran oranına
-  // değil telefonun GERÇEK yönüne bakılır. Tabletlerde (kısa kenar ≥ 600) çıkmaz.
-  (function(){
-    try { if(screen.orientation && screen.orientation.lock) screen.orientation.lock('portrait').catch(function(){}); } catch(e){}
-    function yatayMi(){
-      // Sadece dokunmatik TELEFONLAR: bilgisayar/tablet ekranında perde asla çıkmaz.
-      var dokunmatik = (window.matchMedia && window.matchMedia('(pointer: coarse)').matches) || navigator.maxTouchPoints > 0;
-      if(!dokunmatik) return false;
-      if(Math.min(screen.width || 0, screen.height || 0) >= 600) return false;
-      if(screen.orientation && typeof screen.orientation.type === 'string') return screen.orientation.type.indexOf('landscape') === 0;
-      if(typeof window.orientation === 'number') return Math.abs(window.orientation) === 90;
-      return false;
-    }
-    function guncelle(){
-      var perde = document.getElementById('yatayPerde'); // perde bu betikten SONRA tanımlı; her seferinde bul
-      if(perde) perde.classList.toggle('hidden', !yatayMi());
-    }
-    window.addEventListener('orientationchange', function(){ setTimeout(guncelle, 50); });
-    if(screen.orientation && screen.orientation.addEventListener) screen.orientation.addEventListener('change', guncelle);
-    window.addEventListener('resize', guncelle);
-    guncelle();
-    document.addEventListener('DOMContentLoaded', guncelle);
-  })();
+  // ---------- YAN ÇEVİRME ----------
+  // Telefon yan çevrilince uyarı ÇIKMAZ; uygulama çalışmaya devam eder ve dikeydeki
+  // görünümü korur (ortada telefon genişliğinde sütun — bkz. CSS "YAN ÇEVİRME").
+  // Android'de ana ekrana eklenmiş uygulama manifest ile zaten dik kalır; kilit denenir.
+  try { if(screen.orientation && screen.orientation.lock) screen.orientation.lock('portrait').catch(function(){}); } catch(e){}
 
   // ---------- GÜNCELLEME: kullanıcı kontrollü ----------
   // Eskiden yeni sürüm gelir gelmez sayfa KENDİLİĞİNDEN yenileniyordu; sayımın
@@ -7165,11 +7151,5 @@
   }
 })();
 </script>
-<div id="yatayPerde" class="hidden" style="position:fixed; inset:0; z-index:10000; background:var(--bg, #f3f7ef); color:var(--text, #1d2b1f); display:flex; flex-direction:column; align-items:center; justify-content:center; gap:14px; text-align:center; padding:24px;">
-  <div style="font-size:54px; line-height:1;">📱</div>
-  <div style="font-size:18px; font-weight:800;">Telefonu dik tutun</div>
-  <div style="font-size:14px; opacity:.75; max-width:320px;">Uygulama dikey kullanım içindir. Verileriniz güvende — telefonu düzeltince kaldığınız yerden devam edersiniz.</div>
-  <div style="font-size:13px; max-width:320px; background:rgba(0,0,0,.06); border-radius:12px; padding:10px 12px; line-height:1.5;"><b>Ekran hiç dönmesin:</b> sağ üst köşeden aşağı kaydırın → <b>🔒 Dikey Yön Kilidi</b>'ne dokunun. (iPhone bu kilidi uygulamaların yapmasına izin vermiyor.)</div>
-</div>
 </body>
 </html>
