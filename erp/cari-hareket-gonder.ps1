@@ -1,10 +1,14 @@
 # =====================================================================
 #  Murat Gida - ERP12 -> Veri tabani: CARI HAREKETLERI (cari hesap ekstresi)
 # =====================================================================
-#  Ne yapar: ERP12'deki FINANS_DETAY satirlarindan carilere (CARI_TUR = 1, Pesin
-#  Satis / varsayilan cari haric) ait borc ve alacaklari okuyup bulut veri
-#  tabanina yazar. Uygulamadaki "Cari Hareketleri" ekrani buradan beslenir.
-#  ERP12'deki cari bakiyesi (CARI_BAKIYELER) de ayni satirlardan hesaplanir.
+#  Ne yapar: ERP12'den okuyup bulut veri tabanina yazar; uygulamadaki "Cari
+#  Hareketleri" ekrani buradan beslenir:
+#   1) FINANS_DETAY: carilerin (CARI_TUR = 1) borc / alacak hareketleri. ERP12'deki
+#      cari bakiyesi (CARI_BAKIYELER) de ayni satirlardan hesaplanir.
+#   2) Perakende (Pesin Satis = varsayilan cari): her fis tek tek DEGIL, gun ve
+#      hareket turu basina TOPLAM olarak (cari kodu "__PERAKENDE__").
+#   3) FIS_DETAY: carilerin belgelerinin (fatura, irsaliye, fis, iade) urun satirlari
+#      -> "fatura detayi" ve "carinin stok hareketleri".
 #
 #  - ERP12'ye HICBIR SEY YAZMAZ, sadece okur (SELECT).
 #  - Gunde bir kez TUM hareketleri bastan gonderir (ERP'de silinen/duzeltilen
@@ -127,9 +131,88 @@ WHERE C.CARI_TUR = 1 AND C.ID <> COALESCE((SELECT TOP 1 VARSAYILANCARI FROM dbo.
             borc = $(if ($taraf -eq "B") { $tutar } else { 0 }); alacak = $(if ($taraf -eq "A") { $tutar } else { 0 })
         })
     }
+    # --- 2) Perakende: varsayilan cari (Pesin Satis), gun + hareket turu + taraf basina toplam ---
+    # Sentetik satir no (eksi): -((yyyymmdd * 1000 + tur) * 10 + doviz) -> her gun/tur icin sabit, gonderimler arasi ayni kalir.
+    $sqlP = @"
+WITH VC AS (SELECT TOP 1 VARSAYILANCARI AS ID FROM dbo.FIRMASABITLERI)
+SELECT 'B' AS taraf, CONVERT(char(10), F.TARIH, 23) AS gun, FD.FINANS_ISLEM_TURU AS tur_id, FD.DOVIZ_AD AS dv_id, MAX(T.AD) AS tur, MAX(DV.AD) AS doviz, SUM(FD.TUTAR) AS tutar, COUNT(*) AS adet
+FROM dbo.FINANS_DETAY FD JOIN dbo.FINANS F ON F.ID = FD.FINANS JOIN VC ON VC.ID = FD.KART_BORCLU
+LEFT JOIN dbo.FINANS_ISLEM_TURU T ON T.ID = FD.FINANS_ISLEM_TURU LEFT JOIN dbo.DOVIZ_AD DV ON DV.ID = FD.DOVIZ_AD
+WHERE F.TARIH >= '$basSql' AND F.TARIH < '$bitSql'
+GROUP BY CONVERT(char(10), F.TARIH, 23), FD.FINANS_ISLEM_TURU, FD.DOVIZ_AD
+UNION ALL
+SELECT 'A' AS taraf, CONVERT(char(10), F.TARIH, 23) AS gun, FD.FINANS_ISLEM_TURU AS tur_id, FD.DOVIZ_AD AS dv_id, MAX(T.AD) AS tur, MAX(DV.AD) AS doviz, SUM(FD.TUTAR) AS tutar, COUNT(*) AS adet
+FROM dbo.FINANS_DETAY FD JOIN dbo.FINANS F ON F.ID = FD.FINANS JOIN VC ON VC.ID = FD.KART_ALACAKLI
+LEFT JOIN dbo.FINANS_ISLEM_TURU T ON T.ID = FD.FINANS_ISLEM_TURU LEFT JOIN dbo.DOVIZ_AD DV ON DV.ID = FD.DOVIZ_AD
+WHERE F.TARIH >= '$basSql' AND F.TARIH < '$bitSql'
+GROUP BY CONVERT(char(10), F.TARIH, 23), FD.FINANS_ISLEM_TURU, FD.DOVIZ_AD
+"@
+    $nP = 0
+    try {
+        $dtP = Sql-Tablo $baglanti $sqlP
+        foreach ($r in $dtP.Rows) {
+            $taraf = [string]$r.taraf; $tutar = Sayi $r.tutar; $gun = [string]$r.gun
+            $turId = 0; if ($r.tur_id -isnot [DBNull] -and $r.tur_id -ne $null) { $turId = [long]$r.tur_id }
+            $dvId = 0; if ($r.dv_id -isnot [DBNull] -and $r.dv_id -ne $null) { $dvId = [long]$r.dv_id % 10 }
+            [void]$satirlar.Add([PSCustomObject]@{
+                detay_id = -((([long]($gun.Replace("-", ""))) * 1000 + $turId) * 10 + $dvId); taraf = $taraf
+                cari_kod = "__PERAKENDE__"; cari_ad = "PERAKENDE (Pesin Satis)"
+                tarih = $gun + "T23:59:00+03:00"; vade = $null; tur = Metin $r.tur; belge_no = ""
+                aciklama = "Gunluk toplam (" + [string]$r.adet + " kayit)"; doviz = Metin $r.doviz; fis_id = $null
+                borc = $(if ($taraf -eq "B") { $tutar } else { 0 }); alacak = $(if ($taraf -eq "A") { $tutar } else { 0 })
+            })
+            $nP++
+        }
+    } catch { Yaz-Log "[$Db] UYARI: perakende toplamlari alinamadi: $($_.Exception.Message) (cari hareketleri etkilenmedi)" }
+
     $n = Parcali-Gonder "cari_hareket_yukle" $Db $satirlar ('"' + (Iso $bas) + '"') ('"' + (Iso $bit) + '"')
+    Yaz-Log "[$Db] Cari hareketleri: $n satir gonderildi ($nP perakende gun/tur toplami dahil)"
+
+    # --- 3) Belge satirlari (fatura/irsaliye/fis detayi + carinin stok hareketleri) ---
+    # Stoga etki eden belge turleri (FIS_TURU.GIRIS = +1 / -1; Finans turu 18 haric). Pesin Satis ve personel carileri alinmaz.
+    $kolD = @((Sql-Tablo $baglanti "SELECT COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_NAME = 'FIS_DETAY'") | ForEach-Object { [string]$_.COLUMN_NAME })
+    $kolS = @((Sql-Tablo $baglanti "SELECT COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_NAME = 'STOK'") | ForEach-Object { [string]$_.COLUMN_NAME })
+    $miktar = @("MIKTAR_FIS", "MIKTAR", "MIKTAR1", "ADET") | Where-Object { $kolD -contains $_ } | Select-Object -First 1
+    $fiyat = @("DAHIL_FIYAT", "KDV_DAHIL_FIYAT", "FIYAT_KDV_DAHIL", "KDVLI_FIYAT") | Where-Object { $kolD -contains $_ } | Select-Object -First 1
+    $tutarK = @("DAHIL_TUTAR", "KDV_DAHIL_TUTAR", "TUTAR_KDV_DAHIL", "KDVLI_TUTAR") | Where-Object { $kolD -contains $_ } | Select-Object -First 1
+    $urunAd = @("AD", "STOK_ADI", "ADI") | Where-Object { $kolS -contains $_ } | Select-Object -First 1
+    if (-not $miktar) { Yaz-Log "[$Db] UYARI: FIS_DETAY miktar sutunu bulunamadi; belge satirlari gonderilmedi. Sutunlar: $($kolD -join ', ')" }
+    else {
+        $fiyatIf = if ($fiyat) { "d.$fiyat" } else { "CAST(NULL AS decimal(18,4))" }
+        $tutarIf = if ($tutarK) { "d.$tutarK" } else { "CAST(NULL AS decimal(18,4))" }
+        $adIf = if ($urunAd) { "ISNULL(s.$urunAd, '')" } else { "''" }
+        $sqlF = @"
+SELECT d.ID AS detay_id, f.ID AS fis_id, f.FIS_TURU AS fis_turu, ISNULL(FT.AD, '') AS tur_ad, FT.GIRIS AS giris, f.FIS_TARIHI AS tarih,
+       ISNULL(f.BELGENO, '') AS belge_no, C.KOD AS cari_kod, ISNULL(s.KOD, '') AS stok_kodu, ISNULL(d.BARKOD, '') AS barkod,
+       $adIf AS urun_adi, d.$miktar AS miktar, $fiyatIf AS birim_fiyat, $tutarIf AS tutar
+FROM dbo.FIS f
+JOIN dbo.FIS_DETAY d ON d.FIS = f.ID
+JOIN dbo.CARI C ON C.ID = f.CARI
+JOIN dbo.FIS_TURU FT ON FT.ID = f.FIS_TURU
+LEFT JOIN dbo.STOK s ON s.ID = d.STOK
+WHERE f.FIS_TARIHI >= '$basSql' AND f.FIS_TARIHI < '$bitSql'
+  AND FT.GIRIS IN (1, -1) AND f.FIS_TURU <> 18
+  AND C.CARI_TUR = 1 AND C.ID <> COALESCE((SELECT TOP 1 VARSAYILANCARI FROM dbo.FIRMASABITLERI), -1)
+"@
+        $dtF = Sql-Tablo $baglanti $sqlF
+        $fs = New-Object System.Collections.ArrayList
+        foreach ($r in $dtF.Rows) {
+            $m = Sayi $r.miktar; $bf = $null; $tt = $null
+            if ($r.birim_fiyat -isnot [DBNull] -and $r.birim_fiyat -ne $null) { $bf = [double]$r.birim_fiyat }
+            if ($r.tutar -isnot [DBNull] -and $r.tutar -ne $null) { $tt = [double]$r.tutar } elseif ($bf -ne $null) { $tt = [Math]::Round($m * $bf, 2) }
+            [void]$fs.Add([PSCustomObject]@{
+                detay_id = [long]$r.detay_id; fis_id = [long]$r.fis_id; fis_turu = [int]$r.fis_turu; tur_ad = Metin $r.tur_ad
+                giris = [int]$r.giris; tarih = Iso $r.tarih; belge_no = Metin $r.belge_no; cari_kod = Metin $r.cari_kod
+                stok_kodu = Metin $r.stok_kodu; barkod = Metin $r.barkod; urun_adi = Metin $r.urun_adi
+                miktar = $m; birim_fiyat = $bf; tutar = $tt
+            })
+        }
+        $nF = Parcali-Gonder "fis_satir_yukle" $Db $fs ('"' + (Iso $bas) + '"') ('"' + (Iso $bit) + '"')
+        Yaz-Log "[$Db] Belge satirlari: $nF satir gonderildi (miktar: $miktar, fiyat: $fiyat, tutar: $tutarK, urun adi: $urunAd)"
+    }
+
     if ($tam) { Set-Content -Path $TamGonderimDosya -Value (Get-Date -Format "yyyy-MM-dd HH:mm:ss") }
-    Yaz-Log "[$Db] TAMAM: $n cari hareket satiri gonderildi"
+    Yaz-Log "[$Db] TAMAM"
 }
 
 $baglanti = $null

@@ -268,6 +268,10 @@
   .chSatir .alt{font-size:12px; color:var(--muted); margin-top:3px;}
   .chSatir .borc{color:var(--red); white-space:nowrap; font-family:var(--mono);}
   .chSatir .alacak{color:var(--green); white-space:nowrap; font-family:var(--mono);}
+  .chFis{margin-top:8px; padding:8px 10px; border-radius:10px; background:var(--panel2); font-size:12.5px; cursor:default;}
+  .chFisSatir{display:flex; justify-content:space-between; gap:10px; padding:3px 0;}
+  .chFisSatir small{display:block; color:var(--muted); font-family:var(--mono); font-size:11px;}
+  .chFisSatir b{white-space:nowrap; font-family:var(--mono);}
   .hrkSatir{background:var(--panel); border-radius:12px; padding:10px 12px; margin-bottom:8px; box-shadow:var(--sh-sm);}
   .hrkSatir .ust{display:flex; justify-content:space-between; gap:8px; font-weight:800; font-size:14px;}
   .hrkSatir .alt{display:flex; justify-content:space-between; gap:8px; font-size:12px; color:var(--muted); font-family:var(--mono); margin-top:3px;}
@@ -364,7 +368,7 @@
   <header style="border:none; padding:0 0 16px; background:transparent; display:flex; align-items:flex-start; justify-content:space-between;">
     <div>
       <h1><img src="logo-header.png" alt="Murat Gıda" style="height:30px; width:auto; display:block;"></h1>
-      <div class="sub">MK ERP · Murat Gıda • offline • Android • build 187</div>
+      <div class="sub">MK ERP · Murat Gıda • offline • Android • build 188</div>
     </div>
     <button type="button" id="themeToggleBtn" title="Tema seç" style="background:var(--panel2); border:1.5px solid var(--line); color:var(--text); width:34px; height:34px; border-radius:50%; font-size:15px; padding:0; display:flex; align-items:center; justify-content:center; flex-shrink:0;">🎨</button>
   </header>
@@ -742,7 +746,10 @@
         <div style="font-weight:800; font-size:16px;">📒 Cari Hareketleri</div>
         <button type="button" id="cariHrkCloseBtn" aria-label="Kapat" style="width:34px; height:34px; border-radius:50%; background:var(--panel2); border:1.5px solid var(--line); color:var(--text); font-size:18px; line-height:1; padding:0; display:flex; align-items:center; justify-content:center;">✕</button>
       </div>
-      <input type="text" id="cariHrkInput" placeholder="Cari adı ya da kodu yaz" autocomplete="off" style="width:100%;">
+      <div style="display:flex; gap:8px;">
+        <input type="text" id="cariHrkInput" placeholder="Cari adı ya da kodu yaz" autocomplete="off" style="flex:1; min-width:0;">
+        <button type="button" id="cariHrkPerakendeBtn" style="flex-shrink:0; padding:0 12px; background:var(--panel2); border:1.5px solid var(--line); border-radius:var(--r-sm); font-weight:800; color:var(--text);">🛒 Perakende</button>
+      </div>
       <div id="cariHrkSonuc" class="cariResults hidden"></div>
       <div id="cariHrkDonem" class="hareketDonem">
         <button type="button" data-gun="30">1 ay</button><button type="button" data-gun="90" class="on">3 ay</button><button type="button" data-gun="365">12 ay</button><button type="button" data-gun="0">Tümü</button>
@@ -3825,13 +3832,17 @@
     return out;
   }
   // ---------- CARİ HAREKETLERİ (ekstre) ----------
-  // Cari, telefondaki cari listesinden (Mal Giriş/Çıkış'taki ile aynı) seçilir; hareketler sunucudan
-  // ("cari_hareket" yetkisiyle) gelir. Bakiye = borç − alacak: artı ise cari bize borçlu, eksi ise biz borçluyuz.
+  // Cari, telefondaki cari listesinden (Mal Giriş/Çıkış'taki ile aynı) seçilir; veriler sunucudan ("cari_hareket" yetkisiyle) gelir.
+  // Bakiye = borç − alacak: artı ise cari bize borçlu, eksi ise biz borçluyuz.
+  // İki sekme: hesap hareketleri (ekstre) ve stok hareketleri (o cariden gelen / ona giden ürünler).
+  // Belgeli satıra dokununca faturanın / fişin ürün satırları açılır. Perakende (Peşin Satış) günlük toplam olarak gelir.
   var cariHrkScreenEl = document.getElementById('cariHrkScreen');
   var cariHrkInputEl = document.getElementById('cariHrkInput');
   var cariHrkSonucEl = document.getElementById('cariHrkSonuc');
   var cariHrkBodyEl = document.getElementById('cariHrkBody');
-  var cariHrkGun = 90, cariHrkSecili = null, cariHrkIstekNo = 0, cariHrkListe = [], cariHrkOnbellek = {};
+  var CARI_PERAKENDE = { name: 'PERAKENDE (Peşin Satış)', code: '__PERAKENDE__', balance: '' };
+  var cariHrkGun = 90, cariHrkSekme = 'hesap', cariHrkSecili = null, cariHrkIstekNo = 0, cariHrkListe = [], cariHrkOnbellek = {};
+  var cariHrkAcikFis = {};   // fis_id -> { yukleniyor, veri, hata }
   function openCariHrkScreen(){
     if(!canSeeCariHrk()){ warnToast(hasPerm('cari_hareket') ? 'Şube dışında cari hareketleri gizli' : 'Cari Hareketleri yetkin yok — yöneticinden iste'); return; }
     cariHrkScreenEl.classList.remove('hidden');
@@ -3841,9 +3852,10 @@
   }
   function closeCariHrkScreen(){ var el = document.getElementById('cariHrkScreen'); if(el) el.classList.add('hidden'); }
   function cariHrkKonumKontrol(){ var el = document.getElementById('cariHrkScreen'); if(el && !el.classList.contains('hidden') && !canSeeCariHrk()) el.classList.add('hidden'); }
-  function cariHrkBakiyeYazi(b){
+  function cariHrkBakiyeYazi(b, perakende){
     b = Number(b) || 0;
     if(Math.abs(b) < 0.005) return { tutar: fmtMoney(0), yazi: 'Hesap kapalı', renk: 'var(--muted)' };
+    if(perakende) return { tutar: fmtMoney(Math.abs(b)), yazi: b > 0 ? 'Satış tahsilattan fazla (B)' : 'Tahsilat satıştan fazla (A)', renk: 'var(--text)' };
     return b > 0 ? { tutar: fmtMoney(b), yazi: 'Cari bize borçlu (B)', renk: 'var(--red)' }
                  : { tutar: fmtMoney(-b), yazi: 'Biz cariye borçluyuz (A)', renk: 'var(--green)' };
   }
@@ -3857,20 +3869,33 @@
     }).join('') : '<div class="hint" style="padding:12px;">' + (cariList.length ? 'Eşleşen cari yok — yazımı kontrol et.' : 'Cari listesi henüz inmedi — biraz bekle.') + '</div>';
     cariHrkSonucEl.classList.remove('hidden');
   }
+  function cariHrkSec(c){
+    cariHrkSonucEl.classList.add('hidden');
+    cariHrkInputEl.value = c.name || ''; cariHrkInputEl.blur();
+    cariHrkAcikFis = {};
+    if(c.code === CARI_PERAKENDE.code) cariHrkSekme = 'hesap';
+    cariHrkGetir({ name: c.name || '', code: c.code || '', balance: c.balance });
+  }
   var cariHrkZaman = null;
   cariHrkInputEl.addEventListener('input', function(){ clearTimeout(cariHrkZaman); cariHrkZaman = setTimeout(cariHrkAra, 150); });
   cariHrkSonucEl.addEventListener('click', function(e){
     var b = e.target.closest('.cariRow'); if(!b) return;
-    var c = cariHrkListe[Number(b.getAttribute('data-i'))]; if(!c) return;
-    cariHrkSonucEl.classList.add('hidden');
-    cariHrkInputEl.value = c.name || ''; cariHrkInputEl.blur();
-    cariHrkGetir({ name: c.name || '', code: c.code || '', balance: c.balance });
+    var c = cariHrkListe[Number(b.getAttribute('data-i'))]; if(c) cariHrkSec(c);
   });
+  document.getElementById('cariHrkPerakendeBtn').addEventListener('click', function(){ cariHrkSec(CARI_PERAKENDE); });
   document.getElementById('cariHrkDonem').addEventListener('click', function(e){
     var b = e.target.closest('button[data-gun]'); if(!b) return;
     cariHrkGun = Number(b.getAttribute('data-gun'));
     Array.prototype.forEach.call(this.querySelectorAll('button'), function(x){ x.classList.toggle('on', x === b); });
     if(cariHrkSecili) cariHrkGetir(cariHrkSecili.cari);
+  });
+  cariHrkBodyEl.addEventListener('click', function(e){
+    var sk = e.target.closest('button[data-chsekme]');
+    if(sk){ cariHrkSekme = sk.getAttribute('data-chsekme'); cariHrkAcikFis = {}; if(cariHrkSecili) cariHrkGetir(cariHrkSecili.cari); return; }
+    var sat = e.target.closest('[data-fis]'); if(!sat || !cariHrkSecili || !cariHrkSecili.veri) return;
+    var fis = sat.getAttribute('data-fis');
+    if(cariHrkAcikFis[fis]){ delete cariHrkAcikFis[fis]; cariHrkCiz(); return; }
+    cariHrkFisGetir(fis, cariHrkSecili.veri.kaynak || '');
   });
   document.getElementById('cariHrkCloseBtn').addEventListener('click', closeCariHrkScreen);
   document.getElementById('menuCariHrkBtn').addEventListener('click', openCariHrkScreen);
@@ -3878,51 +3903,105 @@
     var auth = currentAuth();
     if(!auth){ warnToast('Önce giriş yap'); return; }
     if(!canSeeCariHrk()){ closeCariHrkScreen(); return; }
-    cariHrkSecili = { cari: cari, veri: null, hata: '' };
+    var ne = cariHrkSekme === 'stok' ? 'stok' : 'hareket';
+    cariHrkSecili = { cari: cari, veri: null, hata: '', ne: ne };
     if(!cari.code){ cariHrkSecili.hata = 'Bu carinin kodu yok — ERP\'de cari kodu girilmeli'; cariHrkCiz(); return; }
-    var anahtar = cari.code + '|' + cariHrkGun, ob = cariHrkOnbellek[anahtar];
+    var anahtar = ne + '|' + cari.code + '|' + cariHrkGun, ob = cariHrkOnbellek[anahtar];
     if(ob && Date.now() - ob.zaman < 120000){ cariHrkSecili.veri = ob.veri; cariHrkCiz(); return; }
     if(!navigator.onLine){ cariHrkSecili.hata = 'İnternet yok'; cariHrkCiz(); return; }
     var no = ++cariHrkIstekNo;
     cariHrkCiz(true);
-    jsonpRequestP(state.serverUrl || DEFAULT_SERVER_URL, { action: 'cari_hareket', user: auth.user, pass: auth.pass, cariKod: cari.code, gun: cariHrkGun }, function(err, data){
+    jsonpRequestP(state.serverUrl || DEFAULT_SERVER_URL, { action: 'cari_hareket', ne: ne, user: auth.user, pass: auth.pass, cariKod: cari.code, gun: cariHrkGun }, function(err, data){
       if(no !== cariHrkIstekNo) return;
       if(err || !data || data.status !== 'ok'){ cariHrkSecili.hata = err || (data && data.message) || 'bilinmeyen hata'; cariHrkCiz(); return; }
       cariHrkOnbellek[anahtar] = { zaman: Date.now(), veri: data };
       cariHrkSecili.veri = data; cariHrkCiz();
     }, 30000);
   }
+  function cariHrkFisGetir(fis, kaynak){
+    var auth = currentAuth(); if(!auth) return;
+    var ob = cariHrkOnbellek['fis|' + kaynak + '|' + fis];
+    if(ob){ cariHrkAcikFis[fis] = { veri: ob.veri }; cariHrkCiz(); return; }
+    cariHrkAcikFis[fis] = { yukleniyor: true }; cariHrkCiz();
+    jsonpRequestP(state.serverUrl || DEFAULT_SERVER_URL, { action: 'cari_hareket', ne: 'fis', user: auth.user, pass: auth.pass, fisId: fis, kaynak: kaynak }, function(err, data){
+      if(!cariHrkAcikFis[fis]) return;
+      if(err || !data || data.status !== 'ok'){ cariHrkAcikFis[fis] = { hata: err || (data && data.message) || 'bilinmeyen hata' }; cariHrkCiz(); return; }
+      cariHrkOnbellek['fis|' + kaynak + '|' + fis] = { zaman: Date.now(), veri: data };
+      cariHrkAcikFis[fis] = { veri: data }; cariHrkCiz();
+    }, 30000);
+  }
+  // Açılan belgenin ürün satırları. r: [stok kodu, barkod, ürün adı, miktar, KDV dahil birim fiyat, KDV dahil tutar]
+  function cariHrkFisHtml(fis){
+    var a = cariHrkAcikFis[fis]; if(!a) return '';
+    if(a.yukleniyor) return '<div class="chFis">⏳ Belge yükleniyor…</div>';
+    if(a.hata) return '<div class="chFis" style="color:var(--red);">❌ ' + escapeHtml(a.hata) + '</div>';
+    var d = a.veri || {};
+    if(!d.bulundu) return '<div class="chFis">Bu belgenin ürün satırı yok (finans belgesi ya da henüz gönderilmemiş).</div>';
+    return '<div class="chFis"><div style="font-weight:800; margin-bottom:4px;">📄 ' + escapeHtml(d.tur || 'Belge') + (d.belgeNo ? ' · No ' + escapeHtml(d.belgeNo) : '') + '</div>' +
+      (d.satirlar || []).map(function(r){
+        var urun = r[2] || ((catalogMap.get(String(r[1])) || {}).name) || r[0] || r[1] || '—';
+        return '<div class="chFisSatir"><span style="min-width:0;">' + escapeHtml(urun) + '<small>' + escapeHtml(fmtQty(r[3])) + (r[4] !== null && r[4] !== undefined ? ' × ' + escapeHtml(fmtMoney(r[4])) : '') + '</small></span>' +
+          '<b>' + (r[5] !== null && r[5] !== undefined ? escapeHtml(fmtMoney(r[5])) : '') + '</b></div>';
+      }).join('') +
+      '<div class="chFisSatir" style="border-top:1.5px solid var(--line); margin-top:4px; padding-top:6px;"><span>Toplam (KDV dahil)</span><b>' + escapeHtml(fmtMoney(d.toplam || 0)) + '</b></div></div>';
+  }
   function cariHrkCiz(yukleniyor){
     var s = cariHrkSecili;
-    if(!s){ cariHrkBodyEl.innerHTML = '<div class="hint">Cariyi adından ya da kodundan ara, listeden seç.</div>'; return; }
+    if(!s){ cariHrkBodyEl.innerHTML = '<div class="hint">Cariyi adından ya da kodundan ara, listeden seç. Kasa satışları için 🛒 Perakende.</div>'; return; }
+    var perakende = s.cari.code === CARI_PERAKENDE.code;
     var baslik = '<div style="font-weight:800; font-size:16px; line-height:1.3;">' + escapeHtml(s.cari.name) + '</div>' +
-      '<div class="hint" style="font-family:var(--mono); margin:2px 0 0;">' + escapeHtml(s.cari.code || 'kod yok') + '</div>';
+      (perakende ? '' : '<div class="hint" style="font-family:var(--mono); margin:2px 0 0;">' + escapeHtml(s.cari.code || 'kod yok') + '</div>') +
+      (perakende ? '' : '<div class="hrkSekmeler" style="margin:10px 0 0;"><button type="button" class="hrkSekme' + (s.ne === 'hareket' ? ' on' : '') + '" data-chsekme="hesap" style="padding:9px 6px;"><b style="font-size:14px; font-family:inherit;">💳 Hesap hareketleri</b></button>' +
+        '<button type="button" class="hrkSekme' + (s.ne === 'stok' ? ' on' : '') + '" data-chsekme="stok" style="padding:9px 6px;"><b style="font-size:14px; font-family:inherit;">📦 Stok hareketleri</b></button></div>');
     if(yukleniyor){ cariHrkBodyEl.innerHTML = baslik + '<div class="hint" style="margin-top:14px;">⏳ Yükleniyor…</div>'; return; }
     if(s.hata){ cariHrkBodyEl.innerHTML = baslik + '<div class="hint" style="margin-top:14px; color:var(--red);">❌ ' + escapeHtml(s.hata) + '</div>'; return; }
-    var d = s.veri || {}, satir = d.satirlar || [], bak = d.bakiye || {}, dev = d.devreden || {};
+    var d = s.veri || {};
+    if(s.ne === 'stok'){ cariHrkBodyEl.innerHTML = baslik + cariHrkStokHtml(d); return; }
+    var satir = d.satirlar || [], bak = d.bakiye || {}, dev = d.devreden || {};
     if(!d.kaynak){ cariHrkBodyEl.innerHTML = baslik + '<div class="hint" style="margin-top:14px;">Bu cari için hareket bulunamadı.' + (d.sonVeri ? '' : ' (ERP\'den cari hareketleri henüz gönderilmemiş olabilir.)') + '</div>'; return; }
     var dovizler = Object.keys(bak); if(!dovizler.length) dovizler = ['TRY'];
-    var html = baslik + dovizler.map(function(dv){
-      var y = cariHrkBakiyeYazi(bak[dv]);
+    var html = baslik + (perakende ? '' : dovizler.map(function(dv){
+      var y = cariHrkBakiyeYazi(bak[dv], perakende);
       return '<div class="chBakiye"><small>GÜNCEL BAKİYE' + escapeHtml(cariHrkDoviz(dv)) + '</small><b style="color:' + y.renk + ';">' + escapeHtml(y.tutar) + '</b><span style="color:' + y.renk + ';">' + y.yazi + '</span></div>';
-    }).join('');
+    }).join(''));
+    if(perakende) html += '<div style="height:12px;"></div>';
     var erp = Number(s.cari.balance), tr = Number(bak.TRY !== undefined ? bak.TRY : bak.TL);
-    if(s.cari.balance !== '' && s.cari.balance !== undefined && !isNaN(erp) && !isNaN(tr) && Math.abs(erp - tr) > 0.05)
+    if(!perakende && s.cari.balance !== '' && s.cari.balance !== undefined && !isNaN(erp) && !isNaN(tr) && Math.abs(erp - tr) > 0.05)
       html += '<div class="hint" style="margin:-4px 0 10px; color:var(--amber);">ERP cari listesindeki bakiye ' + escapeHtml(fmtMoney(erp)) + ' — aradaki fark, son saatte girilen kayıtlardan olabilir (veri saatte bir güncellenir).</div>';
     var devT = Number(dev.TRY !== undefined ? dev.TRY : (dev.TL || 0)) || 0;
-    html += '<div class="chOzet">' + (cariHrkGun > 0 ? '<div>DEVREDEN<b>' + escapeHtml(fmtMoney(devT)) + '</b></div>' : '') +
-      '<div>DÖNEM BORÇ<b>' + escapeHtml(fmtMoney(d.donemBorc || 0)) + '</b></div><div>DÖNEM ALACAK<b>' + escapeHtml(fmtMoney(d.donemAlacak || 0)) + '</b></div></div>';
-    // r: [tarih, tür, belge no, açıklama, borç, alacak, bakiye (satırdan sonra), döviz, vade]
+    html += '<div class="chOzet">' + (cariHrkGun > 0 && !perakende ? '<div>DEVREDEN<b>' + escapeHtml(fmtMoney(devT)) + '</b></div>' : '') +
+      '<div>' + (perakende ? 'SATIŞ (B)' : 'DÖNEM BORÇ') + '<b>' + escapeHtml(fmtMoney(d.donemBorc || 0)) + '</b></div><div>' + (perakende ? 'TAHSİLAT (A)' : 'DÖNEM ALACAK') + '<b>' + escapeHtml(fmtMoney(d.donemAlacak || 0)) + '</b></div></div>';
+    // r: [tarih, tür, belge no, açıklama, borç, alacak, bakiye (satırdan sonra), döviz, vade, fis_id]
     html += satir.length ? satir.map(function(r){
-      var borc = Number(r[4]) || 0, alacak = Number(r[5]) || 0, dv = cariHrkDoviz(r[7]), y = Number(r[6]) || 0;
+      var borc = Number(r[4]) || 0, alacak = Number(r[5]) || 0, dv = cariHrkDoviz(r[7]), y = Number(r[6]) || 0, fis = r[9] ? String(r[9]) : '';
       var tutar = borc ? '<span class="borc">B ' + escapeHtml(fmtMoney(borc) + dv) + '</span>' : '<span class="alacak">A ' + escapeHtml(fmtMoney(alacak) + dv) + '</span>';
       var alt = [r[2] ? 'No ' + r[2] : '', r[3] || '', r[8] && r[8] !== r[0] ? 'vade ' + r[8] : ''].filter(Boolean).join(' · ');
-      return '<div class="chSatir"><div class="ust"><span style="min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">' + escapeHtml(r[0]) + ' · ' + escapeHtml(r[1] || 'Hareket') + '</span>' + tutar + '</div>' +
-        '<div class="alt"><span style="min-width:0; overflow:hidden; text-overflow:ellipsis;">' + escapeHtml(alt || '—') + '</span><span style="white-space:nowrap; font-family:var(--mono); font-weight:700;">bakiye ' + escapeHtml(fmtMoney(Math.abs(y)) + dv) + (y > 0.005 ? ' B' : y < -0.005 ? ' A' : '') + '</span></div></div>';
+      return '<div class="chSatir"' + (fis ? ' data-fis="' + escapeHtml(fis) + '" style="cursor:pointer;"' : '') + '><div class="ust"><span style="min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">' + escapeHtml(r[0]) + ' · ' + escapeHtml(r[1] || 'Hareket') + (fis ? ' 📄' : '') + '</span>' + tutar + '</div>' +
+        '<div class="alt"><span style="min-width:0; overflow:hidden; text-overflow:ellipsis;">' + escapeHtml(alt || '—') + '</span>' +
+        (perakende ? '' : '<span style="white-space:nowrap; font-family:var(--mono); font-weight:700;">bakiye ' + escapeHtml(fmtMoney(Math.abs(y)) + dv) + (y > 0.005 ? ' B' : y < -0.005 ? ' A' : '') + '</span>') + '</div>' +
+        (fis ? cariHrkFisHtml(fis) : '') + '</div>';
     }).join('') : '<div class="hint">Bu dönemde hareket yok.</div>';
     if(Number(d.adet || 0) > satir.length) html += '<div class="hint">Son ' + satir.length + ' hareket gösteriliyor (dönemde ' + d.adet + ' hareket var) — daha kısa dönem seç.</div>';
-    html += '<div class="hint" style="margin-top:10px; font-size:11px;">B: borç (cari bize borçlandı) · A: alacak (cari ödedi / biz borçlandık).' + (d.sonVeri ? ' ERP verisi: ' + escapeHtml(d.sonVeri) : '') + '</div>';
+    html += '<div class="hint" style="margin-top:10px; font-size:11px;">' + (perakende ? 'Perakende: kasa satışları ve tahsilatları, gün ve hareket türü başına toplam.' : 'B: borç (cari bize borçlandı) · A: alacak (cari ödedi / biz borçlandık). 📄 olan satıra dokun: belgenin ürünleri.') + (d.sonVeri ? ' ERP verisi: ' + escapeHtml(d.sonVeri) : '') + '</div>';
     cariHrkBodyEl.innerHTML = html;
+  }
+  // Carinin stok hareketleri. r: [tarih, belge türü, belge no, stok kodu, barkod, ürün adı, miktar (+giriş/−çıkış), birim fiyat, tutar, fis_id]
+  function cariHrkStokHtml(d){
+    var satir = d.satirlar || [];
+    if(!d.kaynak) return '<div class="hint" style="margin-top:14px;">Bu cariyle stok hareketi bulunamadı.</div>';
+    var html = '<div class="chOzet" style="margin-top:12px;"><div>📥 GELEN (alış)<b>' + escapeHtml(fmtMoney(d.girisTutar || 0)) + '</b></div><div>📤 GİDEN (satış)<b>' + escapeHtml(fmtMoney(d.cikisTutar || 0)) + '</b></div></div>';
+    html += satir.length ? satir.map(function(r){
+      var m = Number(r[6]) || 0, fis = r[9] ? String(r[9]) : '';
+      var urun = r[5] || ((catalogMap.get(String(r[4])) || {}).name) || r[3] || r[4] || '—';
+      return '<div class="chSatir" data-fis="' + escapeHtml(fis) + '" style="cursor:pointer;"><div class="ust"><span style="min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">' + escapeHtml(urun) + '</span>' +
+        '<span class="' + (m >= 0 ? 'alacak' : 'borc') + '">' + (m >= 0 ? '+' : '−') + escapeHtml(fmtQty(Math.abs(m))) + '</span></div>' +
+        '<div class="alt"><span style="min-width:0; overflow:hidden; text-overflow:ellipsis;">' + escapeHtml(r[0] + ' · ' + (r[1] || 'Belge') + (r[2] ? ' · No ' + r[2] : '')) + '</span>' +
+        '<span style="white-space:nowrap; font-family:var(--mono); font-weight:700;">' + (r[7] !== null && r[7] !== undefined ? escapeHtml(fmtMoney(r[7])) : '') + '</span></div>' +
+        cariHrkFisHtml(fis) + '</div>';
+    }).join('') : '<div class="hint">Bu dönemde stok hareketi yok.</div>';
+    if(Number(d.adet || 0) > satir.length) html += '<div class="hint">Son ' + satir.length + ' satır gösteriliyor (dönemde ' + d.adet + ' satır var) — daha kısa dönem seç.</div>';
+    html += '<div class="hint" style="margin-top:10px; font-size:11px;">+ stoğa giren (alış, satıştan iade) · − stoktan çıkan (satış, alıştan iade). Fiyatlar KDV dahil birim fiyat. Satıra dokun: belgenin tamamı.</div>';
+    return html;
   }
 
   var malCariResultsCache = [];

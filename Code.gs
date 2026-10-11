@@ -8,7 +8,7 @@
 // bir sürüm dağıttıktan sonra /exec adresini boş açtığında burada yazan
 // numarayı görmelisin; index.html'in üstündeki "build" numarasıyla
 // eşleşecek şekilde ben her ikisini birlikte güncelliyorum.
-var GS_VERSION = 'build169';
+var GS_VERSION = 'build170';
 
 // Sheets'te "Saat" sütunu zaman biçimli olarak algılanırsa, hücre değeri düz
 // metin değil bir Date nesnesi olarak gelir ve String(...) çirkin bir çıktı
@@ -3246,11 +3246,21 @@ function cariHareket(p, callback) {
   var url = String(props.getProperty('DB_URL') || '').trim().replace(/\/+$/, '');
   var anahtar = String(props.getProperty('DB_ANAHTAR') || '').trim();
   if (!url || !anahtar) return outJson({ status: 'error', message: 'Veri tabanı ayarı yok (DB_URL / DB_ANAHTAR)' }, callback);
-  var kod = String(p.cariKod || '').trim().substring(0, 80);
-  if (!kod) return outJson({ status: 'error', message: 'Carinin kodu yok — ERP\'de cari koduna bak' }, callback);
-  var gun = parseInt(p.gun, 10); if (isNaN(gun) || gun < 0 || gun > 3650) gun = 90;
+  // ne: 'hareket' (ekstre, varsayılan) · 'stok' (carinin stok hareketleri) · 'fis' (bir belgenin ürün satırları)
+  // Perakende (Peşin Satış) günlük toplamları cari kodu '__PERAKENDE__' ile gelir.
+  var ne = String(p.ne || 'hareket'), fn, govde;
+  if (ne === 'fis') {
+    var fisId = parseInt(p.fisId, 10);
+    if (!(fisId > 0)) return outJson({ status: 'error', message: 'Belge seçilmedi' }, callback);
+    fn = 'fis_detay'; govde = { p_kaynak: String(p.kaynak || '').substring(0, 40), p_fis_id: fisId };
+  } else {
+    var kod = String(p.cariKod || '').trim().substring(0, 80);
+    if (!kod) return outJson({ status: 'error', message: 'Carinin kodu yok — ERP\'de cari koduna bak' }, callback);
+    var gun = parseInt(p.gun, 10); if (isNaN(gun) || gun < 0 || gun > 3650) gun = 90;
+    fn = ne === 'stok' ? 'cari_stok' : 'cari_hareket'; govde = { p_cari_kod: kod, p_gun: gun, p_limit: 500 };
+  }
   try {
-    var sonuc = dbCagir({ url: url, anahtar: anahtar }, 'cari_hareket', { p_cari_kod: kod, p_gun: gun, p_limit: 500 });
+    var sonuc = dbCagir({ url: url, anahtar: anahtar }, fn, govde);
     if (!sonuc || sonuc.status !== 'ok') return outJson({ status: 'error', message: (sonuc && sonuc.message) || 'Veri tabanı cevap vermedi' }, callback);
     return outJson(sonuc, callback);
   } catch (err) {
