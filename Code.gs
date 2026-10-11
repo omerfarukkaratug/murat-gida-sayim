@@ -8,7 +8,7 @@
 // bir sürüm dağıttıktan sonra /exec adresini boş açtığında burada yazan
 // numarayı görmelisin; index.html'in üstündeki "build" numarasıyla
 // eşleşecek şekilde ben her ikisini birlikte güncelliyorum.
-var GS_VERSION = 'build172';
+var GS_VERSION = 'build173';
 
 // Sheets'te "Saat" sütunu zaman biçimli olarak algılanırsa, hücre değeri düz
 // metin değil bir Date nesnesi olarak gelir ve String(...) çirkin bir çıktı
@@ -3269,6 +3269,8 @@ function cariHareket(p, callback) {
   try {
     var sonuc = dbCagir({ url: url, anahtar: anahtar }, fn, govde);
     if (!sonuc || sonuc.status !== 'ok') return outJson({ status: 'error', message: (sonuc && sonuc.message) || 'Veri tabanı cevap vermedi' }, callback);
+    // Vade sekmesi: ödeme alışkanlığı ve risk de eklenir (009_odeme_risk.sql yoksa sessizce atlanır).
+    if (fn === 'cari_vade') { try { sonuc.odeme = dbCagir({ url: url, anahtar: anahtar }, 'cari_odeme', { p_cari_kod: govde.p_cari_kod }); } catch (oe) { sonuc.odeme = null; } }
     return outJson(sonuc, callback);
   } catch (err) {
     gunlukYaz('veritabani', 'cari hareketleri', 'Sorgu başarısız: ' + err, true);
