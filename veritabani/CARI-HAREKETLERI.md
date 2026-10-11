@@ -25,3 +25,11 @@ Cari ekstresi: seçilen carinin borç / alacak hareketleri ve yürüyen bakiyesi
 
 ## Sonra
 - Tahsilat / ödeme girişi bu ekranın üstüne eklenecek.
+
+## Vade (build 193, 008_vade.sql)
+- Açık kalemler FIFO ile bulunur: ödemeler en eski borçları kapatmış sayılır; açık bakiye en yeni belgelerden oluşur.
+  Vade = satırın vade tarihi (yoksa belge tarihi). Yalnızca TL; perakende hariç.
+- `cari_vade(kod)`: açık kalemler, geçmiş / 7 gün içinde / ileri, ortalama gecikme, ağırlıklı ortalama vade,
+  faturaların ortalama vade günü (son 365 gün). Ekranda carinin "📅 Vade" sekmesi.
+- `vade_raporu('alacak' | 'borc')`: bütün cariler; ekranda "📅 Vade" düğmesi (Alacaklarımız / Borçlarımız).
+- `Code.gs` (build172): `action=cari_hareket&ne=vade|vadeRapor`.
