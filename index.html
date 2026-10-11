@@ -371,7 +371,7 @@
   <header style="border:none; padding:0 0 16px; background:transparent; display:flex; align-items:flex-start; justify-content:space-between;">
     <div>
       <h1><img src="logo-header.png" alt="Murat Gıda" style="height:30px; width:auto; display:block;"></h1>
-      <div class="sub">MK ERP · Murat Gıda • offline • Android • build 199</div>
+      <div class="sub">MK ERP · Murat Gıda • offline • Android • build 200</div>
     </div>
     <button type="button" id="themeToggleBtn" title="Tema seç" style="background:var(--panel2); border:1.5px solid var(--line); color:var(--text); width:34px; height:34px; border-radius:50%; font-size:15px; padding:0; display:flex; align-items:center; justify-content:center; flex-shrink:0;">🎨</button>
   </header>
@@ -4294,7 +4294,7 @@
         }),
         toplam: ['TOPLAM', '', '', '', Number(d.acik || 0), '', ''],
         sonuc: { etiket: 'AÇIK BAKİYE', deger: acikB, metin: durum(acikB) },
-        notlar: ['Ödemeler en eski belgeleri kapatmış sayılır; listede henüz ödenmemiş (açık) kısımlar vardır.', 'Bakiye eksi (−) ise cari alacaklıdır.']
+        notlar: ['Ödemeler en eski belgeleri kapatmış sayılır; listede henüz ödenmemiş (açık) kısımlar vardır.']
       });
       var kap = (d.odeme && d.odeme.kapanan) || [];
       if(kap.length) bolumler.push({
@@ -4316,7 +4316,7 @@
         var b = Number(x[4]) || 0, a = Number(x[5]) || 0, y = Number(x[6]) || 0; topB += b; topA += a;
         sat.push([x[0], x[1] || '', x[2] || '', x[3] || '', x[8] && x[8] !== x[0] ? x[8] : '', bos(b), bos(a), Math.abs(y), ba(y)]);
       });
-      var notlar = ['B: Borç (cari bize borçlandı) · A: Alacak (cari ödedi / biz borçlandık).', 'Toplam bakiye eksi (−) ise cari alacaklıdır. Bu döküm ERP kayıtlarından alınmıştır.'];
+      var notlar = ['B: Borç (cari bize borçlandı) · A: Alacak (cari ödedi / biz borçlandık).', 'Bu döküm ERP kayıtlarından alınmıştır.'];
       if(Number(d.adet || 0) > satir.length) notlar.push('Not: dönemde ' + d.adet + ' hareket var, son ' + satir.length + ' hareket yazıldı.');
       bolumler.push({
         ad: 'Cari ekstre', baslik: 'Cari Hesap Ekstresi',
