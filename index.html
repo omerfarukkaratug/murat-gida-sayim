@@ -379,7 +379,7 @@
   <header style="border:none; padding:0 0 16px; background:transparent; display:flex; align-items:flex-start; justify-content:space-between;">
     <div>
       <h1><img src="logo-header.png" alt="Murat Gıda" style="height:30px; width:auto; display:block;"></h1>
-      <div class="sub">MK ERP · Murat Gıda • offline • Android • build 196</div>
+      <div class="sub">MK ERP · Murat Gıda • offline • Android • build 197</div>
     </div>
     <button type="button" id="themeToggleBtn" title="Tema seç" style="background:var(--panel2); border:1.5px solid var(--line); color:var(--text); width:34px; height:34px; border-radius:50%; font-size:15px; padding:0; display:flex; align-items:center; justify-content:center; flex-shrink:0;">🎨</button>
   </header>
@@ -4103,7 +4103,7 @@
     if(s.hata){ cariHrkBodyEl.innerHTML = baslik + '<div class="hint" style="margin-top:14px; color:var(--red);">❌ ' + escapeHtml(s.hata) + '</div>'; return; }
     var d = s.veri || {};
     if(s.ne === 'stok'){ cariHrkBodyEl.innerHTML = baslik + cariHrkStokHtml(d); return; }
-    var paylasDugme = '<div style="display:flex; gap:8px; margin:10px 0 0;"><button type="button" class="geriBtn" data-chpaylas="wa" style="margin:0;">💬 WhatsApp ile gönder</button><button type="button" class="geriBtn" data-chpaylas="pdf" style="margin:0;">🖨️ PDF / Yazdır</button></div>';
+    var paylasDugme = '<div style="display:flex; gap:8px; margin:10px 0 0;"><button type="button" class="geriBtn" data-chpaylas="excel" style="margin:0;">📤 Paylaş (Excel)</button><button type="button" class="geriBtn" data-chpaylas="pdf" style="margin:0;">🖨️ Yazdır</button></div>';
     if(s.ne === 'vade'){ cariHrkBodyEl.innerHTML = baslik + (d.kalemler && d.kalemler.length ? paylasDugme : '') + cariHrkVadeHtml(d); return; }
     if(!perakende && (d.satirlar || []).length) baslik += paylasDugme;
     var satir = d.satirlar || [], bak = d.bakiye || {}, dev = d.devreden || {};
@@ -4138,28 +4138,14 @@
     var r = { riskli: ['🔴 Riskli', 'var(--red)'], dikkat: ['🟡 Dikkat', 'var(--amber)'], normal: ['🟢 Normal', 'var(--green)'] }[seviye] || ['—', 'var(--muted)'];
     return '<span style="font-weight:800; color:' + r[1] + ';">' + r[0] + (puan !== null && puan !== undefined ? ' · risk ' + puan + '/100' : '') + '</span>';
   }
-  // ---- Ekstreyi paylaş: WhatsApp (metin) ya da PDF (yazdırma penceresinden "PDF olarak kaydet"/paylaş) ----
+  // ---- Ekstreyi paylaş: Excel dosyası (telefonun paylaş menüsüyle) ya da yazdır (yazdırma penceresinden PDF de alınabilir) ----
   function cariBakiyeMetni(b){ b = Number(b) || 0; return Math.abs(b) < 0.005 ? 'Hesap kapalı' : fmtMoney(Math.abs(b)) + (b > 0 ? ' (Borç)' : ' (Alacak)'); }
   function cariPaylas(tur){
     var s = cariHrkSecili; if(!s || !s.veri) return;
     var d = s.veri, c = s.cari, bugun = new Date().toLocaleDateString('tr-TR');
     var vade = s.ne === 'vade', bak = vade ? (d.yon === 'borc' ? -Number(d.acik || 0) : Number(d.acik || 0)) : Number((d.bakiye || {}).TRY || (d.bakiye || {}).TL || 0);
     var satirlar = vade ? (d.kalemler || []) : (d.satirlar || []);
-    if(tur === 'wa'){
-      var t = '*MURAT GIDA — ' + (vade ? 'Açık Fatura Listesi' : 'Cari Hesap Ekstresi') + '*\n' + c.name + (c.code ? ' (' + c.code + ')' : '') + '\nTarih: ' + bugun + '\n' +
-        (vade ? 'Açık bakiye: ' : 'Güncel bakiye: ') + cariBakiyeMetni(bak) + '\n';
-      if(vade){
-        t += (Number(d.gecmis) > 0 ? 'Vadesi geçmiş: ' + fmtMoney(d.gecmis) + '\n' : '') + '\n';
-        satirlar.slice(0, 25).forEach(function(r){ t += r[0] + ' ' + (r[1] || '') + (r[2] ? ' No ' + r[2] : '') + ' — ' + fmtMoney(r[4]) + ' — vade ' + r[5] + (Number(r[6]) < 0 ? ' (' + (-Number(r[6])) + ' gün geçti)' : '') + '\n'; });
-      } else {
-        t += '\nSon hareketler:\n';
-        satirlar.slice(0, 20).forEach(function(r){ var b = Number(r[4]) || 0, a = Number(r[5]) || 0; t += r[0] + ' ' + (r[1] || '') + (r[2] ? ' No ' + r[2] : '') + ' — ' + (b ? 'B ' + fmtMoney(b) : 'A ' + fmtMoney(a)) + '\n'; });
-        if(satirlar.length > 20) t += '… (toplam ' + satirlar.length + ' hareket)\n';
-      }
-      if(navigator.share){ navigator.share({ text: t }).catch(function(){}); }
-      else window.open('https://wa.me/?text=' + encodeURIComponent(t), '_blank');
-      return;
-    }
+    if(tur === 'excel'){ cariExcelPaylas(s); return; }
     // PDF: yazdırma alanı doldurulup telefonun yazdır / PDF penceresi açılır.
     var tablo = vade
       ? '<tr><th>Belge tarihi</th><th>Belge</th><th>No</th><th>Vade</th><th style="text-align:right;">Açık tutar</th><th style="text-align:right;">Durum</th></tr>' + satirlar.map(function(r){
@@ -4174,6 +4160,162 @@
       '<div style="font-size:10px; margin-top:10px; color:#444;">B: borç · A: alacak. Bu döküm bilgi amaçlıdır; ERP kayıtlarından alınmıştır.</div>';
     document.body.classList.add('yazdiriliyor');
     setTimeout(function(){ window.print(); }, 80);
+  }
+  // ---- Excel (.xlsx) üretici: kütüphanesiz, sıkıştırmasız ZIP içinde düz XML ----
+  var XL_CRC = null;
+  function xlCrc(b){
+    if(!XL_CRC){ XL_CRC = []; for(var n = 0; n < 256; n++){ var c = n; for(var k = 0; k < 8; k++) c = c & 1 ? 0xEDB88320 ^ (c >>> 1) : c >>> 1; XL_CRC[n] = c >>> 0; } }
+    var crc = 0xFFFFFFFF; for(var i = 0; i < b.length; i++) crc = XL_CRC[(crc ^ b[i]) & 0xFF] ^ (crc >>> 8);
+    return (crc ^ 0xFFFFFFFF) >>> 0;
+  }
+  function xlZip(dosyalar){ // dosyalar: [[ad, metin]]
+    var enc = new TextEncoder(), parcalar = [], merkez = [], ofs = 0;
+    function u16(v){ return [v & 255, (v >>> 8) & 255]; }
+    function u32(v){ return [v & 255, (v >>> 8) & 255, (v >>> 16) & 255, (v >>> 24) & 255]; }
+    dosyalar.forEach(function(f){
+      var ad = enc.encode(f[0]), veri = enc.encode(f[1]), crc = xlCrc(veri);
+      var bas = [].concat(u32(0x04034b50), u16(20), u16(0x0800), u16(0), u16(0), u16(0x21), u32(crc), u32(veri.length), u32(veri.length), u16(ad.length), u16(0));
+      parcalar.push(new Uint8Array(bas), ad, veri);
+      merkez.push(new Uint8Array([].concat(u32(0x02014b50), u16(20), u16(20), u16(0x0800), u16(0), u16(0), u16(0x21), u32(crc), u32(veri.length), u32(veri.length), u16(ad.length), u16(0), u16(0), u16(0), u16(0), u32(0), u32(ofs))), ad);
+      ofs += bas.length + ad.length + veri.length;
+    });
+    var mBoy = 0; merkez.forEach(function(m){ mBoy += m.length; });
+    var son = new Uint8Array([].concat(u32(0x06054b50), u16(0), u16(0), u16(dosyalar.length), u16(dosyalar.length), u32(mBoy), u32(ofs), u16(0)));
+    return new Blob(parcalar.concat(merkez, [son]), { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+  }
+  function xlEsc(v){ return String(v === null || v === undefined ? '' : v).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/[\x00-\x08\x0B\x0C\x0E-\x1F]/g, ''); }
+  function xlSutun(i){ var s = ''; i++; while(i > 0){ var m = (i - 1) % 26; s = String.fromCharCode(65 + m) + s; i = Math.floor((i - 1) / 26); } return s; }
+  function xlTarih(t){ // "GG.AA.YYYY" → Excel gün sayısı
+    var m = /^(\d{1,2})\.(\d{1,2})\.(\d{4})$/.exec(String(t || '')); if(!m) return null;
+    return Math.round((Date.UTC(+m[3], +m[2] - 1, +m[1]) - Date.UTC(1899, 11, 30)) / 86400000);
+  }
+  // Stiller: 0 düz · 1 büyük başlık · 2 kalın · 3 tablo başlığı · 4 metin (çerçeveli) · 5 para · 6 tarih · 7 kalın para (toplam) · 8 kalın metin (toplam) · 9 kırmızı metin · 10 yeşil metin · 11 tam sayı
+  // Hücre: {v: değer, s: stil, t: 'n'|'d'|'s'} ya da düz metin/sayı.
+  function xlSayfa(sayfa){
+    var sat = sayfa.satirlar.map(function(r, ri){
+      return '<row r="' + (ri + 1) + '">' + r.map(function(h, ci){
+        if(h === null || h === undefined || h === '') return '';
+        if(typeof h !== 'object') h = { v: h };
+        var ref = xlSutun(ci) + (ri + 1), st = h.s || 0;
+        if(h.t === 'd'){ var g = xlTarih(h.v); if(g !== null) return '<c r="' + ref + '" s="' + (h.s || 6) + '"><v>' + g + '</v></c>'; }
+        if((h.t === 'n' || typeof h.v === 'number') && h.v !== '' && !isNaN(Number(h.v))) return '<c r="' + ref + '" s="' + (h.s || 5) + '"><v>' + Number(h.v) + '</v></c>';
+        return '<c r="' + ref + '" s="' + st + '" t="inlineStr"><is><t xml:space="preserve">' + xlEsc(h.v) + '</t></is></c>';
+      }).join('') + '</row>';
+    }).join('');
+    var don = sayfa.donuk ? '<sheetViews><sheetView workbookViewId="0"><pane ySplit="' + sayfa.donuk + '" topLeftCell="A' + (sayfa.donuk + 1) + '" activePane="bottomLeft" state="frozen"/></sheetView></sheetViews>' : '';
+    var gen = '<cols>' + sayfa.genislik.map(function(w, i){ return '<col min="' + (i + 1) + '" max="' + (i + 1) + '" width="' + w + '" customWidth="1"/>'; }).join('') + '</cols>';
+    return '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><sheetPr><pageSetUpPr fitToPage="1"/></sheetPr>' +
+      don + '<sheetFormatPr defaultRowHeight="15"/>' + gen + '<sheetData>' + sat + '</sheetData>' +
+      '<pageMargins left="0.4" right="0.4" top="0.5" bottom="0.5" header="0.3" footer="0.3"/><pageSetup paperSize="9" orientation="portrait" fitToWidth="1" fitToHeight="0"/></worksheet>';
+  }
+  function xlKitap(sayfalar){
+    var stil = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><styleSheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">' +
+      '<numFmts count="2"><numFmt numFmtId="164" formatCode="#,##0.00\\ &quot;₺&quot;"/><numFmt numFmtId="165" formatCode="dd\\.mm\\.yyyy"/></numFmts>' +
+      '<fonts count="5"><font><sz val="11"/><name val="Calibri"/></font><font><b/><sz val="16"/><name val="Calibri"/></font><font><b/><sz val="11"/><name val="Calibri"/></font>' +
+      '<font><b/><sz val="11"/><color rgb="FFC00000"/><name val="Calibri"/></font><font><b/><sz val="11"/><color rgb="FF00804A"/><name val="Calibri"/></font></fonts>' +
+      '<fills count="4"><fill><patternFill patternType="none"/></fill><fill><patternFill patternType="gray125"/></fill><fill><patternFill patternType="solid"><fgColor rgb="FFDDE7F5"/><bgColor indexed="64"/></patternFill></fill>' +
+      '<fill><patternFill patternType="solid"><fgColor rgb="FFF2F2F2"/><bgColor indexed="64"/></patternFill></fill></fills>' +
+      '<borders count="2"><border><left/><right/><top/><bottom/><diagonal/></border><border><left style="thin"><color rgb="FFBFBFBF"/></left><right style="thin"><color rgb="FFBFBFBF"/></right><top style="thin"><color rgb="FFBFBFBF"/></top><bottom style="thin"><color rgb="FFBFBFBF"/></bottom><diagonal/></border></borders>' +
+      '<cellStyleXfs count="1"><xf numFmtId="0" fontId="0" fillId="0" borderId="0"/></cellStyleXfs><cellXfs count="12">' +
+      '<xf numFmtId="0" fontId="0" fillId="0" borderId="0" xfId="0"/>' +
+      '<xf numFmtId="0" fontId="1" fillId="0" borderId="0" xfId="0" applyFont="1"/>' +
+      '<xf numFmtId="0" fontId="2" fillId="0" borderId="0" xfId="0" applyFont="1"/>' +
+      '<xf numFmtId="0" fontId="2" fillId="2" borderId="1" xfId="0" applyFont="1" applyFill="1" applyBorder="1" applyAlignment="1"><alignment horizontal="center" vertical="center" wrapText="1"/></xf>' +
+      '<xf numFmtId="0" fontId="0" fillId="0" borderId="1" xfId="0" applyBorder="1" applyAlignment="1"><alignment vertical="top" wrapText="1"/></xf>' +
+      '<xf numFmtId="164" fontId="0" fillId="0" borderId="1" xfId="0" applyNumberFormat="1" applyBorder="1" applyAlignment="1"><alignment vertical="top"/></xf>' +
+      '<xf numFmtId="165" fontId="0" fillId="0" borderId="1" xfId="0" applyNumberFormat="1" applyBorder="1" applyAlignment="1"><alignment horizontal="center" vertical="top"/></xf>' +
+      '<xf numFmtId="164" fontId="2" fillId="3" borderId="1" xfId="0" applyNumberFormat="1" applyFont="1" applyFill="1" applyBorder="1"/>' +
+      '<xf numFmtId="0" fontId="2" fillId="3" borderId="1" xfId="0" applyFont="1" applyFill="1" applyBorder="1"/>' +
+      '<xf numFmtId="0" fontId="3" fillId="0" borderId="1" xfId="0" applyFont="1" applyBorder="1" applyAlignment="1"><alignment vertical="top"/></xf>' +
+      '<xf numFmtId="0" fontId="4" fillId="0" borderId="1" xfId="0" applyFont="1" applyBorder="1" applyAlignment="1"><alignment vertical="top"/></xf>' +
+      '<xf numFmtId="1" fontId="0" fillId="0" borderId="1" xfId="0" applyNumberFormat="1" applyBorder="1" applyAlignment="1"><alignment horizontal="center" vertical="top"/></xf>' +
+      '</cellXfs><cellStyles count="1"><cellStyle name="Normal" xfId="0" builtinId="0"/></cellStyles></styleSheet>';
+    var dosyalar = [
+      ['[Content_Types].xml', '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/><Override PartName="/xl/workbook.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/><Override PartName="/xl/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.styles+xml"/>' +
+        sayfalar.map(function(x, i){ return '<Override PartName="/xl/worksheets/sheet' + (i + 1) + '.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/>'; }).join('') + '</Types>'],
+      ['_rels/.rels', '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="xl/workbook.xml"/></Relationships>'],
+      ['xl/workbook.xml', '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><sheets>' +
+        sayfalar.map(function(x, i){ return '<sheet name="' + xlEsc(x.ad.slice(0, 31)) + '" sheetId="' + (i + 1) + '" r:id="rId' + (i + 1) + '"/>'; }).join('') + '</sheets></workbook>'],
+      ['xl/_rels/workbook.xml.rels', '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">' +
+        sayfalar.map(function(x, i){ return '<Relationship Id="rId' + (i + 1) + '" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet' + (i + 1) + '.xml"/>'; }).join('') +
+        '<Relationship Id="rId' + (sayfalar.length + 1) + '" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles" Target="styles.xml"/></Relationships>'],
+      ['xl/styles.xml', stil]
+    ];
+    sayfalar.forEach(function(x, i){ dosyalar.push(['xl/worksheets/sheet' + (i + 1) + '.xml', xlSayfa(x)]); });
+    return xlZip(dosyalar);
+  }
+  function dosyaPaylas(blob, ad, baslik){
+    var dosya = null; try { dosya = new File([blob], ad, { type: blob.type }); } catch(e){}
+    if(dosya && navigator.canShare && navigator.share && navigator.canShare({ files: [dosya] })){
+      navigator.share({ files: [dosya], title: baslik }).catch(function(e){ if(e && e.name !== 'AbortError') dosyaIndir(blob, ad); });
+      return;
+    }
+    dosyaIndir(blob, ad);
+  }
+  function dosyaIndir(blob, ad){
+    var url = URL.createObjectURL(blob), a = document.createElement('a');
+    a.href = url; a.download = ad; document.body.appendChild(a); a.click();
+    setTimeout(function(){ URL.revokeObjectURL(url); a.remove(); }, 4000);
+    successToast(ad + ' indirildi');
+  }
+  // Cari ekstresini Excel olarak hazırlayıp paylaşır.
+  function cariExcelPaylas(s){
+    var d = s.veri || {}, c = s.cari, bugun = new Date().toLocaleDateString('tr-TR'), vade = s.ne === 'vade', sayfalar = [];
+    var H = function(v){ return { v: v, s: 3 }; }, M = function(v){ return { v: v, s: 4 }; }, T = function(v){ return { v: v, t: 'd' }; };
+    var P = function(v){ return v === null || v === undefined || v === '' || !Number(v) ? M('') : { v: Number(v), t: 'n' }; };
+    var ust = function(baslik){ return [[{ v: 'MURAT GIDA', s: 1 }], [{ v: baslik, s: 2 }], [], [{ v: 'Cari', s: 2 }, c.name], [{ v: 'Cari kodu', s: 2 }, c.code || ''], [{ v: 'Döküm tarihi', s: 2 }, bugun]]; };
+    var baYazi = function(b){ b = Number(b) || 0; return Math.abs(b) < 0.005 ? '' : b > 0 ? 'Borç' : 'Alacak'; };
+    if(vade){
+      var acikB = d.yon === 'borc' ? -Number(d.acik || 0) : Number(d.acik || 0);
+      var r1 = ust(d.yon === 'borc' ? 'Ödenecek Faturalar (Açık Belgeler)' : 'Açık Fatura Listesi (Vade Durumu)');
+      r1.push([{ v: 'Açık bakiye', s: 2 }, { v: Math.abs(acikB), s: 7 }, { v: baYazi(acikB), s: 8 }]);
+      r1.push([{ v: 'Vadesi geçmiş', s: 2 }, { v: Number(d.gecmis || 0), s: 7 }]);
+      r1.push([{ v: '7 gün içinde', s: 2 }, { v: Number(d.hafta || 0), s: 7 }]);
+      r1.push([{ v: 'İleri vadeli', s: 2 }, { v: Number(d.ileri || 0), s: 7 }]);
+      r1.push([]);
+      var bas1 = r1.length + 1;
+      r1.push([H('Belge tarihi'), H('Belge türü'), H('Belge no'), H('Belge tutarı'), H('Açık (ödenmemiş)'), H('Vade tarihi'), H('Durum')]);
+      (d.kalemler || []).forEach(function(r){
+        var g = Number(r[6]);
+        r1.push([T(r[0]), M(r[1] || ''), M(r[2] || ''), P(r[3]), P(r[4]), T(r[5]), { v: g < 0 ? (-g) + ' gün geçti' : g === 0 ? 'Bugün' : g + ' gün var', s: g < 0 ? 9 : 4 }]);
+      });
+      r1.push([{ v: 'TOPLAM', s: 8 }, { v: '', s: 8 }, { v: '', s: 8 }, { v: '', s: 8 }, { v: Number(d.acik || 0), s: 7 }, { v: '', s: 8 }, { v: '', s: 8 }]);
+      sayfalar.push({ ad: 'Açık belgeler', satirlar: r1, genislik: [14, 22, 14, 16, 18, 13, 16], donuk: bas1 });
+      var kap = (d.odeme && d.odeme.kapanan) || [];
+      if(kap.length){
+        var r2 = ust('Ödenmiş Belgeler'); r2.push([]);
+        var bas2 = r2.length + 1;
+        r2.push([H('Belge tarihi'), H('Belge türü'), H('Belge no'), H('Tutar'), H('Vade tarihi'), H('Ödendiği tarih'), H('Kaç günde ödendi'), H('Durum')]);
+        kap.forEach(function(r){
+          var gec = Number(r[7]);
+          r2.push([T(r[0]), M(r[1] || ''), M(r[2] || ''), P(r[3]), T(r[4]), T(r[5]), { v: Number(r[6]) || 0, s: 11 }, { v: gec <= 0 ? 'Zamanında' + (gec < 0 ? ' (' + (-gec) + ' gün erken)' : '') : gec + ' gün geç', s: gec <= 0 ? 10 : 9 }]);
+        });
+        r2.push([], [{ v: 'Ödemeler en eski belgeleri kapatmış sayılır (FIFO).', s: 0 }]);
+        sayfalar.push({ ad: 'Ödenmiş belgeler', satirlar: r2, genislik: [14, 22, 14, 16, 13, 15, 16, 22], donuk: bas2 });
+      }
+    } else {
+      var bak = d.bakiye || {}, dev = d.devreden || {};
+      var bakT = Number(bak.TRY !== undefined ? bak.TRY : (bak.TL || 0)) || 0, devT = Number(dev.TRY !== undefined ? dev.TRY : (dev.TL || 0)) || 0;
+      var r = ust('Cari Hesap Ekstresi');
+      r.push([{ v: 'Dönem', s: 2 }, cariHrkGun ? 'Son ' + cariHrkGun + ' gün' : 'Tüm hareketler']);
+      r.push([{ v: 'Güncel bakiye', s: 2 }, { v: Math.abs(bakT), s: 7 }, { v: baYazi(bakT) || 'Hesap kapalı', s: 8 }]);
+      r.push([]);
+      var bas = r.length + 1;
+      r.push([H('Tarih'), H('İşlem'), H('Belge no'), H('Açıklama'), H('Vade'), H('Borç'), H('Alacak'), H('Bakiye'), H('B/A')]);
+      if(cariHrkGun > 0) r.push([M(''), { v: 'Devreden bakiye', s: 8 }, M(''), M(''), M(''), M(''), M(''), { v: Math.abs(devT), t: 'n' }, M(baYazi(devT) === 'Borç' ? 'B' : baYazi(devT) ? 'A' : '')]);
+      var satir = (d.satirlar || []).slice().reverse(), topB = 0, topA = 0;
+      satir.forEach(function(x){
+        var b = Number(x[4]) || 0, a = Number(x[5]) || 0, y = Number(x[6]) || 0; topB += b; topA += a;
+        r.push([T(x[0]), M(x[1] || ''), M(x[2] || ''), M(x[3] || ''), x[8] && x[8] !== x[0] ? T(x[8]) : M(''), P(b), P(a), { v: Math.abs(y), t: 'n' }, M(y > 0.005 ? 'B' : y < -0.005 ? 'A' : '')]);
+      });
+      r.push([{ v: 'TOPLAM', s: 8 }, { v: '', s: 8 }, { v: '', s: 8 }, { v: '', s: 8 }, { v: '', s: 8 }, { v: topB, s: 7 }, { v: topA, s: 7 }, { v: Math.abs(bakT), s: 7 }, { v: bakT > 0.005 ? 'B' : bakT < -0.005 ? 'A' : '', s: 8 }]);
+      r.push([], ['B: Borç (cari bize borçlandı) · A: Alacak (cari ödedi / biz borçlandık). Bu döküm ERP kayıtlarından alınmıştır.']);
+      if(Number(d.adet || 0) > satir.length) r.push(['Not: dönemde ' + d.adet + ' hareket var, son ' + satir.length + ' hareket yazıldı.']);
+      sayfalar.push({ ad: 'Cari ekstre', satirlar: r, genislik: [13, 20, 12, 24, 12, 14, 14, 15, 6], donuk: bas });
+    }
+    var ad = (vade ? 'Acik_Faturalar_' : 'Ekstre_') + String(c.name || 'cari').replace(/[\\\/:*?"<>|]+/g, '').replace(/\s+/g, '_').slice(0, 40) + '_' + bugun.replace(/\./g, '-') + '.xlsx';
+    try { dosyaPaylas(xlKitap(sayfalar), ad, c.name + ' — ' + (vade ? 'Açık faturalar' : 'Cari ekstre')); }
+    catch(e){ errorToast('Excel hazırlanamadı: ' + (e && e.message || e)); }
   }
   window.addEventListener('afterprint', function(){ document.body.classList.remove('yazdiriliyor'); var a = document.getElementById('yazdirAlani'); if(a) a.innerHTML = ''; });
   // Ödenmiş (kapanmış) belgeler. r: [belge tarihi, tür, no, tutar, vade, kapanış tarihi, kaç günde, vadeden kaç gün sonra, fis_id]
