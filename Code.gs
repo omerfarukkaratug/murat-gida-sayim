@@ -8,7 +8,7 @@
 // bir sürüm dağıttıktan sonra /exec adresini boş açtığında burada yazan
 // numarayı görmelisin; index.html'in üstündeki "build" numarasıyla
 // eşleşecek şekilde ben her ikisini birlikte güncelliyorum.
-var GS_VERSION = 'build170';
+var GS_VERSION = 'build171';
 
 // Sheets'te "Saat" sütunu zaman biçimli olarak algılanırsa, hücre değeri düz
 // metin değil bir Date nesnesi olarak gelir ve String(...) çirkin bir çıktı
@@ -114,6 +114,9 @@ function doGet(e) {
   }
   if (e.parameter && e.parameter.action === 'cari_hareket') {
     return cariHareket(e.parameter, e.parameter.callback);
+  }
+  if (e.parameter && e.parameter.action === 'stok_hareket') {
+    return stokHareket(e.parameter, e.parameter.callback);
   }
   if (e.parameter && e.parameter.action === 'temizle') {
     return handleTemizle(e.parameter.user, e.parameter.pass, e.parameter.callback);
@@ -231,7 +234,7 @@ function outJson(obj, callback) {
 // tabloyu açan biri şifreleri okuyamaz. Şifre telefonda hâlâ saklanır ve her
 // istekte sunucuya gönderilir — tam oturum sistemi veri tabanı geçişinde.
 // ============================================================
-var ALL_PERMS = ['rapor', 'temizle', 'kullanici_yonetimi', 'ayarlar', 'canli_durum', 'duzelt', 'hareket', 'cari_hareket', 'mesai', 'mesai_yonetim'];
+var ALL_PERMS = ['rapor', 'temizle', 'kullanici_yonetimi', 'ayarlar', 'canli_durum', 'duzelt', 'hareket', 'cari_hareket', 'stok_hareket', 'mesai', 'mesai_yonetim'];
 
 // ---- ŞİFRE ÖZETİ ----
 // Şifreler tabloda artık DÜZ METİN durmaz: "s256$<tuz>$<özet>" biçiminde,
@@ -3265,6 +3268,38 @@ function cariHareket(p, callback) {
     return outJson(sonuc, callback);
   } catch (err) {
     gunlukYaz('veritabani', 'cari hareketleri', 'Sorgu başarısız: ' + err, true);
+    return outJson({ status: 'error', message: 'Veri tabanına ulaşılamadı — biraz sonra tekrar dene' }, callback);
+  }
+}
+
+// ============================================================
+// STOK HAREKETLERİ: bir ürünün bütün giriş/çıkışları (alış, satış, iade, depo, sarf,
+// fire, sayım; perakende gün toplamı) ve belge (fatura/fiş) detayı. "stok_hareket" yetkisi.
+// ============================================================
+function stokHareket(p, callback) {
+  var auth = requirePermission(p.user, p.pass, 'stok_hareket');
+  if (!auth.ok) return outJson({ status: 'error', message: auth.message }, callback);
+  var props = PropertiesService.getScriptProperties();
+  var url = String(props.getProperty('DB_URL') || '').trim().replace(/\/+$/, '');
+  var anahtar = String(props.getProperty('DB_ANAHTAR') || '').trim();
+  if (!url || !anahtar) return outJson({ status: 'error', message: 'Veri tabanı ayarı yok (DB_URL / DB_ANAHTAR)' }, callback);
+  var fn, govde;
+  if (String(p.ne || '') === 'fis') {
+    var fisId = parseInt(p.fisId, 10);
+    if (!(fisId > 0)) return outJson({ status: 'error', message: 'Belge seçilmedi' }, callback);
+    fn = 'fis_detay'; govde = { p_kaynak: String(p.kaynak || '').substring(0, 40), p_fis_id: fisId };
+  } else {
+    var stokKodu = String(p.stokKodu || '').substring(0, 60), barkod = String(p.barkod || '').substring(0, 60);
+    if (!stokKodu && !barkod) return outJson({ status: 'error', message: 'Ürün seçilmedi' }, callback);
+    var gun = parseInt(p.gun, 10); if (isNaN(gun) || gun < 0 || gun > 3650) gun = 90;
+    fn = 'stok_hareket'; govde = { p_stok_kodu: stokKodu, p_barkod: barkod, p_gun: gun, p_limit: 500 };
+  }
+  try {
+    var sonuc = dbCagir({ url: url, anahtar: anahtar }, fn, govde);
+    if (!sonuc || sonuc.status !== 'ok') return outJson({ status: 'error', message: (sonuc && sonuc.message) || 'Veri tabanı cevap vermedi' }, callback);
+    return outJson(sonuc, callback);
+  } catch (err) {
+    gunlukYaz('veritabani', 'stok hareketleri', 'Sorgu başarısız: ' + err, true);
     return outJson({ status: 'error', message: 'Veri tabanına ulaşılamadı — biraz sonra tekrar dene' }, callback);
   }
 }

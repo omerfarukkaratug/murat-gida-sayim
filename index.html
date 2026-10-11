@@ -368,7 +368,7 @@
   <header style="border:none; padding:0 0 16px; background:transparent; display:flex; align-items:flex-start; justify-content:space-between;">
     <div>
       <h1><img src="logo-header.png" alt="Murat Gıda" style="height:30px; width:auto; display:block;"></h1>
-      <div class="sub">MK ERP · Murat Gıda • offline • Android • build 188</div>
+      <div class="sub">MK ERP · Murat Gıda • offline • Android • build 189</div>
     </div>
     <button type="button" id="themeToggleBtn" title="Tema seç" style="background:var(--panel2); border:1.5px solid var(--line); color:var(--text); width:34px; height:34px; border-radius:50%; font-size:15px; padding:0; display:flex; align-items:center; justify-content:center; flex-shrink:0;">🎨</button>
   </header>
@@ -410,6 +410,7 @@
       <button type="button" class="menuBtn hidden" id="menuDogrulaBtn"><span class="menuIcon">✅</span><span>QR Etiket Doğrulama<span class="menuSub">Raftaki etiketin fiyatı güncel mi, okutup gör</span></span></button>
       <button type="button" class="menuBtn hidden" id="menuMesaiBtn"><span class="menuIcon">🕐</span><span>Mesai<span class="menuSub">Giriş/çıkış, vardiya, izin, duyuru</span></span></button>
       <button type="button" class="menuBtn hidden" id="menuHareketBtn"><span class="menuIcon">🔁</span><span>Ürün Hareketleri<span class="menuSub">Kimden kaça geldi, kime satıldı</span></span></button>
+      <button type="button" class="menuBtn hidden" id="menuStokHrkBtn"><span class="menuIcon">📦</span><span>Stok Hareketleri<span class="menuSub">Ürünün tüm giriş/çıkışları, fatura ve fiş detayı</span></span></button>
       <button type="button" class="menuBtn hidden" id="menuCariHrkBtn"><span class="menuIcon">📒</span><span>Cari Hareketleri<span class="menuSub">Cari ekstresi: borç, alacak, bakiye</span></span></button>
     </div>
     <div class="hint hidden" id="adminOpenLinkWrap" style="text-align:center; margin-top:16px;"><a href="#" id="adminOpenLink" style="color:var(--muted); text-decoration:underline;">⚙ Yönetici Paneli</a></div>
@@ -736,6 +737,31 @@
       </div>
     </div>
     <div id="hareketBody" style="flex:1; overflow-y:auto; padding:12px 14px 24px;"><div class="hint">Ürünü okut ya da barkodunu yaz.</div></div>
+  </div>
+
+  <!-- Stok Hareketleri — bir ürünün tüm giriş/çıkışları; salt okunur, veri sunucu üzerinden gelir. -->
+  <div id="stokHrkScreen" class="hidden" style="position:fixed; inset:0; background:var(--bg); z-index:50; display:flex; flex-direction:column;">
+    <div style="padding:16px; border-bottom:1px solid var(--line); background:var(--panel); box-shadow:var(--sh-sm);">
+      <div class="hizliGecis" data-ekran="stok"></div>
+      <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:10px;">
+        <div style="font-weight:800; font-size:16px;">📦 Stok Hareketleri</div>
+        <button type="button" id="stokHrkCloseBtn" aria-label="Kapat" style="width:34px; height:34px; border-radius:50%; background:var(--panel2); border:1.5px solid var(--line); color:var(--text); font-size:18px; line-height:1; padding:0; display:flex; align-items:center; justify-content:center;">✕</button>
+      </div>
+      <div style="display:flex; gap:8px;">
+        <input type="tel" id="stokHrkInput" inputmode="numeric" autocomplete="off" placeholder="Barkod yaz, ✓ ya da Ara" style="flex:1; min-width:0; font-family:var(--mono); font-size:17px; font-weight:700;">
+        <button type="button" id="stokHrkAraBtn" style="flex-shrink:0; padding:0 14px; background:var(--accent); color:#fff; border:none; border-radius:var(--r-sm); font-weight:800;">Ara</button>
+        <button type="button" id="stokHrkAdBtn" class="priceModeBtn" title="Ürün adıyla ara">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.3" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+        </button>
+        <button type="button" id="stokHrkKameraBtn" title="Kamerayla okut" style="width:44px; flex-shrink:0; background:var(--accent); color:#fff; border:none; border-radius:var(--r-sm); display:flex; align-items:center; justify-content:center; padding:0;">
+          <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2Z"/><circle cx="12" cy="13" r="4"/></svg>
+        </button>
+      </div>
+      <div id="stokHrkDonem" class="hareketDonem">
+        <button type="button" data-gun="30">1 ay</button><button type="button" data-gun="90" class="on">3 ay</button><button type="button" data-gun="365">12 ay</button><button type="button" data-gun="0">Tümü</button>
+      </div>
+    </div>
+    <div id="stokHrkBody" style="flex:1; overflow-y:auto; padding:12px 14px 24px;"><div class="hint">Ürünü okut, barkodunu yaz ya da 🔍 ile adından ara.</div></div>
   </div>
 
   <!-- Cari Hareketleri (cari hesap ekstresi) — salt okunur; veri ERP12 FINANS_DETAY'dan, sunucu üzerinden gelir. -->
@@ -1651,6 +1677,7 @@
   function canSeeMesai(){ return hasPerm('mesai') || hasPerm('mesai_yonetim'); }
   function canSeeHareket(){ return hasPerm('hareket') && konumIzinli(); }
   function canSeeCariHrk(){ return hasPerm('cari_hareket') && konumIzinli(); }
+  function canSeeStokHrk(){ return hasPerm('stok_hareket') && konumIzinli(); }
 
   // ---------- ŞUBE KONUMU (girişte GPS) ----------
   // Amaç: personel mağaza/şube dışındayken fiyat ve stok görmesin. Konum
@@ -1704,12 +1731,14 @@
       document.getElementById('menuFiyatBtn').classList.toggle('hidden', !canSeePrice() && !canSeeStock());
       document.getElementById('menuHareketBtn').classList.toggle('hidden', !canSeeHareket());
       document.getElementById('menuCariHrkBtn').classList.toggle('hidden', !canSeeCariHrk());
+      document.getElementById('menuStokHrkBtn').classList.toggle('hidden', !canSeeStokHrk());
       document.getElementById('menuEtiketBtn').classList.toggle('hidden', !canSeeEtiket());
     document.getElementById('menuDogrulaBtn').classList.toggle('hidden', !canSeeEtiket());
       document.getElementById('menuDogrulaBtn').classList.toggle('hidden', !canSeeEtiket());
     }
     if(typeof hareketKonumKontrol === 'function') hareketKonumKontrol();
     if(typeof cariHrkKonumKontrol === 'function') cariHrkKonumKontrol();
+    var skEl = document.getElementById('stokHrkScreen'); if(skEl && !skEl.classList.contains('hidden') && !canSeeStokHrk()) skEl.classList.add('hidden');
     if(listEl) renderList(); // sayfa açılışında liste henüz hazır değilse atla
     if(typeof renderPriceSearch === 'function' && !document.getElementById('priceScreen').classList.contains('hidden')) renderPriceSearch();
     if(typeof renderMalList === 'function' && !document.getElementById('malHareketScreen').classList.contains('hidden')) renderMalList();
@@ -1774,6 +1803,7 @@
     document.getElementById('menuFiyatBtn').classList.toggle('hidden', !canSeePrice() && !canSeeStock());
     document.getElementById('menuHareketBtn').classList.toggle('hidden', !canSeeHareket());
     document.getElementById('menuCariHrkBtn').classList.toggle('hidden', !canSeeCariHrk());
+    document.getElementById('menuStokHrkBtn').classList.toggle('hidden', !canSeeStokHrk());
     document.getElementById('menuMesaiBtn').classList.toggle('hidden', !canSeeMesai());
     document.getElementById('menuEtiketBtn').classList.toggle('hidden', !canSeeEtiket());
     startBtn.textContent = (state.session.scans && state.session.scans.length > 0) ? '▶ Sayıma Devam Et' : 'Sayıma Başla';
@@ -3931,13 +3961,16 @@
     }, 30000);
   }
   // Açılan belgenin ürün satırları. r: [stok kodu, barkod, ürün adı, miktar, KDV dahil birim fiyat, KDV dahil tutar]
-  function cariHrkFisHtml(fis){
-    var a = cariHrkAcikFis[fis]; if(!a) return '';
+  function cariHrkFisHtml(fis){ return fisDetayHtml(cariHrkAcikFis[fis]); }
+  // Belge (fatura / irsaliye / fiş) detayı — Cari ve Stok Hareketleri ortak. a: { yukleniyor | hata | veri }
+  function fisDetayHtml(a){
+    if(!a) return '';
     if(a.yukleniyor) return '<div class="chFis">⏳ Belge yükleniyor…</div>';
     if(a.hata) return '<div class="chFis" style="color:var(--red);">❌ ' + escapeHtml(a.hata) + '</div>';
     var d = a.veri || {};
     if(!d.bulundu) return '<div class="chFis">Bu belgenin ürün satırı yok (finans belgesi ya da henüz gönderilmemiş).</div>';
-    return '<div class="chFis"><div style="font-weight:800; margin-bottom:4px;">📄 ' + escapeHtml(d.tur || 'Belge') + (d.belgeNo ? ' · No ' + escapeHtml(d.belgeNo) : '') + '</div>' +
+    return '<div class="chFis"><div style="font-weight:800; margin-bottom:4px;">📄 ' + escapeHtml(d.tur || 'Belge') + (d.belgeNo ? ' · No ' + escapeHtml(d.belgeNo) : '') + (d.tarih ? ' · ' + escapeHtml(d.tarih) : '') + '</div>' +
+      (d.cari ? '<div style="color:var(--muted); margin:-2px 0 4px;">' + escapeHtml(d.cari) + '</div>' : '') +
       (d.satirlar || []).map(function(r){
         var urun = r[2] || ((catalogMap.get(String(r[1])) || {}).name) || r[0] || r[1] || '—';
         return '<div class="chFisSatir"><span style="min-width:0;">' + escapeHtml(urun) + '<small>' + escapeHtml(fmtQty(r[3])) + (r[4] !== null && r[4] !== undefined ? ' × ' + escapeHtml(fmtMoney(r[4])) : '') + '</small></span>' +
@@ -3952,7 +3985,7 @@
     var baslik = '<div style="font-weight:800; font-size:16px; line-height:1.3;">' + escapeHtml(s.cari.name) + '</div>' +
       (perakende ? '' : '<div class="hint" style="font-family:var(--mono); margin:2px 0 0;">' + escapeHtml(s.cari.code || 'kod yok') + '</div>') +
       (perakende ? '' : '<div class="hrkSekmeler" style="margin:10px 0 0;"><button type="button" class="hrkSekme' + (s.ne === 'hareket' ? ' on' : '') + '" data-chsekme="hesap" style="padding:9px 6px;"><b style="font-size:14px; font-family:inherit;">💳 Hesap hareketleri</b></button>' +
-        '<button type="button" class="hrkSekme' + (s.ne === 'stok' ? ' on' : '') + '" data-chsekme="stok" style="padding:9px 6px;"><b style="font-size:14px; font-family:inherit;">📦 Stok hareketleri</b></button></div>');
+        '<button type="button" class="hrkSekme' + (s.ne === 'stok' ? ' on' : '') + '" data-chsekme="stok" style="padding:9px 6px;"><b style="font-size:14px; font-family:inherit;">📦 Alınan / satılan ürünler</b></button></div>');
     if(yukleniyor){ cariHrkBodyEl.innerHTML = baslik + '<div class="hint" style="margin-top:14px;">⏳ Yükleniyor…</div>'; return; }
     if(s.hata){ cariHrkBodyEl.innerHTML = baslik + '<div class="hint" style="margin-top:14px; color:var(--red);">❌ ' + escapeHtml(s.hata) + '</div>'; return; }
     var d = s.veri || {};
@@ -4002,6 +4035,102 @@
     if(Number(d.adet || 0) > satir.length) html += '<div class="hint">Son ' + satir.length + ' satır gösteriliyor (dönemde ' + d.adet + ' satır var) — daha kısa dönem seç.</div>';
     html += '<div class="hint" style="margin-top:10px; font-size:11px;">+ stoğa giren (alış, satıştan iade) · − stoktan çıkan (satış, alıştan iade). Fiyatlar KDV dahil birim fiyat. Satıra dokun: belgenin tamamı.</div>';
     return html;
+  }
+
+  // ---------- STOK HAREKETLERİ ----------
+  // Ürünün bütün giriş/çıkışları (alış, satış, iade, depo, sarf, fire, sayım; perakende gün toplamı).
+  // "stok": güncel sistem stoğundan geriye doğru hesaplanır (yalnızca stok görme yetkisi olana).
+  var stokHrkScreenEl = document.getElementById('stokHrkScreen');
+  var stokHrkInputEl = document.getElementById('stokHrkInput');
+  var stokHrkBodyEl = document.getElementById('stokHrkBody');
+  var stokHrkGun = 90, stokHrkSon = null, stokHrkIstekNo = 0, stokHrkOnbellek = {}, stokHrkAcikFis = {};
+  function openStokHrkScreen(){
+    if(!canSeeStokHrk()){ warnToast(hasPerm('stok_hareket') ? 'Şube dışında stok hareketleri gizli' : 'Stok Hareketleri yetkin yok — yöneticinden iste'); return; }
+    stokHrkScreenEl.classList.remove('hidden');
+    hizliGecisCiz();
+    if(!stokHrkSon) setTimeout(function(){ stokHrkInputEl.focus(); }, 80);
+  }
+  function closeStokHrkScreen(){ var el = document.getElementById('stokHrkScreen'); if(el) el.classList.add('hidden'); }
+  document.getElementById('menuStokHrkBtn').addEventListener('click', openStokHrkScreen);
+  document.getElementById('stokHrkCloseBtn').addEventListener('click', closeStokHrkScreen);
+  document.getElementById('stokHrkAraBtn').addEventListener('click', function(){ var v = stokHrkInputEl.value.trim(); if(v) stokHrkAra(v); });
+  stokHrkInputEl.addEventListener('keydown', function(e){ if(e.key === 'Enter'){ e.preventDefault(); var v = stokHrkInputEl.value.trim(); if(v) stokHrkAra(v); } });
+  document.getElementById('stokHrkAdBtn').addEventListener('click', function(){ openNameSearch('stok'); });
+  document.getElementById('stokHrkKameraBtn').addEventListener('click', function(){ startQuickScan(function(val){ stokHrkAra(val); }); });
+  document.getElementById('stokHrkDonem').addEventListener('click', function(e){
+    var b = e.target.closest('button[data-gun]'); if(!b) return;
+    stokHrkGun = Number(b.getAttribute('data-gun'));
+    Array.prototype.forEach.call(this.querySelectorAll('button'), function(x){ x.classList.toggle('on', x === b); });
+    if(stokHrkSon) stokHrkAra(stokHrkSon.barkod);
+  });
+  stokHrkBodyEl.addEventListener('click', function(e){
+    var sat = e.target.closest('[data-fis]'); if(!sat) return;
+    var fis = sat.getAttribute('data-fis'), kaynak = sat.getAttribute('data-kaynak') || '';
+    if(!fis) return;
+    if(stokHrkAcikFis[fis]){ delete stokHrkAcikFis[fis]; stokHrkCiz(); return; }
+    var auth = currentAuth(); if(!auth) return;
+    var ob = stokHrkOnbellek['fis|' + kaynak + '|' + fis];
+    if(ob){ stokHrkAcikFis[fis] = { veri: ob.veri }; stokHrkCiz(); return; }
+    stokHrkAcikFis[fis] = { yukleniyor: true }; stokHrkCiz();
+    jsonpRequestP(state.serverUrl || DEFAULT_SERVER_URL, { action: 'stok_hareket', ne: 'fis', user: auth.user, pass: auth.pass, fisId: fis, kaynak: kaynak }, function(err, data){
+      if(!stokHrkAcikFis[fis]) return;
+      if(err || !data || data.status !== 'ok'){ stokHrkAcikFis[fis] = { hata: err || (data && data.message) || 'bilinmeyen hata' }; stokHrkCiz(); return; }
+      stokHrkOnbellek['fis|' + kaynak + '|' + fis] = { zaman: Date.now(), veri: data };
+      stokHrkAcikFis[fis] = { veri: data }; stokHrkCiz();
+    }, 30000);
+  });
+  function stokHrkAra(barkod){
+    barkod = String(barkod || '').trim(); if(!barkod) return;
+    var auth = currentAuth();
+    if(!auth){ warnToast('Önce giriş yap'); return; }
+    if(!canSeeStokHrk()){ closeStokHrkScreen(); return; }
+    if(stokHrkScreenEl.classList.contains('hidden')) openStokHrkScreen();
+    var urun = catalogMap.get(barkod);
+    stokHrkInputEl.value = barkod;
+    stokHrkAcikFis = {};
+    stokHrkSon = { barkod: barkod, ad: urun ? urun.name : '', stokKodu: urun ? (urun.stockCode || '') : '', stok: urun ? urun.oldStock : '', veri: null, hata: '' };
+    var anahtar = stokHrkSon.stokKodu + '|' + barkod + '|' + stokHrkGun, ob = stokHrkOnbellek[anahtar];
+    if(ob && Date.now() - ob.zaman < 120000){ stokHrkSon.veri = ob.veri; stokHrkCiz(); return; }
+    if(!navigator.onLine){ stokHrkSon.hata = 'İnternet yok'; stokHrkCiz(); return; }
+    var no = ++stokHrkIstekNo;
+    stokHrkCiz(true);
+    jsonpRequestP(state.serverUrl || DEFAULT_SERVER_URL, { action: 'stok_hareket', user: auth.user, pass: auth.pass, stokKodu: stokHrkSon.stokKodu, barkod: barkod, gun: stokHrkGun }, function(err, data){
+      if(no !== stokHrkIstekNo) return;
+      if(err || !data || data.status !== 'ok'){ stokHrkSon.hata = err || (data && data.message) || 'bilinmeyen hata'; stokHrkCiz(); return; }
+      stokHrkOnbellek[anahtar] = { zaman: Date.now(), veri: data };
+      stokHrkSon.veri = data; stokHrkCiz();
+    }, 30000);
+  }
+  function stokHrkCiz(yukleniyor){
+    var h = stokHrkSon;
+    if(!h){ stokHrkBodyEl.innerHTML = '<div class="hint">Ürünü okut, barkodunu yaz ya da 🔍 ile adından ara.</div>'; return; }
+    var baslik = '<div style="font-weight:800; font-size:16px; line-height:1.3;">' + escapeHtml(h.ad || 'Katalogda olmayan barkod') + '</div>' +
+      '<div class="hint" style="font-family:var(--mono); margin:2px 0 0;">' + escapeHtml(h.barkod) + (h.stokKodu ? ' · ' + escapeHtml(h.stokKodu) : '') + '</div>';
+    if(yukleniyor){ stokHrkBodyEl.innerHTML = baslik + '<div class="hint" style="margin-top:14px;">⏳ Yükleniyor…</div>'; return; }
+    if(h.hata){ stokHrkBodyEl.innerHTML = baslik + '<div class="hint" style="margin-top:14px; color:var(--red);">❌ ' + escapeHtml(h.hata) + '</div>'; return; }
+    var d = h.veri || {}, satir = d.satirlar || [];
+    var stokVar = canSeeStock() && h.stok !== '' && h.stok !== undefined && !isNaN(Number(h.stok));
+    var html = baslik + '<div class="chOzet" style="margin-top:12px;"><div>📥 GİREN<b>' + escapeHtml(fmtQty(d.giris || 0)) + '</b></div><div>📤 ÇIKAN<b>' + escapeHtml(fmtQty(d.cikis || 0)) + '</b></div>' +
+      (stokVar ? '<div>📦 STOK<b>' + escapeHtml(fmtQty(h.stok)) + '</b></div>' : '') + '</div>';
+    if(Number(d.perakende || 0)) html += '<div class="hint" style="margin:-4px 0 8px;">Çıkanın ' + escapeHtml(fmtQty(d.perakende)) + ' tanesi perakende (kasa) satışı.</div>';
+    // r: [tarih, belge türü, belge no, cari, miktar (+/−), KDV dahil birim fiyat, tutar, fis_id, kaynak]
+    var kalan = stokVar ? Number(h.stok) : null;
+    html += satir.length ? satir.map(function(r){
+      var m = Number(r[4]) || 0, fis = r[7] ? String(r[7]) : '';
+      var stokYazi = kalan !== null ? 'stok ' + fmtQty(Math.round(kalan * 1000) / 1000) : '';
+      if(kalan !== null) kalan -= m;          // bu hareketten önceki stok = bir alttaki satırın "sonrası"
+      var alt = [r[3] || '', r[2] ? (/satır$/.test(r[2]) ? r[2] : 'No ' + r[2]) : '', r[5] !== null && r[5] !== undefined ? fmtMoney(r[5]) : ''].filter(Boolean).join(' · ');
+      return '<div class="chSatir"' + (fis ? ' data-fis="' + escapeHtml(fis) + '" data-kaynak="' + escapeHtml(r[8] || '') + '" style="cursor:pointer;"' : '') + '>' +
+        '<div class="ust"><span style="min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">' + escapeHtml(r[0] + ' · ' + (r[1] || 'Belge')) + (fis ? ' 📄' : '') + '</span>' +
+        '<span class="' + (m >= 0 ? 'alacak' : 'borc') + '">' + (m >= 0 ? '+' : '−') + escapeHtml(fmtQty(Math.abs(m))) + '</span></div>' +
+        '<div class="alt"><span style="min-width:0; overflow:hidden; text-overflow:ellipsis;">' + escapeHtml(alt || '—') + '</span>' +
+        (stokYazi ? '<span style="white-space:nowrap; font-family:var(--mono); font-weight:700;">' + escapeHtml(stokYazi) + '</span>' : '') + '</div>' +
+        (fis ? fisDetayHtml(stokHrkAcikFis[fis]) : '') + '</div>';
+    }).join('') : '<div class="hint">Bu dönemde hareket yok.</div>';
+    if(Number(d.adet || 0) > satir.length) html += '<div class="hint">Son ' + satir.length + ' hareket gösteriliyor (dönemde ' + d.adet + ' hareket var) — daha kısa dönem seç.</div>';
+    html += '<div class="hint" style="margin-top:10px; font-size:11px;">+ stoğa giren · − stoktan çıkan. Fiyatlar KDV dahil birim fiyat. 📄 olan satıra dokun: belgenin tamamı.' +
+      (stokVar ? ' "stok": o hareketten sonraki miktar, güncel stoktan geriye hesaplanır.' : '') + (d.sonVeri ? ' ERP verisi: ' + escapeHtml(d.sonVeri) : '') + '</div>';
+    stokHrkBodyEl.innerHTML = html;
   }
 
   var malCariResultsCache = [];
@@ -4196,7 +4325,7 @@
   var HIZLI_GECIS = [
     ['sayim', '📋', 'Sayım', 'menuSayimBtn'], ['giris', '📥', 'Giriş', 'menuMalGirisBtn'],
     ['cikis', '📤', 'Çıkış', 'menuMalCikisBtn'], ['fiyat', '💰', 'Fiyat', 'menuFiyatBtn'],
-    ['hareket', '🔁', 'Hareket', 'menuHareketBtn'], ['cari', '📒', 'Cari', 'menuCariHrkBtn'], ['mesai', '🕐', 'Mesai', 'menuMesaiBtn']
+    ['hareket', '🔁', 'Hareket', 'menuHareketBtn'], ['stok', '📦', 'Stok', 'menuStokHrkBtn'], ['cari', '📒', 'Cari', 'menuCariHrkBtn'], ['mesai', '🕐', 'Mesai', 'menuMesaiBtn']
   ];
   function hizliGecisCiz(){
     var gorunen = HIZLI_GECIS.filter(function(g){ var b = document.getElementById(g[3]); return b && !b.classList.contains('hidden'); });
@@ -4212,6 +4341,7 @@
     if(malAcik && malSaving){ warnToast('Kayıt gönderiliyor — bitince geç'); return; }
     if(hedef === 'cikis' && !hasPerm('mal_cikis')){ warnToast('Mal Çıkış yetkin yok — yöneticinden iste'); return; }
     if(hedef === 'mesai' && !canSeeMesai()){ warnToast('Mesai yetkin yok — yöneticinden iste'); return; }
+    if(hedef === 'stok' && !canSeeStokHrk()){ warnToast(hasPerm('stok_hareket') ? 'Şube dışında stok hareketleri gizli' : 'Stok Hareketleri yetkin yok — yöneticinden iste'); return; }
     if(hedef === 'cari' && !canSeeCariHrk()){ warnToast(hasPerm('cari_hareket') ? 'Şube dışında cari hareketleri gizli' : 'Cari Hareketleri yetkin yok — yöneticinden iste'); return; }
     if(hedef === 'hareket' && !canSeeHareket()){ warnToast(hasPerm('hareket') ? 'Şube dışında ürün hareketleri gizli' : 'Ürün Hareketleri yetkin yok — yöneticinden iste'); return; }
     if(malAcik && (hedef === malTip)) return;
@@ -4222,7 +4352,7 @@
     }
     if(!priceScreenEl.classList.contains('hidden')) closePriceScreen();
     if(!hareketScreenEl.classList.contains('hidden')) closeHareketScreen();
-    closeCariHrkScreen();
+    closeCariHrkScreen(); closeStokHrkScreen();
     if(hedef !== 'mesai') closeMesaiScreen();
     if(hedef === 'sayim'){
       // Sayım ekranı (okutma) açıksa zaten oradayız; değilse sayım başlangıcı.
@@ -4235,6 +4365,7 @@
     else if(hedef === 'fiyat') openPriceScreen();
     else if(hedef === 'hareket') openHareketScreen();
     else if(hedef === 'cari') openCariHrkScreen();
+    else if(hedef === 'stok') openStokHrkScreen();
     else if(hedef === 'mesai'){ if(document.getElementById('mesaiScreen').classList.contains('hidden')) openMesaiScreen(); }
     hizliGecisCiz();
   }
@@ -5002,6 +5133,7 @@
     { key: 'stok', label: '📦 Stok Görme' },
     { key: 'hareket', label: '🔁 Ürün Hareketleri' },
     { key: 'cari_hareket', label: '📒 Cari Hareketleri' },
+    { key: 'stok_hareket', label: '📦 Stok Hareketleri' },
     { key: 'mesai', label: '🕐 Mesai (personel)' },
     { key: 'mesai_yonetim', label: '⭐ Ekip Lideri' },
     // Şube dışındayken de fiyat/stok görebilir (konum kısıtlamasından muaf).
@@ -5703,6 +5835,7 @@
     var barcode = decodeURIComponent(row.getAttribute('data-barcode'));
     document.getElementById('nameSearchScreen').classList.add('hidden');
     if(nameSearchMode === 'hareket'){ hareketAra(barcode); return; } // Ürün Hareketleri
+    if(nameSearchMode === 'stok'){ stokHrkAra(barcode); return; } // Stok Hareketleri
     if(nameSearchMode === 'malHareket') malHareketHandleBarcode(barcode); // Mal Giriş/Çıkış: aynı akış, adet giriş kartı açılır
     else handleScanResult(barcode); // Sayım: bulunan ürün için adet giriş kartı açılır
   });
