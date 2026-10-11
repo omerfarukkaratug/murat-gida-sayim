@@ -7,8 +7,10 @@
 #      cari bakiyesi (CARI_BAKIYELER) de ayni satirlardan hesaplanir.
 #   2) Perakende (Pesin Satis = varsayilan cari): her fis tek tek DEGIL, gun ve
 #      hareket turu basina TOPLAM olarak (cari kodu "__PERAKENDE__").
-#   3) FIS_DETAY: carilerin belgelerinin (fatura, irsaliye, fis, iade) urun satirlari
-#      -> "fatura detayi" ve "carinin stok hareketleri".
+#   3) FIS_DETAY: stoga etki eden tum belgelerin (fatura, irsaliye, fis, iade, depo,
+#      sarf, fire, sayim) urun satirlari -> "fatura detayi", "carinin stok hareketleri"
+#      ve "Stok Hareketleri" ekrani.
+#   4) Perakende (kasa) satislari: urun + gun basina TOPLAM -> "Stok Hareketleri".
 #
 #  - ERP12'ye HICBIR SEY YAZMAZ, sadece okur (SELECT).
 #  - Gunde bir kez TUM hareketleri bastan gonderir (ERP'de silinen/duzeltilen
@@ -168,8 +170,10 @@ GROUP BY CONVERT(char(10), F.TARIH, 23), FD.FINANS_ISLEM_TURU, FD.DOVIZ_AD
     $n = Parcali-Gonder "cari_hareket_yukle" $Db $satirlar ('"' + (Iso $bas) + '"') ('"' + (Iso $bit) + '"')
     Yaz-Log "[$Db] Cari hareketleri: $n satir gonderildi ($nP perakende gun/tur toplami dahil)"
 
-    # --- 3) Belge satirlari (fatura/irsaliye/fis detayi + carinin stok hareketleri) ---
-    # Stoga etki eden belge turleri (FIS_TURU.GIRIS = +1 / -1; Finans turu 18 haric). Pesin Satis ve personel carileri alinmaz.
+    # --- 3) Belge satirlari (fatura/irsaliye/fis detayi, carinin ve urunun stok hareketleri) ---
+    # Stoga etki eden TUM belgeler (FIS_TURU.GIRIS = +1 / -1; Finans 18 haric): alis, satis, iade, depo, sarf, fire, sayim...
+    # Perakende (kasa fisleri 11/12, perakende fatura/irsaliye 35/36, Pesin Satis carisinin belgeleri) burada DEGIL,
+    # 4. adimda urun + gun toplami olarak gider.
     $kolD = @((Sql-Tablo $baglanti "SELECT COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_NAME = 'FIS_DETAY'") | ForEach-Object { [string]$_.COLUMN_NAME })
     $kolS = @((Sql-Tablo $baglanti "SELECT COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_NAME = 'STOK'") | ForEach-Object { [string]$_.COLUMN_NAME })
     $miktar = @("MIKTAR_FIS", "MIKTAR", "MIKTAR1", "ADET") | Where-Object { $kolD -contains $_ } | Select-Object -First 1
@@ -183,16 +187,16 @@ GROUP BY CONVERT(char(10), F.TARIH, 23), FD.FINANS_ISLEM_TURU, FD.DOVIZ_AD
         $adIf = if ($urunAd) { "ISNULL(s.$urunAd, '')" } else { "''" }
         $sqlF = @"
 SELECT d.ID AS detay_id, f.ID AS fis_id, f.FIS_TURU AS fis_turu, ISNULL(FT.AD, '') AS tur_ad, FT.GIRIS AS giris, f.FIS_TARIHI AS tarih,
-       ISNULL(f.BELGENO, '') AS belge_no, C.KOD AS cari_kod, ISNULL(s.KOD, '') AS stok_kodu, ISNULL(d.BARKOD, '') AS barkod,
+       ISNULL(f.BELGENO, '') AS belge_no, ISNULL(C.KOD, '') AS cari_kod, ISNULL(C.AD, '') AS cari_ad, ISNULL(s.KOD, '') AS stok_kodu, ISNULL(d.BARKOD, '') AS barkod,
        $adIf AS urun_adi, d.$miktar AS miktar, $fiyatIf AS birim_fiyat, $tutarIf AS tutar
 FROM dbo.FIS f
 JOIN dbo.FIS_DETAY d ON d.FIS = f.ID
-JOIN dbo.CARI C ON C.ID = f.CARI
+LEFT JOIN dbo.CARI C ON C.ID = f.CARI
 JOIN dbo.FIS_TURU FT ON FT.ID = f.FIS_TURU
 LEFT JOIN dbo.STOK s ON s.ID = d.STOK
 WHERE f.FIS_TARIHI >= '$basSql' AND f.FIS_TARIHI < '$bitSql'
-  AND FT.GIRIS IN (1, -1) AND f.FIS_TURU <> 18
-  AND C.CARI_TUR = 1 AND C.ID <> COALESCE((SELECT TOP 1 VARSAYILANCARI FROM dbo.FIRMASABITLERI), -1)
+  AND FT.GIRIS IN (1, -1) AND f.FIS_TURU NOT IN (18, 11, 12, 35, 36)
+  AND ISNULL(f.CARI, 0) <> COALESCE((SELECT TOP 1 VARSAYILANCARI FROM dbo.FIRMASABITLERI), -1)
 "@
         $dtF = Sql-Tablo $baglanti $sqlF
         $fs = New-Object System.Collections.ArrayList
@@ -202,13 +206,41 @@ WHERE f.FIS_TARIHI >= '$basSql' AND f.FIS_TARIHI < '$bitSql'
             if ($r.tutar -isnot [DBNull] -and $r.tutar -ne $null) { $tt = [double]$r.tutar } elseif ($bf -ne $null) { $tt = [Math]::Round($m * $bf, 2) }
             [void]$fs.Add([PSCustomObject]@{
                 detay_id = [long]$r.detay_id; fis_id = [long]$r.fis_id; fis_turu = [int]$r.fis_turu; tur_ad = Metin $r.tur_ad
-                giris = [int]$r.giris; tarih = Iso $r.tarih; belge_no = Metin $r.belge_no; cari_kod = Metin $r.cari_kod
+                giris = [int]$r.giris; tarih = Iso $r.tarih; belge_no = Metin $r.belge_no; cari_kod = Metin $r.cari_kod; cari_ad = Metin $r.cari_ad
                 stok_kodu = Metin $r.stok_kodu; barkod = Metin $r.barkod; urun_adi = Metin $r.urun_adi
                 miktar = $m; birim_fiyat = $bf; tutar = $tt
             })
         }
         $nF = Parcali-Gonder "fis_satir_yukle" $Db $fs ('"' + (Iso $bas) + '"') ('"' + (Iso $bit) + '"')
         Yaz-Log "[$Db] Belge satirlari: $nF satir gonderildi (miktar: $miktar, fiyat: $fiyat, tutar: $tutarK, urun adi: $urunAd)"
+
+        # --- 4) Perakende: urun + gun toplami (satis -, iade +). Ilk calismada tum gecmis, gunluk tam
+        #        gonderimde son 60 gun, diger saatlerde son 7 gun (kasa fisleri sonradan pek degismez).
+        $PerIlkDosya = Join-Path $TamGonderimKlasor "stok-perakende-ilk-$Db.txt"
+        $pBas = if (-not (Test-Path $PerIlkDosya)) { [datetime]"2000-01-01" } elseif ($tam) { (Get-Date).Date.AddDays(-60) } else { $bas }
+        $pBasSql = $pBas.ToString("yyyy-MM-dd")
+        $tutarP = if ($tutarK) { "d.$tutarK" } elseif ($fiyat) { "d.$miktar * d.$fiyat" } else { "0" }
+        $sqlP2 = @"
+SELECT ISNULL(s.KOD, '') AS stok_kodu, CONVERT(char(10), f.FIS_TARIHI, 23) AS gun,
+       SUM(d.$miktar * FT.GIRIS) AS miktar, SUM($tutarP * FT.GIRIS) AS tutar, COUNT(*) AS adet
+FROM dbo.FIS f
+JOIN dbo.FIS_DETAY d ON d.FIS = f.ID
+JOIN dbo.STOK s ON s.ID = d.STOK
+JOIN dbo.FIS_TURU FT ON FT.ID = f.FIS_TURU
+WHERE f.FIS_TARIHI >= '$pBasSql' AND f.FIS_TARIHI < '$bitSql' AND FT.GIRIS IN (1, -1) AND f.FIS_TURU <> 18
+  AND (f.FIS_TURU IN (11, 12, 35, 36) OR ISNULL(f.CARI, 0) = COALESCE((SELECT TOP 1 VARSAYILANCARI FROM dbo.FIRMASABITLERI), -1))
+GROUP BY s.KOD, CONVERT(char(10), f.FIS_TARIHI, 23)
+"@
+        try {
+            $dtP2 = Sql-Tablo $baglanti $sqlP2
+            $ps = New-Object System.Collections.ArrayList
+            foreach ($r in $dtP2.Rows) {
+                [void]$ps.Add([PSCustomObject]@{ stok_kodu = Metin $r.stok_kodu; gun = [string]$r.gun; miktar = Sayi $r.miktar; tutar = [Math]::Round((Sayi $r.tutar), 2); adet = [int]$r.adet })
+            }
+            $nP2 = Parcali-Gonder "stok_perakende_yukle" $Db $ps ('"' + $pBasSql + '"') ('"' + $bitSql + '"')
+            if (-not (Test-Path $PerIlkDosya)) { Set-Content -Path $PerIlkDosya -Value (Get-Date -Format "yyyy-MM-dd HH:mm:ss") }
+            Yaz-Log "[$Db] Perakende urun/gun toplami: $nP2 satir gonderildi ($pBasSql itibaren)"
+        } catch { Yaz-Log "[$Db] UYARI: perakende urun toplamlari gonderilemedi: $($_.Exception.Message) (veri tabanina 007_stok_hareketleri.sql calistirildi mi?)" }
     }
 
     if ($tam) { Set-Content -Path $TamGonderimDosya -Value (Get-Date -Format "yyyy-MM-dd HH:mm:ss") }
