@@ -368,7 +368,7 @@
   <header style="border:none; padding:0 0 16px; background:transparent; display:flex; align-items:flex-start; justify-content:space-between;">
     <div>
       <h1><img src="logo-header.png" alt="Murat Gıda" style="height:30px; width:auto; display:block;"></h1>
-      <div class="sub">MK ERP · Murat Gıda • offline • Android • build 190</div>
+      <div class="sub">MK ERP · Murat Gıda • offline • Android • build 191</div>
     </div>
     <button type="button" id="themeToggleBtn" title="Tema seç" style="background:var(--panel2); border:1.5px solid var(--line); color:var(--text); width:34px; height:34px; border-radius:50%; font-size:15px; padding:0; display:flex; align-items:center; justify-content:center; flex-shrink:0;">🎨</button>
   </header>
@@ -3278,7 +3278,7 @@
     }
     // Aynı anda TEK okuma: önceki kare bitmeden yenisi başlamaz (eskiden her
     // karede yeni okuma başlıyor, iPhone'da üst üste binip telefonu yoruyordu).
-    var mesgul = false, sonOkuma = 0, tuval = null, tuvalCtx = null;
+    var mesgul = false, sonOkuma = 0, tuval = null, tuvalCtx = null, kesitSira = 0;
     // iPhone (yazılım motoru): tüm kare yerine sadece ekranda görünen
     // çerçevenin çevresi okunur, gerekirse küçültülür — hem hızlı hem net.
     function kirpilmisKare(){
@@ -3287,9 +3287,14 @@
       if(!vw || !vh || !W || !H) return videoEl;
       var olcek = Math.max(W / vw, H / vh);           // object-fit: cover
       var gw = W / olcek, gh = H / olcek;              // ekranda görünen kısım (video pikseli)
-      var sx = (vw - gw) / 2 + gw * 0.08, sy = (vh - gh) / 2 + gh * 0.12;
-      var sw = gw * 0.84, sh = gh * 0.76;              // çerçeve + pay
-      var kucult = Math.min(1, 1280 / sw);
+      // Her karede sırayla üç farklı kesit denenir (bir barkod birinde okunmazsa diğerinde okunur):
+      //  0: çerçeve + pay (eskisi) · 1: ekranda görünen alanın tamamı (uzak/yamuk tutulan barkod)
+      //  2: ortadaki dar şerit BÜYÜTÜLEREK (küçük barkodlar, EAN-8, sigara/ilaç kutusu gibi ince çizgiler)
+      var tur = (kesitSira++) % 3;
+      var oranW = tur === 1 ? 1 : tur === 2 ? 0.6 : 0.84, oranH = tur === 1 ? 1 : tur === 2 ? 0.42 : 0.76;
+      var sw = gw * oranW, sh = gh * oranH;
+      var sx = (vw - gw) / 2 + (gw - sw) / 2, sy = (vh - gh) / 2 + (gh - sh) / 2;
+      var kucult = tur === 2 ? Math.min(1.8, 1400 / sw) : Math.min(1, 1280 / sw);
       if(!tuval){ tuval = document.createElement('canvas'); tuvalCtx = tuval.getContext('2d', { willReadFrequently: true }); }
       tuval.width = Math.round(sw * kucult); tuval.height = Math.round(sh * kucult);
       tuvalCtx.drawImage(videoEl, sx, sy, sw, sh, 0, 0, tuval.width, tuval.height);

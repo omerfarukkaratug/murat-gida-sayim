@@ -1294,7 +1294,22 @@
   });
 
   // ---------- Kamera (telefonun kendi okuyucusu; iPhone'da ZBar) ----------
-  var akis = null, okuyucu = null, taraZ = null, bdYukleniyor = null, sonKod = '', sonKodZaman = 0;
+  var akis = null, okuyucu = null, taraZ = null, bdYukleniyor = null, sonKod = '', sonKodZaman = 0, yazilimMotor = false;
+  // iPhone (ZBar yazılım motoru): tam kare yerine sırayla üç kesit okunur — ortadaki geniş alan, görünen alanın
+  // tamamı ve ortadaki dar şerit BÜYÜTÜLEREK (küçük / ince çizgili barkodlar). Biri okumazsa diğeri okur.
+  var kesitSira = 0, kesitTuval = null, kesitCtx = null;
+  function kesitKare(v){
+    var vw = v.videoWidth, vh = v.videoHeight, W = v.clientWidth, H = v.clientHeight;
+    if(!vw || !vh || !W || !H) return v;
+    var olcek = Math.max(W / vw, H / vh), gw = W / olcek, gh = H / olcek, tur = (kesitSira++) % 3;
+    var sw = gw * (tur === 1 ? 1 : tur === 2 ? 0.6 : 0.84), sh = gh * (tur === 1 ? 1 : tur === 2 ? 0.42 : 0.76);
+    var sx = (vw - gw) / 2 + (gw - sw) / 2, sy = (vh - gh) / 2 + (gh - sh) / 2;
+    var k = tur === 2 ? Math.min(1.8, 1400 / sw) : Math.min(1, 1280 / sw);
+    if(!kesitTuval){ kesitTuval = document.createElement('canvas'); kesitCtx = kesitTuval.getContext('2d', { willReadFrequently: true }); }
+    kesitTuval.width = Math.round(sw * k); kesitTuval.height = Math.round(sh * k);
+    kesitCtx.drawImage(v, sx, sy, sw, sh, 0, 0, kesitTuval.width, kesitTuval.height);
+    return kesitTuval;
+  }
   function okuyucuYukle(){
     if('BarcodeDetector' in window) return Promise.resolve(window.BarcodeDetector);
     if(bdYukleniyor) return bdYukleniyor;
@@ -1306,7 +1321,7 @@
         s2.src = 'https://cdn.jsdelivr.net/npm/@undecaf/barcode-detector-polyfill@0.9.23/dist/index.js';
         s2.onload = function(){
           var bdp = (typeof barcodeDetectorPolyfill !== 'undefined') ? barcodeDetectorPolyfill : window.barcodeDetectorPolyfill;
-          if(bdp && bdp.BarcodeDetectorPolyfill){ window.BarcodeDetector = bdp.BarcodeDetectorPolyfill; ok(window.BarcodeDetector); }
+          if(bdp && bdp.BarcodeDetectorPolyfill){ window.BarcodeDetector = bdp.BarcodeDetectorPolyfill; yazilimMotor = true; ok(window.BarcodeDetector); }
           else { bdYukleniyor = null; hata(new Error('okuyucu yüklenemedi')); }
         };
         s2.onerror = function(){ bdYukleniyor = null; hata(new Error('okuyucu yüklenemedi')); };
@@ -1439,9 +1454,10 @@
   function tara(){
     if(!okuyucu || !akis) return;
     var v = $('video');
-    var sonra = function(){ taraZ = setTimeout(tara, 180); };
+    var sonra = function(){ taraZ = setTimeout(tara, yazilimMotor ? 90 : 180); };
     if(v.readyState < 2) return sonra();
-    okuyucu.detect(v).then(function(k){
+    var kaynak = v; if(yazilimMotor){ try { kaynak = kesitKare(v); } catch(e){ kaynak = v; } }
+    okuyucu.detect(kaynak).then(function(k){
       if(k && k.length && k[0].rawValue){
         var kod = String(k[0].rawValue).trim();
         if(dogrulaKip){ dogrulaOku(kod); taraZ = setTimeout(tara, 350); return; }
