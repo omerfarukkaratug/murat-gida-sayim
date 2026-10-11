@@ -1301,11 +1301,19 @@
   function kesitKare(v){
     var vw = v.videoWidth, vh = v.videoHeight, W = v.clientWidth, H = v.clientHeight;
     if(!vw || !vh || !W || !H) return v;
-    var olcek = Math.max(W / vw, H / vh), gw = W / olcek, gh = H / olcek, tur = (kesitSira++) % 3;
+    var olcek = Math.max(W / vw, H / vh), gw = W / olcek, gh = H / olcek, tur = (kesitSira++) % 4;
+    if(!kesitTuval){ kesitTuval = document.createElement('canvas'); kesitCtx = kesitTuval.getContext('2d', { willReadFrequently: true }); }
+    if(tur === 3){ // ürün yan/dik duruyorsa: ortadaki dikey şerit 90° çevrilerek okunur
+      var dw = Math.min(gw, gh) * 0.7, dh = gh, dk = Math.min(1.4, 1400 / dh), dx = (vw - dw) / 2, dy = (vh - gh) / 2;
+      kesitTuval.width = Math.round(dh * dk); kesitTuval.height = Math.round(dw * dk);
+      kesitCtx.translate(kesitTuval.width, 0); kesitCtx.rotate(Math.PI / 2);
+      kesitCtx.drawImage(v, dx, dy, dw, dh, 0, 0, dw * dk, dh * dk);
+      kesitCtx.setTransform(1, 0, 0, 1, 0, 0);
+      return kesitTuval;
+    }
     var sw = gw * (tur === 1 ? 1 : tur === 2 ? 0.6 : 0.84), sh = gh * (tur === 1 ? 1 : tur === 2 ? 0.42 : 0.76);
     var sx = (vw - gw) / 2 + (gw - sw) / 2, sy = (vh - gh) / 2 + (gh - sh) / 2;
     var k = tur === 2 ? Math.min(1.8, 1400 / sw) : Math.min(1, 1280 / sw);
-    if(!kesitTuval){ kesitTuval = document.createElement('canvas'); kesitCtx = kesitTuval.getContext('2d', { willReadFrequently: true }); }
     kesitTuval.width = Math.round(sw * k); kesitTuval.height = Math.round(sh * k);
     kesitCtx.drawImage(v, sx, sy, sw, sh, 0, 0, kesitTuval.width, kesitTuval.height);
     return kesitTuval;

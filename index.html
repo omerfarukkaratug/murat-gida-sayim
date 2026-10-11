@@ -81,25 +81,11 @@
   header .sub{font-size:11px; color:var(--muted); font-family:var(--mono);}
   .screen{height:calc(100 * var(--eh) - 4px); display:flex; flex-direction:column;}
   .hidden{display:none !important;}
-  /* YAN ÇEVİRME: telefon yan dönse de ekran DÖNMEZ. iPhone yön kilidine izin vermediği
-     için, telefon yan dönünce bütün sayfa ters yöne 90° çevrilir; uygulama telefona göre
-     hep dikey kalır (kilitli gibi). --eh/--ew: dikey ekranın %1 yüksekliği/genişliği. */
+  /* YAN ÇEVİRME: telefon yan dönünce uygulama da diğer uygulamalar gibi döner ve ekranı
+     tam genişlikte kullanır; iPhone yazıları kendiliğinden büyütmez.
+     --eh/--ew: ekranın %1 yüksekliği/genişliği (ölçüler tek yerden yönetilsin diye). */
   :root{--eh:1dvh; --ew:1vw;}
   html{-webkit-text-size-adjust:100%; text-size-adjust:100%;}
-  html.dondur{--eh:calc((100vw - env(safe-area-inset-left) - env(safe-area-inset-right)) / 100); --ew:1vh;}
-  html.dondur body{position:fixed; top:0; left:0; margin:0; width:100vh; height:calc(100vw - env(safe-area-inset-left) - env(safe-area-inset-right)); transform-origin:0 0;}
-  html.dondur:not(.sag) body{transform:translate(env(safe-area-inset-left), 100vh) rotate(-90deg);}
-  html.dondur.sag body{transform:translate(calc(100vw - env(safe-area-inset-right)), 0) rotate(90deg);}
-  /* iPhone: çevirme JavaScript'i beklemeden, ekran yan döndüğü AN CSS ile uygulanır
-     (@supports satırı yalnızca iPhone/iPad Safari'de geçerlidir). Yön, JS gelene kadar sola varsayılır. */
-  @supports (-webkit-touch-callout: none){
-    @media (orientation: landscape) and (max-height: 600px){
-    html{--eh:calc((100vw - env(safe-area-inset-left) - env(safe-area-inset-right)) / 100); --ew:1vh;}
-    html body{position:fixed; top:0; left:0; margin:0; width:100vh; height:calc(100vw - env(safe-area-inset-left) - env(safe-area-inset-right)); transform-origin:0 0;}
-    html:not(.sag) body{transform:translate(env(safe-area-inset-left), 100vh) rotate(-90deg);}
-    html.sag body{transform:translate(calc(100vw - env(safe-area-inset-right)), 0) rotate(90deg);}
-    }
-  }
 
   /* SETUP */
   #setup{padding:18px 16px 28px; overflow-y:auto; background:var(--bg);}
@@ -390,7 +376,7 @@
   <header style="border:none; padding:0 0 16px; background:transparent; display:flex; align-items:flex-start; justify-content:space-between;">
     <div>
       <h1><img src="logo-header.png" alt="Murat Gıda" style="height:30px; width:auto; display:block;"></h1>
-      <div class="sub">MK ERP · Murat Gıda • offline • Android • build 204</div>
+      <div class="sub">MK ERP · Murat Gıda • offline • Android • build 206</div>
     </div>
     <button type="button" id="themeToggleBtn" title="Tema seç" style="background:var(--panel2); border:1.5px solid var(--line); color:var(--text); width:34px; height:34px; border-radius:50%; font-size:15px; padding:0; display:flex; align-items:center; justify-content:center; flex-shrink:0;">🎨</button>
   </header>
@@ -2873,7 +2859,6 @@
   function wireKeyboardAwarePanel(panelEl, inputEls, confirmBtnId){
     function adjust(){
       if(!window.visualViewport || panelEl.classList.contains('hidden')) return;
-      if(document.documentElement.classList.contains('dondur') || (window.matchMedia && window.matchMedia('(orientation: landscape) and (max-height: 600px)').matches && /iP(hone|od)/.test(navigator.userAgent))){ panelEl.style.maxHeight = ''; return; }
       var top = panelEl.getBoundingClientRect().top;
       var available = window.visualViewport.height - Math.max(top, 0);
       panelEl.style.maxHeight = Math.max(available, 220) + 'px';
@@ -3322,15 +3307,26 @@
       if(!vw || !vh || !W || !H) return videoEl;
       var olcek = Math.max(W / vw, H / vh);           // object-fit: cover
       var gw = W / olcek, gh = H / olcek;              // ekranda görünen kısım (video pikseli)
-      // Her karede sırayla üç farklı kesit denenir (bir barkod birinde okunmazsa diğerinde okunur):
+      // Her karede sırayla dört farklı kesit denenir (bir barkod birinde okunmazsa diğerinde okunur):
       //  0: çerçeve + pay (eskisi) · 1: ekranda görünen alanın tamamı (uzak/yamuk tutulan barkod)
       //  2: ortadaki dar şerit BÜYÜTÜLEREK (küçük barkodlar, EAN-8, sigara/ilaç kutusu gibi ince çizgiler)
-      var tur = (kesitSira++) % 3;
+      //  3: ortadaki DİKEY şerit 90° ÇEVRİLEREK (ürün yan/dik duruyorsa barkod dikey görünür;
+      //     telefonu çevirmeye gerek kalmaz). Baş aşağı (ters) barkodu motor zaten okur.
+      var tur = (kesitSira++) % 4;
+      if(!tuval){ tuval = document.createElement('canvas'); tuvalCtx = tuval.getContext('2d', { willReadFrequently: true }); }
+      if(tur === 3){
+        var dw = Math.min(gw, gh) * 0.7, dh = gh, dk = Math.min(1.4, 1400 / dh);
+        var dx = (vw - dw) / 2, dy = (vh - gh) / 2;
+        tuval.width = Math.round(dh * dk); tuval.height = Math.round(dw * dk);   // en/boy yer değiştirir
+        tuvalCtx.translate(tuval.width, 0); tuvalCtx.rotate(Math.PI / 2);
+        tuvalCtx.drawImage(videoEl, dx, dy, dw, dh, 0, 0, dw * dk, dh * dk);
+        tuvalCtx.setTransform(1, 0, 0, 1, 0, 0);
+        return tuval;
+      }
       var oranW = tur === 1 ? 1 : tur === 2 ? 0.6 : 0.84, oranH = tur === 1 ? 1 : tur === 2 ? 0.42 : 0.76;
       var sw = gw * oranW, sh = gh * oranH;
       var sx = (vw - gw) / 2 + (gw - sw) / 2, sy = (vh - gh) / 2 + (gh - sh) / 2;
       var kucult = tur === 2 ? Math.min(1.8, 1400 / sw) : Math.min(1, 1280 / sw);
-      if(!tuval){ tuval = document.createElement('canvas'); tuvalCtx = tuval.getContext('2d', { willReadFrequently: true }); }
       tuval.width = Math.round(sw * kucult); tuval.height = Math.round(sh * kucult);
       tuvalCtx.drawImage(videoEl, sx, sy, sw, sh, 0, 0, tuval.width, tuval.height);
       return tuval;
@@ -7079,30 +7075,9 @@
   setInterval(updateStatus, 8000);
 
   // ---------- YAN ÇEVİRME ----------
-  // Telefon yan çevrilince uyarı çıkmaz, ekran da DÖNMEZ: sayfa ters yöne çevrilir,
-  // uygulama telefona göre dikey kalır (bkz. CSS "YAN ÇEVİRME").
-  // Android'de ana ekrana eklenmiş uygulama manifest ile zaten dik kalır; kilit denenir.
+  // Telefon yan çevrilince uyarı çıkmaz; uygulama normal şekilde döner (bkz. CSS "YAN ÇEVİRME").
+  // Android'de ana ekrana eklenmiş uygulama manifest ile dik kalır; kilit denenir.
   try { if(screen.orientation && screen.orientation.lock) screen.orientation.lock('portrait').catch(function(){}); } catch(e){}
-  (function(){
-    function aci(){
-      if(typeof window.orientation === 'number') return window.orientation;
-      if(screen.orientation && typeof screen.orientation.angle === 'number') return screen.orientation.angle;
-      return 0;
-    }
-    function guncelle(){
-      // Sadece dokunmatik TELEFONLAR (kısa kenar < 600): bilgisayar/tablette hiçbir şey yapılmaz.
-      var dokunmatik = (window.matchMedia && window.matchMedia('(pointer: coarse)').matches) || navigator.maxTouchPoints > 0;
-      var a = ((aci() % 360) + 360) % 360, h = document.documentElement;
-      var yan = dokunmatik && Math.min(screen.width || 0, screen.height || 0) < 600 && (a === 90 || a === 270);
-      h.classList.toggle('dondur', yan);
-      h.classList.toggle('sol', yan && a === 90);   // telefon sola yatırıldı → içerik -90°
-      h.classList.toggle('sag', yan && a === 270);  // sağa yatırıldı → +90°
-    }
-    window.addEventListener('orientationchange', function(){ guncelle(); setTimeout(guncelle, 60); setTimeout(guncelle, 300); });
-    if(screen.orientation && screen.orientation.addEventListener) screen.orientation.addEventListener('change', guncelle);
-    window.addEventListener('resize', guncelle);
-    guncelle();
-  })();
 
   // ---------- GÜNCELLEME: kullanıcı kontrollü ----------
   // Eskiden yeni sürüm gelir gelmez sayfa KENDİLİĞİNDEN yenileniyordu; sayımın
