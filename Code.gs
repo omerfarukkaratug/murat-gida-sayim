@@ -8,7 +8,7 @@
 // bir sürüm dağıttıktan sonra /exec adresini boş açtığında burada yazan
 // numarayı görmelisin; index.html'in üstündeki "build" numarasıyla
 // eşleşecek şekilde ben her ikisini birlikte güncelliyorum.
-var GS_VERSION = 'build173';
+var GS_VERSION = 'build174';
 
 // Sheets'te "Saat" sütunu zaman biçimli olarak algılanırsa, hücre değeri düz
 // metin değil bir Date nesnesi olarak gelir ve String(...) çirkin bir çıktı
@@ -1020,7 +1020,7 @@ function saveCariBulk(entries) {
 //      (telefon "emin olamadım" diye tekrar yollarsa çift satır oluşmaz).
 //   2) "Mal Giriş/Çıkış E-postası" tanımlıysa CSV eki olarak mail gider.
 //   3) Sunucudaki PowerShell script'i (mal-hareket-indir.ps1) kaydı
-//      masaüstüne CSV olarak indirir ve "Aktarıldı" damgası basar.
+//      masaüstüne Excel olarak indirir (Mal Alış / Mal Çıkış klasörü) ve "Aktarıldı" damgası basar.
 // ============================================================
 var MAL_HEADERS = ['Tarih', 'Saat', 'Tip', 'Cari', 'Fatura/İrsaliye No', 'Personel', 'Barkod', 'Ürün Adı', 'Stok Kodu', 'Miktar', 'Birim', 'Kayıt ID',
   'Belge Türü', 'Cari Kodu', 'Sebep', 'KDV %', 'Fiyat', 'Batch ID', 'Aktarıldı'];
@@ -1249,7 +1249,76 @@ function malBatchFromRows(rows) {
   batch.temelAd = asciiSlug(batch.cari, 30) + '_' + (batch.belgeNo ? asciiSlug(batch.belgeNo, 20) : 'belgesiz') + '_' +
     batch.tarih + '_' + String(batch.saat).substring(0, 5).replace(':', '') + '_' + batch.batchId.substring(0, 8);
   batch.dosyaAdi = batch.temelAd + '.csv';
+  // Okunur dosya adı (mail eki ve masaüstü dosyası): "Belge türü Cari adı Belge no"
+  // örn. "Satış Fişi ABC KİMYA 20260002". Masaüstünde Mal Alış / Mal Çıkış klasörüne ayrılır.
+  batch.ad = malDosyaAdi(batch);
+  batch.klasor = batch.hareket === 'Çıkış' ? 'Mal Çıkış' : 'Mal Alış';
   return batch;
+}
+
+function malDosyaAdi(batch) {
+  var ad = [batch.belgeTuru, batch.cari, batch.belgeNo].filter(function (x) { return x && String(x).trim(); }).join(' ');
+  ad = ad.replace(/[\\\/:*?"<>|\r\n\t]+/g, ' ').replace(/\s+/g, ' ').replace(/^[\s.]+|[\s.]+$/g, '');
+  return (ad || 'Mal kaydı').substring(0, 120);
+}
+
+// ---- Mal kaydının Excel (.xlsx) dosyası ----
+// ERP12'nin mal aktarım şablonuyla aynı sütunlar. Sayılar GERÇEK SAYI olarak yazılır:
+// eski CSV'de fiyat "12,50" diye metin gidiyordu; ERP bilgisayarı ondalık ayırıcı olarak
+// NOKTA kullandığı için virgülü yok sayıp 1250 okuyordu. Excel hücresindeki sayı bölgeden
+// bağımsızdır, bu sorun olmaz. Barkod / stok kodu metin olarak yazılır (baştaki 0'lar korunur).
+function xmlKac(v) {
+  return String(v === null || v === undefined ? '' : v).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;')
+    .replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F]/g, '');
+}
+function malXlsxParcalari(batch) {
+  var metinler = [], metinNo = {};
+  function sIdx(t) { t = String(t); if (!(t in metinNo)) { metinNo[t] = metinler.length; metinler.push(t); } return metinNo[t]; }
+  function sutun(i) { return String.fromCharCode(65 + i); }
+  function hucre(ref, v, tur) {
+    if (v === '' || v === null || v === undefined) return '';
+    if (tur === 'n' && !isNaN(Number(v))) return '<c r="' + ref + '"><v>' + Number(v) + '</v></c>';
+    return '<c r="' + ref + '" t="s"><v>' + sIdx(v) + '</v></c>';
+  }
+  var turler = ['s', 's', 's', 'n', 'n', 'n', 'n', 'n', 's', 's', 'n'];
+  var satirlar = [MAL_CSV_HEADERS].concat(batch.items.map(function (it) {
+    return [it.barkod, it.stokKodu, it.urunAdi, it.miktar, it.fiyat, it.kdv, 0, '', it.birim, it.grup, it.sfiyat];
+  }));
+  var veri = satirlar.map(function (r, ri) {
+    return '<row r="' + (ri + 1) + '">' + r.map(function (v, ci) { return hucre(sutun(ci) + (ri + 1), v, ri === 0 ? 's' : turler[ci]); }).join('') + '</row>';
+  }).join('');
+  var X = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>';
+  var M = 'http://schemas.openxmlformats.org/spreadsheetml/2006/main', R = 'http://schemas.openxmlformats.org/officeDocument/2006/relationships';
+  var PR = 'http://schemas.openxmlformats.org/package/2006/relationships';
+  return [
+    ['[Content_Types].xml', X + '<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/>' +
+      '<Override PartName="/xl/workbook.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/>' +
+      '<Override PartName="/xl/worksheets/sheet1.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/>' +
+      '<Override PartName="/xl/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.styles+xml"/>' +
+      '<Override PartName="/xl/sharedStrings.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sharedStrings+xml"/>' +
+      '<Override PartName="/docProps/core.xml" ContentType="application/vnd.openxmlformats-package.core-properties+xml"/>' +
+      '<Override PartName="/docProps/app.xml" ContentType="application/vnd.openxmlformats-officedocument.extended-properties+xml"/></Types>'],
+    ['_rels/.rels', X + '<Relationships xmlns="' + PR + '"><Relationship Id="rId1" Type="' + R + '/officeDocument" Target="xl/workbook.xml"/>' +
+      '<Relationship Id="rId2" Type="http://schemas.openxmlformats.org/package/2006/relationships/metadata/core-properties" Target="docProps/core.xml"/>' +
+      '<Relationship Id="rId3" Type="' + R + '/extended-properties" Target="docProps/app.xml"/></Relationships>'],
+    ['docProps/core.xml', X + '<cp:coreProperties xmlns:cp="http://schemas.openxmlformats.org/package/2006/metadata/core-properties" xmlns:dc="http://purl.org/dc/elements/1.1/" xmlns:dcterms="http://purl.org/dc/terms/" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"><dc:title>' + xmlKac(batch.ad) + '</dc:title><dc:creator>MK ERP</dc:creator></cp:coreProperties>'],
+    ['docProps/app.xml', X + '<Properties xmlns="http://schemas.openxmlformats.org/officeDocument/2006/extended-properties"><Application>Microsoft Excel</Application></Properties>'],
+    ['xl/workbook.xml', X + '<workbook xmlns="' + M + '" xmlns:r="' + R + '"><sheets><sheet name="Sayfa1" sheetId="1" r:id="rId1"/></sheets></workbook>'],
+    ['xl/_rels/workbook.xml.rels', X + '<Relationships xmlns="' + PR + '"><Relationship Id="rId1" Type="' + R + '/worksheet" Target="worksheets/sheet1.xml"/>' +
+      '<Relationship Id="rId2" Type="' + R + '/styles" Target="styles.xml"/><Relationship Id="rId3" Type="' + R + '/sharedStrings" Target="sharedStrings.xml"/></Relationships>'],
+    ['xl/styles.xml', X + '<styleSheet xmlns="' + M + '"><fonts count="1"><font><sz val="11"/><name val="Calibri"/></font></fonts><fills count="2"><fill><patternFill patternType="none"/></fill><fill><patternFill patternType="gray125"/></fill></fills>' +
+      '<borders count="1"><border><left/><right/><top/><bottom/><diagonal/></border></borders><cellStyleXfs count="1"><xf numFmtId="0" fontId="0" fillId="0" borderId="0"/></cellStyleXfs>' +
+      '<cellXfs count="1"><xf numFmtId="0" fontId="0" fillId="0" borderId="0" xfId="0"/></cellXfs><cellStyles count="1"><cellStyle name="Normal" xfId="0" builtinId="0"/></cellStyles></styleSheet>'],
+    ['xl/worksheets/sheet1.xml', X + '<worksheet xmlns="' + M + '" xmlns:r="' + R + '"><cols><col min="1" max="2" width="16" customWidth="1"/><col min="3" max="3" width="40" customWidth="1"/></cols><sheetData>' + veri + '</sheetData></worksheet>'],
+    ['xl/sharedStrings.xml', X + '<sst xmlns="' + M + '" count="' + metinler.length + '" uniqueCount="' + metinler.length + '">' +
+      metinler.map(function (t) { return '<si><t xml:space="preserve">' + xmlKac(t) + '</t></si>'; }).join('') + '</sst>']
+  ];
+}
+function malXlsxBlob(batch) {
+  var parcalar = malXlsxParcalari(batch).map(function (p) { return Utilities.newBlob(p[1], 'application/xml', p[0]); });
+  var blob = Utilities.zip(parcalar, batch.ad + '.xlsx');
+  blob.setContentType('application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+  return blob;
 }
 
 // Yönetici Paneli'nde ayrıca bir şey yapılmasa bile mail hep bu adrese gitsin diye
@@ -1264,10 +1333,10 @@ function sendMalMail(batch) {
   var raw = PropertiesService.getScriptProperties().getProperty('MAL_EMAIL');
   var to = (raw === null) ? VARSAYILAN_MAL_EMAIL : raw;
   if (!to) return false;
-  var blob = Utilities.newBlob('\uFEFF' + batch.csv, 'text/csv', batch.dosyaAdi);
+  var blob = malXlsxBlob(batch);
   MailApp.sendEmail({
     to: to,
-    subject: 'Mal ' + batch.hareket + ' — ' + batch.belgeTuru + ' — ' + batch.cari + (batch.belgeNo ? (' — No ' + batch.belgeNo) : ''),
+    subject: batch.ad + ' (Mal ' + batch.hareket + ')',
     body: 'Mal ' + batch.hareket.toLowerCase() + ' kaydı tamamlandı.\n\n' +
       'Belge: ' + batch.belgeTuru + (batch.belgeNo ? (' · No ' + batch.belgeNo) : '') + '\n' +
       'Cari: ' + batch.cari + (batch.cariKodu ? (' (' + batch.cariKodu + ')') : '') + '\n' +
@@ -1275,7 +1344,7 @@ function sendMalMail(batch) {
       (batch.aciklama ? ('Açıklama: ' + batch.aciklama + '\n') : '') +
       'Kalem sayısı: ' + batch.kalemSayisi + ' · Toplam miktar: ' + trSayi(batch.toplamMiktar) + '\n' +
       'Kaydeden: ' + batch.personel + ' · ' + batch.tarih + ' ' + batch.saat + '\n\n' +
-      'Ürün listesi ekte CSV olarak bulunuyor.',
+      'Ürün listesi ekte Excel dosyası olarak bulunuyor (ERP12 mal aktarım şablonu).',
     attachments: [blob]
   });
   return true;
@@ -1302,7 +1371,12 @@ function malExport(user, pass, callback) {
       if (!groups[b]) { groups[b] = []; order.push(b); }
       groups[b].push(r);
     });
-    var batches = order.slice(0, 25).map(function (b) { return malBatchFromRows(groups[b]); });
+    var batches = order.slice(0, 25).map(function (b) {
+      var bt = malBatchFromRows(groups[b]);
+      // Yeni masaüstü programı (mal-hareket-indir.ps1, build 174+) Excel dosyasını doğrudan kaydeder.
+      try { bt.xlsx = Utilities.base64Encode(malXlsxBlob(bt).getBytes()); } catch (xe) { bt.xlsx = ''; }
+      return bt;
+    });
     // PowerShell'in son bağlanma zamanı her seferinde, indirilecek kayıt
     // varsa ayrıca günlüğe yazılır (boş kontroller günlüğü doldurmasın).
     sonKaydet('masaustu_kontrol', String(user || ''), order.length + ' bekleyen kayıt', false);
