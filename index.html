@@ -376,7 +376,7 @@
   <header style="border:none; padding:0 0 16px; background:transparent; display:flex; align-items:flex-start; justify-content:space-between;">
     <div>
       <h1><img src="logo-header.png" alt="Murat Gıda" style="height:30px; width:auto; display:block;"></h1>
-      <div class="sub">MK ERP · Murat Gıda • offline • Android • build 207</div>
+      <div class="sub">MK ERP · Murat Gıda • offline • Android • build 208</div>
     </div>
     <button type="button" id="themeToggleBtn" title="Tema seç" style="background:var(--panel2); border:1.5px solid var(--line); color:var(--text); width:34px; height:34px; border-radius:50%; font-size:15px; padding:0; display:flex; align-items:center; justify-content:center; flex-shrink:0;">🎨</button>
   </header>
@@ -417,6 +417,7 @@
       <button type="button" class="menuBtn hidden" id="menuEtiketBtn"><span class="menuIcon">🏷️</span><span>Etiket Yazdır<span class="menuSub">Raf etiketi, A5 / A4 / A3 fiyat afişi</span></span></button>
       <button type="button" class="menuBtn hidden" id="menuDogrulaBtn"><span class="menuIcon">✅</span><span>QR Etiket Doğrulama<span class="menuSub">Raftaki etiketin fiyatı güncel mi, okutup gör</span></span></button>
       <button type="button" class="menuBtn hidden" id="menuMesaiBtn"><span class="menuIcon">🕐</span><span>Mesai<span class="menuSub">Giriş/çıkış, vardiya, izin, duyuru</span></span></button>
+      <button type="button" class="menuBtn hidden" id="menuPlasiyerBtn"><span class="menuIcon">🚚</span><span>Plasiyer<span class="menuSub">Müşterilerim, sipariş, araçtan satış, tahsilat notu</span></span></button>
       <button type="button" class="menuBtn hidden" id="menuHareketBtn"><span class="menuIcon">🔁</span><span>Ürün Hareketleri<span class="menuSub">Kimden kaça geldi, kime satıldı</span></span></button>
       <button type="button" class="menuBtn hidden" id="menuStokHrkBtn"><span class="menuIcon">📦</span><span>Stok Hareketleri<span class="menuSub">Ürünün tüm giriş/çıkışları, fatura ve fiş detayı</span></span></button>
       <button type="button" class="menuBtn hidden" id="menuCariHrkBtn"><span class="menuIcon">📒</span><span>Cari Hareketleri<span class="menuSub">Cari ekstresi: borç, alacak, bakiye</span></span></button>
@@ -708,6 +709,18 @@
       </div>
     </div>
     <iframe id="mesaiFrame" title="Mesai" allow="geolocation; camera; fullscreen; screen-wake-lock" style="flex:1; width:100%; border:0; background:var(--bg);"></iframe>
+  </div>
+
+  <!-- PLASİYER: ayrı dosyadaki plasiyer.html uygulamanın içinde açılır. ERP'ye hiçbir şey yazmaz. -->
+  <div id="plasiyerScreen" class="hidden" style="position:fixed; inset:0; background:var(--bg); z-index:50; display:flex; flex-direction:column;">
+    <div style="padding:16px 16px 10px; border-bottom:1px solid var(--line); background:var(--panel); box-shadow:var(--sh-sm);">
+      <div class="hizliGecis" data-ekran="plasiyer"></div>
+      <div style="display:flex; align-items:center; justify-content:space-between;">
+        <div style="font-weight:800; font-size:16px;">🚚 Plasiyer</div>
+        <button type="button" id="plasiyerCloseBtn" aria-label="Kapat" style="width:34px; height:34px; border-radius:50%; background:var(--panel2); border:1.5px solid var(--line); color:var(--text); font-size:18px; line-height:1; padding:0; display:flex; align-items:center; justify-content:center;">✕</button>
+      </div>
+    </div>
+    <iframe id="plasiyerFrame" title="Plasiyer" allow="camera" style="flex:1; width:100%; border:0; background:var(--bg);"></iframe>
   </div>
 
   <div id="hareketScreen" class="hidden" style="position:fixed; inset:0; background:var(--bg); z-index:50; display:flex; flex-direction:column;">
@@ -1706,6 +1719,8 @@
   // Fiyat etiketi (etiket.html): "etiket" yetkisi + şube içinde olma (fiyat gösterdiği için).
   function canSeeEtiket(){ return hasPerm('etiket') && konumIzinli(); }
   function canSeeMesai(){ return hasPerm('mesai') || hasPerm('mesai_yonetim'); }
+  // Plasiyer: sahada çalışır, şube konumu ŞART DEĞİL (fiyat/maliyet yetkisi sunucuda ayrıca denetlenir).
+  function canSeePlasiyer(){ return hasPerm('plasiyer') || hasPerm('plasiyer_yonetim'); }
   function canSeeHareket(){ return hasPerm('hareket') && konumIzinli(); }
   function canSeeCariHrk(){ return hasPerm('cari_hareket') && konumIzinli(); }
   function canSeeStokHrk(){ return hasPerm('stok_hareket') && konumIzinli(); }
@@ -1836,12 +1851,13 @@
     document.getElementById('menuCariHrkBtn').classList.toggle('hidden', !canSeeCariHrk());
     document.getElementById('menuStokHrkBtn').classList.toggle('hidden', !canSeeStokHrk());
     document.getElementById('menuMesaiBtn').classList.toggle('hidden', !canSeeMesai());
+    document.getElementById('menuPlasiyerBtn').classList.toggle('hidden', !canSeePlasiyer());
     document.getElementById('menuEtiketBtn').classList.toggle('hidden', !canSeeEtiket());
     startBtn.textContent = (state.session.scans && state.session.scans.length > 0) ? '▶ Sayıma Devam Et' : 'Sayıma Başla';
     konumKontrol(); // girişte (açılışta ve giriş yapınca) bir kez
   }
   function showLoginUI(){
-    closeMesaiScreen();
+    closeMesaiScreen(); closePlasiyerScreen();
     loginCardEl.classList.remove('hidden');
     loggedInCardEl.classList.add('hidden');
     document.getElementById('homeMenuScreen').classList.add('hidden');
@@ -1901,6 +1917,29 @@
     document.getElementById('mesaiFrame').src = 'about:blank'; // kod ekranı/ekran kilidi dursun
   }
   document.getElementById('menuMesaiBtn').addEventListener('click', openMesaiScreen);
+
+  // ---------- PLASİYER (plasiyer.html çerçeve içinde) ----------
+  // Kayıtlar plasiyer.html'in kendi kuyruğunda durur; çerçeve kapanınca gönderilmemiş kayıt kaybolmaz.
+  function openPlasiyerScreen(){
+    if(!canSeePlasiyer()){ warnToast('Plasiyer yetkin yok — yöneticinden iste'); return; }
+    try { save(); } catch(e){}
+    document.getElementById('plasiyerFrame').src = 'plasiyer.html?gomulu=1&t=' + Date.now();
+    document.getElementById('plasiyerScreen').classList.remove('hidden');
+    hizliGecisCiz();
+  }
+  function closePlasiyerScreen(){
+    var el = document.getElementById('plasiyerScreen');
+    if(!el || el.classList.contains('hidden')) return;
+    el.classList.add('hidden');
+    document.getElementById('plasiyerFrame').src = 'about:blank'; // kamera kapansın
+  }
+  // Geri tuşu: önce plasiyer ekranının içindeki pencere/sipariş kapanır, yoksa ekranın kendisi.
+  function plasiyerGeri(){
+    try { var w = document.getElementById('plasiyerFrame').contentWindow; if(w && typeof w.mkGeri === 'function' && w.mkGeri()) return; } catch(e){}
+    closePlasiyerScreen();
+  }
+  document.getElementById('menuPlasiyerBtn').addEventListener('click', openPlasiyerScreen);
+  document.getElementById('plasiyerCloseBtn').addEventListener('click', closePlasiyerScreen);
   // Etiket ayrı sayfada açılır (telefonun yazdırma penceresi tam sayfa ister).
   // Sayım kayıtları telefonda saklı; "Uygulamaya dön" ile kaldığın yere gelirsin.
   document.getElementById('menuEtiketBtn').addEventListener('click', function(){ try { save(); } catch(e){} window.location.href = 'etiket.html'; });
@@ -4924,7 +4963,8 @@
   var HIZLI_GECIS = [
     ['sayim', '📋', 'Sayım', 'menuSayimBtn'], ['giris', '📥', 'Giriş', 'menuMalGirisBtn'],
     ['cikis', '📤', 'Çıkış', 'menuMalCikisBtn'], ['fiyat', '💰', 'Fiyat', 'menuFiyatBtn'],
-    ['hareket', '🔁', 'Hareket', 'menuHareketBtn'], ['stok', '📦', 'Stok', 'menuStokHrkBtn'], ['cari', '📒', 'Cari', 'menuCariHrkBtn'], ['mesai', '🕐', 'Mesai', 'menuMesaiBtn']
+    ['hareket', '🔁', 'Hareket', 'menuHareketBtn'], ['stok', '📦', 'Stok', 'menuStokHrkBtn'], ['cari', '📒', 'Cari', 'menuCariHrkBtn'], ['mesai', '🕐', 'Mesai', 'menuMesaiBtn'],
+    ['plasiyer', '🚚', 'Plasiyer', 'menuPlasiyerBtn']
   ];
   function hizliGecisCiz(){
     var gorunen = HIZLI_GECIS.filter(function(g){ var b = document.getElementById(g[3]); return b && !b.classList.contains('hidden'); });
@@ -4940,6 +4980,7 @@
     if(malAcik && malSaving){ warnToast('Kayıt gönderiliyor — bitince geç'); return; }
     if(hedef === 'cikis' && !hasPerm('mal_cikis')){ warnToast('Mal Çıkış yetkin yok — yöneticinden iste'); return; }
     if(hedef === 'mesai' && !canSeeMesai()){ warnToast('Mesai yetkin yok — yöneticinden iste'); return; }
+    if(hedef === 'plasiyer' && !canSeePlasiyer()){ warnToast('Plasiyer yetkin yok — yöneticinden iste'); return; }
     if(hedef === 'stok' && !canSeeStokHrk()){ warnToast(hasPerm('stok_hareket') ? 'Şube dışında stok hareketleri gizli' : 'Stok Hareketleri yetkin yok — yöneticinden iste'); return; }
     if(hedef === 'cari' && !canSeeCariHrk()){ warnToast(hasPerm('cari_hareket') ? 'Şube dışında cari hareketleri gizli' : 'Cari Hareketleri yetkin yok — yöneticinden iste'); return; }
     if(hedef === 'hareket' && !canSeeHareket()){ warnToast(hasPerm('hareket') ? 'Şube dışında ürün hareketleri gizli' : 'Ürün Hareketleri yetkin yok — yöneticinden iste'); return; }
@@ -4953,6 +4994,7 @@
     if(!hareketScreenEl.classList.contains('hidden')) closeHareketScreen();
     closeCariHrkScreen(); closeStokHrkScreen();
     if(hedef !== 'mesai') closeMesaiScreen();
+    if(hedef !== 'plasiyer') closePlasiyerScreen();
     if(hedef === 'sayim'){
       // Sayım ekranı (okutma) açıksa zaten oradayız; değilse sayım başlangıcı.
       if(document.getElementById('main').classList.contains('hidden')){
@@ -4966,6 +5008,7 @@
     else if(hedef === 'cari') openCariHrkScreen();
     else if(hedef === 'stok') openStokHrkScreen();
     else if(hedef === 'mesai'){ if(document.getElementById('mesaiScreen').classList.contains('hidden')) openMesaiScreen(); }
+    else if(hedef === 'plasiyer'){ if(document.getElementById('plasiyerScreen').classList.contains('hidden')) openPlasiyerScreen(); }
     hizliGecisCiz();
   }
   document.addEventListener('click', function(e){
@@ -5739,6 +5782,10 @@
     { key: 'stok_hareket', label: '📦 Stok Hareketleri' },
     { key: 'mesai', label: '🕐 Mesai (personel)' },
     { key: 'mesai_yonetim', label: '⭐ Ekip Lideri' },
+    // Plasiyer (saha satış): ERP'ye yazmaz. Maliyet = tedarikçi, alış fiyatı, kâr marjı.
+    { key: 'plasiyer', label: '🚚 Plasiyer' },
+    { key: 'plasiyer_maliyet', label: '🚚 Plasiyer: maliyet/tedarikçi görür' },
+    { key: 'plasiyer_yonetim', label: '🚚 Plasiyer Yönetimi (ayar, atama, iptal)' },
     // Şube dışındayken de fiyat/stok görebilir (konum kısıtlamasından muaf).
     { key: 'konum_serbest', label: '🌍 Şube Dışında da Görür' },
     { key: 'etiket', label: '🏷️ Etiket Yazdırma' },
@@ -6393,6 +6440,7 @@
     ['hareketScreen', function(){ closeHareketScreen(); }],
     ['priceScreen', function(){ closePriceScreen(); }],
     ['mesaiScreen', function(){ closeMesaiScreen(); }],
+    ['plasiyerScreen', function(){ plasiyerGeri(); }],
     ['malHareketScreen', function(){ if(!malSaving) closeMalHareketScreen(); }]
   ];
   var geriKayitli = false, geriYutuluyor = false;
