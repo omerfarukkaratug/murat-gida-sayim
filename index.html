@@ -376,7 +376,7 @@
   <header style="border:none; padding:0 0 16px; background:transparent; display:flex; align-items:flex-start; justify-content:space-between;">
     <div>
       <h1><img src="logo-header.png" alt="Murat Gıda" style="height:30px; width:auto; display:block;"></h1>
-      <div class="sub">MK ERP · Murat Gıda • offline • Android • build 206</div>
+      <div class="sub">MK ERP · Murat Gıda • offline • Android • build 207</div>
     </div>
     <button type="button" id="themeToggleBtn" title="Tema seç" style="background:var(--panel2); border:1.5px solid var(--line); color:var(--text); width:34px; height:34px; border-radius:50%; font-size:15px; padding:0; display:flex; align-items:center; justify-content:center; flex-shrink:0;">🎨</button>
   </header>
@@ -5315,7 +5315,11 @@
         malSaveDone(false, 'Bu kaydın bir kısmı masaüstüne (ERP) aktarılmış, değişiklik sunucuya uygulanamadı (' + fark.mesaj + '). Yöneticiye haber ver — ürünler telefonda duruyor.');
         return;
       }
-      if(attempt < 4){ setTimeout(function(){ verifyMalBatch(url, batchId, expected, attempt + 1); }, 2500); return; }
+      // Sunucu yoğunken (büyük sekme, mail gönderimi) yazma 10-20 sn sürebiliyor: ~30 sn sabırla bekle.
+      if(attempt < 9){
+        malSaveBtnEl.textContent = '⏳ Sunucu onayı bekleniyor… (' + (attempt + 2) + ')';
+        setTimeout(function(){ verifyMalBatch(url, batchId, expected, attempt + 1); }, attempt < 3 ? 2500 : 3500); return;
+      }
       malSaveDone(false, 'Sunucudan doğru onay alınamadı (' + fark.mesaj + ') — ürünler telefonda duruyor. Bağlantıyı kontrol edip "Kaydet"e tekrar bas (çift kayıt oluşmaz).');
     }, 9000);
   }
