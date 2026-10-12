@@ -48,9 +48,18 @@ try {
     if (-not $AnaKlasor) { $AnaKlasor = Join-Path ([Environment]::GetFolderPath('Desktop')) "Mal Aktarim" }
 
     if (-not (Test-Path $GirisDosyasi)) { Yaz-Log "HATA: $GirisDosyasi yok (1. satir kullanici, 2. satir sifre)."; exit 1 }
-    $giris = @(Get-Content -Path $GirisDosyasi -Encoding UTF8 -TotalCount 2)
-    $kullanici = if ($giris.Count -ge 1) { ([string]$giris[0]).Trim() } else { "" }
-    $sifre     = if ($giris.Count -ge 2) { ([string]$giris[1]).Trim() } else { "" }
+    # Dosya Not Defteri'nde hangi kodlamayla kaydedilmis olursa olsun (ANSI / UTF-8 / Unicode)
+    # Turkce harfli sifre dogru okunsun.
+    $bayt = [System.IO.File]::ReadAllBytes($GirisDosyasi)
+    if ($bayt.Length -ge 2 -and $bayt[0] -eq 0xFF -and $bayt[1] -eq 0xFE) { $metin = [System.Text.Encoding]::Unicode.GetString($bayt) }
+    elseif ($bayt.Length -ge 2 -and $bayt[0] -eq 0xFE -and $bayt[1] -eq 0xFF) { $metin = [System.Text.Encoding]::BigEndianUnicode.GetString($bayt) }
+    else {
+        try { $metin = (New-Object System.Text.UTF8Encoding($false, $true)).GetString($bayt) }
+        catch { $metin = [System.Text.Encoding]::Default.GetString($bayt) }
+    }
+    $giris = @(($metin -replace [char]0xFEFF, '') -split "`r?`n" | ForEach-Object { $_.Trim() } | Where-Object { $_ -ne '' })
+    $kullanici = if ($giris.Count -ge 1) { [string]$giris[0] } else { "" }
+    $sifre     = if ($giris.Count -ge 2) { [string]$giris[1] } else { "" }
     if (-not $kullanici -or -not $sifre) { Yaz-Log "HATA: $GirisDosyasi icinde kullanici ya da sifre eksik."; exit 1 }
 
     # Sunucu yanitini UTF-8 olarak oku (Turkce harfler bozulmasin).
@@ -75,7 +84,7 @@ try {
     $toplam = 0
     for ($tur = 0; $tur -lt 20; $tur++) {
         $cevap = Sunucu-Get @{ action = "mal_export"; user = $kullanici; pass = $sifre }
-        if ($cevap.status -ne "ok") { Yaz-Log ("HATA: sunucu: " + $cevap.message); exit 1 }
+        if ($cevap.status -ne "ok") { Yaz-Log ("HATA: sunucu: " + $cevap.message + " (kullanici: '" + $kullanici + "', sifre " + $sifre.Length + " karakter okundu)"); exit 1 }
         $kayitlar = @($cevap.batches)
         if ($kayitlar.Count -eq 0) { break }
 
