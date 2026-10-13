@@ -89,6 +89,7 @@
   .sonuc{padding:10px 4px; border-bottom:1px solid var(--line); display:flex; gap:10px; align-items:center; cursor:pointer; user-select:none; -webkit-user-select:none; -webkit-touch-callout:none;}
   .sonuc .ad{flex:1; min-width:0; font-size:14px; font-weight:700;}
   .sonuc .ad small{display:block; font-weight:500; color:var(--muted); font-family:var(--mono); font-size:11.5px;}
+  .cesitBtn{font-family:var(--sans, inherit); font-size:12px; font-weight:800; padding:3px 9px; margin-top:3px; border-radius:8px; border:1.5px solid var(--accent, #1d4ed8); background:transparent; color:var(--accent, #1d4ed8); white-space:nowrap;}
   .sonuc .f{font-family:var(--mono); font-weight:800; white-space:nowrap;}
   .sonuc .adt{flex:none; width:66px; text-align:center; font-family:var(--mono); font-weight:800; font-size:17px; padding:9px 4px; border-radius:10px;}
   .sonuc .adt.dolu{border-color:var(--accent); background:#2563eb1f;}
@@ -467,7 +468,7 @@
         var g = db.transaction('catalog', 'readonly').objectStore('catalog').getAll();
         g.onsuccess = function(){
           var tum = g.result || [];
-          katalog = []; katalogBarkod = {}; katalogKod = {};
+          katalog = []; katalogBarkod = {}; katalogKod = {}; cesitIndeks = null; cesitOnbellek = {};
           tum.forEach(function(e){
             if(!e || !e.barcode) return;
             var u = { b: String(e.barcode), a: String(e.name || ''), k: String(e.stockCode || ''), f: sayi(e.price), kdv: sayi(e.kdv), af: sayi(e.af), c: Number(e.carpan) > 1 ? Number(e.carpan) : 1, birim: e.birim || '', st: sayi(e.oldStock) };
@@ -849,23 +850,46 @@
     if(son) return Number(son[1]) + ({ kg:'kg', gr:'g', g:'g', lt:'l', l:'l', ml:'ml', cl:'cl', mt:'m', m:'m', cm:'cm' })[son[2]];
     var a = /(\d+)\s*'?\s*(li|lu|lü|lı)\b/.exec(String(ad || '').toLocaleLowerCase('tr-TR')); return a ? a[1] + 'li' : '';
   }
+  // Ad sözcükleri: boy (2,5 LT), sayılar ve noktalama atılır; "TEM." → "tem".
+  function cesitSozcuk(ad){
+    return norm(ad).replace(/,/g, '.').replace(/(\d+(?:\.\d+)?)\s*(kg|gr|g|lt|l|ml|cl|mt|m|cm)\b/g, ' ').replace(/[^a-z0-9]+/g, ' ')
+      .split(' ').filter(function(w){ return w && !/^\d+$/.test(w) && !/^x\d*$/.test(w); });
+  }
+  var cesitIndeks = null;   // fiyat (kuruş) → [{u, s, boy}] — katalog yüklenince bir kez kurulur
+  function cesitIndeksKur(){
+    cesitIndeks = {};
+    katalog.forEach(function(k){
+      if(!isFinite(k.f) || !(k.f > 0)) return;
+      var a = Math.round(k.f * 100); (cesitIndeks[a] = cesitIndeks[a] || []).push({ u: k, s: null, boy: null });
+    });
+  }
   function cesitBul(u){
     if(!u || !isFinite(u.f) || !(u.f > 0)) return [];
     if(cesitOnbellek[u.b]) return cesitOnbellek[u.b];
-    var s0 = sozcuk(u.a), b0 = boyBul(u.a), gerek = Math.max(1, Math.min(3, s0.length - 3)), gorulen = {}, l = [];
+    if(!cesitIndeks) cesitIndeksKur();
+    var s0 = cesitSozcuk(u.a), b0 = boyBul(u.a), gorulen = {}, l = [];
+    if(!s0.length) return (cesitOnbellek[u.b] = []);
+    var gerek = s0.length >= 3 ? 2 : 1;
     gorulen[norm(u.a)] = 1;
-    for(var i = 0; i < katalog.length && l.length < 40; i++){
-      var k = katalog[i];
-      if(k.b === u.b || !isFinite(k.f) || Math.abs(k.f - u.f) > 0.004) continue;
-      var s1 = sozcuk(k.a), n = 0; while(n < s0.length && n < s1.length && s0[n] === s1[n]) n++;
-      if(n < gerek || boyBul(k.a) !== b0) continue;
-      var an = norm(k.a); if(gorulen[an]) continue; gorulen[an] = 1;
+    (cesitIndeks[Math.round(u.f * 100)] || []).forEach(function(x){
+      var k = x.u; if(k.b === u.b || l.length >= 40) return;
+      if(x.boy === null){ x.boy = boyBul(k.a); x.s = cesitSozcuk(k.a); }
+      if(x.boy !== b0) return;
+      var s1 = x.s, n = 0; while(n < s0.length && n < s1.length && s0[n] === s1[n]) n++;
+      var tamam = n >= Math.min(gerek, s1.length);
+      if(!tamam){   // sözcük sırası farklı yazılmış olabilir: biri hariç hepsi ortak
+        var ortak = s1.filter(function(w){ return s0.indexOf(w) !== -1; }).length;
+        tamam = s0[0] === s1[0] && ortak >= Math.max(2, Math.min(s0.length, s1.length) - 1);
+      }
+      if(!tamam) return;
+      var an = norm(k.a); if(gorulen[an]) return; gorulen[an] = 1;
       l.push(k);
-    }
+    });
+    l.sort(function(x, y){ return x.a.localeCompare(y.a, 'tr'); });
     cesitOnbellek[u.b] = l;
     return l;
   }
-  var cesitKaynak = null;
+  var cesitKaynak = null, cesitCizimde = false;
   function cesitAc(barkod){
     var u = katalogBarkod[barkod]; if(!u) return;
     cesitKaynak = u;
@@ -879,7 +903,8 @@
     if(!cesitKaynak || !B) return;
     var odak = document.activeElement;
     if(odak && odak.classList && odak.classList.contains('adt') && $('cesitListe').contains(odak)) odak.blur();
-    $('cesitListe').innerHTML = [cesitKaynak].concat(cesitBul(cesitKaynak)).map(sonucSatir).join('');
+    cesitCizimde = true;
+    try { $('cesitListe').innerHTML = [cesitKaynak].concat(cesitBul(cesitKaynak)).map(sonucSatir).join(''); } finally { cesitCizimde = false; }
   }
   $('cpHepsiBtn').addEventListener('click', function(){
     if(!cesitKaynak) return;
@@ -895,6 +920,7 @@
     var alt = [esc(u.b) + (u.k ? ' · ' + esc(u.k) : '')];
     if(stokGorur() && isFinite(u.st)) alt.push(u.st > 0 ? 'stok ' + miktarMetni(u.st) : '<span class="stokYok">stok yok</span>');
     var bkm = bekleyenMiktar(B.cariKod, u.b); if(bkm) alt.push('<span class="uyari">⏳ bekleyende ' + miktarMetni(bkm) + '</span>');
+    var cs = cesitCizimde ? [] : cesitBul(u); if(cs.length) alt.push('<button type="button" class="cesitBtn" data-cesit="' + esc(u.b) + '">🎨 ' + cs.length + ' çeşit</button>');
     if(s) alt.push('son ' + para(s.f) + (s.net === 0 ? ' brüt' : '') + ' · ' + esc(s.t) + (s.kez > 1 ? ' · ' + s.kez + ' kez, ort. ' + miktarMetni(s.ort || s.m) : ' · ' + miktarMetni(s.m) + ' adet'));
     return '<div class="sonuc' + (var_ ? ' sepette' : '') + '" data-b="' + esc(u.b) + '" data-uzun="1"><div class="ad">' + esc(u.a) + '<small>' + alt.join(' · ') + '</small></div>' +
       '<div class="f">' + (o ? '<span class="etiket yesil">özel</span><br>' + para(o.f) : (isFinite(u.f) ? para(u.f) : '—')) + '</div>' +
@@ -954,6 +980,7 @@
   $('cesitListe').addEventListener('click', function(e){
     if(uzunBasildi){ uzunBasildi = false; return; }
     if(e.target.classList.contains('adt')) return;
+    var cb = e.target.closest('[data-cesit]'); if(cb){ cesitAc(cb.getAttribute('data-cesit')); return; }
     var r = e.target.closest('.sonuc'); if(!r) return;
     var u = katalogBarkod[r.getAttribute('data-b')]; if(u){ kalemEkle(u, 1); cesitCiz(); }
   });
@@ -989,6 +1016,7 @@
   $('urunSonuc').addEventListener('click', function(e){
     if(uzunBasildi){ uzunBasildi = false; return; }
     if(e.target.classList.contains('adt')) return;
+    var cb = e.target.closest('[data-cesit]'); if(cb){ cesitAc(cb.getAttribute('data-cesit')); return; }
     var s = e.target.closest('.sonuc'); if(!s) return;
     var u = katalogBarkod[s.getAttribute('data-b')]; if(u) kalemEkle(u, 1);
   });
