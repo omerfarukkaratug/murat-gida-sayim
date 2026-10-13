@@ -1,4 +1,4 @@
-# 🚚 Plasiyer (saha satış) — build 209 / Code.gs build176
+# 🚚 Plasiyer (saha satış) — build 210 / Code.gs build177
 
 Uygulamanın menüsünde **🚚 Plasiyer** (ve üstteki hızlı geçişte). Kodu ayrı dosyada (`plasiyer.html`)
 durur, uygulamanın içinde açılır. **ERP12'ye hiçbir şey yazmaz.** Sipariş, araçtan satış ve tahsilat
@@ -62,8 +62,8 @@ görünürse sunucu günü kullanılır ve kayda uyarı düşülür.
    `erp_fis_satir`'dan (cari-hareket-gonder.ps1 zaten dolduruyor) okur. Çalıştırılmazsa uygulama yine
    çalışır, sadece son satış fiyatı ve tedarikçi gelmez.
 2. **Apps Script:** `Code.gs`'in tamamını yapıştır → **Dağıt → Dağıtımları yönet → yeni sürüm**
-   (adres değişmesin). `/exec` boş açılınca `build176` görünmeli.
-3. **GitHub Pages:** `index.html`, `plasiyer.html`, `sw.js` yüklenir; uygulamada **build 209** görünmeli.
+   (adres değişmesin). `/exec` boş açılınca `build177` görünmeli.
+3. **GitHub Pages:** `index.html`, `plasiyer.html`, `hazirla.html`, `sw.js` yüklenir; uygulamada **build 210** görünmeli.
 4. **Kullanıcılar:** plasiyerlere **🚚 Plasiyer** (gerekirse maliyet) yetkisi.
 5. **Plasiyer → ⚙️ Yönetim:** ayarlar, müşteri atama, gerekirse özel fiyatlar.
 
@@ -82,3 +82,31 @@ görünürse sunucu günü kullanılır ve kayda uyarı düşülür.
 - Ürün / Stok / Cari Hareketleri ekranları kendi yetkileriyle alış fiyatlarını göstermeye devam eder;
   maliyet gizli kalacaksa o yetkiler de verilmemeli.
 - Risk listesi sunucuda 20 dakika önbellekte tutulur.
+
+## 📦 Sipariş Hazırlama (depo) — build 210 / Code.gs build177
+Menüde **📦 Sipariş Hazırlama** (`hazirla.html`). Plasiyerin aldığı **siparişler** (araçtan satış değil)
+depoda okutularak toplanır. ERP'ye yazmaz; `SiparisHazirlik` sekmesinde durur. Depocu **fiyat görmez**.
+
+| Yetki | Ne yapar |
+|---|---|
+| **📦 Sipariş Hazırlama (depo)** | Siparişleri hazırlar, sevk fişi basar, teslim eder (stok yetkisi varsa sistem stoğunu da görür) |
+| **🚚 Plasiyer Yönetimi** | Ayrıca başkasının hazırlığını devralır, hazır/teslim edilmiş siparişi yeniden açar |
+
+**Akış:** ⏳ Bekleyen → **▶ Hazırlamaya başla** (sipariş o kişiye kilitlenir) → 🔧 Hazırlanıyor →
+**✅ Hazır** (koli/paket sayısı) → **🚚 Teslim edildi** (teslim alan; varsayılan plasiyer).
+- **Okutma:** barkod okutunca o kalem 1 artar; ürünün diğer barkodu da tanınır, **koli barkodu koli
+  çarpanı kadar** sayar. Siparişte olmayan ürün okutulursa kalın sesli hata; istenenden fazlası kırmızı uyarı.
+  Kaleme dokununca miktar yazılır ("Tamamı", "Yok"); satırdaki ✓ / ✗ tek dokunuşla tamam / yok.
+  "Kalanlar üstte" görünümünde bitenler aşağı iner. İlerleme çubuğu: tam / eksik / fazla.
+- **Kayıt:** okutmalar önce telefona yazılır, 3 sn içinde sunucuya gider; internet yoksa telefonda bekler
+  ("gönderilmedi"), internet gelince ya da ekran kapanınca gider.
+- **Bitirirken** her kalem işaretlenmiş olmalı ("Kalanları yok say" düğmesi var). Eksik/fazla kalemler
+  sevk fişinde ve plasiyerin gün sonunda görünür. **Hazırlık notu** plasiyere gider.
+- **Bırak:** hazırlayan bırakırsa okuttukları kalır, sipariş "bekleyen"e döner, başkası devam eder.
+- **Sevk fişi** (yazdır): müşteri, plasiyer, hazırlayan, koli; kalem kalem istenen / hazırlanan / eksik;
+  fiyatsız, imza alanlı. ERP belgesi değildir.
+- **İptal:** depo hazırlamaya başladıktan sonra plasiyer siparişi iptal edemez (yöneticiye söyler).
+  Hazırlanırken iptal edilen sipariş depoda kırmızı **İPTAL** görünür, hazır yapılamaz.
+- **Plasiyer** gün sonunda her siparişin durumunu görür: depoda bekliyor / hazırlanıyor (kim) /
+  hazır · N koli / teslim edildi, eksik/fazla kalem sayısı.
+- Liste: son 30 günün teslim edilmemiş siparişleri + bugün teslim edilenler; en eski üstte; dakikada bir tazelenir.

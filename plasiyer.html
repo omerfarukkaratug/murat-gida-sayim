@@ -1127,12 +1127,14 @@
     var hepsi = l.belgeler.map(function(b){ b._t = 'belge'; return b; }).concat(l.tahsilatlar.map(function(t){ t._t = 'tahsilat'; return t; }))
       .sort(function(x, y){ return String(x.zaman) < String(y.zaman) ? 1 : -1; });
     $('kayitListe').innerHTML = hepsi.length ? '<div class="kart">' + hepsi.map(function(x){
-      var iptalEdilebilir = !x.bekliyor && x.durum !== 'iptal' && (yonetim() || (String(x.plasiyer).toLowerCase() === String(kimlik.user).toLowerCase() && x.tarih === bugun));
+      var hz = x._t === 'belge' ? x.hazirlik : null, hzBasladi = hz && hz.durum && hz.durum !== 'bekliyor';
+      var iptalEdilebilir = !x.bekliyor && x.durum !== 'iptal' && (yonetim() || (!hzBasladi && String(x.plasiyer).toLowerCase() === String(kimlik.user).toLowerCase() && x.tarih === bugun));
       var ust = x._t === 'tahsilat' ? '💵 ' + esc(x.cariAd) : (x.cesit === 'arac' ? '🚚 ' : '🛒 ') + esc(x.cariAd);
       var alt = (l.bas !== l.bit ? tarihMetni(x.tarih) + ' ' : '') + saatMetni(x.zaman) + (yonetim() ? ' · ' + esc(x.plasiyer) : '') +
         (x._t === 'tahsilat' ? ' · ' + (YONTEM_AD[x.yontem] || esc(x.yontem)) : ' · ' + x.kalem + ' kalem') +
         (x.bekliyor ? ' · <span class="uyari">⏳ gönderilmedi</span>' : '') + (x.durum === 'iptal' ? ' · <span class="hata">İPTAL</span>' : '') +
-        (x.uyari ? ' · <span class="uyari">⚠️ ' + esc(x.uyari) + '</span>' : '');
+        (x.uyari ? ' · <span class="uyari">⚠️ ' + esc(x.uyari) + '</span>' : '') +
+        (hz && x.durum !== 'iptal' ? ' · ' + hazirlikEtiket(hz) : '');
       var detay = '';
       if(x._t === 'belge'){
         detay = '<table><tr><th>Ürün</th><th class="sayi">Miktar</th><th class="sayi">Fiyat</th><th class="sayi">Tutar</th></tr>' + (x.satirlar || []).map(function(s){
@@ -1141,6 +1143,8 @@
         }).join('') + '</table>';
       }
       if(x.not) detay += '<div class="ipucu" style="margin-top:6px;">📝 ' + esc(x.not) + '</div>';
+      if(hz && hz.not) detay += '<div class="ipucu" style="margin-top:4px;">📦 Depo notu: ' + esc(hz.not) + '</div>';
+      if(hzBasladi && !yonetim() && x.durum !== 'iptal') detay += '<div class="ipucu" style="margin-top:4px;">Depo hazırlamaya başladı — iptal için yöneticine söyle.</div>';
       if(x.durum === 'iptal') detay += '<div class="hata" style="margin-top:6px; font-size:13px;">İptal: ' + esc(x.iptalEden) + ' — ' + esc(x.iptalNeden) + ' (' + esc(x.iptalZaman) + ')</div>';
       var dug = '';
       if(iptalEdilebilir) dug += '<button type="button" class="kucuk" data-iptal="' + esc(x.id) + '" data-tur="' + x._t + '">🚫 İptal et</button> ';
@@ -1149,6 +1153,15 @@
       return '<div class="kayit' + (x.durum === 'iptal' ? ' iptal' : '') + '"><div class="bas" data-ac="1"><div class="ad">' + ust + '<div class="ipucu" style="font-weight:500;">' + alt + '</div></div><div class="t' + (x._t === 'tahsilat' ? ' iyi' : '') + '">' + para(x._t === 'tahsilat' ? x.tutar : x.toplam) + '</div></div>' +
         '<div class="detay gizli">' + detay + (dug ? '<div style="margin-top:8px;">' + dug + '</div>' : '') + '</div></div>';
     }).join('') + '</div>' : '<div class="kart ipucu">Bu aralıkta kayıt yok.</div>';
+  }
+  // Depodaki hazırlık durumu (siparişler için).
+  function hazirlikEtiket(h){
+    if(h.durum === 'hazirlaniyor') return '<span class="etiket mavi">📦 hazırlanıyor (' + esc(h.hazirlayan) + ')</span>';
+    if(h.durum === 'hazir' || h.durum === 'teslim'){
+      return '<span class="etiket yesil">' + (h.durum === 'hazir' ? '📦 hazır' : '🚚 teslim edildi') + ' · ' + (h.koli || 0) + ' koli</span>' +
+        (h.eksik ? '<span class="etiket sari">' + h.eksik + ' kalem eksik</span>' : '') + (h.fazla ? '<span class="etiket kirmizi">' + h.fazla + ' fazla</span>' : '');
+    }
+    return '<span class="etiket">📦 depoda bekliyor</span>';
   }
   $('kayitListe').addEventListener('click', function(e){
     var t = e.target;

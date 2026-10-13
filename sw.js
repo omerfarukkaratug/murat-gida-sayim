@@ -1,4 +1,4 @@
-const CACHE = 'sayim-v209';
+const CACHE = 'sayim-v210';
 // Barkod/QR kütüphaneleri sürüm numaralı adreslerden gelir ve hiç değişmez;
 // uygulama güncellense de silinmesinler diye AYRI ve kalıcı bir önbellekte durur.
 const KUTUPHANE_CACHE = 'sayim-kutuphane-v1';
@@ -6,7 +6,7 @@ const KUTUPHANE_HOST = 'cdn.jsdelivr.net';
 
 // ZORUNLU dosyalar: bunlar inmeden kurulum tamamlanmış sayılmaz — uygulama
 // internetsiz açılabilsin diye ana sayfalar da burada.
-const CEKIRDEK = ['./', './index.html', './mesai.html', './etiket.html', './plasiyer.html', './manifest.json'];
+const CEKIRDEK = ['./', './index.html', './mesai.html', './etiket.html', './plasiyer.html', './hazirla.html', './manifest.json'];
 // İSTEĞE BAĞLI dosyalar: biri inemezse (örn. tek bir ikon) kurulum BOZULMAZ.
 const ISTEGE_BAGLI = ['./icon.svg', './icon-192.png', './icon-512.png', './icon-512-maskable.png', './logo-header.png', './yerli-uretim.png'];
 // Kamera kütüphaneleri: internet varken şimdiden indirilir, böylece sayım
