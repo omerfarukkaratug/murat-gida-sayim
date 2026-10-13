@@ -555,6 +555,11 @@
         <div class="bicimSec" style="margin:0;"><button type="button" data-tb="zebra" class="etk">🏷️ Etiket</button><button type="button" data-tb="a6">A6</button><button type="button" data-tb="a5">A5</button><button type="button" data-tb="a4">A4</button><button type="button" data-tb="a3">A3</button></div>
       </div>
       <div id="liste"><div class="ipucu">Henüz ürün eklenmedi.</div></div>
+      <!-- Basılan ürünler listeden çıkar; yanlışlıkla gitmesin diye son basılanlar burada durur (tekrar eklenebilir). -->
+      <details id="sonBasilanKutu" class="gizli" style="margin-top:10px; border:1px dashed var(--line); border-radius:12px; padding:8px 10px;">
+        <summary style="cursor:pointer; font-size:13px; font-weight:800; color:var(--muted);">🕘 Son basılanlar <span id="sonBasilanSayi"></span></summary>
+        <div id="sonBasilanListe" style="margin-top:6px;"></div>
+      </details>
       <!-- Liste aktarma: telefonda hazırla, yazıcının bağlı olduğu bilgisayarda getirip bas. -->
       <button type="button" id="listeIslemAc" class="baglanti" style="margin-top:10px;">Listeyi başka cihaza aktar ▾</button>
       <div id="listeIslem" class="gizli">
@@ -1541,10 +1546,49 @@
     return e;
   }
   function baslikMetni(u){ return u.indirim ? 'İNDİRİM' : (u.baslik === 'ozel' ? String(u.ozel || '').trim().toLocaleUpperCase('tr-TR') : (u.baslik || '')); }
+  // ---- Basılan ürünleri listeden çıkar (build 214) ----
+  // Eskiden basılan ürün listede soluk kalıyor, yeni eklenenlerle karışıyordu. Artık hemen çıkar; son 40'ı
+  // "Son basılanlar"da (bu cihazda) durur, yanlışlıkla çıktıysa tek dokunuşla listeye geri eklenir.
+  if(!IS_NO && !Array.isArray(durum.sonBasilan)) durum.sonBasilan = [];
+  function basilanlariCikar(secim){
+    var saat = new Date(), damga = ('0' + saat.getDate()).slice(-2) + '.' + ('0' + (saat.getMonth() + 1)).slice(-2) + ' ' + ('0' + saat.getHours()).slice(-2) + ':' + ('0' + saat.getMinutes()).slice(-2);
+    var cikan = durum.liste.filter(secim);
+    if(!cikan.length) return 0;
+    durum.liste = durum.liste.filter(function(u){ return cikan.indexOf(u) === -1; });
+    cikan.forEach(function(u){ delete acik[u.id]; u.basildi = ''; durum.sonBasilan.unshift({ u: u, zaman: damga }); });
+    durum.sonBasilan = durum.sonBasilan.slice(0, 40);
+    kaydet(); listeCiz(); ciz();
+    toast('✅ Basılan ' + cikan.length + ' ürün listeden çıktı');
+    return cikan.length;
+  }
+  // Arkalı önlü bir baskılıktır: iş gönderilince / bu cihazdan basılınca kendiliğinden kapanır.
+  function ciftKapat(){ if(!durum.cift) return; durum.cift = false; toast('Arkalı önlü kapatıldı — bir sonraki baskı tek yüz', 'uyari'); }
+  function sonBasilanCiz(){
+    var l = (durum.sonBasilan || []);
+    $('sonBasilanKutu').classList.toggle('gizli', !l.length);
+    $('sonBasilanSayi').textContent = l.length ? '(' + l.length + ')' : '';
+    $('sonBasilanListe').innerHTML = l.map(function(x, i){
+      return '<div style="display:flex; align-items:center; gap:8px; padding:6px 0; border-bottom:1px solid var(--line); font-size:13px;">' +
+        '<div style="flex:1; min-width:0;"><div style="font-weight:700; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">' + esc(x.u.ad) + '</div>' +
+        '<div class="ipucu">' + esc(x.zaman) + ' basıldı · ' + para(x.u.fiyat) + ' ₺</div></div>' +
+        '<button type="button" data-sb="' + i + '" style="padding:5px 9px; font-size:12px; flex:none;">↩ Listeye ekle</button></div>';
+    }).join('') + (l.length ? '<button type="button" data-sb="hepsi" style="margin-top:8px; padding:5px 9px; font-size:12px;">Bu listeyi temizle</button>' : '');
+  }
+  if(!IS_NO) $('sonBasilanListe').addEventListener('click', function(e){
+    var b = e.target.closest('button[data-sb]'); if(!b) return;
+    var i = b.getAttribute('data-sb');
+    if(i === 'hepsi'){ durum.sonBasilan = []; kaydet(); sonBasilanCiz(); return; }
+    var x = durum.sonBasilan[+i]; if(!x) return;
+    var var_ = durum.liste.filter(function(u){ return u.id === x.u.id; })[0];
+    if(!var_){ x.u.basildi = ''; durum.liste.push(x.u); }
+    durum.sonBasilan.splice(+i, 1);
+    kaydet(); listeCiz(); ciz(); toast('Listeye geri eklendi — fiyatı basmadan önce kontrol edilir');
+  });
   var acik = {};   // ayrıntısı açık ürünler (kaydedilmez)
   var odakBirakiliyor = false;
   function listeCiz(){
     var kutu = $('liste');
+    if(!IS_NO) sonBasilanCiz();
     $('topluBicim').classList.toggle('gizli', durum.liste.filter(function(u){ return !u.basildi; }).length < 2);
     hizliCiz();
     // Yazılmakta olan kutu varsa önce bırakılır: değişikliği kaydolur, sonra liste yeniden çizilir.
@@ -2170,10 +2214,8 @@
           if(!is2 || d.durum === is2.durum) return;
           d.durum = is2.durum; d.mesaj = is2.mesaj || ''; degisti = true;
           if(is2.durum === 'basildi' || is2.durum === 'hata') d.bitis = Date.now();
-          if(is2.durum === 'basildi'){
-            var saat = new Date(), damga = ('0' + saat.getHours()).slice(-2) + ':' + ('0' + saat.getMinutes()).slice(-2);
-            durum.liste.forEach(function(u){ if((d.idler || []).indexOf(u.id) !== -1) u.basildi = damga; });
-          }
+          // Basılan ürünler listeden HEMEN çıkar (eskiden soluk kalıyordu); "Son basılanlar"dan geri eklenebilir.
+          if(is2.durum === 'basildi') basilanlariCikar(function(u){ return (d.idler || []).indexOf(u.id) !== -1; });
         });
         if(degisti){ kaydet(); listeCiz(); ciz(); if(durum.hizli) hizliPlanla(2); }
         baski.isler.forEach(function(i){
@@ -2276,6 +2318,7 @@
       .then(function(){
         izlenen[id] = { bitti: false, kuyruk: kuyrukUrun, kayit: dnm };
         if(!dnm) durum.isDurum[gBicim] = { id: id, adet: gonderilen.reduce(function(t, u){ return t + Math.max(1, parseInt(u.adet, 10) || 1); }, 0), zaman: Date.now(), durum: 'gonderildi', mesaj: '', yazici: y.ad, idler: gonderilen.map(function(u){ return u.id; }) };
+        ciftKapat();
         kaydet(); yazdirCiz();
         var deneme = 0;
         var bak = function(){
@@ -3537,11 +3580,16 @@
     if(yerliSayi && !yerliLogoVar && !window.confirm(yerliSayi + ' ürün Türkiye\'de üretilmiş ama yerli üretim logosu dosyası yüklü değil.\nBu etiketler yönetmeliğe göre EKSİK olur.\n\nYine de yazdırılsın mı?')) return;
     kameraKapat();
     ciz();
-    var bekleyen = basilanKuyrukUrunleri(), soruldu = false;
+    var bekleyen = basilanKuyrukUrunleri(), soruldu = false, basilanIdler = aktifListe().map(function(u){ return u.id; });
     var sor = function(){
-      if(soruldu || !bekleyen.length) return; soruldu = true;
+      if(soruldu) return; soruldu = true;
       setTimeout(function(){
-        if(window.confirm('Etiketler basıldı mı?\n\n"Tamam" dersen fiyatı değişen ' + bekleyen.length + ' ürün "basılacaklar" kuyruğundan çıkar (bütün cihazlarda). Baskı iptal olduysa ya da bozuk çıktıysa "İptal" de.')) basildiIsaretle(bekleyen);
+        if(window.confirm('Etiketler basıldı mı?\n\n"Tamam" dersen basılan ' + basilanIdler.length + ' ürün listeden çıkar' +
+            (bekleyen.length ? ' ve fiyatı değişen ' + bekleyen.length + ' ürün "basılacaklar" kuyruğundan düşer (bütün cihazlarda)' : '') + '. Baskı iptal olduysa ya da bozuk çıktıysa "İptal" de.')){
+          if(bekleyen.length) basildiIsaretle(bekleyen);
+          basilanlariCikar(function(u){ return basilanIdler.indexOf(u.id) !== -1; });
+        }
+        ciftKapat(); kaydet(); yazdirCiz();
       }, 400);
     };
     window.addEventListener('afterprint', function bitti(){ window.removeEventListener('afterprint', bitti); sor(); });
@@ -3549,6 +3597,17 @@
     setTimeout(function(){ window.print(); }, 150);
   });
 
+  // Açılışta: önceden basılıp listede soluk kalmış ürünler "Son basılanlar"a taşınır; arkalı önlü kapalı başlar.
+  if(!IS_NO){
+    var eskiBasilan = durum.liste.filter(function(u){ return u.basildi; });
+    if(eskiBasilan.length){
+      durum.liste = durum.liste.filter(function(u){ return !u.basildi; });
+      eskiBasilan.forEach(function(u){ var z = u.basildi; u.basildi = ''; durum.sonBasilan.unshift({ u: u, zaman: z }); });
+      durum.sonBasilan = durum.sonBasilan.slice(0, 40);
+    }
+    durum.cift = false;
+    kaydet();
+  }
   listeCiz(); bicimCiz();
   if(!IS_NO){ varsayilanCiz(); sekmeAc(/[?&]dogrula=1/.test(location.search) ? 'kontrol' : (durum.sekme || 'urun')); }
 
