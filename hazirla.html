@@ -181,6 +181,10 @@
     <div class="pencere">
       <h3><span>✅ Sipariş hazır</span><button type="button" class="kapat" data-kapat="bitirPerde">✕</button></h3>
       <div id="btOzet"></div>
+      <label id="btBekleyenAlan" class="gizli" style="display:flex; gap:10px; align-items:flex-start; text-transform:none; letter-spacing:0; font-size:14px; color:var(--text); margin:12px 0 0; padding:10px; border:1.5px solid var(--amber); border-radius:12px;">
+        <input type="checkbox" id="btBekleyen" checked style="width:22px; height:22px; flex:none; margin:0;">
+        <span><b>⏳ Eksikleri BEKLEYEN SİPARİŞ yap</b><br><span class="ipucu" id="btBekleyenBilgi"></span></span>
+      </label>
       <label for="btKoli">Koli / paket sayısı</label>
       <input id="btKoli" inputmode="numeric" class="buyukSayi" placeholder="0">
       <button type="button" class="yesil tam" id="btTamam" style="margin-top:12px; padding:14px; font-size:17px;">Hazır olarak kaydet</button>
@@ -346,6 +350,7 @@
         }
         if(h.durum === 'teslim') ek.push('<span class="etiket">→ ' + esc(h.teslimAlan) + ' ' + saat(h.teslimZaman) + '</span>');
         if(s.iptal) ek.unshift('<span class="etiket kirmizi">🚫 İPTAL</span>');
+        if(s.bekleyen) ek.unshift('<span class="etiket sari">⏳ BEKLEYEN (önceki siparişin eksikleri)</span>');
         if(yerel[s.id] && yerel[s.id].kirli) ek.push('<span class="etiket sari">⏳ gönderilmedi</span>');
         return '<button type="button" class="siparis' + (s.iptal ? ' iptal' : '') + '" data-id="' + esc(s.id) + '"><div class="ust"><div class="ad">' + esc(s.cariAd) + '</div><div class="yas">' + tarihSaat(s.zaman) + '<br>' + yas(s.zaman) + '</div></div>' +
           '<div class="alt">🚚 ' + esc(s.plasiyer) + ' · ' + s.kalem + ' kalem · ' + mk(s.miktar) + ' adet' + (s.not ? ' · 📝 ' + esc(s.not) : '') + '</div><div>' + ek.join('') + '</div></button>';
@@ -396,7 +401,7 @@
     $('skAlt').textContent = '🚚 ' + b.plasiyer + ' · ' + tarihSaat(b.zaman) + ' · ' + b.satirlar.length + ' kalem';
     var bant = [];
     if(b.iptal) bant.push('<div class="bant kirmizi">🚫 Bu sipariş İPTAL edildi' + (b.iptalNeden ? ': ' + esc(b.iptalNeden) : '') + '. Hazırlamayı durdur, toplanan ürünleri yerine koy.</div>');
-    if(b.not) bant.push('<div class="bant mavi">📝 Plasiyer notu: ' + esc(b.not) + '</div>');
+    if(b.not) bant.push('<div class="bant ' + (b.bekleyen ? 'sari' : 'mavi') + '">' + (b.bekleyen ? '⏳ ' : '📝 Plasiyer notu: ') + esc(b.not) + '</div>');
     if(h.durum === 'hazirlaniyor' && !S.sahip) bant.push('<div class="bant sari">🔧 ' + esc(h.hazirlayan) + ' hazırlıyor.</div>');
     if(h.durum === 'hazir') bant.push('<div class="bant yesil">✅ Hazır — ' + esc(h.hazirlayan) + ', ' + tarihSaat(h.bitis) + ' · ' + (h.koli || 0) + ' koli</div>');
     if(h.durum === 'teslim') bant.push('<div class="bant yesil">🚚 Teslim edildi: ' + esc(h.teslimAlan) + ' · ' + tarihSaat(h.teslimZaman) + ' (' + esc(h.teslimEden) + ')</div>');
@@ -565,6 +570,11 @@
     $('btOzet').innerHTML = '<div class="sayilar"><div><b class="iyi">' + o.tam + '</b><span>Tam</span></div><div><b class="uyari">' + o.eksik + '</b><span>Eksik</span></div><div><b class="hata">' + o.fazla + '</b><span>Fazla</span></div><div><b>' + o.bos + '</b><span>İşaretsiz</span></div></div>' +
       (o.bos ? '<div class="bant sari" style="margin-top:10px;">' + o.bos + ' kalem işaretlenmedi. <button type="button" class="kucuk" id="btYokSay">Kalanları "yok" say</button></div>' : '') +
       (o.eksik || o.fazla ? '<div class="ipucu" style="margin-top:8px;">Eksik/fazla kalemler sevk fişinde ve plasiyerin ekranında görünür.</div>' : '');
+    // Eksik kalan miktar varsa (eksik ya da "yok" denen kalemler) bekleyen sipariş önerilir.
+    var eksikKalem = S.belge.satirlar.filter(function(s, i){ return S.mik[i] !== undefined && S.mik[i] < s.m - 0.0005; });
+    $('btBekleyenAlan').classList.toggle('gizli', !eksikKalem.length);
+    $('btBekleyen').checked = true;
+    $('btBekleyenBilgi').textContent = eksikKalem.length ? eksikKalem.length + ' kalem (' + eksikKalem.slice(0, 3).map(function(s){ return s.a; }).join(', ') + (eksikKalem.length > 3 ? '…' : '') + ') mal gelince hazırlanmak üzere ayrı sipariş olarak listeye düşer; plasiyer de görür.' : '';
     $('btKoli').value = S.hazirlik.koli || '';
     $('bitirPerde').classList.remove('gizli');
     setTimeout(function(){ $('btKoli').focus(); }, 60);
@@ -580,7 +590,9 @@
     var koli = parseInt($('btKoli').value, 10);
     if(!(koli >= 0)){ toast('Koli / paket sayısını gir', 'hata'); return; }
     var id = S.belge.id;
-    islem(this, { action:'hazirla_bitir', id: id, miktarlar: JSON.stringify(S.mik), koli: koli, not: $('skNot').value }, '✅ Hazır olarak kaydedildi', function(){
+    var bekleyen = !$('btBekleyenAlan').classList.contains('gizli') && $('btBekleyen').checked ? 1 : 0;
+    islem(this, { action:'hazirla_bitir', id: id, miktarlar: JSON.stringify(S.mik), koli: koli, not: $('skNot').value, bekleyen: bekleyen }, null, function(r){
+      toast(r.bekleyenId ? '✅ Hazır — eksikler bekleyen sipariş oldu' : '✅ Hazır olarak kaydedildi');
       if(yerel[id]){ yerel[id].kirli = false; yerelKaydet(); }
       $('bitirPerde').classList.add('gizli');
       siparisAc(id);

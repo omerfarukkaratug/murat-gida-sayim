@@ -8,7 +8,7 @@
 // bir sürüm dağıttıktan sonra /exec adresini boş açtığında burada yazan
 // numarayı görmelisin; index.html'in üstündeki "build" numarasıyla
 // eşleşecek şekilde ben her ikisini birlikte güncelliyorum.
-var GS_VERSION = 'build180';
+var GS_VERSION = 'build181';
 
 // Sheets'te "Saat" sütunu zaman biçimli olarak algılanırsa, hücre değeri düz
 // metin değil bir Date nesnesi olarak gelir ve String(...) çirkin bir çıktı
@@ -4282,6 +4282,16 @@ function plsVeri(k) {
   var sonuc = { status: 'ok', ben: k.ben, yonetim: k.yonetim, maliyet: k.maliyet, stok: k.stok, ayar: plsAyar(), musteriler: musteriler, ozel: ozel,
     yontemler: PLS_YONTEMLER, bugun: ekipBugun(), riskVar: Object.keys(risk).length > 0 };
   if (k.yonetim) sonuc.plasiyerler = plsKullanicilar();
+  // Teslim edilmemiş BEKLEYEN siparişler (depoda eksik çıkan kalemler), müşteri başına — yeni siparişte uyarı için.
+  var hz = hzHarita(), bek = {};
+  plsOku('PlasiyerBelge').forEach(function (r) {
+    if (String(r[4]) !== 'bekleyen' || String(r[12]) === 'iptal' || !izinli[String(r[5])]) return;
+    var h = hz[String(r[0])]; if (h && h.durum === 'teslim') return;
+    var kl = []; try { kl = JSON.parse(String(r[9] || '[]')); } catch (e) { kl = []; }
+    (bek[String(r[5])] = bek[String(r[5])] || []).push({ id: String(r[0]), tarih: plsTarih(r[2]), durum: h ? h.durum : 'bekliyor',
+      satirlar: kl.map(function (x) { return [x.b, x.a, x.m]; }) });
+  });
+  sonuc.bekleyen = bek;
   return sonuc;
 }
 
@@ -4465,7 +4475,7 @@ function plsListe(k, p) {
   var uygun = function (tarih, pls) { return tarih >= bas && tarih <= bit && (!kim || String(pls).trim().toLowerCase() === kim); };
   var belgeler = plsOku('PlasiyerBelge').filter(function (r) { return uygun(plsTarih(r[2]), r[3]); }).map(function (r) { return plsBelgeNesne(r, k.maliyet); });
   var hz = hzHarita();
-  belgeler.forEach(function (b) { var h = hz[b.id]; if (b.cesit === 'siparis') b.hazirlik = h ? hzOzet(h, b) : { durum: 'bekliyor' }; });
+  belgeler.forEach(function (b) { var h = hz[b.id]; if (b.cesit === 'siparis' || b.cesit === 'bekleyen') b.hazirlik = h ? hzOzet(h, b) : { durum: 'bekliyor' }; });
   var tahsilatlar = plsOku('PlasiyerTahsilat').filter(function (r) { return uygun(plsTarih(r[2]), r[3]); }).map(plsTahsilatNesne);
   belgeler.sort(function (x, y) { return x.zaman < y.zaman ? 1 : -1; });
   tahsilatlar.sort(function (x, y) { return x.zaman < y.zaman ? 1 : -1; });
@@ -4486,6 +4496,7 @@ function plsRapor(k, ay) {
     if (plsTarih(r[2]).slice(0, 7) !== ay || !izinli(r[3])) return;
     var o = kisi(r[3]), tutar = plsSayi(r[8]);
     if (String(r[12]) === 'iptal') { o.iptalAdet++; o.iptalTutar += tutar; return; }
+    if (String(r[4]) === 'bekleyen') { o.bekleyenAdet = (o.bekleyenAdet || 0) + 1; return; } // asıl sipariş primde zaten sayıldı
     if (String(r[4]) === 'arac') { o.arac += tutar; o.aracAdet++; } else { o.siparis += tutar; o.siparisAdet++; }
     if (/taban/.test(String(r[11] || ''))) o.tabanUyari++;
     o.musteri[String(r[5])] = 1;
@@ -4526,7 +4537,8 @@ function plsIptal(k, p) {
   if (!k.yonetim) {
     if (geri) throw new Error('İptali yalnızca yönetici geri alır');
     if (!kendi) throw new Error('Başkasının kaydını iptal etme yetkin yok');
-    if (plsTarih(hedef[sutun.tarih - 1]) !== ekipBugun()) throw new Error('Geçmiş günün kaydını yalnızca yönetici iptal eder');
+    var bekleyenMi = tur === 'PlasiyerBelge' && String(hedef[4]) === 'bekleyen';
+    if (!bekleyenMi && plsTarih(hedef[sutun.tarih - 1]) !== ekipBugun()) throw new Error('Geçmiş günün kaydını yalnızca yönetici iptal eder');
   }
   if (!geri && !neden) throw new Error('İptal nedenini yaz');
   // Depo hazırlamaya başladıysa siparişi yalnızca yönetim iptal eder (depo ekranında kırmızı görünür).
@@ -4656,7 +4668,7 @@ function hzBelgeBul(id) {
   var r = plsOku('PlasiyerBelge').filter(function (x) { return String(x[0]) === id; })[0];
   if (!r) throw new Error('Sipariş bulunamadı');
   var b = plsBelgeNesne(r, false);
-  if (b.cesit !== 'siparis') throw new Error('Bu bir sipariş değil (araçtan satış)');
+  if (b.cesit !== 'siparis' && b.cesit !== 'bekleyen') throw new Error('Bu bir sipariş değil (araçtan satış)');
   return b;
 }
 // Depocuya giden satırlar: fiyatsız.
@@ -4697,14 +4709,14 @@ function hzListe(k) {
   var bugun = ekipBugun(), sinir = ekipGunEkle(bugun, -30), hz = hzHarita();
   var liste = [];
   plsOku('PlasiyerBelge').forEach(function (r) {
-    if (String(r[4]) !== 'siparis') return;
+    if (String(r[4]) !== 'siparis' && String(r[4]) !== 'bekleyen') return;
     var tarih = plsTarih(r[2]); if (tarih < sinir) return;
     var b = plsBelgeNesne(r, false), h = hz[b.id];
     var durum = h ? h.durum : 'bekliyor';
     if (b.durum === 'iptal' && (durum === 'bekliyor' || durum === 'teslim')) return;
     if (durum === 'teslim' && String(h.teslimZaman).slice(0, 10) !== bugun) return;
     var o = h ? hzOzet(h, b) : { durum: 'bekliyor' };
-    liste.push({ id: b.id, zaman: b.zaman, tarih: b.tarih, plasiyer: b.plasiyer, cariKod: b.cariKod, cariAd: b.cariAd, kalem: b.kalem, not: b.not,
+    liste.push({ id: b.id, zaman: b.zaman, tarih: b.tarih, plasiyer: b.plasiyer, cariKod: b.cariKod, cariAd: b.cariAd, kalem: b.kalem, not: b.not, bekleyen: b.cesit === 'bekleyen',
       iptal: b.durum === 'iptal', iptalNeden: b.iptalNeden, hazirlik: o, miktar: (b.satirlar || []).reduce(function (t, s) { return t + (Number(s.m) || 0); }, 0) });
   });
   liste.sort(function (x, y) { return x.zaman < y.zaman ? -1 : 1; }); // en eski önce
@@ -4713,7 +4725,7 @@ function hzListe(k) {
 function hzAc(k, id) {
   id = plsMetin(id, 60);
   var b = hzBelgeBul(id), h = hzHarita()[id] || { id: id, durum: 'bekliyor', hazirlanan: {} };
-  return { status: 'ok', ben: k.ben, yonetim: k.yonetim, belge: { id: b.id, zaman: b.zaman, plasiyer: b.plasiyer, cariKod: b.cariKod, cariAd: b.cariAd, not: b.not,
+  return { status: 'ok', ben: k.ben, yonetim: k.yonetim, belge: { id: b.id, zaman: b.zaman, plasiyer: b.plasiyer, cariKod: b.cariKod, cariAd: b.cariAd, not: b.not, bekleyen: b.cesit === 'bekleyen',
     iptal: b.durum === 'iptal', iptalNeden: b.iptalNeden, satirlar: hzSatirlar(b, k.stok) },
     hazirlik: { durum: h.durum, hazirlayan: h.hazirlayan || '', basla: h.basla || '', bitis: h.bitis || '', hazirlanan: h.hazirlanan || {}, koli: h.koli || 0, not: h.not || '',
       teslimAlan: h.teslimAlan || '', teslimZaman: h.teslimZaman || '', teslimEden: h.teslimEden || '' } };
@@ -4767,11 +4779,34 @@ function hzBitir(k, p) {
   var koli = parseInt(p.koli, 10);
   if (!(koli >= 0 && koli <= 9999)) throw new Error('Koli / paket sayısını gir');
   h.koli = koli; if (p.not !== undefined) h.not = plsMetin(p.not, 300);
+  // Eksik kalan kalemler istenirse BEKLEYEN SİPARİŞ olur (aynı müşteri, aynı fiyatlar); mal gelince depoda hazırlanır.
+  var bekleyenId = '';
+  if (String(p.bekleyen || '') === '1') bekleyenId = hzBekleyenOlustur(k, b, h);
   h.durum = 'hazir'; h.bitis = plsZamanMetni();
   hzYaz(h);
   var o = hzOzet(h, b);
-  gunlukYaz('hazirlama', k.ben, 'Sipariş hazır: ' + b.cariAd + ' (' + id + '), ' + o.tam + ' tam' + (o.eksik ? ', ' + o.eksik + ' eksik' : '') + (o.fazla ? ', ' + o.fazla + ' fazla' : '') + ', ' + koli + ' koli', false);
-  return { ozet: o };
+  gunlukYaz('hazirlama', k.ben, 'Sipariş hazır: ' + b.cariAd + ' (' + id + '), ' + o.tam + ' tam' + (o.eksik ? ', ' + o.eksik + ' eksik' : '') + (o.fazla ? ', ' + o.fazla + ' fazla' : '') + ', ' + koli + ' koli' + (bekleyenId ? ', bekleyen sipariş ' + bekleyenId : ''), false);
+  return { ozet: o, bekleyenId: bekleyenId };
+}
+// Eksikleri yeni bir belgeye (cesit 'bekleyen') yazar. Aynı siparişten ikinci kez oluşmaz.
+// PlasiyerBelge'ye telefon kayıtları (genel kilit altında) SONA eklendiği için burada da kısa süre genel kilit alınır.
+function hzBekleyenOlustur(k, b, h) {
+  var eksikler = [];
+  (b.satirlar || []).forEach(function (s, i) {
+    var v = Number(h.hazirlanan[i]) || 0, kalan = Math.round((Number(s.m) - v) * 1000) / 1000;
+    if (kalan > 0.0005) { var y = JSON.parse(JSON.stringify(s)); y.m = kalan; delete y.taban; eksikler.push(y); }
+  });
+  if (!eksikler.length) return '';
+  var yeniId = ('B' + String(b.id)).substring(0, 60);
+  if (plsOku('PlasiyerBelge').some(function (r) { return String(r[0]) === yeniId; })) return yeniId;
+  var genel = LockService.getScriptLock();
+  try { genel.waitLock(20000); } catch (e) { throw new Error('Sunucu meşgul — birazdan tekrar dene'); }
+  try {
+    var toplam = eksikler.reduce(function (t, s) { return t + s.m * (Number(s.f) || 0); }, 0);
+    plsEkle('PlasiyerBelge', [[yeniId, plsZamanMetni(), ekipBugun(), b.plasiyer, 'bekleyen', b.cariKod, b.cariAd, eksikler.length, plsYuvarla(toplam),
+      JSON.stringify(eksikler), plsMetin('Bekleyen: ' + plsTarih(b.tarih) + ' tarihli siparişin eksikleri (' + b.id + ')' + (h.not ? ' · ' + h.not : ''), 300), '', 'aktif', '', '', '', '']]);
+  } finally { genel.releaseLock(); }
+  return yeniId;
 }
 function hzTeslim(k, p) {
   var id = plsMetin(p.id, 60), b = hzBelgeBul(id), h = hzKayit(id);

@@ -1,4 +1,4 @@
-# 🚚 Plasiyer (saha satış) — build 210 / Code.gs build177
+# 🚚 Plasiyer (saha satış) — build 216 / Code.gs build181
 
 Uygulamanın menüsünde **🚚 Plasiyer** (ve üstteki hızlı geçişte). Kodu ayrı dosyada (`plasiyer.html`)
 durur, uygulamanın içinde açılır. **ERP12'ye hiçbir şey yazmaz.** Sipariş, araçtan satış ve tahsilat
@@ -129,3 +129,18 @@ depoda okutularak toplanır. ERP'ye yazmaz; `SiparisHazirlik` sekmesinde durur. 
 - **Stok:** 📦 Stok Görme yetkisi olan plasiyer aramada ve kalemde stoğu görür; stoktan fazlasına uyarı.
 - Arama kutusu kaydırınca üstte kalır; altta kalem ve toplam adet.
 - Not: Maliyet / taban hâlâ katalogdaki son alış fiyatıyla (STOK.SON_ALIS_FIYAT) hesaplanır.
+
+## build 216 / Code.gs build181 — bekleyen sipariş, kâr gizleme, çeşitler
+
+- **Bekleyen sipariş:** Depocu "Hazır" derken eksik kalem varsa "⏳ Eksikleri BEKLEYEN SİPARİŞ yap" kutusu çıkar
+  (varsayılan işaretli). Eksikler `B<sipariş no>` numaralı yeni bir belgeye (çeşit `bekleyen`) yazılır;
+  hazırlama listesine "⏳ BEKLEYEN" etiketiyle düşer, mal gelince normal sipariş gibi hazırlanır.
+  - Plasiyer müşteri penceresinde, sipariş bandında ve ürün aramasında "⏳ bekleyende N" görür (çift yazmasın diye).
+  - Gün sonunda ayrı gösterilir, toplamlara girmez. **Primde sayılmaz** (asıl sipariş zaten sayıldı).
+  - Plasiyer kendi bekleyenini, hazırlık başlamadıysa her gün iptal edebilir.
+- **Kâr gizli:** Sipariş ekranında marj/kâr artık görünmez. Maliyet yetkilisi alttaki "👁 Kâr" düğmesine
+  **basılı tutunca** görünür, bırakınca kaybolur. Ürün penceresinde maliyet/tedarikçi bölümü kapalı gelir
+  ("🔒 Maliyet, kâr ve tedarikçiler" — dokununca açılır). Taban altı fiyat uyarısında sayı yazmaz.
+  Plasiyerin hiç görmemesi için `plasiyer_maliyet` yetkisi verilmez.
+- **Çeşitler:** Siparişteki ürünün altında "🎨 N çeşit daha" — aynı fiyat, aynı boy (2.5 LT vb.) ve adın baştaki
+  sözcükleri (marka + ürün) aynı olan ürünler. Pencerede her çeşide adet yazılır ya da "Hepsinden" ile hepsine aynı adet.
