@@ -18,6 +18,9 @@ Plasiyer ekranı **şube konumu istemez** (sahada çalışır). Her istek giriş
 kapalıyken bile.
 
 ## Neler var
+- **🏢 Tüm cariler (yönetici / Plasiyer Yönetimi, build 212):** "Müşterilerim"de **Tüm cariler** süzgeciyle
+  atanmamış dahil bütün carilere (telefondaki cari listesinden, internetsiz de) sipariş, araçtan satış ve
+  tahsilat notu girilir. Kayıt **girenin adına** yazılır (primi ona sayılır).
 - **👥 Müşterilerim:** atanan müşteriler; bakiye (ERP cari listesinden, B/A), vadesi geçmiş tutar, risk
   (yeşil/sarı/kırmızı, `009_odeme_risk.sql`); dokununca risk nedenleri ve bugün o müşteriye girilenler.
 - **🛒 Sipariş al / 🚚 Araçtan satış:** ürün ada, barkoda, stok koduna göre aranır ya da 📷 ile okutulur

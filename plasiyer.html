@@ -167,6 +167,7 @@
           <button type="button" data-f="riskli">🔴 Riskli</button>
           <button type="button" data-f="dikkat">🟡 Dikkat</button>
           <button type="button" data-f="borclu">Bakiyesi olan</button>
+          <button type="button" data-f="tum" id="tumCariFiltre" class="gizli">🏢 Tüm cariler</button>
         </div>
         <div id="musteriOzet" class="ipucu" style="margin-top:8px;"></div>
         <div id="musteriListe" style="margin-top:4px;"></div>
@@ -561,7 +562,42 @@
 
   // ---------- Müşterilerim ----------
   var musteriFiltre = '';
-  function musteriBul(kod){ return ((D.veri && D.veri.musteriler) || []).filter(function(m){ return m.kod === kod; })[0] || null; }
+  // Yönetici (Plasiyer Yönetimi) atanmamış dahil TÜM carilere sipariş/tahsilat girebilir. Cari listesi
+  // telefondaki uygulama kaydından (sayimDB / cari) gelir — internetsiz de çalışır; yoksa sunucudan.
+  var tumCari = null, tumCariYukleniyor = false;
+  function tumCariYukle(){
+    if(tumCari || tumCariYukleniyor) return;
+    tumCariYukleniyor = true;
+    var bitti = function(l){ tumCari = l || []; tumCariYukleniyor = false; musteriCiz(); };
+    var sunucudan = function(){
+      istek(kimlikli({ action:'plasiyer_cariler' }), function(r){
+        if(r.status !== 'ok'){ tumCariYukleniyor = false; toast(r.message || 'Cari listesi alınamadı', 'hata'); musteriCiz(); return; }
+        bitti(r.cariler.map(function(c){ return { kod: String(c[0]), ad: String(c[1]), bakiye: c[2] === null || c[2] === '' ? null : Number(c[2]) }; }));
+      });
+    };
+    try {
+      var req = indexedDB.open('sayimDB');
+      req.onupgradeneeded = function(e){ try { e.target.transaction.abort(); } catch(er){} };
+      req.onerror = sunucudan;
+      req.onsuccess = function(e){
+        var db = e.target.result;
+        if(!db.objectStoreNames.contains('cari')){ db.close(); sunucudan(); return; }
+        var g = db.transaction('cari', 'readonly').objectStore('cari').getAll();
+        g.onsuccess = function(){
+          db.close();
+          var l = (g.result || []).filter(function(c){ return c && c.code; }).map(function(c){ var b = sayi(c.balance); return { kod: String(c.code), ad: String(c.name || ''), bakiye: isNaN(b) ? null : b }; });
+          if(l.length) bitti(l); else sunucudan();
+        };
+        g.onerror = function(){ db.close(); sunucudan(); };
+      };
+    } catch(e){ sunucudan(); }
+  }
+  function musteriBul(kod){
+    var m = ((D.veri && D.veri.musteriler) || []).filter(function(x){ return x.kod === kod; })[0];
+    if(m) return m;
+    if(yonetim() && tumCari){ var c = tumCari.filter(function(x){ return x.kod === kod; })[0]; if(c) return { kod: c.kod, ad: c.ad, bakiye: c.bakiye, risk: null, seviye: '', gecmis: null, atanmamis: true }; }
+    return null;
+  }
   function bakiyeMetni(b){
     if(b === null || b === undefined || b === '') return '<span class="ipucu">—</span>';
     var n = Number(b);
@@ -573,6 +609,8 @@
     return '<span class="etiket ' + c + '">Risk ' + m.risk + ' · ' + esc(m.seviye) + '</span>';
   }
   function musteriCiz(){
+    $('tumCariFiltre').classList.toggle('gizli', !yonetim());
+    if(musteriFiltre === 'tum' && yonetim()){ tumCariCiz(); return; }
     var liste = (D.veri && D.veri.musteriler) || [];
     var q = norm($('musteriAra').value);
     var goster = liste.filter(function(m){
@@ -599,6 +637,18 @@
         '<div class="bak">' + bakiyeMetni(m.bakiye) + '</div></div>';
     }).join('') || '<div class="ipucu" style="padding:12px 0;">Eşleşen müşteri yok.</div>';
   }
+  function tumCariCiz(){
+    if(!tumCari){ $('musteriOzet').textContent = ''; $('musteriListe').innerHTML = '<div class="ipucu" style="padding:12px 0;">Cari listesi yükleniyor…</div>'; tumCariYukle(); return; }
+    var q = norm($('musteriAra').value), atanan = {};
+    ((D.veri && D.veri.musteriler) || []).forEach(function(m){ atanan[m.kod] = m.plasiyer; });
+    $('musteriOzet').innerHTML = tumCari.length + ' cari · yönetici olarak hepsine sipariş / tahsilat girebilirsin';
+    if(q.length < 2){ $('musteriListe').innerHTML = '<div class="ipucu" style="padding:12px 0;">🔎 Cari adını ya da kodunu yaz (en az 2 harf).</div>'; return; }
+    var l = tumCari.filter(function(c){ return norm(c.ad).indexOf(q) !== -1 || norm(c.kod).indexOf(q) !== -1; });
+    $('musteriListe').innerHTML = (l.length > 100 ? '<div class="ipucu">' + l.length + ' sonuç — ilk 100 gösteriliyor, aramayı daralt.</div>' : '') + l.slice(0, 100).map(function(c){
+      return '<div class="musteri" data-kod="' + esc(c.kod) + '"><span class="riskNokta"></span><div style="flex:1; min-width:0;"><div class="ad">' + esc(c.ad) + '</div><div class="alt">' + esc(c.kod) +
+        (atanan[c.kod] ? ' · 🚚 ' + esc(atanan[c.kod]) : ' · <span class="ipucu">atanmamış</span>') + '</div></div><div class="bak">' + bakiyeMetni(c.bakiye) + '</div></div>';
+    }).join('') || '<div class="ipucu" style="padding:12px 0;">Eşleşen cari yok.</div>';
+  }
   $('musteriAra').addEventListener('input', musteriCiz);
   $('musteriFiltre').addEventListener('click', function(e){
     var b = e.target.closest('button'); if(!b) return;
@@ -619,12 +669,14 @@
     var m = musteriBul(kod); if(!m) return;
     seciliMusteri = m;
     $('mpAd').textContent = m.ad;
-    $('mpBilgi').innerHTML = '<div class="ipucu mono">' + esc(m.kod) + (m.erpteYok ? ' · ⚠️ ERP cari listesinde yok' : '') + '</div>' +
+    var adina = (m.atanmamis || (m.plasiyer && String(m.plasiyer).toLowerCase() !== String(kimlik.user).toLowerCase())) && yonetim()
+      ? '<div class="bant mavi" style="margin:8px 0 0;">Girdiğin sipariş/tahsilat <b>senin adına</b> yazılır' + (m.plasiyer ? ' (müşterinin plasiyeri: ' + esc(m.plasiyer) + ')' : '') + '.</div>' : '';
+    $('mpBilgi').innerHTML = '<div class="ipucu mono">' + esc(m.kod) + (m.erpteYok ? ' · ⚠️ ERP cari listesinde yok' : '') + '</div>' + adina +
       '<div class="sayilar" style="margin-top:8px;">' +
         '<div><b>' + (m.bakiye === null || m.bakiye === undefined ? '—' : para(Math.abs(m.bakiye))) + '</b><span>Bakiye ' + (Number(m.bakiye) < 0 ? '(A)' : '(B)') + '</span></div>' +
         '<div><b' + (Number(m.gecmis) > 0 ? ' class="hata"' : '') + '>' + (m.gecmis === null || m.gecmis === undefined ? '—' : para(m.gecmis)) + '</b><span>Vadesi geçmiş</span></div>' +
       '</div><div style="margin-top:8px;">' + riskEtiket(m) + '</div>';
-    $('mpRisk').innerHTML = (m.risk !== null && m.risk !== undefined) ? '<button type="button" class="kucuk" id="mpRiskBtn">ℹ️ Risk nedenleri</button>' : '';
+    $('mpRisk').innerHTML = ((m.risk !== null && m.risk !== undefined) || (yonetim() && m.atanmamis)) ? '<button type="button" class="kucuk" id="mpRiskBtn">ℹ️ Risk' + (m.atanmamis ? ' / ödeme alışkanlığı' : ' nedenleri') + '</button>' : '';
     var bugun = yerelTarih();
     var bugunkuler = D.kuyruk.concat(D.gonderilen).filter(function(x){ return x.cariKod === kod && String(x.cz).slice(0, 10) === bugun; });
     $('mpBugun').innerHTML = bugunkuler.length ? '<div class="ipucu"><b>Bugün bu müşteri:</b> ' + bugunkuler.map(function(x){
