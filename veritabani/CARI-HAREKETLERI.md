@@ -42,3 +42,11 @@ Cari ekstresi: seçilen carinin borç / alacak hareketleri ve yürüyen bakiyesi
   0–24 normal (yeşil) · 25–49 dikkat (sarı) · 50+ riskli (kırmızı).
 - `vade_raporu('alacak')` satırlarına risk eklendi; riskliler en üstte.
 - `Code.gs` (build173): vade sekmesi cevabına `odeme` eklenir.
+
+## Stoğa etki etmeyen faturalar (012_fatura_satirlari.sql, 13.10.2026)
+- İrsaliyeden kesilen fatura gibi stoğa dokunmayan belgelerin (FIS_TURU.GIRIS = 0) satırları da gönderilir
+  (`giris = 0`); eskiden bu faturaların içi "ürün satırı yok" görünüyordu.
+- Fatura detayında görünür; stok hareketlerinde ve carinin stok hareketlerinde sayılmaz (mal irsaliyede sayıldı).
+- Plasiyerin son satış/alış fiyatında kullanılır; aynı gün irsaliye + fatura tek sayılır.
+- Kurulum: Supabase'de `012_fatura_satirlari.sql`; ERP bilgisayarında `cari-hareket-gonder.ps1` yenisi.
+  Hemen görünsün diye `CARI-HAREKET-TAM.bat` çift tıklanır (tüm geçmişi yeniden gönderir; yoksa en geç ertesi gün).

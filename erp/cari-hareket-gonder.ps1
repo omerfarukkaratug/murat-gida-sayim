@@ -23,6 +23,7 @@
 # =====================================================================
 
 # ---------------------- AYARLAR ----------------------
+$script:Argumanlar = @($args | ForEach-Object { ([string]$_).ToUpperInvariant().TrimStart("-") })
 $SqlServer        = "SERVER\ERP12"
 # Bos: en yeni ERP12 yil veri tabani otomatik bulunur. Elle: "ERP122025"
 $Database         = ""
@@ -87,7 +88,9 @@ function Parcali-Gonder($fonksiyon, $kaynak, $satirlar, $basJson, $bitJson) {
 function Veritabani-Gonder($Db, $baglanti) {
     $TamGonderimDosya = Join-Path $TamGonderimKlasor "cari-hareket-son-tam-$Db.txt"
     $tam = $true
-    if (Test-Path $TamGonderimDosya) {
+    # "TAM" parametresiyle (CARI-HAREKET-TAM.bat) her zaman tum gecmis gonderilir.
+    if ($script:Argumanlar -contains "TAM") { }
+    elseif (Test-Path $TamGonderimDosya) {
         $sonTam = [datetime]::MinValue
         if ([datetime]::TryParse((Get-Content $TamGonderimDosya -TotalCount 1), [ref]$sonTam)) {
             $tam = ((Get-Date) - $sonTam).TotalHours -ge 20
@@ -172,6 +175,8 @@ GROUP BY CONVERT(char(10), F.TARIH, 23), FD.FINANS_ISLEM_TURU, FD.DOVIZ_AD
 
     # --- 3) Belge satirlari (fatura/irsaliye/fis detayi, carinin ve urunun stok hareketleri) ---
     # Stoga etki eden TUM belgeler (FIS_TURU.GIRIS = +1 / -1; Finans 18 haric): alis, satis, iade, depo, sarf, fire, sayim...
+    # + Cariye kesilmis, stoga etki ETMEYEN belgeler (GIRIS = 0): irsaliyeden kesilen fatura gibi. Bunlar olmadan
+    #   cari ekstresinde faturanin ici "urun satiri yok" gorunuyordu. Stok hesabina girmezler (giris = 0).
     # Perakende (Pesin Satis carisinin belgeleri + carisi OLMAYAN kasa/perakende belgeleri 11/12/35/36) burada DEGIL,
     # 4. adimda urun + gun toplami olarak gider. Bir cariye kesilmis kasa fisi / perakende fatura burada kalir.
     $kolD = @((Sql-Tablo $baglanti "SELECT COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_NAME = 'FIS_DETAY'") | ForEach-Object { [string]$_.COLUMN_NAME })
@@ -199,7 +204,7 @@ LEFT JOIN dbo.CARI C ON C.ID = f.CARI
 JOIN dbo.FIS_TURU FT ON FT.ID = f.FIS_TURU
 LEFT JOIN dbo.STOK s ON s.ID = d.STOK
 WHERE f.FIS_TARIHI >= '$basSql' AND f.FIS_TARIHI < '$bitSql'
-  AND FT.GIRIS IN (1, -1) AND f.FIS_TURU <> 18
+  AND (FT.GIRIS IN (1, -1) OR (ISNULL(FT.GIRIS, 0) = 0 AND C.ID IS NOT NULL)) AND f.FIS_TURU <> 18
   AND NOT (ISNULL(C.ID, 0) = COALESCE((SELECT TOP 1 VARSAYILANCARI FROM dbo.FIRMASABITLERI), -1)
            OR (C.ID IS NULL AND f.FIS_TURU IN (11, 12, 35, 36)))
 "@
@@ -216,7 +221,7 @@ WHERE f.FIS_TARIHI >= '$basSql' AND f.FIS_TARIHI < '$bitSql'
             }
             [void]$fs.Add([PSCustomObject]@{
                 detay_id = [long]$r.detay_id; fis_id = [long]$r.fis_id; fis_turu = [int]$r.fis_turu; tur_ad = Metin $r.tur_ad
-                giris = [int]$r.giris; tarih = Iso $r.tarih; belge_no = Metin $r.belge_no; cari_kod = Metin $r.cari_kod; cari_ad = Metin $r.cari_ad
+                giris = $(if ($r.giris -is [DBNull] -or $r.giris -eq $null) { 0 } else { [int]$r.giris }); tarih = Iso $r.tarih; belge_no = Metin $r.belge_no; cari_kod = Metin $r.cari_kod; cari_ad = Metin $r.cari_ad
                 stok_kodu = Metin $r.stok_kodu; barkod = Metin $r.barkod; urun_adi = Metin $r.urun_adi
                 miktar = $m; birim_fiyat = $bf; tutar = $tt; net_fiyat = $nf
             })
