@@ -8,7 +8,7 @@
 // bir sürüm dağıttıktan sonra /exec adresini boş açtığında burada yazan
 // numarayı görmelisin; index.html'in üstündeki "build" numarasıyla
 // eşleşecek şekilde ben her ikisini birlikte güncelliyorum.
-var GS_VERSION = 'build179';
+var GS_VERSION = 'build180';
 
 // Sheets'te "Saat" sütunu zaman biçimli olarak algılanırsa, hücre değeri düz
 // metin değil bir Date nesnesi olarak gelir ve String(...) çirkin bir çıktı
@@ -4222,9 +4222,16 @@ function plsRiskler() {
   return m;
 }
 
+// Plasiyer / sipariş hazırlama yazmaları AYRI kilitle (belge kilidi) sıraya girer (build180).
+// Eskiden sayım, katalog (ERP 15 dk'da bir ~20 bin ürün yazar), mal hareketi ile AYNI kilidi bekliyordu;
+// katalog yazılırken "Sunucu meşgul" çıkıyordu. Bu işlemler yalnızca Plasiyer*/SiparisHazirlik sekmelerine
+// yazar; plasiyer kaydı (POST) PlasiyerBelge'ye yalnızca SONA ekler, burada ise var olan satır güncellenir —
+// birbirini bozmaz. Belge kilidi alınamazsa (bağlı olmayan proje) eskisi gibi genel kilit.
 function plsYaz(fn) {
-  var lock = LockService.getScriptLock();
-  try { lock.waitLock(20000); } catch (e) { throw new Error('Sunucu meşgul — birazdan tekrar dene'); }
+  var lock = null;
+  try { lock = LockService.getDocumentLock(); } catch (e0) { lock = null; }
+  if (!lock) lock = LockService.getScriptLock();
+  try { lock.waitLock(25000); } catch (e) { throw new Error('Sunucu meşgul — birazdan tekrar dene'); }
   try { var r = fn(); r.status = r.status || 'ok'; return r; } finally { lock.releaseLock(); }
 }
 
@@ -4737,7 +4744,7 @@ function hzBasla(k, p) {
   h.durum = 'hazirlaniyor'; h.hazirlayan = k.ben; h.basla = h.basla || plsZamanMetni();
   hzYaz(h);
   if (devir) gunlukYaz('hazirlama', k.ben, 'Sipariş ' + id + ' devralındı (önceki: ' + devir + ')', false);
-  return { hazirlik: hzAc(k, id).hazirlik };
+  return { durum: 'hazirlaniyor', hazirlayan: k.ben };
 }
 function hzKaydet(k, p) {
   var id = plsMetin(p.id, 60), b = hzBelgeBul(id), h = hzKayit(id);

@@ -261,9 +261,16 @@
     document.body.appendChild(sc);
   }
   function kimlikli(p){ p.user = kimlik.user; p.pass = kimlik.pass; return p; }
-  function islem(btn, params, basari, sonra){
-    if(btn){ if(btn.disabled) return; btn.disabled = true; }
+  // Sunucu kısa süreli meşgulse (başka bir yazma sürüyor) 3 kez, 4 sn arayla kendiliğinden tekrar denenir.
+  function islem(btn, params, basari, sonra, deneme){
+    deneme = deneme || 0;
+    if(btn && !deneme){ if(btn.disabled) return; btn.disabled = true; }
     istek(kimlikli(params), function(r){
+      if(r.status !== 'ok' && /meşgul/i.test(r.message || '') && deneme < 3){
+        toast('Sunucu yoğun — tekrar deneniyor (' + (deneme + 1) + '/3)…', 'uyari');
+        setTimeout(function(){ islem(btn, params, basari, sonra, deneme + 1); }, 4000);
+        return;
+      }
       if(btn) btn.disabled = false;
       if(r.status !== 'ok'){ toast(r.message || 'İşlem yapılamadı', 'hata'); return; }
       if(basari) toast(basari);
@@ -466,9 +473,10 @@
         if(r.iptal && S && S.belge.id === id && !S.belge.iptal){ S.belge.iptal = true; bip(false); toast('Sipariş İPTAL edildi — hazırlamayı durdur', 'hata'); siparisCiz(); }
         if(sonra) sonra(true);
       } else {
-        if(!r.ag) toast(r.message, 'hata');
-        if(!r.ag && S && S.belge.id === id) siparisAc(id); // başkası devraldı vb. — güncel hâli yükle
-        else kaydetPlanla(15000);
+        var mesgul = /meşgul/i.test(r.message || '');
+        if(!r.ag && !mesgul) toast(r.message, 'hata');
+        if(!r.ag && !mesgul && S && S.belge.id === id) siparisAc(id); // başkası devraldı vb. — güncel hâli yükle
+        else kaydetPlanla(mesgul ? 5000 : 15000);   // internet yok / sunucu meşgul: okutmalar telefonda, sonra gider
         if(sonra) sonra(false, r);
       }
       kayitDurumCiz();
