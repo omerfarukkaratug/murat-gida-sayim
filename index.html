@@ -376,7 +376,7 @@
   <header style="border:none; padding:0 0 16px; background:transparent; display:flex; align-items:flex-start; justify-content:space-between;">
     <div>
       <h1><img src="logo-header.png" alt="Murat Gıda" style="height:30px; width:auto; display:block;"></h1>
-      <div class="sub">MK ERP · Murat Gıda • offline • Android • build 208</div>
+      <div class="sub">MK ERP · Murat Gıda • offline • Android • build 209</div>
     </div>
     <button type="button" id="themeToggleBtn" title="Tema seç" style="background:var(--panel2); border:1.5px solid var(--line); color:var(--text); width:34px; height:34px; border-radius:50%; font-size:15px; padding:0; display:flex; align-items:center; justify-content:center; flex-shrink:0;">🎨</button>
   </header>
@@ -1721,6 +1721,8 @@
   function canSeeMesai(){ return hasPerm('mesai') || hasPerm('mesai_yonetim'); }
   // Plasiyer: sahada çalışır, şube konumu ŞART DEĞİL (fiyat/maliyet yetkisi sunucuda ayrıca denetlenir).
   function canSeePlasiyer(){ return hasPerm('plasiyer') || hasPerm('plasiyer_yonetim'); }
+  // Alış fiyatı (maliyet): sunucu kataloğa yalnızca bu kişilere koyar (build 209).
+  function canSeeAlis(){ return hasPerm('alis_fiyat') || hasPerm('plasiyer_maliyet'); }
   function canSeeHareket(){ return hasPerm('hareket') && konumIzinli(); }
   function canSeeCariHrk(){ return hasPerm('cari_hareket') && konumIzinli(); }
   function canSeeStokHrk(){ return hasPerm('stok_hareket') && konumIzinli(); }
@@ -1854,10 +1856,12 @@
     document.getElementById('menuPlasiyerBtn').classList.toggle('hidden', !canSeePlasiyer());
     document.getElementById('menuEtiketBtn').classList.toggle('hidden', !canSeeEtiket());
     startBtn.textContent = (state.session.scans && state.session.scans.length > 0) ? '▶ Sayıma Devam Et' : 'Sayıma Başla';
+    katalogAlisDenetle();
     konumKontrol(); // girişte (açılışta ve giriş yapınca) bir kez
   }
   function showLoginUI(){
     closeMesaiScreen(); closePlasiyerScreen();
+    if(typeof katalogAlisDenetle === 'function') setTimeout(katalogAlisDenetle, 0);
     loginCardEl.classList.remove('hidden');
     loggedInCardEl.classList.add('hidden');
     document.getElementById('homeMenuScreen').classList.add('hidden');
@@ -2148,7 +2152,45 @@
     rows.forEach(function(r){ catalogMap.set(r.barcode, { name: r.name, stockCode: r.stockCode || '', oldStock: r.oldStock || '', price: r.price || '', kdv: r.kdv || '', carpan: r.carpan || '', birim: r.birim || '', ft: r.ft || '', of: r.of || '', yer: r.yer || '', pr: r.pr || '', af: r.af || '' }); });
     updateProductCountLabel();
     setSyncStatus();
+    katalogAlisDenetle();
   }).catch(function(){ productCountEl.textContent = "Henüz ürün yok"; });
+
+  // ---------- MALİYET GİZLİLİĞİ (build 209) ----------
+  // Katalog telefonda TEK (sayimDB) ve bütün kullanıcılar paylaşır. Alış fiyatı yetkisi olmayan biri
+  // girdiğinde telefonda önceki yetkilinin indirdiği alış fiyatları kalmasın: hemen silinir (internet
+  // gerekmez). Yetkili biri girdiğinde katalogda alış fiyatı yoksa sessizce yeniden indirilir.
+  var alisDenetimSuruyor = false, alisIndirmeDenendi = '';
+  function katalogAlisDenetle(){
+    // Kimse giriş yapmamışsa (çıkış yapılmış telefon) da yetkisiz sayılır: alış fiyatları silinir.
+    if(alisDenetimSuruyor || catalogMap.size === 0) return;
+    var afVar = false; catalogMap.forEach(function(v){ if(v.af) afVar = true; });
+    if(!canSeeAlis()){
+      if(state.malDrafts && state.malDrafts.giris && state.malDrafts.giris.items){
+        var degisti = false;
+        state.malDrafts.giris.items.forEach(function(it){ if(it.fiyat !== ''){ it.fiyat = ''; degisti = true; } });
+        if(degisti) save();
+      }
+      if(!afVar) return;
+      alisDenetimSuruyor = true;
+      catalogMap.forEach(function(v){ v.af = ''; });
+      dbPromise.then(function(db){
+        return new Promise(function(ok, hata){
+          var g = db.transaction('catalog', 'readonly').objectStore('catalog').getAll();
+          g.onsuccess = function(){ ok(g.result || []); }; g.onerror = function(){ hata(g.error); };
+        });
+      }).then(function(rows){
+        var islemler = [];
+        rows.forEach(function(r){ if(r && r.af !== undefined){ var c = {}; Object.keys(r).forEach(function(k){ if(k !== 'af') c[k] = r[k]; }); islemler.push(function(st){ st.put(c); }); } });
+        return idbParcaYaz('catalog', islemler, false);
+      }).catch(function(){ /* bir sonraki açılışta tekrar denenir */ }).then(function(){ alisDenetimSuruyor = false; });
+      return;
+    }
+    // Yetkili: katalog alış fiyatsız inmişse bir kez (bu oturumda) yeniden indir.
+    if(!afVar && state.currentUser && alisIndirmeDenendi !== state.currentUser.name && navigator.onLine !== false){
+      alisIndirmeDenendi = state.currentUser.name;
+      fetchCatalogFromServer(true);
+    }
+  }
 
   function updateProductCountLabel(){
     katalogAramaOnHazirla(); // katalog her yüklendiğinde/değiştiğinde çağrılıyor
@@ -5083,11 +5125,13 @@
   function fmtPara(n){
     return Number(n).toLocaleString('tr-TR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + ' ₺';
   }
+  // Mal girişteki fiyatlar ALIŞ fiyatıdır: fiyat yetkisine ek olarak alış fiyatı yetkisi ister.
+  function malFiyatGorur(){ return canSeePrice() && (malTip !== 'giris' || canSeeAlis()); }
   function malFiyat(it){ return (it.fiyat === '' || it.fiyat === null || it.fiyat === undefined || isNaN(Number(it.fiyat))) ? null : Number(it.fiyat); }
   function renderMalMeta(){
     var toplam = malItems.reduce(function(sum, it){ return sum + it.miktar; }, 0);
     var fiyatHtml = '';
-    if(canSeePrice() && malItems.length){
+    if(malFiyatGorur() && malItems.length){
       var tutar = 0, fiyatsiz = 0, kdvTutar = 0, kdvsiz = 0;
       malItems.forEach(function(it){
         var f = malFiyat(it); if(f === null){ fiyatsiz++; return; }
@@ -5127,7 +5171,7 @@
       var sira = toplamSatir - i; // okutma sırası: ilk okutulan 1 (liste en yeniden eskiye)
       var kdvTxt = formatKdv(it.kdv);
       var fiyatSatir = '';
-      if(canSeePrice()){
+      if(malFiyatGorur()){
         var f = malFiyat(it);
         fiyatSatir = '<div class="meta" style="font-weight:700; color:var(--text);">' +
           (f === null ? '<span style="color:var(--amber);">Fiyat yok</span>' : fmtPara(f) + ' × ' + fmtQty(it.miktar) + ' = ' + fmtPara(f * it.miktar)) + '</div>';
@@ -5287,7 +5331,8 @@
       stokKodu: entry.stockCode || '', birim: unitFor(malPendingBarcode), miktar: qty,
       kdv: entry.kdv === undefined ? '' : entry.kdv,
       // Mal GİRİŞ: en son alış fiyatı (ERP, KDV hariç; hiç alınmamışsa boş). Mal ÇIKIŞ: satış fiyatı.
-      fiyat: malTip === 'giris' ? (entry.af ? entry.af : '') : (entry.price === undefined ? '' : entry.price),
+      // Alış fiyatı yetkisi yoksa telefonda alış fiyatı yoktur; boş gider, sunucu son alıştan doldurur.
+      fiyat: malTip === 'giris' ? (entry.af && canSeeAlis() ? entry.af : '') : (entry.price === undefined ? '' : entry.price),
       tarih: t.date, saat: t.time, v: 1
     });
     if(!malCommit(onceki, 'Bu okutma (' + name + ')')) return;
@@ -5786,6 +5831,8 @@
     { key: 'plasiyer', label: '🚚 Plasiyer' },
     { key: 'plasiyer_maliyet', label: '🚚 Plasiyer: maliyet/tedarikçi görür' },
     { key: 'plasiyer_yonetim', label: '🚚 Plasiyer Yönetimi (ayar, atama, iptal)' },
+    // Son alış fiyatı (maliyet): mal girişte fiyatın gelmesi için. Yoksa telefona hiç inmez.
+    { key: 'alis_fiyat', label: '💲 Alış Fiyatı (maliyet) Görme' },
     // Şube dışındayken de fiyat/stok görebilir (konum kısıtlamasından muaf).
     { key: 'konum_serbest', label: '🌍 Şube Dışında da Görür' },
     { key: 'etiket', label: '🏷️ Etiket Yazdırma' },

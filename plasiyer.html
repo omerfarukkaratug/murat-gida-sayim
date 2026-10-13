@@ -814,7 +814,8 @@
         '<div class="fiyat"><input inputmode="decimal" data-f="' + i + '" value="' + esc(para(k.f)) + '"' + (serbest ? '' : ' readonly') + ' aria-label="Birim fiyat"></div>' +
         '<div class="tutar">' + para(k.m * k.f) + '</div></div>' +
         '<div class="bilgi">' + bilgi.join(' · ') + (dug ? '<div style="margin-top:4px;">' + dug + '</div>' : '') + '</div>' +
-        (hata ? '<div class="hata" style="font-size:12.5px; margin-top:4px;">' + esc(hata) + '</div>' : '') + '</div>';
+        (hata ? '<div class="hata" style="font-size:12.5px; margin-top:4px;">' + esc(hata) + '</div>' : '') +
+        (!hata && k.kontrolsuz ? '<div class="uyari" style="font-size:12.5px; margin-top:4px;">⚠️ Fiyat internetsiz girildi, kontrol edilemedi</div>' : '') + '</div>';
     }).join('') || '<div class="ipucu" style="text-align:center; padding:16px 0;">Henüz ürün eklenmedi.</div>';
     toplamCiz();
   }
@@ -845,17 +846,32 @@
     if((i = t.getAttribute('data-f')) !== null) fiyatYaz(+i, sayi(t.value));
   });
   // Fiyat taban altına YAZILAMAZ: eski fiyat geri gelir.
+  // Maliyet yetkisi olan: telefondaki maliyetle anında kontrol. Olmayan: telefonda maliyet YOK (gizli);
+  // liste ya da özel fiyat ve üstü doğrudan kabul, altı sunucuya sorulur (cevap yalnız uygun / değil).
+  // İnternet yoksa fiyat kabul edilir, kalem "kontrol edilemedi" işaretlenir; sunucu kayıtta yine denetler.
+  var fiyatSoruNo = 0;
   function fiyatYaz(i, f){
     var k = B.kalemler[i]; if(!k) return;
     if(!ayar().fiyatSerbest){ kalemCiz(); return; }
     if(!(f > 0) || f > 10000000){ toast('Fiyat geçersiz', 'hata'); kalemCiz(); return; }
     f = yuvarla(f);
-    var t = tabanHesap(katalogBarkod[k.b]);
-    if(t && f < t - 0.005){
-      toast(maliyetGorur() ? 'Yazılamaz: en düşük ' + para(t) + ' ₺' : 'Bu fiyat yazılamaz — izin verilen en düşük fiyatın altında', 'hata');
-      kalemCiz(); return;
+    if(maliyetGorur()){
+      var t = tabanHesap(katalogBarkod[k.b]);
+      if(t && f < t - 0.005){ toast('Yazılamaz: en düşük ' + para(t) + ' ₺', 'hata'); kalemCiz(); return; }
+      k.f = f; delete k.kontrolsuz; kaydetD(); kalemCiz(); return;
     }
-    k.f = f; kaydetD(); kalemCiz();
+    if(f >= (k.lf || 0) - 0.005 && k.lf > 0 || (k.of && f >= k.of - 0.005)){ k.f = f; delete k.kontrolsuz; kaydetD(); kalemCiz(); return; }
+    var no = ++fiyatSoruNo, b = k.b;
+    var kutu = document.querySelector('input[data-f="' + i + '"]'); if(kutu){ kutu.disabled = true; }
+    istek(kimlikli({ action:'plasiyer_fiyat_kontrol', barkod: b, fiyat: f }), function(r){
+      if(!B || no !== fiyatSoruNo) return;
+      var kk = B.kalemler.filter(function(x){ return x.b === b; })[0]; if(!kk){ kalemCiz(); return; }
+      if(r.status === 'ok' && r.uygun){ kk.f = f; delete kk.kontrolsuz; }
+      else if(r.status === 'ok'){ toast('Bu fiyat yazılamaz — izin verilen en düşük fiyatın altında', 'hata'); }
+      else if(r.ag){ kk.f = f; kk.kontrolsuz = 1; toast('İnternet yok — fiyat kontrol edilemedi; kayıtta yöneticiye uyarı düşebilir', 'uyari'); }
+      else toast(r.message || 'Fiyat kontrol edilemedi', 'hata');
+      kaydetD(); kalemCiz();
+    });
   }
 
   $('bkPesin').addEventListener('change', function(){
