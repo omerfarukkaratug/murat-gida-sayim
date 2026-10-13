@@ -180,15 +180,19 @@ GROUP BY CONVERT(char(10), F.TARIH, 23), FD.FINANS_ISLEM_TURU, FD.DOVIZ_AD
     $fiyat = @("DAHIL_FIYAT", "KDV_DAHIL_FIYAT", "FIYAT_KDV_DAHIL", "KDVLI_FIYAT") | Where-Object { $kolD -contains $_ } | Select-Object -First 1
     $tutarK = @("DAHIL_TUTAR", "KDV_DAHIL_TUTAR", "TUTAR_KDV_DAHIL", "KDVLI_TUTAR") | Where-Object { $kolD -contains $_ } | Select-Object -First 1
     $urunAd = @("AD", "STOK_ADI", "ADI") | Where-Object { $kolS -contains $_ } | Select-Object -First 1
+    # NET fiyat (011_net_fiyat.sql): tum iskontolar (satir + fis/dip) dusulmus, KDV DAHIL birim fiyat.
+    # KDV matrahi iskontolar dusulmus tutardir: net = (TOPLAM_KDV_MATRAHI + TOPLAM_KDV) / miktar.
+    $netVar = ($kolD -contains "TOPLAM_KDV_MATRAHI") -and ($kolD -contains "TOPLAM_KDV")
     if (-not $miktar) { Yaz-Log "[$Db] UYARI: FIS_DETAY miktar sutunu bulunamadi; belge satirlari gonderilmedi. Sutunlar: $($kolD -join ', ')" }
     else {
         $fiyatIf = if ($fiyat) { "d.$fiyat" } else { "CAST(NULL AS decimal(18,4))" }
         $tutarIf = if ($tutarK) { "d.$tutarK" } else { "CAST(NULL AS decimal(18,4))" }
         $adIf = if ($urunAd) { "ISNULL(s.$urunAd, '')" } else { "''" }
+        $netIf = if ($netVar) { "CASE WHEN d.$miktar > 0 THEN (ISNULL(d.TOPLAM_KDV_MATRAHI, 0) + ISNULL(d.TOPLAM_KDV, 0)) / d.$miktar END" } else { "CAST(NULL AS decimal(18,4))" }
         $sqlF = @"
 SELECT d.ID AS detay_id, f.ID AS fis_id, f.FIS_TURU AS fis_turu, ISNULL(FT.AD, '') AS tur_ad, FT.GIRIS AS giris, f.FIS_TARIHI AS tarih,
        ISNULL(f.BELGENO, '') AS belge_no, ISNULL(C.KOD, '') AS cari_kod, ISNULL(C.AD, '') AS cari_ad, ISNULL(s.KOD, '') AS stok_kodu, ISNULL(d.BARKOD, '') AS barkod,
-       $adIf AS urun_adi, d.$miktar AS miktar, $fiyatIf AS birim_fiyat, $tutarIf AS tutar
+       $adIf AS urun_adi, d.$miktar AS miktar, $fiyatIf AS birim_fiyat, $tutarIf AS tutar, $netIf AS net_fiyat
 FROM dbo.FIS f
 JOIN dbo.FIS_DETAY d ON d.FIS = f.ID
 LEFT JOIN dbo.CARI C ON C.ID = f.CARI
@@ -202,18 +206,23 @@ WHERE f.FIS_TARIHI >= '$basSql' AND f.FIS_TARIHI < '$bitSql'
         $dtF = Sql-Tablo $baglanti $sqlF
         $fs = New-Object System.Collections.ArrayList
         foreach ($r in $dtF.Rows) {
-            $m = Sayi $r.miktar; $bf = $null; $tt = $null
+            $m = Sayi $r.miktar; $bf = $null; $tt = $null; $nf = $null
             if ($r.birim_fiyat -isnot [DBNull] -and $r.birim_fiyat -ne $null) { $bf = [double]$r.birim_fiyat }
             if ($r.tutar -isnot [DBNull] -and $r.tutar -ne $null) { $tt = [double]$r.tutar } elseif ($bf -ne $null) { $tt = [Math]::Round($m * $bf, 2) }
+            # Net fiyat ancak mantikliysa gider (0'dan buyuk, brutten en fazla %1 yuksek); yoksa bos kalir, brut kullanilir.
+            if ($r.net_fiyat -isnot [DBNull] -and $r.net_fiyat -ne $null) {
+                $nv = [Math]::Round([double]$r.net_fiyat, 4)
+                if ($nv -gt 0 -and ($bf -eq $null -or $bf -le 0 -or $nv -le $bf * 1.01)) { $nf = $nv }
+            }
             [void]$fs.Add([PSCustomObject]@{
                 detay_id = [long]$r.detay_id; fis_id = [long]$r.fis_id; fis_turu = [int]$r.fis_turu; tur_ad = Metin $r.tur_ad
                 giris = [int]$r.giris; tarih = Iso $r.tarih; belge_no = Metin $r.belge_no; cari_kod = Metin $r.cari_kod; cari_ad = Metin $r.cari_ad
                 stok_kodu = Metin $r.stok_kodu; barkod = Metin $r.barkod; urun_adi = Metin $r.urun_adi
-                miktar = $m; birim_fiyat = $bf; tutar = $tt
+                miktar = $m; birim_fiyat = $bf; tutar = $tt; net_fiyat = $nf
             })
         }
         $nF = Parcali-Gonder "fis_satir_yukle" $Db $fs ('"' + (Iso $bas) + '"') ('"' + (Iso $bit) + '"')
-        Yaz-Log "[$Db] Belge satirlari: $nF satir gonderildi (miktar: $miktar, fiyat: $fiyat, tutar: $tutarK, urun adi: $urunAd)"
+        Yaz-Log "[$Db] Belge satirlari: $nF satir gonderildi (miktar: $miktar, fiyat: $fiyat, tutar: $tutarK, urun adi: $urunAd, net fiyat: $(if ($netVar) { 'var' } else { 'YOK - TOPLAM_KDV_MATRAHI/TOPLAM_KDV sutunu bulunamadi' }))"
 
         # --- 4) Perakende: urun + gun toplami (satis -, iade +). Ilk calismada tum gecmis, gunluk tam
         #        gonderimde son 60 gun, diger saatlerde son 7 gun (kasa fisleri sonradan pek degismez).

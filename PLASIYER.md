@@ -113,3 +113,19 @@ depoda okutularak toplanır. ERP'ye yazmaz; `SiparisHazirlik` sekmesinde durur. 
 - **Plasiyer** gün sonunda her siparişin durumunu görür: depoda bekliyor / hazırlanıyor (kim) /
   hazır · N koli / teslim edildi, eksik/fazla kalem sayısı.
 - Liste: son 30 günün teslim edilmemiş siparişleri + bugün teslim edilenler; en eski üstte; dakikada bir tazelenir.
+
+## build 213 / Code.gs build179 — net fiyat ve kullanım kolaylığı
+- **Net fiyat:** "Son alışlar", "Tedarikçiler" ve müşteriye "son satış" artık **tüm iskontolar (satır + fiş/dip)
+  düşülmüş, KDV dahil** birim fiyattır: ERP12 FIS_DETAY'dan (TOPLAM_KDV_MATRAHI + TOPLAM_KDV) / miktar.
+  Son alışlarda liste fiyatı ve iskonto oranı da yazar. Ürün penceresinde **son net alış** ve ona göre marj.
+  Net bilgisi henüz gelmemiş eski satırlarda "brüt" yazar (iskontosuz).
+  Kurulum: Supabase'de `veritabani/011_net_fiyat.sql`, ERP bilgisayarında `C:\Scripts\cari-hareket-gonder.ps1`
+  yenisiyle değiştirilir. Program günde bir tüm geçmişi yeniden gönderdiği için eski belgeler de netleşir.
+- **Aramada adet kutusu:** her ürünün yanında; adet yaz + Enter → siparişe girer (0 = çıkar), imleç aramaya
+  döner, sıradaki ürün yazılır. Siparişteki ürünün adedi kutuda görünür. Adetli ürüne küsurat yazılamaz,
+  KG ürüne yazılır.
+- **⭐ Sık aldıkları:** arama boşken müşterinin ERP'deki satışlarından en sık aldığı ürünler hazır gelir
+  (son net fiyat, tarih, kaç kez, ortalama adet). **🛒 Siparişteki** süzgeci.
+- **Stok:** 📦 Stok Görme yetkisi olan plasiyer aramada ve kalemde stoğu görür; stoktan fazlasına uyarı.
+- Arama kutusu kaydırınca üstte kalır; altta kalem ve toplam adet.
+- Not: Maliyet / taban hâlâ katalogdaki son alış fiyatıyla (STOK.SON_ALIS_FIYAT) hesaplanır.

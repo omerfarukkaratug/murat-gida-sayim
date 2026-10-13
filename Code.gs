@@ -8,7 +8,7 @@
 // bir sürüm dağıttıktan sonra /exec adresini boş açtığında burada yazan
 // numarayı görmelisin; index.html'in üstündeki "build" numarasıyla
 // eşleşecek şekilde ben her ikisini birlikte güncelliyorum.
-var GS_VERSION = 'build178';
+var GS_VERSION = 'build179';
 
 // Sheets'te "Saat" sütunu zaman biçimli olarak algılanırsa, hücre değeri düz
 // metin değil bir Date nesnesi olarak gelir ve String(...) çirkin bir çıktı
@@ -4156,7 +4156,7 @@ function plsKimlik(user, pass) {
   var yonetim = yon || p.indexOf('plasiyer_yonetim') !== -1;
   var kullanir = yonetim || p.indexOf('plasiyer') !== -1;
   if (!kullanir) return { ok: false, message: 'Plasiyer yetkin yok — yöneticinden iste' };
-  return { ok: true, ben: String(user || '').trim(), yonetim: yonetim, maliyet: yon || p.indexOf('plasiyer_maliyet') !== -1 };
+  return { ok: true, ben: String(user || '').trim(), yonetim: yonetim, maliyet: yon || p.indexOf('plasiyer_maliyet') !== -1, stok: yon || p.indexOf('stok') !== -1 };
 }
 
 // Plasiyer kullanıcıları (şifreler okunmaz).
@@ -4272,7 +4272,7 @@ function plsVeri(k) {
     var anahtar = String(r[1] || '').trim() || String(r[2] || '').trim(); if (!anahtar) return;
     (ozel[kod] = ozel[kod] || {})[anahtar] = [plsSayi(r[4]), String(r[3] || ''), plsTarih(r[5]), String(r[2] || '')];
   });
-  var sonuc = { status: 'ok', ben: k.ben, yonetim: k.yonetim, maliyet: k.maliyet, ayar: plsAyar(), musteriler: musteriler, ozel: ozel,
+  var sonuc = { status: 'ok', ben: k.ben, yonetim: k.yonetim, maliyet: k.maliyet, stok: k.stok, ayar: plsAyar(), musteriler: musteriler, ozel: ozel,
     yontemler: PLS_YONTEMLER, bugun: ekipBugun(), riskVar: Object.keys(risk).length > 0 };
   if (k.yonetim) sonuc.plasiyerler = plsKullanicilar();
   return sonuc;
@@ -4393,6 +4393,7 @@ function plsUrun(k, stokKodu, barkod) {
         var ad = function (kod, ad0) { if (ad0) return ad0; if (!cari) cari = plsCariHarita(); return (cari[kod] && cari[kod].ad) || kod; };
         sonuc.alislar = (r.alislar || []).map(function (s) { s[2] = ad(s[1], s[2]); return s; });
         sonuc.tedarikciler = (r.tedarikciler || []).map(function (s) { s[1] = ad(s[0], s[1]); return s; });
+        if (r.sonNet !== undefined && r.sonNet !== null) sonuc.sonNet = Number(r.sonNet); // son NET alış (iskontolar düşülmüş, KDV dahil) — 011_net_fiyat.sql
       }
     } catch (err) { sonuc.dbHata = 'Alış geçmişi alınamadı'; gunlukYaz('veritabani', 'plasiyer ürün', 'Sorgu başarısız: ' + err, true); }
   } else sonuc.dbYok = true;

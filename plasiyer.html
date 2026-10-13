@@ -90,6 +90,12 @@
   .sonuc .ad{flex:1; min-width:0; font-size:14px; font-weight:700;}
   .sonuc .ad small{display:block; font-weight:500; color:var(--muted); font-family:var(--mono); font-size:11.5px;}
   .sonuc .f{font-family:var(--mono); font-weight:800; white-space:nowrap;}
+  .sonuc .adt{flex:none; width:66px; text-align:center; font-family:var(--mono); font-weight:800; font-size:17px; padding:9px 4px; border-radius:10px;}
+  .sonuc .adt.dolu{border-color:var(--accent); background:#2563eb1f;}
+  .sonuc.sepette{background:#2563eb0d;}
+  .aramaKutu{position:sticky; top:-12px; z-index:5; background:var(--bg); margin:-12px -14px 0; padding:12px 14px 6px; box-shadow:0 6px 8px -8px #0004;}
+  .bolumBaslik{font-size:12px; font-weight:800; color:var(--muted); text-transform:uppercase; letter-spacing:.05em; margin:10px 2px 2px;}
+  .stokYok{color:var(--red); font-weight:800;}
   /* Sipariş kalemi */
   .kalem{background:var(--panel); border:1px solid var(--line); border-radius:14px; padding:10px 12px; margin-bottom:8px; user-select:none; -webkit-user-select:none; -webkit-touch-callout:none;}
   .kalem.hatali{border-color:var(--red);}
@@ -266,6 +272,7 @@
     </div>
     <div class="katmanGovde" id="bkGovde">
       <div id="bkBant"></div>
+      <div class="aramaKutu">
       <div class="aramaSatir">
         <input id="urunAra" type="search" placeholder="🔎 Ürün: ad, barkod ya da stok kodu" autocomplete="off" enterkeyhint="search">
         <button type="button" id="kameraBtn" aria-label="Barkod okut">📷</button>
@@ -276,8 +283,10 @@
       </div>
       <div class="cipler" id="urunKaynak" style="margin-top:8px;">
         <button type="button" class="on" data-k="hepsi">Tüm ürünler</button>
-        <button type="button" data-k="once">Daha önce aldıkları</button>
+        <button type="button" data-k="once">⭐ Sık aldıkları</button>
         <button type="button" data-k="ozel">Özel fiyatlı</button>
+        <button type="button" data-k="sepet">🛒 Siparişteki</button>
+      </div>
       </div>
       <div class="sonuclar" id="urunSonuc"></div>
       <div id="kalemler" style="margin-top:12px;"></div>
@@ -437,7 +446,7 @@
           katalog = []; katalogBarkod = {}; katalogKod = {};
           tum.forEach(function(e){
             if(!e || !e.barcode) return;
-            var u = { b: String(e.barcode), a: String(e.name || ''), k: String(e.stockCode || ''), f: sayi(e.price), kdv: sayi(e.kdv), af: sayi(e.af), c: Number(e.carpan) > 1 ? Number(e.carpan) : 1, birim: e.birim || '' };
+            var u = { b: String(e.barcode), a: String(e.name || ''), k: String(e.stockCode || ''), f: sayi(e.price), kdv: sayi(e.kdv), af: sayi(e.af), c: Number(e.carpan) > 1 ? Number(e.carpan) : 1, birim: e.birim || '', st: sayi(e.oldStock) };
             u.n = norm(u.a);
             katalogBarkod[u.b] = u;
             if(u.c === 1){ katalog.push(u); if(u.k && !katalogKod[u.k]) katalogKod[u.k] = u; }
@@ -454,6 +463,9 @@
   function tabanHesap(u){ var m = maliyetHesap(u); return m ? yuvarla(m * (1 - (Number(ayar().altYuzde) || 0) / 100)) : null; }
   function ayar(){ return (D.veri && D.veri.ayar) || { altYuzde:10, primSatis:0, primTahsilat:0, fiyatSerbest:true }; }
   function maliyetGorur(){ return !!(D.veri && D.veri.maliyet); }
+  function stokGorur(){ return !!(D.veri && D.veri.stok); }
+  // Küsuratlı miktar: ERP birimi KG ise ya da barkod 29 ile başlıyorsa (dökme).
+  function kesirli(u){ return !!u && (String(u.b).indexOf('29') === 0 || /^(KG|KGM|KİLO|KILO|KİLOGRAM|KILOGRAM)$/.test(String(u.birim || '').trim().toLocaleUpperCase('tr-TR'))); }
   function yonetim(){ return !!(D.veri && D.veri.yonetim); }
 
   // ---------- Kuyruk ve gönderim ----------
@@ -707,7 +719,8 @@
     if(c && Date.now() - c.zaman < 30 * 60000){ if(cb) cb(); return; }
     istek(kimlikli({ action:'plasiyer_son_fiyat', cariKod: kod }), function(r){
       if(r.status === 'ok'){
-        var m = {}; (r.satirlar || []).forEach(function(s){ m[s[0] || s[1]] = { f: s[2], t: s[3], m: s[4], kez: s[5], b: s[1] }; });
+        // f: NET (iskontolar düşülmüş) KDV dahil son satış; net 0 ise ERP'den net gelmemiş, brüt.
+        var m = {}; (r.satirlar || []).forEach(function(s){ m[s[0] || s[1]] = { f: s[2], t: s[3], m: s[4], kez: s[5], b: s[1], ort: s[6], net: s[7] === undefined ? 1 : s[7] }; });
         // En fazla 40 müşterinin listesi saklanır (hafıza dolmasın).
         var kodlar = Object.keys(D.sonFiyat).sort(function(a, b){ return D.sonFiyat[a].zaman - D.sonFiyat[b].zaman; });
         while(kodlar.length >= 40){ delete D.sonFiyat[kodlar.shift()]; }
@@ -776,29 +789,77 @@
     var parcalar = nq.split(' ').filter(Boolean);
     var once = kaynak === 'once' ? (D.sonFiyat[kod] || {}).m || {} : null;
     var ozel = kaynak === 'ozel' ? (D.veri && D.veri.ozel && D.veri.ozel[kod]) || {} : null;
-    for(var i = 0; i < katalog.length && sonuc.length < 40; i++){
+    var sepet = kaynak === 'sepet' && B ? B.kalemler.reduce(function(o, k){ o[k.b] = 1; return o; }, {}) : null;
+    var sinir = (once || sepet) ? 100000 : 40;
+    for(var i = 0; i < katalog.length && sonuc.length < sinir; i++){
       var u = katalog[i];
       if(once && !once[u.k] && !once[u.b]) continue;
       if(ozel && !ozel[u.k] && !ozel[u.b]) continue;
+      if(sepet && !sepet[u.b]) continue;
       if(parcalar.length && !parcalar.every(function(p){ return u.n.indexOf(p) !== -1 || u.b.indexOf(p) === 0 || norm(u.k).indexOf(p) === 0; })) continue;
       sonuc.push(u);
     }
-    return sonuc;
+    // Sık aldıkları: en çok alınan en üstte.
+    if(once){ var kez = function(u){ var x = once[u.k] || once[u.b]; return x ? x.kez || 0 : 0; }; sonuc.sort(function(x, y){ return kez(y) - kez(x); }); }
+    return sonuc.slice(0, (once || sepet) ? 60 : 40);
   }
   function birimFiyat(u){ var o = ozelFiyat(B.cariKod, u); return o ? o.f : u.f; }
+  // Arama satırı: ad, barkod, stok, son satış (net) ve ADET KUTUSU — adet yazıp Enter'a basınca ürün siparişe girer
+  // (0 ya da boş = siparişten çıkar). Satıra dokunmak 1 ekler, basılı tutmak ürün bilgisini açar.
+  function sonucSatir(u){
+    var s = sonFiyat(B.cariKod, u), o = ozelFiyat(B.cariKod, u), var_ = B.kalemler.filter(function(k){ return k.b === u.b; })[0];
+    var alt = [esc(u.b) + (u.k ? ' · ' + esc(u.k) : '')];
+    if(stokGorur() && isFinite(u.st)) alt.push(u.st > 0 ? 'stok ' + miktarMetni(u.st) : '<span class="stokYok">stok yok</span>');
+    if(s) alt.push('son ' + para(s.f) + (s.net === 0 ? ' brüt' : '') + ' · ' + esc(s.t) + (s.kez > 1 ? ' · ' + s.kez + ' kez, ort. ' + miktarMetni(s.ort || s.m) : ' · ' + miktarMetni(s.m) + ' adet'));
+    return '<div class="sonuc' + (var_ ? ' sepette' : '') + '" data-b="' + esc(u.b) + '" data-uzun="1"><div class="ad">' + esc(u.a) + '<small>' + alt.join(' · ') + '</small></div>' +
+      '<div class="f">' + (o ? '<span class="etiket yesil">özel</span><br>' + para(o.f) : (isFinite(u.f) ? para(u.f) : '—')) + '</div>' +
+      '<input class="adt' + (var_ ? ' dolu' : '') + '" data-adt="' + esc(u.b) + '" inputmode="' + (kesirli(u) ? 'decimal' : 'numeric') + '" enterkeyhint="done" autocomplete="off" placeholder="adet" value="' + (var_ ? esc(miktarMetni(var_.m)) : '') + '" aria-label="Adet"></div>';
+  }
   function urunAraCiz(){
     if(!B) return;
-    var q = $('urunAra').value.trim();
-    if(!q && urunKaynak === 'hepsi'){ $('urunSonuc').innerHTML = '<div class="ipucu" style="padding:6px 2px;">Ürün adını yaz ya da 📷 ile okut. <b>Basılı tut:</b> ürün bilgisi' + (maliyetGorur() ? ', tedarikçi ve alış fiyatı' : '') + '.</div>'; return; }
-    var l = urunEslesen(q, urunKaynak, B.cariKod);
-    $('urunSonuc').innerHTML = l.map(function(u){
-      var s = sonFiyat(B.cariKod, u), o = ozelFiyat(B.cariKod, u), var_ = B.kalemler.filter(function(k){ return k.b === u.b; })[0];
-      return '<div class="sonuc" data-b="' + esc(u.b) + '" data-uzun="1"><div class="ad">' + esc(u.a) + '<small>' + esc(u.b) + (u.k ? ' · ' + esc(u.k) : '') +
-        (s ? ' · son ' + para(s.f) + ' (' + esc(s.t) + ')' : '') + '</small></div>' +
-        (var_ ? '<span class="etiket mavi">×' + miktarMetni(var_.m) + '</span>' : '') +
-        '<div class="f">' + (o ? '<span class="etiket yesil">özel</span>' + para(o.f) : (isFinite(u.f) ? para(u.f) : '—')) + '</div></div>';
-    }).join('') || '<div class="ipucu" style="padding:6px 2px;">Ürün bulunamadı.</div>';
+    // Odaktaki adet kutusu silinmeden önce bırakılır (yazılan değer kaydedilir).
+    var odak = document.activeElement;
+    if(odak && odak.classList && odak.classList.contains('adt') && $('urunSonuc').contains(odak)) odak.blur();
+    var q = $('urunAra').value.trim(), kaynak = urunKaynak;
+    var gecmis = D.sonFiyat[B.cariKod] && Object.keys(D.sonFiyat[B.cariKod].m || {}).length;
+    // Arama boşken: müşterinin sık aldıkları (varsa) hazır gelir.
+    if(!q && kaynak === 'hepsi'){
+      if(!gecmis){ $('urunSonuc').innerHTML = '<div class="ipucu" style="padding:6px 2px;">Ürün adını yaz ya da 📷 ile okut, <b>adet kutusuna</b> yazıp Enter. Basılı tut: ürün bilgisi' + (maliyetGorur() ? ', tedarikçi ve alış fiyatı' : '') + '.</div>'; return; }
+      kaynak = 'once';
+    }
+    var l = urunEslesen(q, kaynak, B.cariKod);
+    var baslik = (!q && kaynak === 'once') ? '<div class="bolumBaslik">⭐ Bu müşterinin sık aldıkları — adet yaz, Enter</div>' : '';
+    $('urunSonuc').innerHTML = baslik + (l.map(sonucSatir).join('') || '<div class="ipucu" style="padding:6px 2px;">' + (kaynak === 'once' ? 'Bu müşterinin ERP\'de satış geçmişi yok.' : 'Ürün bulunamadı.') + '</div>');
   }
+  // Adet kutusundan: miktarı DOĞRUDAN yazar (ekleme değil). 0 / boş = siparişten çıkar.
+  function adetYaz(barkod, deger, odakla){
+    var u = katalogBarkod[barkod]; if(!u || !B) return;
+    var k = B.kalemler.filter(function(x){ return x.b === barkod; })[0];
+    var metin = String(deger == null ? '' : deger).trim();
+    var m = metin === '' ? 0 : sayi(metin);
+    if(isNaN(m) || m < 0 || m > 100000){ toast('Adet okunamadı', 'hata'); urunAraCiz(); return; }
+    if(!kesirli(u) && Math.floor(m) !== m){ toast('Bu ürün adetle satılır — küsurat olmaz', 'hata'); urunAraCiz(); return; }
+    m = yuvarla3(m);
+    if(k && Math.abs(k.m - m) < 0.0005 && m > 0){ if(odakla) aramayaDon(); return; }
+    if(m === 0){ if(k){ B.kalemler.splice(B.kalemler.indexOf(k), 1); toast(u.a + ' çıkarıldı', 'uyari'); } }
+    else if(k){ k.m = m; }
+    else { kalemEkle(u, m, true); }
+    if(m > 0 && stokGorur() && isFinite(u.st) && m > u.st) toast('Dikkat: stok ' + miktarMetni(u.st) + ' — siparişte ' + miktarMetni(m), 'uyari');
+    if(navigator.vibrate) navigator.vibrate(25);
+    kaydetD(); kalemCiz(); urunAraCiz();
+    if(odakla) aramayaDon();
+  }
+  // Bir sonraki ürün için arama kutusuna dön (yazılı metin seçili: yazınca yerine geçer).
+  function aramayaDon(){ var a = $('urunAra'); setTimeout(function(){ try { a.focus(); a.select(); } catch(e){} }, 30); }
+  $('urunSonuc').addEventListener('keydown', function(e){
+    var t = e.target; if(!t.classList.contains('adt') || e.key !== 'Enter') return;
+    e.preventDefault(); t.dataset.islendi = '1'; adetYaz(t.getAttribute('data-adt'), t.value, true);
+  });
+  $('urunSonuc').addEventListener('change', function(e){
+    var t = e.target; if(!t.classList.contains('adt') || t.dataset.islendi) return;
+    adetYaz(t.getAttribute('data-adt'), t.value, false);
+  });
+  $('urunSonuc').addEventListener('focusin', function(e){ if(e.target.classList.contains('adt')) setTimeout(function(){ try { e.target.select(); } catch(er){} }, 30); });
   $('urunAra').addEventListener('input', urunAraCiz);
   $('urunAra').addEventListener('keydown', function(e){
     if(e.key !== 'Enter') return;
@@ -814,7 +875,7 @@
     if(u.c > 1){ var tek = katalogKod[u.k]; if(tek){ kalemEkle(tek, u.c); toast('Koli: ' + u.c + ' adet eklendi'); return true; } }
     kalemEkle(u, 1); return true;
   }
-  function kalemEkle(u, adet){
+  function kalemEkle(u, adet, cizme){
     var k = B.kalemler.filter(function(x){ return x.b === u.b; })[0];
     if(k){ k.m = yuvarla3(k.m + adet); }
     else {
@@ -823,12 +884,14 @@
       if(o) k.of = o.f; if(s) k.sf = s.f;
       B.kalemler.unshift(k);
     }
+    if(cizme) return;
     if(navigator.vibrate) navigator.vibrate(25);
     kaydetD(); kalemCiz(); urunAraCiz();
   }
   function yuvarla3(n){ return Math.round(n * 1000) / 1000; }
   $('urunSonuc').addEventListener('click', function(e){
     if(uzunBasildi){ uzunBasildi = false; return; }
+    if(e.target.classList.contains('adt')) return;
     var s = e.target.closest('.sonuc'); if(!s) return;
     var u = katalogBarkod[s.getAttribute('data-b')]; if(u) kalemEkle(u, 1);
   });
@@ -852,7 +915,8 @@
       var bilgi = [];
       bilgi.push('Liste ' + para(k.lf));
       if(k.of) bilgi.push('<span class="iyi">Özel ' + para(k.of) + '</span>');
-      if(s) bilgi.push('Son satış ' + para(s.f) + ' <span class="mono">(' + esc(s.t) + ')</span>');
+      if(s) bilgi.push('Son satış ' + para(s.f) + (s.net === 0 ? ' brüt' : '') + ' <span class="mono">(' + esc(s.t) + ')</span>');
+      if(stokGorur() && u && isFinite(u.st)) bilgi.push(k.m > u.st ? '<span class="stokYok">Stok ' + miktarMetni(u.st) + ' — yetmiyor</span>' : 'Stok ' + miktarMetni(u.st));
       if(mg){ var mal = maliyetHesap(u); if(mal && k.f > 0) bilgi.push('Marj %' + (((k.f - mal) / k.f) * 100).toLocaleString('tr-TR', { maximumFractionDigits:1 })); }
       var dug = '';
       if(serbest){
@@ -875,7 +939,8 @@
     var t = 0, mal = 0, malVar = true;
     B.kalemler.forEach(function(k){ t += k.m * k.f; var m = maliyetHesap(katalogBarkod[k.b]); if(m) mal += m * k.m; else malVar = false; });
     $('bkToplam').textContent = tl(t);
-    $('bkOzet').textContent = B.kalemler.length + ' kalem';
+    var adetT = B.kalemler.reduce(function(a, k){ return a + k.m; }, 0);
+    $('bkOzet').textContent = B.kalemler.length + ' kalem · ' + miktarMetni(adetT) + ' adet';
     $('bkMarj').textContent = (maliyetGorur() && t > 0 && mal > 0) ? 'Tahmini kâr ' + tl(t - mal) + ' (%' + (((t - mal) / t) * 100).toLocaleString('tr-TR', { maximumFractionDigits:1 }) + ')' + (malVar ? '' : ' · bazı ürünlerin maliyeti yok') : '';
     if($('bkPesin').checked && !$('bkPesinTutar').dataset.elle) $('bkPesinTutar').value = para(t);
   }
@@ -1005,14 +1070,15 @@
     var satir = function(a, b){ return '<tr><td>' + a + '</td><td class="sayi">' + b + '</td></tr>'; };
     var h = '<div class="ipucu mono">' + esc(u.b) + (u.k ? ' · ' + esc(u.k) : '') + (u.birim ? ' · ' + esc(u.birim) : '') + '</div><table style="margin-top:8px;">' +
       satir('Liste fiyatı (KDV dahil)', isFinite(u.f) ? tl(u.f) : '—') + satir('KDV', isFinite(u.kdv) ? '%' + u.kdv : '—') +
-      (o ? satir('Müşteriye özel', tl(o.f)) : '') + (s ? satir('Bu müşteriye son satış', tl(s.f) + ' · ' + esc(s.t)) : '');
+      (o ? satir('Müşteriye özel', tl(o.f)) : '') + (s ? satir('Bu müşteriye son satış' + (s.net === 0 ? ' (brüt)' : ' (net)'), tl(s.f) + ' · ' + esc(s.t)) : '') +
+      (stokGorur() && isFinite(u.st) ? satir('Stok', u.st > 0 ? miktarMetni(u.st) : '<span class="stokYok">yok</span>') : '');
     if(maliyetGorur()){
       var mal = maliyetHesap(u), t = tabanHesap(u), f = isFinite(u.f) ? u.f : 0;
       h += satir('Son alış (KDV hariç)', u.af > 0 ? tl(u.af) : '—') + satir('Maliyet (KDV dahil)', mal ? tl(mal) : '—') +
         satir('Taban (maliyet −%' + ayar().altYuzde + ')', t ? tl(t) : '—') +
         (mal && f ? satir('Liste fiyatında marj', '%' + (((f - mal) / f) * 100).toLocaleString('tr-TR', { maximumFractionDigits:1 }) + ' · kâr ' + tl(f - mal)) : '');
       if(B){ var k = B.kalemler.filter(function(x){ return x.b === u.b; })[0]; if(k && mal) h += satir('Bu siparişteki fiyatla marj', '%' + (((k.f - mal) / k.f) * 100).toLocaleString('tr-TR', { maximumFractionDigits:1 })); }
-      h += '</table><div id="upTedarik" class="ipucu" style="margin-top:10px;">Tedarikçiler yükleniyor…</div>';
+      h += '<tbody id="upNet"></tbody></table><div id="upTedarik" class="ipucu" style="margin-top:10px;">Tedarikçiler yükleniyor…</div>';
     } else h += '</table>';
     $('upIcerik').innerHTML = h;
     perdeAc('urunPerde');
@@ -1022,11 +1088,21 @@
       if(r.status !== 'ok'){ el.innerHTML = '<span class="uyari">' + esc(r.ag ? 'İnternet yok — tedarikçi bilgisi alınamadı' : r.message) + '</span>'; return; }
       if(r.dbYok || r.dbHata){ el.textContent = r.dbHata || 'Alış geçmişi şu an yok (veri tabanı)'; return; }
       if(!(r.tedarikciler || []).length){ el.textContent = 'ERP\'de bu ürünün alışı yok.'; return; }
-      el.innerHTML = '<b style="color:var(--text);">Tedarikçiler</b><table style="margin-top:4px; color:var(--text);"><tr><th>Firma</th><th class="sayi">Son alış</th><th class="sayi">Tarih</th></tr>' +
+      // Son NET alış (tüm iskontolar düşülmüş, KDV dahil) ve ona göre marj.
+      var netEl = $('upNet'), lf = isFinite(u.f) ? u.f : 0;
+      if(netEl && r.sonNet){
+        var kk = B ? B.kalemler.filter(function(x){ return x.b === u.b; })[0] : null;
+        netEl.innerHTML = '<tr><td><b>Son net alış</b> (iskontolu, KDV dahil)</td><td class="sayi"><b>' + tl(r.sonNet) + '</b></td></tr>' +
+          (lf ? '<tr><td>Net alışa göre liste marjı</td><td class="sayi">%' + (((lf - r.sonNet) / lf) * 100).toLocaleString('tr-TR', { maximumFractionDigits:1 }) + ' · kâr ' + tl(lf - r.sonNet) + '</td></tr>' : '') +
+          (kk && kk.f ? '<tr><td>Net alışa göre bu siparişteki marj</td><td class="sayi">%' + (((kk.f - r.sonNet) / kk.f) * 100).toLocaleString('tr-TR', { maximumFractionDigits:1 }) + '</td></tr>' : '');
+      }
+      var brutVar = (r.alislar || []).some(function(a){ return a[7] === 0; });
+      el.innerHTML = '<b style="color:var(--text);">Tedarikçiler</b><table style="margin-top:4px; color:var(--text);"><tr><th>Firma</th><th class="sayi">Son net alış</th><th class="sayi">Tarih</th></tr>' +
         r.tedarikciler.map(function(t){ return '<tr><td>' + esc(t[1]) + (t[4] > 1 ? ' <span class="ipucu">(' + t[4] + ' kez)</span>' : '') + '</td><td class="sayi">' + para(t[2]) + '</td><td class="sayi">' + esc(t[3]) + '</td></tr>'; }).join('') +
-        '</table><div class="ipucu" style="margin-top:4px;">Alış fiyatları KDV dahil (ERP faturası).</div>' +
-        '<details style="margin-top:8px;"><summary>Son alışlar</summary><table style="color:var(--text);">' + (r.alislar || []).map(function(a){
-          return '<tr><td>' + esc(a[0]) + '<br><span class="ipucu">' + esc(a[2]) + '</span></td><td class="sayi">' + miktarMetni(a[4]) + '</td><td class="sayi">' + para(a[3]) + '</td></tr>';
+        '</table><div class="ipucu" style="margin-top:4px;">Fiyatlar <b>tüm iskontolar düşülmüş, KDV dahil</b> birim fiyattır.' + (brutVar ? ' "brüt" yazanlarda ERP\'den net bilgi henüz gelmedi (iskontosuz).' : '') + '</div>' +
+        '<details style="margin-top:8px;" open><summary>Son alışlar</summary><table style="color:var(--text);"><tr><th>Tarih / firma</th><th class="sayi">Miktar</th><th class="sayi">Net fiyat</th></tr>' + (r.alislar || []).map(function(a){
+          var isk = a[7] === 1 && a[6] > a[3] + 0.004 ? '<br><span class="ipucu">liste ' + para(a[6]) + ' · %' + (((a[6] - a[3]) / a[6]) * 100).toLocaleString('tr-TR', { maximumFractionDigits:1 }) + ' isk.</span>' : (a[7] === 0 ? '<br><span class="ipucu">brüt</span>' : '');
+          return '<tr><td>' + esc(a[0]) + '<br><span class="ipucu">' + esc(a[2]) + '</span></td><td class="sayi">' + miktarMetni(a[4]) + '</td><td class="sayi">' + para(a[3]) + isk + '</td></tr>';
         }).join('') + '</table></details>';
     });
   }
