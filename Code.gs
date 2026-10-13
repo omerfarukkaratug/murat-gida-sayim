@@ -8,7 +8,7 @@
 // bir sürüm dağıttıktan sonra /exec adresini boş açtığında burada yazan
 // numarayı görmelisin; index.html'in üstündeki "build" numarasıyla
 // eşleşecek şekilde ben her ikisini birlikte güncelliyorum.
-var GS_VERSION = 'build177';
+var GS_VERSION = 'build178';
 
 // Sheets'te "Saat" sütunu zaman biçimli olarak algılanırsa, hücre değeri düz
 // metin değil bir Date nesnesi olarak gelir ve String(...) çirkin bir çıktı
@@ -1312,7 +1312,8 @@ function malXlsxParcalari(batch) {
   }
   var turler = ['s', 's', 's', 'n', 'n', 'n', 'n', 'n', 's', 's', 'n'];
   var satirlar = [MAL_CSV_HEADERS].concat(batch.items.map(function (it) {
-    return [it.barkod, it.stokKodu, it.urunAdi, it.miktar, it.fiyat, it.kdv, 0, '', it.birim, it.grup, it.sfiyat];
+    var yuv = function (v, b) { return (v === '' || v === null || v === undefined || isNaN(Number(v))) ? v : Math.round(Number(v) * Math.pow(10, b)) / Math.pow(10, b); };
+    return [it.barkod, it.stokKodu, it.urunAdi, yuv(it.miktar, 3), yuv(it.fiyat, 4), it.kdv, 0, '', it.birim, it.grup, yuv(it.sfiyat, 2)];
   }));
   var veri = satirlar.map(function (r, ri) {
     return '<row r="' + (ri + 1) + '">' + r.map(function (v, ci) { return hucre(sutun(ci) + (ri + 1), v, ri === 0 ? 's' : turler[ci]); }).join('') + '</row>';
@@ -2141,8 +2142,21 @@ function doPostIsle(e) {
 // yazıyoruz — bu şekilde Sheets hiçbir yorum yapmadan, olduğu gibi kaydeder.
 function cleanNum(v) {
   if (v === '' || v === null || v === undefined) return '';
-  var n = Number(v);
+  if (typeof v === 'number') return isFinite(v) ? v : '';
+  var n = sayiOku(v);
   return isNaN(n) ? '' : n;
+}
+// Metin sayı (build178): virgül varsa Türkçe biçim sayılır ("1,5" → 1.5, "1.250,75" → 1250.75);
+// virgül yoksa olduğu gibi ("12.5" → 12.5). Eskiden "1,5" okunamıyor, boş ya da 1 kalıyordu.
+function sayiOku(v) {
+  if (typeof v === 'number') return v;
+  var t = String(v == null ? '' : v).replace(/[\s\u00a0]/g, '');
+  if (!t) return NaN;
+  if (t.indexOf(',') !== -1) {
+    if (t.indexOf('.') !== -1 && t.lastIndexOf('.') > t.lastIndexOf(',')) return NaN;
+    t = t.replace(/\./g, '').replace(',', '.');
+  }
+  return /^-?\d+(\.\d+)?$/.test(t) ? Number(t) : NaN;
 }
 
 // Gelen listenin özeti (MD5). ERP programı listeyi 15 dk'da bir gönderiyor;
@@ -2966,7 +2980,7 @@ function sayimGuncelle(user, pass, kayitId, adet, callback) {
   var auth = requirePermission(user, pass, 'duzelt');
   if (!auth.ok) return outJson({ status: 'error', message: auth.message }, callback);
   if (!kayitId) return outJson({ status: 'error', message: 'Kayıt ID eksik' }, callback);
-  var yeniAdet = parseFloat(adet);
+  var yeniAdet = sayiOku(adet);
   if (isNaN(yeniAdet) || yeniAdet < 0) return outJson({ status: 'error', message: 'Geçersiz adet' }, callback);
   var lock = LockService.getScriptLock();
   try { lock.waitLock(30000); } catch (e) { return outJson({ status: 'error', message: 'Sunucu meşgul, birazdan tekrar dene' }, callback); }

@@ -376,7 +376,7 @@
   <header style="border:none; padding:0 0 16px; background:transparent; display:flex; align-items:flex-start; justify-content:space-between;">
     <div>
       <h1><img src="logo-header.png" alt="Murat Gıda" style="height:30px; width:auto; display:block;"></h1>
-      <div class="sub">MK ERP · Murat Gıda • offline • Android • build 210</div>
+      <div class="sub">MK ERP · Murat Gıda • offline • Android • build 211</div>
     </div>
     <button type="button" id="themeToggleBtn" title="Tema seç" style="background:var(--panel2); border:1.5px solid var(--line); color:var(--text); width:34px; height:34px; border-radius:50%; font-size:15px; padding:0; display:flex; align-items:center; justify-content:center; flex-shrink:0;">🎨</button>
   </header>
@@ -622,7 +622,7 @@
     <div class="qtyEntryCard" style="width:100%; max-width:360px;">
       <div id="browseEditName" style="font-size:18px; font-weight:800; margin-bottom:2px;">—</div>
       <div id="browseEditMeta" style="font-size:12px; color:var(--muted); font-family:var(--mono); margin-bottom:16px;"></div>
-      <input type="number" id="browseEditQtyInput" inputmode="numeric" style="width:100%; font-size:28px; font-weight:800; text-align:center; font-family:var(--mono); padding:14px; border-radius:var(--r-sm); border:2px solid var(--accent); background:var(--panel2); color:var(--text); margin-bottom:14px;">
+      <input type="text" autocomplete="off" id="browseEditQtyInput" inputmode="numeric" style="width:100%; font-size:28px; font-weight:800; text-align:center; font-family:var(--mono); padding:14px; border-radius:var(--r-sm); border:2px solid var(--accent); background:var(--panel2); color:var(--text); margin-bottom:14px;">
       <div class="qtyEntryBtns">
         <button id="browseEditDelete" style="background:var(--panel); border:1.5px solid var(--red); color:var(--red); flex:0.8;">🗑️ Sil</button>
         <button id="browseEditCancel">Vazgeç</button>
@@ -638,7 +638,7 @@
     <div class="qtyEntryCard" style="width:100%; max-width:360px;">
       <div id="duzeltEditName" style="font-size:18px; font-weight:800; margin-bottom:2px;">—</div>
       <div id="duzeltEditMeta" style="font-size:12px; color:var(--muted); font-family:var(--mono); margin-bottom:16px;"></div>
-      <input type="number" id="duzeltEditQtyInput" inputmode="numeric" style="width:100%; font-size:28px; font-weight:800; text-align:center; font-family:var(--mono); padding:14px; border-radius:var(--r-sm); border:2px solid var(--accent); background:var(--panel2); color:var(--text); margin-bottom:14px;">
+      <input type="text" autocomplete="off" id="duzeltEditQtyInput" inputmode="decimal" style="width:100%; font-size:28px; font-weight:800; text-align:center; font-family:var(--mono); padding:14px; border-radius:var(--r-sm); border:2px solid var(--accent); background:var(--panel2); color:var(--text); margin-bottom:14px;">
       <div class="qtyEntryBtns">
         <button id="duzeltEditDelete" style="background:var(--panel); border:1.5px solid var(--red); color:var(--red); flex:0.8;">🗑️ Sil</button>
         <button id="duzeltEditCancel">Vazgeç</button>
@@ -1426,17 +1426,53 @@
 
   // Barkodu 29 ile başlayan ürünler dökme (tartılan) üründür — birimi Kg,
   // ondalıklı miktar girilebilir (örn: 1.5). Diğer her şey Adet, tam sayı.
+  // build 211: ERP'de birimi KG olan ürün de (barkodu 29 ile başlamasa bile) dökme sayılır — küsurat girilebilir.
+  var KG_BIRIM = /^(KG|KGM|KİLO|KILO|KİLOGRAM|KILOGRAM)$/;
   function isBulkBarcode(barcode){
-    return !!barcode && barcode.trim().indexOf('29') === 0;
+    if(!barcode) return false;
+    barcode = String(barcode).trim();
+    if(barcode.indexOf('29') === 0) return true;
+    var e = (typeof catalogMap !== 'undefined' && catalogMap) ? catalogMap.get(barcode) : null;
+    return !!(e && e.birim && KG_BIRIM.test(String(e.birim).trim().toLocaleUpperCase('tr-TR')));
   }
   function unitFor(barcode){ return isBulkBarcode(barcode) ? 'Kg' : 'Adet'; }
-  function parseQtyForBarcode(value, barcode){
-    if(isBulkBarcode(barcode)){
-      var n = Math.round(parseFloat(String(value).replace(',', '.')) * 1000) / 1000; // 3 ondalık basamağa kadar
-      return isNaN(n) ? 0 : Math.max(0, n);
+
+  // ---------- TÜRKÇE SAYI OKUMA (build 211) ----------
+  // Eskiden miktar kutuları "sayı" türündeydi: Android'de "2,5" yazınca virgül YUTULUYOR, 25 kaydediliyordu;
+  // "1.000" (bin) 1 oluyordu; adetli üründe "1,5" sessizce 1'e iniyordu. Artık:
+  //   virgül = ondalık ("1,5" → 1,5), nokta = binlik ("1.000" → 1000; "1.250,5" → 1250,5).
+  //   Dökme (Kg) üründe tek nokta ondalık sayılır ("1.5" → 1,5 kg) — kg'da bin nadirdir, klavye nokta verebilir.
+  // Dönüş: sayı ya da NaN (okunamadı).
+  function turkceSayi(value, ondalikNokta){
+    if(typeof value === 'number') return isFinite(value) ? value : NaN;
+    var t = String(value == null ? '' : value).replace(/[\s\u00a0']/g, '');
+    if(!t) return NaN;
+    var virgul = t.indexOf(',') !== -1, nokta = t.indexOf('.') !== -1;
+    if(virgul && nokta){ if(t.lastIndexOf(',') < t.lastIndexOf('.')) return NaN; t = t.replace(/\./g, '').replace(',', '.'); }
+    else if(virgul){ if(t.split(',').length > 2) return NaN; t = t.replace(',', '.'); }
+    else if(nokta){
+      var tekNokta = t.split('.').length === 2;
+      if(/^\d{1,3}(\.\d{3})+$/.test(t) && !(ondalikNokta && tekNokta)) t = t.replace(/\./g, '');
+      else if(!tekNokta) return NaN;
     }
-    return Math.max(0, Math.floor(Number(value) || 0));
+    if(!/^\d+(\.\d+)?$/.test(t)) return NaN;
+    return Number(t);
   }
+  // Miktar: { deger } ya da { hata }. Adet tam sayı olmalı, Kg en çok 3 ondalık.
+  function miktarCoz(value, barcode){ return miktarCozBirim(value, isBulkBarcode(barcode)); }
+  function miktarCozBirim(value, bulk){
+    var n = turkceSayi(value, bulk);
+    if(isNaN(n)) return { hata: 'Miktar okunamadı — örnek: ' + (bulk ? '1,5' : '12') };
+    if(n < 0) return { hata: 'Miktar eksi olamaz' };
+    if(bulk) return { deger: Math.round(n * 1000) / 1000 };
+    if(Math.floor(n) !== n) return { hata: 'Adetli üründe küsurat olmaz (' + String(n).replace('.', ',') + ') — kilo ile satılıyorsa ERP\'de birimi KG olmalı' };
+    return { deger: n };
+  }
+  function parseQtyForBarcode(value, barcode){
+    var m = miktarCoz(value, barcode);
+    return m.hata ? 0 : m.deger;
+  }
+  function miktarYazi(n){ return String(Math.round(Number(n) * 1000) / 1000).replace('.', ','); }
 
   function parcaAnahtar(i){ return STORE_KEY + '_okutma_' + i; }
   // Bir parçada değişebilecek her şeyin kısa özeti: kimlik, adet, sürüm, onaylı sürüm, reyon.
@@ -3093,7 +3129,7 @@
       '<div class="info"><div class="name">'+syncDot+escapeHtml(it.name)+'</div>' +
       '<div class="meta">'+escapeHtml(it.barcode)+' · '+it.time+oldStockHtml+kdvTagFor(it.barcode)+birimTagFor(it.barcode)+fiyatTagFor(it.barcode)+unitHtml+reyonHtml+koliMetni(it)+'</div></div>' +
       '<div class="qtyBox">' +
-        '<input class="qtyInput" type="number" inputmode="'+(unit==='Kg'?'decimal':'numeric')+'" step="'+(unit==='Kg'?'0.001':'1')+'" value="'+(kc ? it.koli : it.qty)+'" data-id="'+it.id+'"'+(kc ? ' data-koli="1" title="Koli sayısı"' : '')+'>' +
+        '<input class="qtyInput" type="text" autocomplete="off" inputmode="'+(unit==='Kg'?'decimal':'numeric')+'" value="'+miktarYazi(kc ? it.koli : it.qty)+'" data-id="'+it.id+'"'+(kc ? ' data-koli="1" title="Koli sayısı"' : '')+'>' +
         '<button type="button" class="itemDelBtn" data-id="'+it.id+'" title="Bu kaydı sil">🗑️</button>' +
       '</div></div>';
   }
@@ -3211,7 +3247,9 @@
     if(idx === -1) return;
     var it = state.session.scans[idx];
     var unit = unitFor(it.barcode);
-    newQty = parseQtyForBarcode(newQty, it.barcode);
+    var mc = miktarCoz(newQty, it.barcode);
+    if(mc.hata){ warnToast(mc.hata); renderList(); return; }
+    newQty = mc.deger;
     var carpan = koliModu ? koliKaydiCarpan(it) : 0, yeniKoli = 0;
     if(carpan && newQty > 0){ yeniKoli = newQty; newQty = yeniKoli * carpan; }
     if(newQty === 0){
@@ -5220,7 +5258,7 @@
         '<div class="info"><div class="name">' + escapeHtml(it.ad) + '</div>' +
         '<div class="meta">' + escapeHtml(it.barkod) + (it.stokKodu ? (' · ' + escapeHtml(it.stokKodu)) : '') + (kdvTxt ? ' · <span class="kdvTag">' + kdvTxt + '</span>' : '') + (it.birim === 'Kg' ? '' : birimTagFor(it.barkod)) + (it.birim === 'Kg' ? ' · <span class="oldStock">Kg</span>' : '') + (it.stokAc === false ? ' · <span class="noStokTag">STOK AÇILMAYACAK</span>' : (it.yeni ? ' · <span class="noStokTag">YENİ STOK</span>' : '')) + '</div>' + fiyatSatir + '</div>' +
         '<div class="qtyBox">' +
-          '<input class="qtyInput mhQty" type="number" inputmode="' + (it.birim === 'Kg' ? 'decimal' : 'numeric') + '" step="' + (it.birim === 'Kg' ? '0.001' : '1') + '" value="' + it.miktar + '" data-mh-id="' + escAttr(it.id) + '">' +
+          '<input class="qtyInput mhQty" type="text" autocomplete="off" inputmode="' + (it.birim === 'Kg' ? 'decimal' : 'numeric') + '" value="' + miktarYazi(it.miktar) + '" data-mh-id="' + escAttr(it.id) + '">' +
           '<button type="button" class="itemDelBtn mhDelBtn" data-mh-id="' + escAttr(it.id) + '" title="Bu satırı sil">🗑️</button>' +
         '</div></div>';
     }).join('');
@@ -5231,8 +5269,10 @@
     if(!inp) return;
     var it = malItemById(inp.getAttribute('data-mh-id'));
     if(!it) return;
-    var q = parseQtyForBarcode(inp.value, it.barkod);
-    if(!q){ inp.value = it.miktar; warnToast("Miktar 0'dan büyük olmalı — silmek için çöp kutusuna dokun"); return; }
+    var mc = miktarCozBirim(inp.value, it.birim === 'Kg');
+    if(mc.hata){ inp.value = miktarYazi(it.miktar); warnToast(mc.hata); return; }
+    var q = mc.deger;
+    if(!q){ inp.value = miktarYazi(it.miktar); warnToast("Miktar 0'dan büyük olmalı — silmek için çöp kutusuna dokun"); return; }
     if(q === it.miktar) return;
     var onceki = JSON.stringify(malItems);
     it.miktar = q;
@@ -5581,9 +5621,8 @@
     document.getElementById('browseEditName').textContent = it.name;
     document.getElementById('browseEditMeta').textContent =
       it.barcode + ' · ' + it.date + ' ' + it.time + (unit === 'Kg' ? ' · Kg' : '') + (kc ? ' · KOLİ sayısı (1 koli = ' + kc + ' adet)' : '') + (it.reyon ? ' · ' + it.reyon : '');
-    browseEditQtyInput.value = kc ? it.koli : it.qty;
+    browseEditQtyInput.value = miktarYazi(kc ? it.koli : it.qty);
     browseEditQtyInput.setAttribute('inputmode', unit === 'Kg' ? 'decimal' : 'numeric');
-    browseEditQtyInput.setAttribute('step', unit === 'Kg' ? '0.001' : '1');
     browseEditModalEl.classList.remove('hidden');
     setTimeout(function(){ browseEditQtyInput.focus(); browseEditQtyInput.select(); }, 80);
   }
@@ -6262,7 +6301,7 @@
     duzeltEditIdVal = kayitId;
     document.getElementById('duzeltEditName').textContent = r.ad;
     document.getElementById('duzeltEditMeta').textContent = r.saat + ' · ' + (r.stokKodu || '—') + ' · ' + (r.barkod || '—') + ' · ' + r.personel + (r.reyon ? (' · ' + r.reyon) : '');
-    duzeltEditQtyInput.value = r.adet;
+    duzeltEditQtyInput.value = miktarYazi(r.adet);
     duzeltEditModalEl.classList.remove('hidden');
     setTimeout(function(){ duzeltEditQtyInput.focus(); duzeltEditQtyInput.select(); }, 80);
   }
@@ -6270,7 +6309,10 @@
   document.getElementById('duzeltEditSave').addEventListener('click', function(){
     var auth = currentAuth();
     if(!auth || !navigator.onLine){ warnToast('İnternet yok'); return; }
-    var yeniAdet = duzeltEditQtyInput.value;
+    // Sunucuya her zaman noktalı ondalık gider ("1,5" → "1.5"); okunamazsa gönderilmez.
+    var yeniAdetSayi = turkceSayi(duzeltEditQtyInput.value, true);
+    if(isNaN(yeniAdetSayi) || yeniAdetSayi < 0){ warnToast('Miktar okunamadı — örnek: 12 ya da 1,5'); return; }
+    var yeniAdet = String(Math.round(yeniAdetSayi * 1000) / 1000);
     var btn = document.getElementById('duzeltEditSave');
     btn.textContent = '⏳';
     jsonpRequestP(state.serverUrl || DEFAULT_SERVER_URL, { action:'sayim_guncelle', user:auth.user, pass:auth.pass, kayitId: duzeltEditIdVal, adet: yeniAdet }, function(err, res){
