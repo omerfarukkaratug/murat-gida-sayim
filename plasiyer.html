@@ -143,6 +143,20 @@
   .kpFiyat input{text-align:right; font-family:var(--mono); font-weight:800; font-size:18px;}
   .kpDug{display:flex; flex-wrap:wrap; gap:6px; margin-top:8px;}
   .kpDug button{font-size:13px; padding:7px 10px; border-radius:10px;}
+  /* Düğün / Mevlüt listesi */
+  .mnGrup{margin-top:12px;}
+  .mnGrup .bas{font-size:12px; font-weight:800; color:var(--muted); text-transform:uppercase; letter-spacing:.04em; margin-bottom:6px;}
+  .mnGrup .cipler button{font-size:14px;}
+  .mnSatir{padding:10px 0; border-bottom:1px solid var(--line);}
+  .mnSatir .ust{display:flex; gap:8px; align-items:center;}
+  .mnSatir .ad{flex:1; min-width:0; font-weight:700; font-size:14px; line-height:1.3;}
+  .mnSatir .ad small{display:block; font-weight:600; font-size:11.5px; color:var(--muted);}
+  .mnSatir .ad small.uy{color:var(--amber);}
+  .mnSatir input.mk{width:70px; flex:none; text-align:center; font-family:var(--mono); font-weight:800; padding:8px 4px;}
+  .mnSatir .alt{display:flex; gap:6px; margin-top:6px; align-items:center;}
+  .mnSatir .alt button{font-size:12.5px; padding:5px 9px; border-radius:9px;}
+  .mnSatir .alt input{font-size:14px; padding:7px 10px;}
+  .mnSatir.yok .ad{opacity:.5; text-decoration:line-through;}
   .toplamSatir{display:flex; justify-content:space-between; align-items:baseline; font-weight:800;}
   .toplamSatir .t{font-family:var(--mono); font-size:22px;}
   /* Alt pencere */
@@ -270,6 +284,11 @@
         </div>
       </div>
       <div class="kart">
+        <div class="kartBaslik">🍲 Düğün / Mevlüt — kişi başı miktarlar <button type="button" class="kucuk" id="mnOranAc">Aç</button></div>
+        <div class="ipucu">Siparişteki "🍲 Düğün / Mevlüt" listesi bu miktarlarla hesaplanır (gram; süt/ayran ml; yumurta, ekmek, tabak adet).</div>
+        <div id="mnOranAlan" class="gizli" style="margin-top:8px;"></div>
+      </div>
+      <div class="kart">
         <div class="kartBaslik">🏷️ Müşteriye özel fiyat</div>
         <div class="ipucu">Önce müşteriyi seç. Özel fiyat siparişte liste fiyatının yerine gelir; taban fiyatın altında olamaz.</div>
         <select id="ozelMusteri" style="margin-top:8px;"></select>
@@ -322,6 +341,7 @@
         <button type="button" class="on" data-k="hepsi">Tüm ürünler</button>
         <button type="button" data-k="once">⭐ Sık aldıkları</button>
         <button type="button" data-k="ozel">🏷️ Özel fiyatlı</button>
+        <button type="button" data-k="menu" id="menuAcBtn">🍲 Düğün / Mevlüt</button>
       </div>
       </div>
       <div class="sonuclar" id="urunSonuc"></div>
@@ -385,7 +405,39 @@
     <div class="pencere">
       <h3><span id="kpAd"></span><button type="button" class="kapat" data-kapat="kalemPerde">✕</button></h3>
       <div id="kpIcerik"></div>
+      <label for="kpNot">📝 Ürün notu (depo görür)</label>
+      <input id="kpNot" maxlength="150" placeholder="Örn. 5 kg'lık torba olsun, son kullanma uzun olsun">
       <div class="satirlar" style="margin-top:8px;"><button type="button" class="kirmizi" id="kpSil">🗑 Sil</button><button type="button" class="ana" data-kapat="kalemPerde">Tamam</button></div>
+    </div>
+  </div>
+
+  <!-- ===== DÜĞÜN / MEVLÜT LİSTESİ ===== -->
+  <div id="menuPerde" class="perde gizli">
+    <div class="pencere" style="max-height:94vh;">
+      <h3><span id="mnBaslik">🍲 Düğün / Mevlüt yemeği</span><button type="button" class="kapat" data-kapat="menuPerde">✕</button></h3>
+      <div id="mnSoru">
+        <label for="mnKisi">Kaç kişilik?</label>
+        <input id="mnKisi" inputmode="numeric" placeholder="Örn. 1000" style="font-family:var(--mono); font-size:22px; font-weight:800;">
+        <div id="mnGruplar"></div>
+        <div class="satirlar" style="margin-top:12px;">
+          <div><label for="mnPay">Pay / fire (%)</label><input id="mnPay" inputmode="decimal" placeholder="5"></div>
+        </div>
+        <button type="button" class="ana tam" id="mnHesapla" style="margin-top:14px; padding:14px; font-size:17px;">Listeyi çıkar</button>
+        <div class="ipucu" style="margin-top:8px;">Kişi başı ortalama miktarlarla hesaplanır; sonraki ekranda ürünleri, miktarları değiştirebilir, ürüne not yazabilirsin.</div>
+      </div>
+      <div id="mnListe" class="gizli">
+        <div class="bant mavi" id="mnOzet"></div>
+        <div id="mnSatirlar"></div>
+        <div id="mnAraAlan" class="gizli" style="margin-top:10px;">
+          <div class="kartBaslik" id="mnAraBaslik"></div>
+          <input id="mnAra" type="search" placeholder="Ürün ara" autocomplete="off">
+          <div class="sonuclar" id="mnAraSonuc"></div>
+        </div>
+        <div class="satirlar" style="margin-top:12px;">
+          <button type="button" id="mnGeri" style="flex:0 0 auto;">← Sorular</button>
+          <button type="button" class="ana" id="mnEkle" style="padding:14px; font-size:16px;">Sepete ekle</button>
+        </div>
+      </div>
     </div>
   </div>
 
@@ -912,6 +964,7 @@
   var urunKaynak = 'hepsi';
   $('urunKaynak').addEventListener('click', function(e){
     var b = e.target.closest('button'); if(!b) return;
+    if(b.getAttribute('data-k') === 'menu'){ menuAc(); return; }
     urunKaynak = b.getAttribute('data-k');
     this.querySelectorAll('button').forEach(function(x){ x.classList.toggle('on', x === b); });
     urunAraCiz();
@@ -1133,6 +1186,7 @@
       if(hata) alt.push('<span class="hata">⚠️ ' + esc(hata) + '</span>');
       else if(k.kontrolsuz) alt.push('<span class="uyari">fiyat kontrol edilemedi</span>');
       if(k.of && Math.abs(k.f - k.of) < 0.005) alt.push('<span class="iyi">özel fiyat</span>');
+      if(k.n) alt.push('📝 ' + esc(k.n));
       var on = oneriBul(u || k); if(on && Math.abs(k.f - on.o) > 0.004) alt.push('<span class="iyi">💡 verebilirsin ' + para(on.o) + '</span>');
       if(stokGorur() && u && isFinite(u.st) && k.m > u.st) alt.push('<span class="stokYok">stok ' + miktarMetni(u.st) + ' — yetmiyor</span>');
       var bk = bekleyenMiktar(B.cariKod, k.b); if(bk) alt.push('<span class="uyari">⏳ bekleyende ' + miktarMetni(bk) + '</span>');
@@ -1148,7 +1202,16 @@
   }
   // ---------- Sepet kalemi düzenleme penceresi ----------
   var kpBarkod = null;
-  function kpAc(barkod){ kpBarkod = barkod; kpCiz(true); perdeAc('kalemPerde'); }
+  function kpAc(barkod){
+    kpBarkod = barkod; kpCiz(true);
+    var k = B.kalemler.filter(function(x){ return x.b === barkod; })[0]; $('kpNot').value = (k && k.n) || '';
+    perdeAc('kalemPerde');
+  }
+  $('kpNot').addEventListener('input', function(){
+    var k = B && B.kalemler.filter(function(x){ return x.b === kpBarkod; })[0]; if(!k) return;
+    var v = this.value.trim(); if(v) k.n = v; else delete k.n; kaydetD();
+  });
+  $('kpNot').addEventListener('change', function(){ kalemCiz(); });
   function kpCiz(zorla){
     if(!B || !kpBarkod || (!zorla && $('kalemPerde').classList.contains('gizli'))) return;
     var i = -1; B.kalemler.forEach(function(x, j){ if(x.b === kpBarkod) i = j; });
@@ -1286,13 +1349,307 @@
     if(!confirm((B.cesit === 'arac' ? 'Araçtan satış' : 'Sipariş') + ' kaydedilsin mi?\n\n' + B.cariAd + '\n' + B.kalemler.length + ' kalem · ' + tl(toplam) + (pesin ? '\nPeşin tahsilat: ' + tl(pesin.tutar) : ''))) return;
     var cz = new Date().toISOString();
     var kayit = { tur:'belge', id: B.id, cesit: B.cesit, cariKod: B.cariKod, cariAd: B.cariAd, not: ($('bkNot').value || '').trim(), cz: cz, plasiyer: kimlik.user, toplam: toplam,
-      satirlar: B.kalemler.slice().reverse().map(function(k){ var s = { b:k.b, k:k.k, a:k.a, m:k.m, f:k.f, lf:k.lf, kdv:k.kdv }; if(k.of) s.of = k.of; if(k.sf) s.sf = k.sf; return s; }) };
+      satirlar: B.kalemler.slice().reverse().map(function(k){ var s = { b:k.b, k:k.k, a:k.a, m:k.m, f:k.f, lf:k.lf, kdv:k.kdv }; if(k.of) s.of = k.of; if(k.sf) s.sf = k.sf; if(k.n) s.n = k.n; return s; }) };
     D.taslak = null;
     kuyrugaEkle(kayit);
     if(pesin) kuyrugaEkle({ tur:'tahsilat', id: yeniId(), cariKod: B.cariKod, cariAd: B.cariAd, tutar: pesin.tutar, yontem: pesin.yontem, not: 'Araçtan satış peşin', bagli: B.id, cz: cz, plasiyer: kimlik.user });
     toast('✅ Kaydedildi' + (navigator.onLine === false ? ' — internet gelince gönderilecek' : ''));
     B = null; belgeKapat(); musteriCiz();
     if(sonListe && aktifSekme === 'kayit') kayitCiz();
+  });
+
+  // ---------- 🍲 Düğün / Mevlüt listesi ----------
+  // Kişi sayısı + menü seçimi → kişi başı ortalama miktarlarla malzeme listesi → katalogdan ürün, paket boyuna
+  // göre adet. Miktarlar YÖNETİMDE değiştirilir (plasiyer_menu_kaydet); burada yazanlar başlangıç değeri.
+  // Birimler: g (ağırlık), ml (sıvı; g ile aynı sayılır), adet.
+  var MALZEME = {
+    pirinc:      { ad:'Pirinç', ara:['pirinc baldo', 'pirinc osmancik', 'pirinc'], hayir:['un', 'sehriye', 'nisasta'] },
+    bulgur_p:    { ad:'Pilavlık bulgur', ara:['pilavlik bulgur', 'bulgur pilavlik', 'bulgur'], hayir:['koftelik', 'ince'] },
+    bulgur:      { ad:'Bulgur (çorbalık)', ara:['koftelik bulgur', 'ince bulgur', 'bulgur'] },
+    mercimek:    { ad:'Kırmızı mercimek', ara:['kirmizi mercimek', 'mercimek kirmizi', 'mercimek'], hayir:['yesil', 'corba'] },
+    nohut:       { ad:'Nohut', ara:['nohut'], hayir:['leblebi', 'konserve', 'haslanmis'] },
+    fasulye:     { ad:'Kuru fasulye', ara:['kuru fasulye', 'fasulye'], hayir:['taze', 'konserve', 'barbunya'] },
+    dogme:       { ad:'Döğme (keşkeklik buğday)', ara:['dogme', 'keskek', 'asurelik bugday'] },
+    irmik:       { ad:'İrmik', ara:['irmik'], hayir:['helva'] },
+    seker:       { ad:'Toz şeker', ara:['toz seker', 'seker'], hayir:['pudra', 'kup', 'esmer'] },
+    un:          { ad:'Un', ara:['un'] },
+    nisasta:     { ad:'Nişasta', ara:['nisasta'] },
+    sehriye:     { ad:'Arpa şehriye', ara:['arpa sehriye', 'sehriye'] },
+    salca:       { ad:'Domates salçası', ara:['domates salcasi', 'salca'], hayir:['biber'] },
+    tuz:         { ad:'Tuz', ara:['tuz'], hayir:['tuzlu', 'tuzsuz'] },
+    pul_biber:   { ad:'Pul biber', ara:['pul biber'] },
+    nane:        { ad:'Nane', ara:['nane'], hayir:['sakiz', 'seker'] },
+    sivi_yag:    { ad:'Sıvı yağ', ara:['aycicek yagi', 'aycicek', 'sivi yag', 'misir ozu'], hayir:['margarin', 'tereyag'] },
+    tereyagi:    { ad:'Tereyağı', ara:['tereyag'] },
+    margarin:    { ad:'Margarin', ara:['margarin'] },
+    sogan:       { ad:'Kuru soğan', ara:['kuru sogan', 'sogan'], hayir:['yesil', 'toz'] },
+    sarimsak:    { ad:'Sarımsak', ara:['sarimsak'], hayir:['toz'] },
+    yogurt:      { ad:'Yoğurt', ara:['yogurt'], hayir:['ayran', 'icecek'] },
+    sut:         { ad:'Süt', ara:['sut'], hayir:['sutlac', 'tozu', 'cikolata', 'kremasi'] },
+    yumurta:     { ad:'Yumurta', ara:['yumurta'], hayir:['makarna', 'sehriye', 'eriste'] },
+    domates:     { ad:'Domates', ara:['domates'], hayir:['salca', 'kurusu', 'konserve', 'suyu', 'puresi', 'rendesi'] },
+    salatalik:   { ad:'Salatalık', ara:['salatalik', 'hiyar'], hayir:['tursu'] },
+    biber:       { ad:'Sivri biber', ara:['sivri biber', 'carliston', 'biber'], hayir:['pul', 'salca', 'tursu', 'kirmizi toz', 'karabiber'] },
+    tursu:       { ad:'Turşu', ara:['karisik tursu', 'tursu'] },
+    ayran:       { ad:'Ayran', ara:['ayran'] },
+    ekmek:       { ad:'Ekmek', ara:['ekmek'], hayir:['kirinti', 'galeta'] },
+    et:          { ad:'Et (kuşbaşı)', ara:['dana kusbasi', 'kusbasi', 'dana'], et:1 },
+    tavuk:       { ad:'Tavuk', ara:['tavuk but', 'tavuk gogus', 'tavuk'], hayir:['bulyon', 'suyu'], et:1 },
+    tabak:       { ad:'Tek kullanımlık tabak', ara:['karton tabak', 'plastik tabak', 'tabak'] },
+    kasik:       { ad:'Tek kullanımlık kaşık', ara:['plastik kasik', 'kasik'] },
+    pecete:      { ad:'Peçete', ara:['pecete'] },
+    bardak:      { ad:'Tek kullanımlık bardak', ara:['karton bardak', 'plastik bardak', 'bardak'] }
+  };
+  var ADET_MALZEME = { yumurta:1, ayran:1, ekmek:1, tabak:1, kasik:1, pecete:1, bardak:1 };
+  // [grup, seçenek, ad, [[malzeme, kişi başı], …]] — 'yag' yemek yağı, 'tatli_yag' tatlı yağı (tercihe göre çözülür)
+  var YEMEK = {
+    corba: { ad:'Çorba', sec:[
+      ['yayla', 'Yayla', [['yogurt', 80], ['pirinc', 10], ['un', 5], ['yumurta', 0.1], ['nane', 0.5], ['yag', 4], ['tuz', 2]]],
+      ['mercimek', 'Mercimek', [['mercimek', 25], ['sogan', 8], ['un', 3], ['salca', 3], ['yag', 5], ['tuz', 2], ['pul_biber', 0.5]]],
+      ['ezogelin', 'Ezogelin', [['mercimek', 20], ['bulgur', 8], ['pirinc', 5], ['sogan', 8], ['salca', 5], ['nane', 0.5], ['pul_biber', 0.5], ['yag', 5], ['tuz', 2]]] ] },
+    ana: { ad:'Ana yemek', cok:1, sec:[
+      ['nohut', 'Etli nohut', [['nohut', 40], ['et', 30], ['sogan', 10], ['salca', 6], ['yag', 6], ['tuz', 1.5], ['pul_biber', 0.5]]],
+      ['fasulye', 'Etli kuru fasulye', [['fasulye', 40], ['et', 30], ['sogan', 10], ['salca', 6], ['yag', 6], ['tuz', 1.5], ['pul_biber', 0.5]]],
+      ['keskek', 'Keşkek', [['dogme', 50], ['et', 40], ['tereyagi', 8], ['tuz', 1.5], ['pul_biber', 0.5]]],
+      ['kavurma', 'Et kavurma', [['et', 110], ['sogan', 15], ['yag', 5], ['tuz', 1.5]]],
+      ['tavuk', 'Tavuk', [['tavuk', 120], ['sogan', 10], ['salca', 4], ['yag', 5], ['tuz', 1.5]]] ] },
+    pilav: { ad:'Pilav', sec:[
+      ['pirinc', 'Pirinç (kabune)', [['pirinc', 70], ['sehriye', 5], ['yag', 8], ['tuz', 1.5]]],
+      ['bulgur', 'Bulgur', [['bulgur_p', 70], ['salca', 4], ['sogan', 8], ['yag', 7], ['tuz', 1.5]]] ] },
+    tatli: { ad:'Tatlı', sec:[
+      ['irmik', 'İrmik helvası', [['irmik', 15], ['seker', 15], ['sut', 40], ['tatli_yag', 6]]],
+      ['zerde', 'Zerde', [['pirinc', 10], ['seker', 20], ['nisasta', 3]]],
+      ['sutlac', 'Sütlaç', [['sut', 120], ['pirinc', 10], ['seker', 15], ['nisasta', 3]]] ] },
+    salata: { ad:'Salata / yanında', cok:1, sec:[
+      ['sogus', 'Söğüş', [['domates', 50], ['salatalik', 40], ['biber', 10]]],
+      ['tursu', 'Turşu', [['tursu', 40]]],
+      ['cacik', 'Cacık', [['yogurt', 60], ['salatalik', 20], ['sarimsak', 1], ['nane', 0.2], ['tuz', 0.5]]] ] },
+    icecek: { ad:'İçecek', sec:[ ['ayran', 'Ayran', [['ayran', 1]]] ] },
+    ekmek: { ad:'Ekmek', sec:[ ['var', 'Ekmek de olsun', [['ekmek', 0.3]]] ] },
+    servis: { ad:'Tek kullanımlık servis', sec:[ ['var', 'Tabak, kaşık, peçete, bardak', [['tabak', 2], ['kasik', 2], ['pecete', 3], ['bardak', 1]]] ] }
+  };
+  var MN_SORU = [
+    { id:'tur', ad:'Ne için?', sec:[['dugun', 'Düğün'], ['mevlut', 'Mevlüt'], ['taziye', 'Taziye / hayır'], ['diger', 'Diğer']], vars:'dugun' },
+    { id:'corba', yemek:1, vars:'yayla' }, { id:'ana', yemek:1, vars:'nohut' }, { id:'pilav', yemek:1, vars:'pirinc' },
+    { id:'tatli', yemek:1, vars:'irmik' }, { id:'salata', yemek:1, vars:'sogus' },
+    { id:'icecek', yemek:1, vars:'' }, { id:'ekmek', yemek:1, vars:'' },
+    { id:'yag', ad:'Yemeklerde yağ', sec:[['sivi', 'Sıvı yağ'], ['tere', 'Tereyağı'], ['yarim', 'Yarı yarıya']], vars:'sivi' },
+    { id:'et', ad:'Et / tavuk listeye eklensin mi?', sec:[['hayir', 'Hayır (kasaptan)'], ['evet', 'Evet']], vars:'hayir' },
+    { id:'servis', yemek:1, vars:'' }
+  ];
+  var mnSecim = {};
+  function mnOran(grup, sec, malz, vars){ var o = (D.veri && D.veri.menu && D.veri.menu.oran) || {}, a = grup + '.' + sec + '.' + malz; return o[a] !== undefined ? Number(o[a]) : vars; }
+  function menuAc(){
+    if(!B) return;
+    if(!katalog.length){ toast('Telefonda ürün listesi yok', 'hata'); return; }
+    if(!Object.keys(mnSecim).length) MN_SORU.forEach(function(q){ mnSecim[q.id] = q.vars ? [q.vars] : []; });
+    $('mnPay').value = $('mnPay').value || String(((D.veri && D.veri.menu && D.veri.menu.pay) != null ? D.veri.menu.pay : 5)).replace('.', ',');
+    mnGrupCiz();
+    $('mnSoru').classList.remove('gizli'); $('mnListe').classList.add('gizli');
+    $('mnBaslik').textContent = '🍲 Düğün / Mevlüt yemeği';
+    perdeAc('menuPerde');
+    if(!$('mnKisi').value) setTimeout(function(){ $('mnKisi').focus(); }, 80);
+  }
+  function mnGrupCiz(){
+    $('mnGruplar').innerHTML = MN_SORU.map(function(q){
+      var y = q.yemek ? YEMEK[q.id] : null, cok = y ? !!y.cok : false;
+      var secs = y ? y.sec.map(function(x){ return [x[0], x[1]]; }) : q.sec;
+      if(y && !cok) secs = [['', 'Yok']].concat(secs);
+      if(y && cok) secs = secs.concat([['', 'Yok']]);
+      var sec = mnSecim[q.id] || [];
+      return '<div class="mnGrup"><div class="bas">' + esc(y ? y.ad + (cok ? ' (birden çok seçilebilir)' : '') : q.ad) + '</div><div class="cipler" data-q="' + q.id + '" data-cok="' + (cok ? 1 : 0) + '">' +
+        secs.map(function(x){ var on = x[0] ? sec.indexOf(x[0]) !== -1 : !sec.length; return '<button type="button" data-v="' + x[0] + '"' + (on ? ' class="on"' : '') + '>' + esc(x[1]) + '</button>'; }).join('') + '</div></div>';
+    }).join('');
+  }
+  $('mnGruplar').addEventListener('click', function(e){
+    var b = e.target.closest('button'), g = e.target.closest('[data-q]'); if(!b || !g) return;
+    var q = g.getAttribute('data-q'), v = b.getAttribute('data-v'), cok = g.getAttribute('data-cok') === '1', sec = mnSecim[q] || [];
+    if(!v) sec = [];
+    else if(cok){ var i = sec.indexOf(v); if(i === -1) sec.push(v); else sec.splice(i, 1); }
+    else sec = [v];
+    mnSecim[q] = sec; mnGrupCiz();
+  });
+  // Ürün adından paket boyu: g/ml ya da adet (30'lu).
+  function paketBoyu(u){
+    var b = boyBul(u.a); if(!b) return null;
+    var m = /^(\d+(?:\.\d+)?)(kg|g|l|ml|cl|li)$/.exec(b); if(!m) return null;
+    var n = Number(m[1]), c = { kg:1000, g:1, l:1000, ml:1, cl:10, li:1 }[m[2]];
+    return { miktar: n * c, adet: m[2] === 'li' };
+  }
+  function kelimeUyar(ad, ara){
+    var t = cesitSozcuk(ad).concat(norm(ad).replace(/[^a-z0-9 ]+/g, ' ').split(' '));
+    return ara.split(' ').every(function(w){ return t.some(function(x){ return w.length <= 3 ? x === w : x.indexOf(w) === 0; }); });
+  }
+  var MN_TERCIH = 'mkMenuTercih_v1';   // malzeme → bu telefonda en son seçilen ürün barkodu
+  function mnTercih(){ try { return JSON.parse(localStorage.getItem(MN_TERCIH) || '{}') || {}; } catch(e){ return {}; } }
+  function mnAdaylar(id){
+    var m = MALZEME[id], hayir = m.hayir || [], l = [], gor = {};
+    m.ara.forEach(function(a){
+      katalog.forEach(function(u){
+        if(gor[u.b] || !kelimeUyar(u.a, a)) return;
+        var n = norm(u.a); if(hayir.some(function(h){ return n.indexOf(h) !== -1; })) return;
+        gor[u.b] = 1; l.push(u);
+      });
+    });
+    return l;
+  }
+  function mnUrunSec(id, toplam){
+    var t = mnTercih()[id]; if(t && katalogBarkod[t]) return katalogBarkod[t];
+    var l = mnAdaylar(id); if(!l.length) return null;
+    var once = (D.sonFiyat[B.cariKod] || {}).m || {};
+    var alinan = l.filter(function(u){ return once[u.k] || once[u.b]; });
+    if(alinan.length) l = alinan;                         // müşterinin daha önce aldığı ürün
+    var puan = function(u){ if(kesirli(u)) return 1e9; var p = paketBoyu(u); return p ? p.miktar : 0; };
+    l.sort(function(a, b){ return puan(b) - puan(a) || a.a.localeCompare(b.a, 'tr'); });   // en büyük paket / dökme
+    return l[0];
+  }
+  function mnMiktar(u, toplam, adetMi){
+    if(!u) return { m: 0, aciklama: '' };
+    if(kesirli(u)){ var kg = Math.ceil(toplam / 1000 * 2) / 2; return { m: kg, aciklama: '≈ ' + miktarMetni(kg) + ' kg (dökme)' }; }
+    var p = paketBoyu(u);
+    if(p && p.miktar > 0){ var n = Math.max(1, Math.ceil(toplam / p.miktar - 1e-9)); return { m: n, aciklama: '≈ ' + mnBirim(toplam, adetMi) + ' → ' + n + ' × ' + boyBul(u.a) }; }
+    if(adetMi){ var a = Math.ceil(toplam); return { m: a, aciklama: a + ' adet' }; }
+    var k = Math.max(1, Math.ceil(toplam / 1000)); return { m: k, aciklama: '≈ ' + mnBirim(toplam) + ' — paket boyu adda yok, miktarı kontrol et', uyari: 1 };
+  }
+  function mnBirim(t, adetMi){ return adetMi ? Math.ceil(t) + ' adet' : t >= 1000 ? miktarMetni(Math.round(t / 100) / 10) + ' kg' : Math.round(t) + ' g'; }
+  var mnL = [], mnKisi = 0;
+  $('mnHesapla').addEventListener('click', function(){
+    var kisi = Math.round(sayi($('mnKisi').value));
+    if(!(kisi > 0) || kisi > 100000){ toast('Kaç kişilik olduğunu yaz', 'hata'); $('mnKisi').focus(); return; }
+    var pay = sayi($('mnPay').value || '0'); if(!(pay >= 0 && pay <= 50)) pay = 5;
+    var yag = (mnSecim.yag || ['sivi'])[0], et = (mnSecim.et || [])[0] === 'evet';
+    var top = {}, nereden = {};
+    Object.keys(YEMEK).forEach(function(g){
+      (mnSecim[g] || []).forEach(function(sv){
+        var x = YEMEK[g].sec.filter(function(y){ return y[0] === sv; })[0]; if(!x) return;
+        x[2].forEach(function(r){
+          var miktar = mnOran(g, sv, r[0], r[1]) * kisi * (1 + pay / 100), ids;
+          if(r[0] === 'yag') ids = yag === 'tere' ? [['tereyagi', 1]] : yag === 'yarim' ? [['tereyagi', 0.5], ['sivi_yag', 0.5]] : [['sivi_yag', 1]];
+          else if(r[0] === 'tatli_yag') ids = [[yag === 'sivi' ? 'margarin' : 'tereyagi', 1]];
+          else ids = [[r[0], 1]];
+          ids.forEach(function(z){
+            if(MALZEME[z[0]].et && !et) return;
+            top[z[0]] = (top[z[0]] || 0) + miktar * z[1];
+            (nereden[z[0]] = nereden[z[0]] || []).indexOf(x[1]) === -1 && nereden[z[0]].push(x[1]);
+          });
+        });
+      });
+    });
+    var ids = Object.keys(top);
+    if(!ids.length){ toast('Menüden en az bir yemek seç', 'hata'); return; }
+    mnKisi = kisi;
+    mnL = ids.map(function(id){
+      var adetMi = !!ADET_MALZEME[id], u = mnUrunSec(id, top[id]), q = mnMiktar(u, top[id], adetMi);
+      return { id: id, toplam: top[id], adetMi: adetMi, u: u, m: q.m, aciklama: q.aciklama, uyari: q.uyari, nereden: nereden[id], not: '', cikar: false };
+    });
+    var sira = Object.keys(MALZEME); mnL.sort(function(a, b){ return sira.indexOf(a.id) - sira.indexOf(b.id); });
+    var ozet = [kisi + ' kişi'].concat(Object.keys(YEMEK).map(function(g){ return (mnSecim[g] || []).map(function(sv){ var x = YEMEK[g].sec.filter(function(y){ return y[0] === sv; })[0]; return x ? x[1] + (g === 'corba' ? ' çorbası' : g === 'pilav' ? ' pilavı' : '') : ''; }).join(', '); }).filter(Boolean));
+    mnL.ozet = ozet.join(' · ');
+    $('mnOzet').innerHTML = '🍲 <b>' + esc(((MN_SORU[0].sec.filter(function(x){ return x[0] === (mnSecim.tur || [])[0]; })[0]) || ['', 'Yemek'])[1]) + '</b> · ' + esc(mnL.ozet) + (pay ? ' · %' + miktarMetni(pay) + ' pay' : '') +
+      '<br><span style="font-weight:600;">Ortalama miktarlardır — ürünü, adedi değiştirebilir, not yazabilirsin.' + (et ? '' : ' Et/tavuk listede yok.') + '</span>';
+    $('mnBaslik').textContent = '🍲 Hesaplanan liste';
+    $('mnSoru').classList.add('gizli'); $('mnListe').classList.remove('gizli'); $('mnAraAlan').classList.add('gizli');
+    mnListeCiz();
+    $('menuPerde').querySelector('.pencere').scrollTop = 0;
+  });
+  function mnListeCiz(){
+    var top = 0, n = 0;
+    $('mnSatirlar').innerHTML = mnL.map(function(r, i){
+      var m = MALZEME[r.id], u = r.u, f = u ? birimFiyat(u) : 0;
+      if(u && !r.cikar){ top += r.m * (f || 0); n++; }
+      return '<div class="mnSatir' + (r.cikar ? ' yok' : '') + '" data-i="' + i + '"><div class="ust"><div class="ad">' + (u ? esc(u.a) : '<span class="hata">' + esc(m.ad) + ' — katalogda bulunamadı</span>') +
+        '<small>' + esc(m.ad) + ' · ' + esc(r.nereden.join(', ')) + '</small><small' + (r.uyari ? ' class="uy"' : '') + '>' + esc(r.aciklama || mnBirim(r.toplam, r.adetMi)) + (u && f ? ' · ' + para(f) + ' ₺' : '') + '</small></div>' +
+        (u ? '<input class="mk" inputmode="decimal" data-mk="' + i + '" value="' + esc(miktarMetni(r.m)) + '"' + (r.cikar ? ' disabled' : '') + '>' : '') + '</div>' +
+        '<div class="alt"><button type="button" data-degis="' + i + '">🔁 Ürünü değiştir</button>' +
+          '<button type="button" data-cikar="' + i + '">' + (r.cikar ? '↩︎ Geri al' : '✕ Çıkar') + '</button>' +
+          '<input data-not="' + i + '" maxlength="150" placeholder="📝 not" value="' + esc(r.not) + '"></div></div>';
+    }).join('');
+    $('mnEkle').textContent = 'Sepete ekle (' + n + ' ürün · ' + tl(top) + ')';
+  }
+  var mnDegisen = -1;
+  $('mnSatirlar').addEventListener('click', function(e){
+    var t = e.target.closest('button'); if(!t) return; var i;
+    if((i = t.getAttribute('data-cikar')) !== null){ mnL[+i].cikar = !mnL[+i].cikar; mnListeCiz(); return; }
+    if((i = t.getAttribute('data-degis')) !== null){
+      mnDegisen = +i; var r = mnL[+i];
+      $('mnAraBaslik').textContent = '🔁 ' + MALZEME[r.id].ad + ' için ürün seç';
+      $('mnAra').value = MALZEME[r.id].ara[MALZEME[r.id].ara.length - 1];
+      $('mnAraAlan').classList.remove('gizli'); mnAraCiz();
+      setTimeout(function(){ $('mnAraAlan').scrollIntoView({ block:'start', behavior:'smooth' }); }, 30);
+    }
+  });
+  $('mnSatirlar').addEventListener('change', function(e){
+    var t = e.target, i;
+    if((i = t.getAttribute('data-mk')) !== null){
+      var v = sayi(t.value), r = mnL[+i];
+      if(!(v > 0) || v > 100000 || (!kesirli(r.u) && Math.floor(v) !== v)){ toast('Miktar geçersiz' + (!kesirli(r.u) ? ' (adetle satılır)' : ''), 'hata'); mnListeCiz(); return; }
+      r.m = v; mnListeCiz();
+    }
+  });
+  $('mnSatirlar').addEventListener('input', function(e){ var i = e.target.getAttribute('data-not'); if(i !== null) mnL[+i].not = e.target.value; });
+  function mnAraCiz(){
+    var q = $('mnAra').value.trim(), r = mnL[mnDegisen]; if(!r) return;
+    var l = q ? urunEslesen(q, 'hepsi', B.cariKod) : mnAdaylar(r.id);
+    $('mnAraSonuc').innerHTML = l.slice(0, 30).map(function(u){
+      var q2 = mnMiktar(u, r.toplam, r.adetMi);
+      return '<div class="sonuc" data-mnb="' + esc(u.b) + '"><div class="ad">' + esc(u.a) + '<small>' + esc(q2.aciklama) + '</small></div><div class="f">' + para(birimFiyat(u)) + '</div></div>';
+    }).join('') || '<div class="ipucu">Ürün bulunamadı.</div>';
+  }
+  $('mnAra').addEventListener('input', mnAraCiz);
+  $('mnAraSonuc').addEventListener('click', function(e){
+    var d = e.target.closest('[data-mnb]'); if(!d || mnDegisen < 0) return;
+    var r = mnL[mnDegisen], u = katalogBarkod[d.getAttribute('data-mnb')]; if(!u) return;
+    var q = mnMiktar(u, r.toplam, r.adetMi);
+    r.u = u; r.m = q.m; r.aciklama = q.aciklama; r.uyari = q.uyari; r.cikar = false;
+    try { var t = mnTercih(); t[r.id] = u.b; localStorage.setItem(MN_TERCIH, JSON.stringify(t)); } catch(er){}
+    $('mnAraAlan').classList.add('gizli'); mnDegisen = -1; mnListeCiz();
+    toast(MALZEME[r.id].ad + ': ' + u.a);
+  });
+  $('mnGeri').addEventListener('click', function(){ $('mnSoru').classList.remove('gizli'); $('mnListe').classList.add('gizli'); $('mnBaslik').textContent = '🍲 Düğün / Mevlüt yemeği'; });
+  $('mnEkle').addEventListener('click', function(){
+    var eklenen = 0;
+    mnL.forEach(function(r){
+      if(r.cikar || !r.u || !(r.m > 0)) return;
+      kalemEkle(r.u, r.m, true);
+      var k = B.kalemler.filter(function(x){ return x.b === r.u.b; })[0];
+      var not = r.not.trim(); if(k && not) k.n = k.n && k.n.indexOf(not) === -1 ? (k.n + ' · ' + not).slice(0, 150) : not;
+      eklenen++;
+    });
+    if(!eklenen){ toast('Eklenecek ürün yok', 'hata'); return; }
+    var tur = ((MN_SORU[0].sec.filter(function(x){ return x[0] === (mnSecim.tur || [])[0]; })[0]) || ['', 'Yemek'])[1];
+    var satir = '🍲 ' + tur + ': ' + mnL.ozet;
+    if((B.not || '').indexOf(satir) === -1){ B.not = ((B.not ? B.not + ' · ' : '') + satir).slice(0, 300); $('bkNot').value = B.not; }
+    kaydetD(); perdeKapat('menuPerde'); kalemCiz(); urunAraCiz(); bkSekme('sepet');
+    toast('✅ ' + eklenen + ' ürün sepete eklendi');
+  });
+
+  // Yönetim: kişi başı miktarlar
+  $('mnOranAc').addEventListener('click', function(){
+    var a = $('mnOranAlan');
+    if(!a.classList.contains('gizli')){ a.classList.add('gizli'); return; }
+    var menu = (D.veri && D.veri.menu) || {};
+    a.innerHTML = Object.keys(YEMEK).map(function(g){
+      return YEMEK[g].sec.map(function(x){
+        return '<details style="margin-top:6px;"><summary><b>' + esc(YEMEK[g].ad) + ': ' + esc(x[1]) + '</b></summary><table style="margin-top:4px;">' +
+          x[2].map(function(r){
+            var ad = r[0] === 'yag' ? 'Yemek yağı (tercihe göre)' : r[0] === 'tatli_yag' ? 'Tatlı yağı (tereyağı/margarin)' : MALZEME[r[0]].ad;
+            var birim = ADET_MALZEME[r[0]] ? 'adet' : (r[0] === 'sut' || r[0] === 'ayran') ? 'ml' : 'g';
+            return '<tr><td>' + esc(ad) + '</td><td class="sayi" style="width:110px;"><input data-oran="' + g + '.' + x[0] + '.' + r[0] + '" inputmode="decimal" value="' + esc(miktarMetni(mnOran(g, x[0], r[0], r[1]))) + '" style="padding:6px 8px; text-align:right;"></td><td style="width:40px;">' + birim + '</td></tr>';
+          }).join('') + '</table></details>';
+      }).join('');
+    }).join('') +
+      '<label>Varsayılan pay / fire (%)</label><input id="mnOranPay" inputmode="decimal" value="' + esc(String(menu.pay != null ? menu.pay : 5).replace('.', ',')) + '">' +
+      '<button type="button" class="ana tam" id="mnOranKaydet" style="margin-top:10px;">Miktarları kaydet</button>' +
+      (menu.zaman ? '<div class="ipucu" style="margin-top:6px;">Son değişiklik: ' + esc(menu.kim || '') + ' · ' + esc(menu.zaman) + '</div>' : '');
+    a.classList.remove('gizli');
+  });
+  $('mnOranAlan').addEventListener('click', function(e){
+    if(e.target.id !== 'mnOranKaydet') return;
+    var oran = {}, hata = '';
+    this.querySelectorAll('[data-oran]').forEach(function(x){ var v = sayi(x.value); if(!(v >= 0)) hata = x.getAttribute('data-oran'); else oran[x.getAttribute('data-oran')] = v; });
+    if(hata){ toast('Geçersiz miktar', 'hata'); return; }
+    var menu = { oran: oran, pay: sayi($('mnOranPay').value || '5') };
+    islem(e.target, { action:'plasiyer_menu_kaydet', menu: JSON.stringify(menu) }, 'Menü miktarları kaydedildi', function(r){ if(D.veri){ D.veri.menu = r.menu; kaydetD(); } });
   });
 
   // ---------- Tahsilat notu ----------
@@ -1543,7 +1900,7 @@
       var detay = '';
       if(x._t === 'belge'){
         detay = '<table><tr><th>Ürün</th><th class="sayi">Miktar</th><th class="sayi">Fiyat</th><th class="sayi">Tutar</th></tr>' + (x.satirlar || []).map(function(s){
-          return '<tr><td>' + esc(s.a) + (s.taban ? ' <span class="etiket kirmizi">taban altı</span>' : '') + (s.of ? ' <span class="etiket yesil">özel</span>' : '') +
+          return '<tr><td>' + esc(s.a) + (s.taban ? ' <span class="etiket kirmizi">taban altı</span>' : '') + (s.of ? ' <span class="etiket yesil">özel</span>' : '') + (s.n ? '<br><span class="ipucu">📝 ' + esc(s.n) + '</span>' : '') +
             (Math.abs((s.lf || 0) - s.f) > 0.004 ? '<br><span class="ipucu">liste ' + para(s.lf) + '</span>' : '') + '</td><td class="sayi">' + miktarMetni(s.m) + '</td><td class="sayi">' + para(s.f) + '</td><td class="sayi">' + para(s.m * s.f) + '</td></tr>';
         }).join('') + '</table>';
       }
@@ -1812,7 +2169,7 @@
   // ---------- Geri tuşu (uygulama çağırır): en üstteki katmanı kapatır; kapattıysa true ----------
   window.mkGeri = function(){
     if(!$('yazdir').classList.contains('gizli')){ $('yazdir').classList.add('gizli'); $('yazdir').innerHTML = ''; return true; }
-    var perdeler = ['iptalPerde', 'urunPerde', 'cesitPerde', 'kalemPerde', 'tahsilatPerde', 'musteriPerde'];
+    var perdeler = ['iptalPerde', 'urunPerde', 'cesitPerde', 'kalemPerde', 'menuPerde', 'tahsilatPerde', 'musteriPerde'];
     for(var i = 0; i < perdeler.length; i++) if(!$(perdeler[i]).classList.contains('gizli')){ perdeKapat(perdeler[i]); return true; }
     if(!$('belgeKatman').classList.contains('gizli')){
       if(akis){ kameraKapat(); return true; }

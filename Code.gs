@@ -8,7 +8,7 @@
 // bir sürüm dağıttıktan sonra /exec adresini boş açtığında burada yazan
 // numarayı görmelisin; index.html'in üstündeki "build" numarasıyla
 // eşleşecek şekilde ben her ikisini birlikte güncelliyorum.
-var GS_VERSION = 'build183';
+var GS_VERSION = 'build184';
 
 // Sheets'te "Saat" sütunu zaman biçimli olarak algılanırsa, hücre değeri düz
 // metin değil bir Date nesnesi olarak gelir ve String(...) çirkin bir çıktı
@@ -4258,6 +4258,7 @@ function plasiyerIstek(p, callback) {
     if (a === 'plasiyer_iptal') return outJson(plsYaz(function () { return plsIptal(k, p); }), callback);
     if (a === 'plasiyer_fiyat_kontrol') return outJson(plsFiyatKontrol(k, p), callback);
     yonetimGerek();
+    if (a === 'plasiyer_menu_kaydet') return outJson(plsYaz(function () { return plsMenuKaydet(k, p); }), callback);
     if (a === 'plasiyer_ayar_kaydet') return outJson(plsYaz(function () { return plsAyarKaydet(k, p); }), callback);
     if (a === 'plasiyer_musteri_ata') return outJson(plsYaz(function () { return plsMusteriAta(k, p); }), callback);
     if (a === 'plasiyer_ozel_kaydet') return outJson(plsYaz(function () { return plsOzelKaydet(k, p); }), callback);
@@ -4286,7 +4287,7 @@ function plsVeri(k) {
     var anahtar = String(r[1] || '').trim() || String(r[2] || '').trim(); if (!anahtar) return;
     (ozel[kod] = ozel[kod] || {})[anahtar] = [plsSayi(r[4]), String(r[3] || ''), plsTarih(r[5]), String(r[2] || '')];
   });
-  var sonuc = { status: 'ok', ben: k.ben, yonetim: k.yonetim, maliyet: k.maliyet, stok: k.stok, ayar: plsAyar(), musteriler: musteriler, ozel: ozel,
+  var sonuc = { status: 'ok', ben: k.ben, yonetim: k.yonetim, maliyet: k.maliyet, stok: k.stok, ayar: plsAyar(), menu: plsMenu(), musteriler: musteriler, ozel: ozel,
     yontemler: PLS_YONTEMLER, bugun: ekipBugun(), riskVar: Object.keys(risk).length > 0 };
   if (k.yonetim) sonuc.plasiyerler = plsKullanicilar();
   // Teslim edilmemiş BEKLEYEN siparişler (depoda eksik çıkan kalemler), müşteri başına — yeni siparişte uyarı için.
@@ -4363,6 +4364,7 @@ function plsKayitKaydet(kayitlar, k) {
         lf: kat ? kat.fiyat : plsYuvarla(plsSayi(s.lf)), kdv: kat ? kat.kdv : plsSayi(s.kdv) };
       if (s.of) kalem.of = plsYuvarla(plsSayi(s.of));
       if (s.sf) kalem.sf = plsYuvarla(plsSayi(s.sf));
+      if (s.n) kalem.n = plsMetin(s.n, 150);   // ürün notu (depo ve sevk fişinde görünür)
       // Taban denetimi SUNUCUDA da yapılır (telefon eski katalogla çalışmış olabilir). Kayıt REDDEDİLMEZ
       // (sahadaki sipariş kaybolmasın), satır ve belge işaretlenir; yönetici görür.
       var mal = plsMaliyet(kat), taban = plsTaban(mal, ayar);
@@ -4607,6 +4609,21 @@ function plsIptal(k, p) {
   return { durum: deger[0], bagli: bagli };
 }
 
+// Düğün / Mevlüt menü oranları (yönetim değiştirir): { oran: { 'yemek.malzeme': kişi başı g/ml/adet }, pay: % }.
+var PLS_MENU_OZELLIK = 'PLASIYER_MENU';
+function plsMenu() { try { return JSON.parse(PropertiesService.getScriptProperties().getProperty(PLS_MENU_OZELLIK) || '{}') || {}; } catch (e) { return {}; } }
+function plsMenuKaydet(k, p) {
+  var g = {}; try { g = JSON.parse(String(p.menu || '{}')) || {}; } catch (e) { throw new Error('Menü okunamadı'); }
+  var oran = {}, n = 0;
+  Object.keys(g.oran || {}).forEach(function (a) {
+    if (++n > 400 || !/^[a-z0-9_.]{3,80}$/.test(a)) return;
+    var v = plsSayi(g.oran[a]); if (v >= 0 && v <= 5000) oran[a] = Math.round(v * 1000) / 1000;
+  });
+  var pay = plsSayi(g.pay); if (!(pay >= 0 && pay <= 50)) pay = 5;
+  var menu = { oran: oran, pay: pay, zaman: plsZamanMetni(), kim: k.ben };
+  PropertiesService.getScriptProperties().setProperty(PLS_MENU_OZELLIK, JSON.stringify(menu));
+  return { status: 'ok', menu: menu };
+}
 function plsAyarKaydet(k, p) {
   var a = plsAyar();
   var sinirli = function (v, en, ek) { var n = plsSayi(v); if (!(n >= en && n <= ek)) throw new Error('Ayar değeri geçersiz: ' + v); return Math.round(n * 100) / 100; };
@@ -4750,6 +4767,7 @@ function hzSatirlar(b, stokGor, kat) {
   kat = kat || plsKatalogStok();
   return (b.satirlar || []).map(function (s) {
     var o = { b: s.b, k: s.k, a: s.a, m: s.m };
+    if (s.n) o.n = s.n;
     if (kat[s.b] !== undefined) { if (stokGor) o.stok = kat[s.b]; if (kat[s.b] < s.m) o.az = 1; } // stok yetmeyebilir (miktar gizli)
     return o;
   });

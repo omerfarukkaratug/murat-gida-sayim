@@ -187,3 +187,19 @@ Akış: bekliyor → hazırlanıyor → **hazır** → (başka biri kontrol eder
 - **📊 Rapor (yönetim):** ay içinde kişi başı sipariş, kalem, ortalama süre, eksik/fazla, elle, kontrol farkı;
   sevkiyatçı başına müşteriye teslim sayısı.
 - Sheets: SiparisHazirlik'e "Ek (JSON)" sütunu kendiliğinden eklenir.
+
+## build 222 / Code.gs build184 — 🍲 Düğün / Mevlüt listesi, ürün notu
+
+- Siparişte **Ürün Ekle → 🍲 Düğün / Mevlüt**: kaç kişilik, ne için (düğün/mevlüt/taziye), çorba (yayla /
+  mercimek / ezogelin), ana yemek (etli nohut / kuru fasulye / keşkek / et kavurma / tavuk — çoklu),
+  pilav (pirinç-kabune / bulgur), tatlı (irmik helvası / zerde / sütlaç), salata (söğüş / turşu / cacık — çoklu),
+  ayran, ekmek, yemek yağı (sıvı / tereyağı / yarı yarıya), et-tavuk eklensin mi (varsayılan hayır),
+  tek kullanımlık servis, pay/fire %.
+- Kişi başı ortalama × kişi × (1 + pay) → malzeme toplamı; katalogdan ürün seçilir (önce bu telefonda o malzeme
+  için en son seçilen, sonra müşterinin daha önce aldığı, sonra en büyük paket / dökme). Adet = toplam ÷ paket
+  boyu (adındaki 5 KG, 500 GR, 5 LT, 30lu); KG birimli üründe kg. Paket boyu adda yoksa uyarı.
+- Listede: 🔁 ürünü değiştir, adet değiştir, ✕ çıkar, 📝 not → "Sepete ekle". Sipariş notuna menü özeti yazılır.
+- **Ürün notu:** sepette ürüne dokun → "📝 Ürün notu". Depo hazırlarken ve sevk fişinde görür.
+- **Yönetim → 🍲 kişi başı miktarlar:** her yemeğin malzeme miktarı ve varsayılan pay değiştirilebilir
+  (Script Properties: PLASIYER_MENU). Başlangıç: pirinç pilavı 70 g, irmik 15 g, nohut/fasulye 40 g …
+  Eski düğün faturaları gelince bu değerler onlara göre güncellenecek.

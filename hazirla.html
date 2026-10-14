@@ -583,7 +583,7 @@
       return '<div class="kalem ' + d + (i === sonSira ? ' son' : '') + '" data-i="' + i + '">' +
         '<div class="bilgi" data-ac="' + i + '"><div class="ad">' + esc(s.a) + etk + '</div><div class="alt">' + esc(s.b) + (s.k ? ' · ' + esc(s.k) : '') +
           (s.stok !== undefined ? ' · <span style="' + (s.stok < s.m ? 'color:var(--red); font-weight:800;' : '') + '">stok ' + mk(s.stok) + '</span>' : '') +
-          (kontrol ? ' · sipariş ' + mk(s.m) : '') + '</div></div>' +
+          (kontrol ? ' · sipariş ' + mk(s.m) : '') + '</div>' + (s.n ? '<div style="font-size:12.5px; font-weight:700; color:var(--blue); margin-top:3px;">📝 ' + esc(s.n) + '</div>' : '') + '</div>' +
         '<div class="sayi" data-ac="' + i + '"><b>' + (v === undefined ? '—' : mk(v)) + '</b><span>/ ' + mk(hd) + '</span></div>' +
         (duzenle ? '<div class="dug"><button type="button" class="yesil" data-tam="' + i + '" aria-label="Tamamı">✓</button><button type="button" data-yok="' + i + '" aria-label="Yok">✗</button></div>' : '') +
         '</div>';
@@ -877,7 +877,7 @@
     var b = S.belge, h = S.hazirlik, H = S.H;
     var satir = b.satirlar.map(function(s, i){
       var v = H.mik[i], m = s.m, d = v === undefined ? '' : Math.abs(v - m) < 0.0005 ? 'tam' : v < m ? 'eksik' : 'fazla';
-      return '<tr><td>' + (i + 1) + '</td><td>' + esc(s.a) + '<br><small>' + esc(s.b) + (s.k ? ' · ' + esc(s.k) : '') + '</small></td><td style="text-align:right">' + mk(s.m) + '</td><td style="text-align:right"><b>' + (v === undefined ? '' : mk(v)) + '</b></td><td>' +
+      return '<tr><td>' + (i + 1) + '</td><td>' + esc(s.a) + '<br><small>' + esc(s.b) + (s.k ? ' · ' + esc(s.k) : '') + '</small>' + (s.n ? '<br><b>📝 ' + esc(s.n) + '</b>' : '') + '</td><td style="text-align:right">' + mk(s.m) + '</td><td style="text-align:right"><b>' + (v === undefined ? '' : mk(v)) + '</b></td><td>' +
         (d === 'eksik' ? 'EKSİK ' + mk(s.m - v) : d === 'fazla' ? 'FAZLA ' + mk(v - s.m) : d === 'tam' ? '✓' : '') + (H.elle[i] && v > 0 ? ' ✋ elle (' + esc(H.elle[i]) + ')' : '') + '</td></tr>';
     }).join('');
     var sv = h.sevk;
