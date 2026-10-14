@@ -8,7 +8,7 @@
 // bir sürüm dağıttıktan sonra /exec adresini boş açtığında burada yazan
 // numarayı görmelisin; index.html'in üstündeki "build" numarasıyla
 // eşleşecek şekilde ben her ikisini birlikte güncelliyorum.
-var GS_VERSION = 'build184';
+var GS_VERSION = 'build185';
 
 // Sheets'te "Saat" sütunu zaman biçimli olarak algılanırsa, hücre değeri düz
 // metin değil bir Date nesnesi olarak gelir ve String(...) çirkin bir çıktı
@@ -2257,7 +2257,8 @@ function saveKatalogBulk(entries) {
   var sheet = ss.getSheetByName('Katalog');
   if (!sheet) sheet = ss.insertSheet('Katalog');
   var props = PropertiesService.getScriptProperties();
-  var ozet = listeOzeti(entries.map(function (e) { return [e.name || '', e.barcode || '', e.stockCode || '', cleanNum(e.oldStock), cleanNum(e.price), cleanNum(e.kdv), koliCarpan(e.carpan), String(e.birim || ''), ulkeMetni(e.ulke), erpFiyatTarihi(e.ft), cleanNum(e.of), promosyonMetni(e.pr), cleanNum(e.af)]; }));
+  // 'm2|': barkod/stok kodu metin biçimine geçişte katalog bir kez yeniden yazılsın (baştaki 0'lar geri gelsin).
+  var ozet = 'm2|' + listeOzeti(entries.map(function (e) { return [e.name || '', e.barcode || '', e.stockCode || '', cleanNum(e.oldStock), cleanNum(e.price), cleanNum(e.kdv), koliCarpan(e.carpan), String(e.birim || ''), ulkeMetni(e.ulke), erpFiyatTarihi(e.ft), cleanNum(e.of), promosyonMetni(e.pr), cleanNum(e.af)]; }));
   if (entries.length > 0 && ozet === props.getProperty('KATALOG_OZET') && sheet.getLastRow() === entries.length + 1) {
     return ContentService.createTextOutput(JSON.stringify({ status: 'ok', saved: 0, degisiklikYok: true })).setMimeType(ContentService.MimeType.JSON);
   }
@@ -2309,6 +2310,9 @@ function saveKatalogBulk(entries) {
   if (sheet.getMaxColumns() < KATALOG_BASLIK.length) sheet.insertColumnsAfter(sheet.getMaxColumns(), KATALOG_BASLIK.length - sheet.getMaxColumns());
   if (sheet.getMaxRows() < rows.length + 1) sheet.insertRowsAfter(sheet.getMaxRows(), rows.length + 1 - sheet.getMaxRows());
   sheet.getRange(1, 9, rows.length + 1, 1).setNumberFormat('@');
+  // Barkod ve STOK KODU da METİN: "0306202643" sayıya çevrilince baştaki 0 düşüyor, ürün ERP hareketleriyle
+  // (stok kodu "0306202643") eşleşmiyordu — Ürün/Stok Hareketleri, son satış fiyatı, öneri fiyatı boş geliyordu.
+  sheet.getRange(1, 2, rows.length + 1, 2).setNumberFormat('@');
 
   tabloyuDegistir(sheet, KATALOG_BASLIK, rows);
   // Fiyat sütununu her zaman 2 ondalık basamakla göster — Sheets'in
@@ -2353,6 +2357,7 @@ function saveKatalogItem(entry) {
     var barcodes = sheet.getRange(2, 2, lastRow - 1, 1).getValues();
     for (var i = 0; i < barcodes.length; i++) {
       if (String(barcodes[i][0]) === String(entry.barcode)) {
+        sheet.getRange(i + 2, 2, 1, 2).setNumberFormat('@');
         sheet.getRange(i + 2, 1, 1, 8).setValues([rowData]);
         sheet.getRange(i + 2, 5, 1, 1).setNumberFormat('0.00');
         sheet.getRange(i + 2, 6, 1, 1).setNumberFormat('0.##');
@@ -2361,6 +2366,7 @@ function saveKatalogItem(entry) {
       }
     }
   }
+  sheet.getRange(sheet.getLastRow() + 1, 2, 1, 2).setNumberFormat('@');
   sheet.appendRow(rowData);
   sheet.getRange(sheet.getLastRow(), 5, 1, 1).setNumberFormat('0.00');
   sheet.getRange(sheet.getLastRow(), 6, 1, 1).setNumberFormat('0.##');
