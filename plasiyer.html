@@ -420,7 +420,7 @@
         <input id="mnKisi" inputmode="numeric" placeholder="Örn. 1000" style="font-family:var(--mono); font-size:22px; font-weight:800;">
         <div id="mnGruplar"></div>
         <div class="satirlar" style="margin-top:12px;">
-          <div><label for="mnPay">Pay / fire (%)</label><input id="mnPay" inputmode="decimal" placeholder="5"></div>
+          <div><label for="mnPay">Pay / fire (%)</label><input id="mnPay" inputmode="decimal" placeholder="0"></div>
         </div>
         <button type="button" class="ana tam" id="mnHesapla" style="margin-top:14px; padding:14px; font-size:17px;">Listeyi çıkar</button>
         <div class="ipucu" style="margin-top:8px;">Kişi başı ortalama miktarlarla hesaplanır; sonraki ekranda ürünleri, miktarları değiştirebilir, ürüne not yazabilirsin.</div>
@@ -998,7 +998,7 @@
     var t = norm(ad).replace(/,/g, '.'), m = /(\d+(?:\.\d+)?)\s*(kg|gr|g|lt|l|ml|cl|mt|m|cm)\b/g, son = null, x;
     while((x = m.exec(t))) son = x;
     if(son) return Number(son[1]) + ({ kg:'kg', gr:'g', g:'g', lt:'l', l:'l', ml:'ml', cl:'cl', mt:'m', m:'m', cm:'cm' })[son[2]];
-    var a = /(\d+)\s*'?\s*(li|lu|lü|lı)\b/.exec(String(ad || '').toLocaleLowerCase('tr-TR')); return a ? a[1] + 'li' : '';
+    var a = /(\d+)\s*'?\s*(li|lu)\b/.exec(norm(ad)); return a ? a[1] + 'li' : '';
   }
   // Ad sözcükleri: boy (2,5 LT), sayılar ve noktalama atılır; "TEM." → "tem".
   function cesitSozcuk(ad){
@@ -1362,88 +1362,144 @@
   // Kişi sayısı + menü seçimi → kişi başı ortalama miktarlarla malzeme listesi → katalogdan ürün, paket boyuna
   // göre adet. Miktarlar YÖNETİMDE değiştirilir (plasiyer_menu_kaydet); burada yazanlar başlangıç değeri.
   // Birimler: g (ağırlık), ml (sıvı; g ile aynı sayılır), adet.
+  // Kişi başı miktarlar Aşçı Fatih Sapan'ın 2026 düğün faturalarından (irmik 15 kg = 1000 kişi kabulüyle) çıkarıldı:
+  // pirinç 75 g, fasulye ~30 + nohut ~4 g, irmik 15 g, şeker 30 g, tereyağı ~18 g, süzme yoğurt 10 g, tuz 9 g, turşu ~40 g,
+  // bardak su 1, köpük tabak 1, plastik kaşık 1, ıslak mendil ~1, masa kağıdı 12 g, kömür 12 g … Faturalar zaten
+  // payı içerdiği için varsayılan pay %0. Yönetim → "🍲 kişi başı miktarlar"dan değiştirilebilir.
   var MALZEME = {
-    pirinc:      { ad:'Pirinç', ara:['pirinc baldo', 'pirinc osmancik', 'pirinc'], hayir:['un', 'sehriye', 'nisasta'] },
+    pirinc:      { ad:'Pirinç', ara:['baldo pirinc', 'pirinc baldo', 'pirinc osmancik', 'pirinc'], hayir:['un', 'sehriye', 'nisasta'] },
     bulgur_p:    { ad:'Pilavlık bulgur', ara:['pilavlik bulgur', 'bulgur pilavlik', 'bulgur'], hayir:['koftelik', 'ince'] },
     bulgur:      { ad:'Bulgur (çorbalık)', ara:['koftelik bulgur', 'ince bulgur', 'bulgur'] },
-    mercimek:    { ad:'Kırmızı mercimek', ara:['kirmizi mercimek', 'mercimek kirmizi', 'mercimek'], hayir:['yesil', 'corba'] },
-    nohut:       { ad:'Nohut', ara:['nohut'], hayir:['leblebi', 'konserve', 'haslanmis'] },
-    fasulye:     { ad:'Kuru fasulye', ara:['kuru fasulye', 'fasulye'], hayir:['taze', 'konserve', 'barbunya'] },
+    mercimek:    { ad:'Mercimek (kırmızı / sarı)', ara:['kirmizi mercimek', 'sari mercimek', 'mercimek'], hayir:['yesil', 'corba'] },
+    nohut:       { ad:'Nohut', ara:['yemeklik nohut', 'nohut'], hayir:['leblebi', 'konserve', 'haslanmis'] },
+    fasulye:     { ad:'Kuru fasulye', ara:['dermason fasulye', 'sira fasulye', 'kuru fasulye', 'fasulye'], hayir:['taze', 'konserve', 'barbunya'] },
     dogme:       { ad:'Döğme (keşkeklik buğday)', ara:['dogme', 'keskek', 'asurelik bugday'] },
     irmik:       { ad:'İrmik', ara:['irmik'], hayir:['helva'] },
     seker:       { ad:'Toz şeker', ara:['toz seker', 'seker'], hayir:['pudra', 'kup', 'esmer'] },
+    kunar:       { ad:'Kunar (çam fıstığı içi)', ara:['kunar', 'cam fistigi'] },
     un:          { ad:'Un', ara:['un'] },
     nisasta:     { ad:'Nişasta', ara:['nisasta'] },
     sehriye:     { ad:'Arpa şehriye', ara:['arpa sehriye', 'sehriye'] },
     salca:       { ad:'Domates salçası', ara:['domates salcasi', 'salca'], hayir:['biber'] },
-    tuz:         { ad:'Tuz', ara:['tuz'], hayir:['tuzlu', 'tuzsuz'] },
+    tuz:         { ad:'Tuz', ara:['gurtuz', 'yemeklik tuz', 'tuz'], hayir:['tuzlu', 'tuzsuz', 'limon', 'karton', 'iyotlu karton'] },
+    karabiber:   { ad:'Karabiber', ara:['karabiber'] },
+    toz_biber:   { ad:'Toz kırmızı biber', ara:['toz biber', 'kirmizi toz biber'], hayir:['pul', 'karabiber'] },
     pul_biber:   { ad:'Pul biber', ara:['pul biber'] },
-    nane:        { ad:'Nane', ara:['nane'], hayir:['sakiz', 'seker'] },
-    sivi_yag:    { ad:'Sıvı yağ', ara:['aycicek yagi', 'aycicek', 'sivi yag', 'misir ozu'], hayir:['margarin', 'tereyag'] },
+    nane:        { ad:'Kuru nane', ara:['kuru nane', 'nane'], hayir:['sakiz', 'seker'] },
+    limon_tuzu:  { ad:'Limon tuzu', ara:['limon tuzu'] },
+    sivi_yag:    { ad:'Ayçiçek yağı', ara:['aycicek yagi', 'aycicek', 'sivi yag', 'misir ozu'], hayir:['margarin', 'tereyag'] },
     tereyagi:    { ad:'Tereyağı', ara:['tereyag'] },
     margarin:    { ad:'Margarin', ara:['margarin'] },
     sogan:       { ad:'Kuru soğan', ara:['kuru sogan', 'sogan'], hayir:['yesil', 'toz'] },
     sarimsak:    { ad:'Sarımsak', ara:['sarimsak'], hayir:['toz'] },
-    yogurt:      { ad:'Yoğurt', ara:['yogurt'], hayir:['ayran', 'icecek'] },
+    yogurt:      { ad:'Süzme yoğurt', ara:['suzme yogurt', 'yogurt'], hayir:['ayran', 'icecek'] },
     sut:         { ad:'Süt', ara:['sut'], hayir:['sutlac', 'tozu', 'cikolata', 'kremasi'] },
     yumurta:     { ad:'Yumurta', ara:['yumurta'], hayir:['makarna', 'sehriye', 'eriste'] },
     domates:     { ad:'Domates', ara:['domates'], hayir:['salca', 'kurusu', 'konserve', 'suyu', 'puresi', 'rendesi'] },
     salatalik:   { ad:'Salatalık', ara:['salatalik', 'hiyar'], hayir:['tursu'] },
-    biber:       { ad:'Sivri biber', ara:['sivri biber', 'carliston', 'biber'], hayir:['pul', 'salca', 'tursu', 'kirmizi toz', 'karabiber'] },
-    tursu:       { ad:'Turşu', ara:['karisik tursu', 'tursu'] },
+    biber:       { ad:'Sivri biber', ara:['sivri biber', 'carliston', 'biber'], hayir:['pul', 'salca', 'tursu', 'toz', 'karabiber'] },
+    tursu:       { ad:'Karışık turşu', ara:['karisik tursu', 'tursu'] },
     ayran:       { ad:'Ayran', ara:['ayran'] },
+    bardak_su:   { ad:'Bardak su', ara:['bardak su'] },
+    damacana:    { ad:'Damacana / 5 lt su', ara:['damacana', 'aysu', 'pinargozu', 'su 19 lt'] },
+    cay:         { ad:'Çay', ara:['caykur', 'cay'], hayir:['bardak', 'kasigi', 'karistirici', 'demlik', 'tabagi'] },
+    kup_seker:   { ad:'Küp şeker', ara:['kup seker'] },
+    karistirici: { ad:'Çay karıştırıcı', ara:['karistirici'] },
     ekmek:       { ad:'Ekmek', ara:['ekmek'], hayir:['kirinti', 'galeta'] },
     et:          { ad:'Et (kuşbaşı)', ara:['dana kusbasi', 'kusbasi', 'dana'], et:1 },
     tavuk:       { ad:'Tavuk', ara:['tavuk but', 'tavuk gogus', 'tavuk'], hayir:['bulyon', 'suyu'], et:1 },
-    tabak:       { ad:'Tek kullanımlık tabak', ara:['karton tabak', 'plastik tabak', 'tabak'] },
-    kasik:       { ad:'Tek kullanımlık kaşık', ara:['plastik kasik', 'kasik'] },
+    kopuk_tabak: { ad:'Köpük tabak (tabldot)', ara:['kopuk tabak', 'tabildot', 'tabldot'] },
+    kasik:       { ad:'Plastik kaşık', ara:['plastik kasik', 'kasik'] },
+    sogus_tabagi:{ ad:'Söğüş tabağı', ara:['sogus tabagi'] },
+    masa_kagidi: { ad:'Masa kağıdı', ara:['masa kagidi'] },
+    islak_mendil:{ ad:'Islak mendil', ara:['islak mendil', 'islak havlu'] },
     pecete:      { ad:'Peçete', ara:['pecete'] },
-    bardak:      { ad:'Tek kullanımlık bardak', ara:['karton bardak', 'plastik bardak', 'bardak'] }
+    kagit_bardak:{ ad:'Kağıt bardak', ara:['karton bardak', 'kagit bardak', 'plastik bardak'] },
+    sizdirmaz:   { ad:'Sızdırmaz kap (paket yemek)', ara:['sizdirmaz'] },
+    tuzluk:      { ad:'Karton tuz (tuzluk)', ara:['iyotlu karton', 'karton tuz', 'tuzluk'] },
+    komur:       { ad:'Mangal kömürü', ara:['mangal komuru', 'komur'] },
+    ispirto:     { ad:'İspirto', ara:['ispirto'] },
+    krem_det:    { ad:'Krem deterjan', ara:['krem deterjan', 'beyaz krem', 'krem'], hayir:['el kremi', 'peynir', 'sut', 'krema', 'tereyag'] },
+    bulasik_det: { ad:'Bulaşık deterjanı', ara:['bulasik det', 'bulasik deterjani'] },
+    ovma_tozu:   { ad:'Ovma tozu', ara:['ovma tozu'] },
+    tel:         { ad:'Bulaşık teli', ara:['bulasik teli'] },
+    sunger:      { ad:'Sünger', ara:['sunger'] },
+    bulasik_eld: { ad:'Bulaşık eldiveni', ara:['bulasik eldiveni'] },
+    muayene_eld: { ad:'Muayene eldiveni', ara:['muayene eldiveni'] },
+    cop_poseti:  { ad:'Çöp poşeti (jumbo)', ara:['cop poseti', 'cop torbasi'] },
+    naylon:      { ad:'Naylon torba', ara:['naylon torba'] },
+    camasir_suyu:{ ad:'Çamaşır suyu', ara:['camasir suyu'] }
   };
-  var ADET_MALZEME = { yumurta:1, ayran:1, ekmek:1, tabak:1, kasik:1, pecete:1, bardak:1 };
-  // [grup, seçenek, ad, [[malzeme, kişi başı], …]] — 'yag' yemek yağı, 'tatli_yag' tatlı yağı (tercihe göre çözülür)
+  var ADET_MALZEME = { yumurta:1, ayran:1, ekmek:1, bardak_su:1, damacana:1, karistirici:1, kopuk_tabak:1, kasik:1, sogus_tabagi:1, islak_mendil:1, pecete:1, kagit_bardak:1, sizdirmaz:1, tuzluk:1,
+    ispirto:1, krem_det:1, bulasik_det:1, ovma_tozu:1, tel:1, sunger:1, bulasik_eld:1, muayene_eld:1, cop_poseti:1, camasir_suyu:1 };
+  var ML_MALZEME = { sut:1, sivi_yag:1 };
+  // [seçenek, ad, [[malzeme, kişi başı], …]] — 'yag' yemek yağı, 'tatli_yag' tatlı yağı (tercihe göre çözülür)
   var YEMEK = {
     corba: { ad:'Çorba', sec:[
-      ['yayla', 'Yayla', [['yogurt', 80], ['pirinc', 10], ['un', 5], ['yumurta', 0.1], ['nane', 0.5], ['yag', 4], ['tuz', 2]]],
-      ['mercimek', 'Mercimek', [['mercimek', 25], ['sogan', 8], ['un', 3], ['salca', 3], ['yag', 5], ['tuz', 2], ['pul_biber', 0.5]]],
-      ['ezogelin', 'Ezogelin', [['mercimek', 20], ['bulgur', 8], ['pirinc', 5], ['sogan', 8], ['salca', 5], ['nane', 0.5], ['pul_biber', 0.5], ['yag', 5], ['tuz', 2]]] ] },
+      ['yayla', 'Yayla', [['yogurt', 10], ['pirinc', 5], ['un', 5], ['yumurta', 0.015], ['nane', 0.15], ['limon_tuzu', 0.1], ['yag', 1]]],
+      ['mercimek', 'Mercimek', [['mercimek', 10], ['un', 2], ['salca', 1], ['yag', 1], ['nane', 0.1]]],
+      ['ezogelin', 'Ezogelin', [['mercimek', 8], ['bulgur', 3], ['pirinc', 2], ['salca', 1.5], ['nane', 0.1], ['yag', 1]]] ] },
     ana: { ad:'Ana yemek', cok:1, sec:[
-      ['nohut', 'Etli nohut', [['nohut', 40], ['et', 30], ['sogan', 10], ['salca', 6], ['yag', 6], ['tuz', 1.5], ['pul_biber', 0.5]]],
-      ['fasulye', 'Etli kuru fasulye', [['fasulye', 40], ['et', 30], ['sogan', 10], ['salca', 6], ['yag', 6], ['tuz', 1.5], ['pul_biber', 0.5]]],
-      ['keskek', 'Keşkek', [['dogme', 50], ['et', 40], ['tereyagi', 8], ['tuz', 1.5], ['pul_biber', 0.5]]],
-      ['kavurma', 'Et kavurma', [['et', 110], ['sogan', 15], ['yag', 5], ['tuz', 1.5]]],
-      ['tavuk', 'Tavuk', [['tavuk', 120], ['sogan', 10], ['salca', 4], ['yag', 5], ['tuz', 1.5]]] ] },
+      ['fasulye', 'Etli kuru fasulye', [['fasulye', 30], ['nohut', 4], ['et', 30], ['salca', 4.5], ['yag', 3], ['sivi_yag', 5]]],
+      ['nohut', 'Etli nohut', [['nohut', 34], ['et', 30], ['salca', 4.5], ['yag', 3], ['sivi_yag', 5]]],
+      ['keskek', 'Keşkek', [['dogme', 50], ['et', 40], ['tereyagi', 8]]],
+      ['kavurma', 'Et kavurma', [['et', 110], ['sogan', 15], ['yag', 5]]],
+      ['tavuk', 'Tavuk', [['tavuk', 120], ['sogan', 10], ['salca', 4], ['yag', 5]]] ] },
     pilav: { ad:'Pilav', sec:[
-      ['pirinc', 'Pirinç (kabune)', [['pirinc', 70], ['sehriye', 5], ['yag', 8], ['tuz', 1.5]]],
-      ['bulgur', 'Bulgur', [['bulgur_p', 70], ['salca', 4], ['sogan', 8], ['yag', 7], ['tuz', 1.5]]] ] },
+      ['pirinc', 'Pirinç (kabune)', [['pirinc', 70], ['sehriye', 2.5], ['yag', 8]]],
+      ['bulgur', 'Bulgur', [['bulgur_p', 70], ['salca', 3], ['sogan', 8], ['yag', 7]]] ] },
     tatli: { ad:'Tatlı', sec:[
-      ['irmik', 'İrmik helvası', [['irmik', 15], ['seker', 15], ['sut', 40], ['tatli_yag', 6]]],
+      ['irmik', 'İrmik helvası (kunarlı)', [['irmik', 15], ['seker', 30], ['kunar', 0.35], ['tatli_yag', 7]]],
       ['zerde', 'Zerde', [['pirinc', 10], ['seker', 20], ['nisasta', 3]]],
       ['sutlac', 'Sütlaç', [['sut', 120], ['pirinc', 10], ['seker', 15], ['nisasta', 3]]] ] },
-    salata: { ad:'Salata / yanında', cok:1, sec:[
-      ['sogus', 'Söğüş', [['domates', 50], ['salatalik', 40], ['biber', 10]]],
+    genel: { ad:'Tuz ve baharat', sec:[ ['genel', 'Tuz, karabiber, toz biber', [['tuz', 9], ['karabiber', 0.22], ['toz_biber', 0.15]]] ] },
+    salata: { ad:'Yanında', cok:1, sec:[
       ['tursu', 'Turşu', [['tursu', 40]]],
-      ['cacik', 'Cacık', [['yogurt', 60], ['salatalik', 20], ['sarimsak', 1], ['nane', 0.2], ['tuz', 0.5]]] ] },
-    icecek: { ad:'İçecek', sec:[ ['ayran', 'Ayran', [['ayran', 1]]] ] },
-    ekmek: { ad:'Ekmek', sec:[ ['var', 'Ekmek de olsun', [['ekmek', 0.3]]] ] },
-    servis: { ad:'Tek kullanımlık servis', sec:[ ['var', 'Tabak, kaşık, peçete, bardak', [['tabak', 2], ['kasik', 2], ['pecete', 3], ['bardak', 1]]] ] }
+      ['sogus', 'Söğüş (manav)', [['domates', 50], ['salatalik', 40], ['biber', 10]]],
+      ['cacik', 'Cacık', [['yogurt', 30], ['salatalik', 20], ['sarimsak', 1], ['nane', 0.1]]] ] },
+    icecek: { ad:'İçecek', cok:1, sec:[
+      ['bardak_su', 'Bardak su', [['bardak_su', 1]]],
+      ['damacana', 'Damacana / 5 lt su', [['damacana', 0.015]]],
+      ['ayran', 'Ayran', [['ayran', 1]]],
+      ['cay', 'Çay (küp şeker, karıştırıcı)', [['cay', 1], ['kup_seker', 4], ['karistirici', 0.5]]] ] },
+    servis: { ad:'Servis malzemesi', cok:1, sec:[
+      ['kopuk_tabak', 'Köpük tabak', [['kopuk_tabak', 1]]],
+      ['kasik', 'Plastik kaşık', [['kasik', 1]]],
+      ['sogus_tabagi', 'Söğüş tabağı', [['sogus_tabagi', 0.3]]],
+      ['masa_kagidi', 'Masa kağıdı', [['masa_kagidi', 12]]],
+      ['islak_mendil', 'Islak mendil', [['islak_mendil', 1.1]]],
+      ['sizdirmaz', 'Sızdırmaz kap (paket)', [['sizdirmaz', 0.15]]],
+      ['tuzluk', 'Karton tuz (tuzluk)', [['tuzluk', 0.018]]],
+      ['pecete', 'Peçete', [['pecete', 2]]],
+      ['kagit_bardak', 'Kağıt bardak', [['kagit_bardak', 1]]] ] },
+    mutfak: { ad:'Mutfak ve temizlik', cok:1, sec:[
+      ['komur', 'Mangal kömürü', [['komur', 12]]],
+      ['ispirto', 'İspirto', [['ispirto', 0.003]]],
+      ['temizlik', 'Temizlik seti (krem, bulaşık det., ovma tozu, tel, sünger, eldiven)', [['krem_det', 0.003], ['bulasik_det', 0.001], ['ovma_tozu', 0.002], ['tel', 0.002], ['sunger', 0.001], ['bulasik_eld', 0.002]]],
+      ['muayene', 'Muayene eldiveni', [['muayene_eld', 0.09]]],
+      ['cop', 'Çöp poşeti', [['cop_poseti', 0.012]]],
+      ['naylon', 'Naylon torba', [['naylon', 1]]],
+      ['camasir', 'Çamaşır suyu', [['camasir_suyu', 0.002]]] ] },
+    ekmek: { ad:'Ekmek', sec:[ ['var', 'Ekmek de olsun', [['ekmek', 0.3]]] ] }
   };
   var MN_SORU = [
     { id:'tur', ad:'Ne için?', sec:[['dugun', 'Düğün'], ['mevlut', 'Mevlüt'], ['taziye', 'Taziye / hayır'], ['diger', 'Diğer']], vars:'dugun' },
-    { id:'corba', yemek:1, vars:'yayla' }, { id:'ana', yemek:1, vars:'nohut' }, { id:'pilav', yemek:1, vars:'pirinc' },
-    { id:'tatli', yemek:1, vars:'irmik' }, { id:'salata', yemek:1, vars:'sogus' },
-    { id:'icecek', yemek:1, vars:'' }, { id:'ekmek', yemek:1, vars:'' },
-    { id:'yag', ad:'Yemeklerde yağ', sec:[['sivi', 'Sıvı yağ'], ['tere', 'Tereyağı'], ['yarim', 'Yarı yarıya']], vars:'sivi' },
-    { id:'et', ad:'Et / tavuk listeye eklensin mi?', sec:[['hayir', 'Hayır (kasaptan)'], ['evet', 'Evet']], vars:'hayir' },
-    { id:'servis', yemek:1, vars:'' }
+    { id:'corba', yemek:1, vars:'yayla' }, { id:'ana', yemek:1, vars:'fasulye' }, { id:'pilav', yemek:1, vars:'pirinc' },
+    { id:'tatli', yemek:1, vars:'irmik' }, { id:'salata', yemek:1, vars:'tursu' }, { id:'genel', yemek:1, vars:'genel' },
+    { id:'icecek', yemek:1, vars:['bardak_su', 'damacana'] },
+    { id:'servis', yemek:1, vars:['kopuk_tabak', 'kasik', 'sogus_tabagi', 'masa_kagidi', 'islak_mendil', 'sizdirmaz', 'tuzluk'] },
+    { id:'mutfak', yemek:1, vars:['komur', 'ispirto', 'temizlik', 'muayene', 'cop', 'naylon'] },
+    { id:'ekmek', yemek:1, vars:'' },
+    { id:'yag', ad:'Yemeklerde yağ', sec:[['tere', 'Tereyağı'], ['sivi', 'Sıvı yağ'], ['yarim', 'Yarı yarıya']], vars:'tere' },
+    { id:'et', ad:'Et / tavuk listeye eklensin mi?', sec:[['hayir', 'Hayır (kasaptan)'], ['evet', 'Evet']], vars:'hayir' }
   ];
   var mnSecim = {};
   function mnOran(grup, sec, malz, vars){ var o = (D.veri && D.veri.menu && D.veri.menu.oran) || {}, a = grup + '.' + sec + '.' + malz; return o[a] !== undefined ? Number(o[a]) : vars; }
   function menuAc(){
     if(!B) return;
     if(!katalog.length){ toast('Telefonda ürün listesi yok', 'hata'); return; }
-    if(!Object.keys(mnSecim).length) MN_SORU.forEach(function(q){ mnSecim[q.id] = q.vars ? [q.vars] : []; });
-    $('mnPay').value = $('mnPay').value || String(((D.veri && D.veri.menu && D.veri.menu.pay) != null ? D.veri.menu.pay : 5)).replace('.', ',');
+    if(!Object.keys(mnSecim).length) MN_SORU.forEach(function(q){ mnSecim[q.id] = Array.isArray(q.vars) ? q.vars.slice() : q.vars ? [q.vars] : []; });
+    $('mnPay').value = $('mnPay').value || String(((D.veri && D.veri.menu && D.veri.menu.pay) != null ? D.veri.menu.pay : 0)).replace('.', ',');
     mnGrupCiz();
     $('mnSoru').classList.remove('gizli'); $('mnListe').classList.add('gizli');
     $('mnBaslik').textContent = '🍲 Düğün / Mevlüt yemeği';
@@ -1503,9 +1559,20 @@
     l.sort(function(a, b){ return puan(b) - puan(a) || a.a.localeCompare(b.a, 'tr'); });   // en büyük paket / dökme
     return l[0];
   }
+  // "72 LI" → tr küçük harf "72 lı" olur; norm() ı→i, ü→u çevirir (\b Türkçe harfte çalışmaz).
+  function paketAdet(u){ var a = /(\d+)\s*'?\s*(li|lu)\b/.exec(norm(u.a)); return a ? Number(a[1]) : 0; }
   function mnMiktar(u, toplam, adetMi){
     if(!u) return { m: 0, aciklama: '' };
-    if(kesirli(u)){ var kg = Math.ceil(toplam / 1000 * 2) / 2; return { m: kg, aciklama: '≈ ' + miktarMetni(kg) + ' kg (dökme)' }; }
+    if(adetMi && !kesirli(u)){
+      var pa = paketAdet(u), ad = Math.max(1, Math.ceil(toplam - 1e-9));
+      if(pa > 1){ var np = Math.max(1, Math.ceil(toplam / pa - 1e-9)); return { m: np, aciklama: '≈ ' + ad + ' adet → ' + np + ' × ' + pa + "'li" }; }
+      return { m: ad, aciklama: ad + ' adet' };
+    }
+    if(kesirli(u)){
+      // Küçük miktarlar (baharat) 50 g'a, büyükler yarım kiloya yukarı yuvarlanır.
+      var kg = toplam < 2000 ? Math.max(0.05, Math.ceil(toplam / 50) * 0.05) : Math.ceil(toplam / 1000 * 2) / 2;
+      kg = Math.round(kg * 100) / 100;
+      return { m: kg, aciklama: '≈ ' + miktarMetni(kg) + ' kg (dökme)' }; }
     var p = paketBoyu(u);
     if(p && p.miktar > 0){ var n = Math.max(1, Math.ceil(toplam / p.miktar - 1e-9)); return { m: n, aciklama: '≈ ' + mnBirim(toplam, adetMi) + ' → ' + n + ' × ' + boyBul(u.a) }; }
     if(adetMi){ var a = Math.ceil(toplam); return { m: a, aciklama: a + ' adet' }; }
@@ -1516,8 +1583,8 @@
   $('mnHesapla').addEventListener('click', function(){
     var kisi = Math.round(sayi($('mnKisi').value));
     if(!(kisi > 0) || kisi > 100000){ toast('Kaç kişilik olduğunu yaz', 'hata'); $('mnKisi').focus(); return; }
-    var pay = sayi($('mnPay').value || '0'); if(!(pay >= 0 && pay <= 50)) pay = 5;
-    var yag = (mnSecim.yag || ['sivi'])[0], et = (mnSecim.et || [])[0] === 'evet';
+    var pay = sayi($('mnPay').value || '0'); if(!(pay >= 0 && pay <= 50)) pay = 0;
+    var yag = (mnSecim.yag || ['tere'])[0], et = (mnSecim.et || [])[0] === 'evet';
     var top = {}, nereden = {};
     Object.keys(YEMEK).forEach(function(g){
       (mnSecim[g] || []).forEach(function(sv){
@@ -1633,12 +1700,12 @@
         return '<details style="margin-top:6px;"><summary><b>' + esc(YEMEK[g].ad) + ': ' + esc(x[1]) + '</b></summary><table style="margin-top:4px;">' +
           x[2].map(function(r){
             var ad = r[0] === 'yag' ? 'Yemek yağı (tercihe göre)' : r[0] === 'tatli_yag' ? 'Tatlı yağı (tereyağı/margarin)' : MALZEME[r[0]].ad;
-            var birim = ADET_MALZEME[r[0]] ? 'adet' : (r[0] === 'sut' || r[0] === 'ayran') ? 'ml' : 'g';
+            var birim = ADET_MALZEME[r[0]] ? 'adet' : ML_MALZEME[r[0]] ? 'ml' : 'g';
             return '<tr><td>' + esc(ad) + '</td><td class="sayi" style="width:110px;"><input data-oran="' + g + '.' + x[0] + '.' + r[0] + '" inputmode="decimal" value="' + esc(miktarMetni(mnOran(g, x[0], r[0], r[1]))) + '" style="padding:6px 8px; text-align:right;"></td><td style="width:40px;">' + birim + '</td></tr>';
           }).join('') + '</table></details>';
       }).join('');
     }).join('') +
-      '<label>Varsayılan pay / fire (%)</label><input id="mnOranPay" inputmode="decimal" value="' + esc(String(menu.pay != null ? menu.pay : 5).replace('.', ',')) + '">' +
+      '<label>Varsayılan pay / fire (%)</label><input id="mnOranPay" inputmode="decimal" value="' + esc(String(menu.pay != null ? menu.pay : 0).replace('.', ',')) + '">' +
       '<button type="button" class="ana tam" id="mnOranKaydet" style="margin-top:10px;">Miktarları kaydet</button>' +
       (menu.zaman ? '<div class="ipucu" style="margin-top:6px;">Son değişiklik: ' + esc(menu.kim || '') + ' · ' + esc(menu.zaman) + '</div>' : '');
     a.classList.remove('gizli');
@@ -1648,7 +1715,7 @@
     var oran = {}, hata = '';
     this.querySelectorAll('[data-oran]').forEach(function(x){ var v = sayi(x.value); if(!(v >= 0)) hata = x.getAttribute('data-oran'); else oran[x.getAttribute('data-oran')] = v; });
     if(hata){ toast('Geçersiz miktar', 'hata'); return; }
-    var menu = { oran: oran, pay: sayi($('mnOranPay').value || '5') };
+    var menu = { oran: oran, pay: sayi($('mnOranPay').value || '0') };
     islem(e.target, { action:'plasiyer_menu_kaydet', menu: JSON.stringify(menu) }, 'Menü miktarları kaydedildi', function(r){ if(D.veri){ D.veri.menu = r.menu; kaydetD(); } });
   });
 

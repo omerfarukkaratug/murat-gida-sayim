@@ -203,3 +203,17 @@ Akış: bekliyor → hazırlanıyor → **hazır** → (başka biri kontrol eder
 - **Yönetim → 🍲 kişi başı miktarlar:** her yemeğin malzeme miktarı ve varsayılan pay değiştirilebilir
   (Script Properties: PLASIYER_MENU). Başlangıç: pirinç pilavı 70 g, irmik 15 g, nohut/fasulye 40 g …
   Eski düğün faturaları gelince bu değerler onlara göre güncellenecek.
+
+## build 223 — Düğün / Mevlüt oranları faturalardan
+
+Aşçı Fatih Sapan'ın Ağustos–Ekim 2026 faturaları (MGA…238, 267/268, 270, 281, 286, 320, 365) ve Yaylabel
+"Düğün & Mevlüt Yemek Organizasyonu" formu esas alındı. Kişi sayısı faturada yok; **irmik 15 kg = 1000 kişi**
+(kişi başı 15 g) kabul edildi. 1000 kişilik çıkan liste faturalarla örtüşür: pirinç 75 kg, fasulye 30 + nohut 4 kg,
+irmik 15, şeker 30, kunar ~0,35, tereyağı ~19 kg, süzme yoğurt 10 kg, salça 4,5 kg, ayçiçek 5 lt, tuz 3×3 kg,
+karabiber 0,25, toz biber 0,15, nane 0,15, limon tuzu 0,1 kg, un 5 kg, yumurta 15'li, turşu 3×15 kg,
+bardak su 14×72, damacana 15, köpük tabak 10×100, kaşık 10×100, söğüş tabağı 3×100, masa kağıdı 12 kg,
+ıslak mendil 20×56, sızdırmaz kap 2×100, karton tuz 18, kömür 12 kg, ispirto 3, temizlik seti, eldiven, çöp poşeti.
+Varsayılan menü: yayla çorbası, etli kuru fasulye, pirinç pilavı, kunarlı irmik helvası, turşu, tereyağı; pay %0.
+Yeni soru grupları: İçecek (bardak su, damacana, ayran, çay), Servis malzemesi, Mutfak ve temizlik, Tuz-baharat.
+Ürün eşlemesi ERP adlarına göre (BALDO PIRINC KG, OBA IRMIK KG, GURTUZ, K KUNAR ICI, NAZLI BARDAK SU 72 LI …);
+müşterinin daha önce aldığı ürün önce seçilir. "72 LI / 56 LI" paket adedi düzgün okunuyor.
