@@ -144,3 +144,13 @@ depoda okutularak toplanır. ERP'ye yazmaz; `SiparisHazirlik` sekmesinde durur. 
   Plasiyerin hiç görmemesi için `plasiyer_maliyet` yetkisi verilmez.
 - **Çeşitler:** Siparişteki ürünün altında "🎨 N çeşit daha" — aynı fiyat, aynı boy (2.5 LT vb.) ve adın baştaki
   sözcükleri (marka + ürün) aynı olan ürünler. Pencerede her çeşide adet yazılır ya da "Hepsinden" ile hepsine aynı adet.
+
+## build 219 — sipariş ekranı yenilendi
+
+- **Üstte müşteri:** cari adı + rozetler (risk, vade geçmiş / bakiye, ⏳ bekleyen). Dokununca müşteri bilgisi,
+  risk nedenleri ve **💵 Tahsilat Notu** açılır; sipariş arkada açık kalır.
+- **İki sekme:** ➕ Ürün Ekle (en üstte arama + 📷, altında Sık aldıkları / Özel fiyatlı, satırda adet kutusu) ve
+  🧺 Sepet (sayaçlı). Sepet tek satırlık liste: ad · miktar × fiyat · tutar; uyarılar satırın altında küçük yazı.
+- **Sepette ürüne dokun:** düzenleme penceresi — −/+ ve miktar, fiyat, Liste / Özel / Son satış düğmeleri,
+  🎨 çeşitler, ℹ️ ürün bilgisi, 🗑 Sil, Tamam. Basılı tutmak yine ürün bilgisini açar.
+- Alt çubuk tek satır: kalem/adet, toplam, 👁 Kâr (basılı tut), 💾 Kaydet. Yarım sipariş sepet sekmesinde açılır.
