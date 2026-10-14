@@ -8,7 +8,7 @@
 // bir sürüm dağıttıktan sonra /exec adresini boş açtığında burada yazan
 // numarayı görmelisin; index.html'in üstündeki "build" numarasıyla
 // eşleşecek şekilde ben her ikisini birlikte güncelliyorum.
-var GS_VERSION = 'build182';
+var GS_VERSION = 'build183';
 
 // Sheets'te "Saat" sütunu zaman biçimli olarak algılanırsa, hücre değeri düz
 // metin değil bir Date nesnesi olarak gelir ve String(...) çirkin bir çıktı
@@ -239,7 +239,7 @@ function outJson(obj, callback) {
 // tabloyu açan biri şifreleri okuyamaz. Şifre telefonda hâlâ saklanır ve her
 // istekte sunucuya gönderilir — tam oturum sistemi veri tabanı geçişinde.
 // ============================================================
-var ALL_PERMS = ['rapor', 'temizle', 'kullanici_yonetimi', 'ayarlar', 'canli_durum', 'duzelt', 'hareket', 'cari_hareket', 'stok_hareket', 'mesai', 'mesai_yonetim', 'plasiyer', 'plasiyer_maliyet', 'plasiyer_yonetim', 'alis_fiyat', 'siparis_hazirla'];
+var ALL_PERMS = ['rapor', 'temizle', 'kullanici_yonetimi', 'ayarlar', 'canli_durum', 'duzelt', 'hareket', 'cari_hareket', 'stok_hareket', 'mesai', 'mesai_yonetim', 'plasiyer', 'plasiyer_maliyet', 'plasiyer_yonetim', 'alis_fiyat', 'siparis_hazirla', 'sevkiyat'];
 
 // ---- ŞİFRE ÖZETİ ----
 // Şifreler tabloda artık DÜZ METİN durmaz: "s256$<tuz>$<özet>" biçiminde,
@@ -4099,7 +4099,7 @@ var PLS_SEKME = {
   PlasiyerTahsilat: ['Id', 'Zaman', 'Tarih', 'Plasiyer', 'Cari Kodu', 'Cari Adı', 'Tutar', 'Yöntem', 'Not', 'Bağlı Belge', 'Durum', 'İptal Eden', 'İptal Nedeni', 'İptal Zamanı', 'Cihaz Zamanı'],
   PlasiyerMusteri: ['Cari Kodu', 'Cari Adı', 'Plasiyer', 'Zaman', 'Değiştiren'],
   PlasiyerOzelFiyat: ['Cari Kodu', 'Stok Kodu', 'Barkod', 'Ürün', 'Fiyat', 'Zaman', 'Giren'],
-  SiparisHazirlik: ['Belge Id', 'Durum', 'Hazırlayan', 'Başlama', 'Bitiş', 'Hazırlanan (JSON)', 'Koli', 'Not', 'Teslim Alan', 'Teslim Zamanı', 'Teslim Eden', 'Güncelleme']
+  SiparisHazirlik: ['Belge Id', 'Durum', 'Hazırlayan', 'Başlama', 'Bitiş', 'Hazırlanan (JSON)', 'Koli', 'Not', 'Teslim Alan', 'Teslim Zamanı', 'Teslim Eden', 'Güncelleme', 'Ek (JSON)']
 };
 var PLS_AYAR_OZELLIK = 'PLASIYER_AYAR';
 var PLS_AYAR_VARSAYILAN = { altYuzde: 10, primSatis: 0, primTahsilat: 0, fiyatSerbest: true };
@@ -4107,6 +4107,7 @@ var PLS_YONTEMLER = { nakit: 'Nakit', kart: 'Kredi kartı', havale: 'Havale/EFT'
 var PLS_MAX_KALEM = 300;
 var PLS_JSON_MAX = 45000;
 
+var plsBaslikBakildi = {};
 function plsSheet(ad) {
   var ss = SpreadsheetApp.getActiveSpreadsheet();
   var sh = ss.getSheetByName(ad);
@@ -4114,7 +4115,12 @@ function plsSheet(ad) {
     sh = ss.insertSheet(ad);
     sh.getRange(1, 1, 1, PLS_SEKME[ad].length).setValues([PLS_SEKME[ad]]);
     sh.setFrozenRows(1);
+  } else if (!plsBaslikBakildi[ad]) {
+    // Sonradan eklenen sütunların başlığı (ör. SiparisHazirlik 'Ek (JSON)') eski sekmeye yazılır.
+    var n = PLS_SEKME[ad].length;
+    if (sh.getLastColumn() < n) sh.getRange(1, 1, 1, n).setValues([PLS_SEKME[ad]]);
   }
+  plsBaslikBakildi[ad] = true;
   return sh;
 }
 // Tutar sütunları sayı, diğerleri METİN yazılır (Sheets "2026-10-12"yi tarihe, "00123"ü sayıya çevirmesin).
@@ -4667,7 +4673,10 @@ function plsCariler() {
 // ============================================================
 // SİPARİŞ HAZIRLAMA (depo) — plasiyer siparişlerinin toplanması. ERP'YE YAZMAZ.
 // 'SiparisHazirlik' sekmesi: her sipariş için bir satır (hiç dokunulmamış sipariş satırsızdır = bekliyor).
-// Durum: bekliyor → hazirlaniyor (bir kişi üstlenir) → hazir (koli sayısıyla) → teslim (araca yüklendi / teslim edildi).
+// Durum: bekliyor → hazirlaniyor (bir kişi üstlenir) → hazir (koli sayısıyla) → teslim (BAŞKA biri kontrol edip
+// teslim aldı = SEVKİYATTA) → sevkiyat: yolda → müşteriye teslim edildi / edilemedi.
+// Ek (JSON): okut {sıra: okutma sayısı}, elle {sıra: neden} (okutmadan işaretlenen), log [[zaman, kim, olay]],
+//            kontrol {kim, zaman, koli, elle}, sevk {durum, kim, cikis, zaman, kisi, neden}.
 // Hazırlanan miktarlar sipariş satırının SIRASIYLA tutulur ({ "0": 12, "3": 0 }); sipariş belgesi değişmez.
 // Depocuya fiyat GÖNDERİLMEZ. Yetki: "siparis_hazirla" ya da "plasiyer_yonetim" (yönetici = hepsi).
 // ============================================================
@@ -4677,18 +4686,43 @@ function hzKimlik(user, pass) {
   if (!a.ok) return { ok: false, kimlik: true, message: 'Giriş gerekli — çıkış yapıp tekrar giriş yap' };
   var p = a.permissions || [], yon = a.role === 'yonetici';
   var yonetim = yon || p.indexOf('plasiyer_yonetim') !== -1;
-  if (!yonetim && p.indexOf('siparis_hazirla') === -1) return { ok: false, message: 'Sipariş hazırlama yetkin yok — yöneticinden iste' };
-  return { ok: true, ben: String(user || '').trim(), yonetim: yonetim, stok: yon || p.indexOf('stok') !== -1 };
+  var hazirla = yonetim || p.indexOf('siparis_hazirla') !== -1, sevkiyat = yonetim || p.indexOf('sevkiyat') !== -1;
+  if (!hazirla && !sevkiyat) return { ok: false, message: 'Sipariş hazırlama / sevkiyat yetkin yok — yöneticinden iste' };
+  return { ok: true, ben: String(user || '').trim(), yonetim: yonetim, hazirla: hazirla, sevkiyat: sevkiyat, stok: yon || p.indexOf('stok') !== -1 };
 }
 function hzSatirNesne(r) {
   var h = {}; try { h = JSON.parse(String(r[5] || '{}')) || {}; } catch (e) { h = {}; }
   return { satir: r.satir, id: String(r[0]), durum: HZ_DURUMLAR[String(r[1])] ? String(r[1]) : 'bekliyor', hazirlayan: String(r[2] || ''),
     basla: String(r[3] || ''), bitis: String(r[4] || ''), hazirlanan: h, koli: Number(r[6]) || 0, not: String(r[7] || ''),
-    teslimAlan: String(r[8] || ''), teslimZaman: String(r[9] || ''), teslimEden: String(r[10] || ''), guncelleme: String(r[11] || '') };
+    teslimAlan: String(r[8] || ''), teslimZaman: String(r[9] || ''), teslimEden: String(r[10] || ''), guncelleme: String(r[11] || ''), ek: hzEkOku(r[12]) };
+}
+function hzEkOku(v) {
+  var e = {}; try { e = JSON.parse(String(v || '{}')) || {}; } catch (er) { e = {}; }
+  e.okut = e.okut || {}; e.elle = e.elle || {}; e.log = e.log || [];
+  return e;
+}
+function hzLog(h, kim, olay) {
+  h.ek = h.ek || hzEkOku('');
+  h.ek.log.push([plsZamanMetni(), kim, plsMetin(olay, 200)]);
+  if (h.ek.log.length > 150) h.ek.log = h.ek.log.slice(-150);
+}
+// Telefondan gelen okutma bilgisi: { okut: {sıra: n}, elle: {sıra: neden} } — yalnız geçerli sıralar.
+function hzEkAl(json, b) {
+  if (json === undefined || json === null || json === '') return null;
+  var o = {}; try { o = JSON.parse(String(json)) || {}; } catch (e) { return null; }
+  var n = (b.satirlar || []).length, okut = {}, elle = {};
+  Object.keys(o.okut || {}).forEach(function (i) { var ix = parseInt(i, 10), v = Math.round(Number(o.okut[i]) || 0); if (ix >= 0 && ix < n && v > 0 && v <= 100000) okut[ix] = v; });
+  Object.keys(o.elle || {}).forEach(function (i) { var ix = parseInt(i, 10); if (ix >= 0 && ix < n && o.elle[i]) elle[ix] = plsMetin(o.elle[i], 60); });
+  return { okut: okut, elle: elle };
+}
+// Okutulmadan (> 0 miktarla) işaretlenmiş ve nedeni yazılmamış kalem sayısı.
+function hzOkutmasiz(b, mik, ek) {
+  return (b.satirlar || []).filter(function (s, i) { return Number(mik[i]) > 0 && !ek.okut[i] && !ek.elle[i]; }).length;
 }
 function hzHarita() { var m = {}; plsOku('SiparisHazirlik').forEach(function (r) { var o = hzSatirNesne(r); if (o.id) m[o.id] = o; }); return m; }
 function hzYaz(h) {
-  var satir = [h.id, h.durum, h.hazirlayan, h.basla, h.bitis, JSON.stringify(h.hazirlanan || {}), h.koli || 0, h.not || '', h.teslimAlan || '', h.teslimZaman || '', h.teslimEden || '', plsZamanMetni()];
+  var satir = [h.id, h.durum, h.hazirlayan, h.basla, h.bitis, JSON.stringify(h.hazirlanan || {}), h.koli || 0, h.not || '', h.teslimAlan || '', h.teslimZaman || '', h.teslimEden || '', plsZamanMetni(),
+    JSON.stringify(h.ek || {})];
   if (h.satir) plsSatirYaz('SiparisHazirlik', h.satir, [satir]); else plsEkle('SiparisHazirlik', [satir]);
 }
 // Belge + hazırlık → özet: kaç kalem tamam / eksik / fazla.
@@ -4699,8 +4733,10 @@ function hzOzet(h, b) {
     dokunulan++; v = Number(v) || 0;
     if (Math.abs(v - s.m) < 0.0005) tam++; else if (v < s.m) eksik++; else fazla++;
   });
+  var ek = h.ek || {}, elle = Object.keys(ek.elle || {}).length;
   return { durum: h.durum, hazirlayan: h.hazirlayan, basla: h.basla, bitis: h.bitis, koli: h.koli, tam: tam, eksik: eksik, fazla: fazla, dokunulan: dokunulan,
-    teslimAlan: h.teslimAlan, teslimZaman: h.teslimZaman, not: h.not };
+    teslimAlan: h.teslimAlan, teslimZaman: h.teslimZaman, teslimEden: h.teslimEden, not: h.not, elle: elle,
+    kontrol: ek.kontrol ? { kim: ek.kontrol.kim, zaman: ek.kontrol.zaman } : null, sevk: ek.sevk || null };
 }
 function hzBelgeBul(id) {
   var r = plsOku('PlasiyerBelge').filter(function (x) { return String(x[0]) === id; })[0];
@@ -4710,11 +4746,11 @@ function hzBelgeBul(id) {
   return b;
 }
 // Depocuya giden satırlar: fiyatsız.
-function hzSatirlar(b, stokGor) {
-  var kat = stokGor ? plsKatalogStok() : null;
+function hzSatirlar(b, stokGor, kat) {
+  kat = kat || plsKatalogStok();
   return (b.satirlar || []).map(function (s) {
     var o = { b: s.b, k: s.k, a: s.a, m: s.m };
-    if (kat && kat[s.b] !== undefined) o.stok = kat[s.b];
+    if (kat[s.b] !== undefined) { if (stokGor) o.stok = kat[s.b]; if (kat[s.b] < s.m) o.az = 1; } // stok yetmeyebilir (miktar gizli)
     return o;
   });
 }
@@ -4732,19 +4768,23 @@ function hazirlaIstek(p, callback) {
     if (!k.ok) return outJson({ status: 'error', kimlik: !!k.kimlik, message: k.message }, callback);
     if (a === 'hazirla_liste') return outJson(hzListe(k, p), callback);
     if (a === 'hazirla_ac') return outJson(hzAc(k, p.id), callback);
-    var fn = { hazirla_basla: hzBasla, hazirla_kaydet: hzKaydet, hazirla_bitir: hzBitir, hazirla_teslim: hzTeslim, hazirla_birak: hzBirak, hazirla_geri: hzGeri }[a];
+    if (a === 'hazirla_rapor') return outJson(hzRapor(k, p), callback);
+    var fn = { hazirla_basla: hzBasla, hazirla_kaydet: hzKaydet, hazirla_bitir: hzBitir, hazirla_teslim: hzTeslim, hazirla_birak: hzBirak, hazirla_geri: hzGeri,
+      hazirla_kontrol: hzKontrol, hazirla_fark: hzFark, hazirla_sevk: hzSevk }[a];
     if (!fn) return outJson({ status: 'error', message: 'Bilinmeyen işlem' }, callback);
+    // Yalnız sevkiyat yetkisi olan: kontrol-teslim ve sevkiyat işlemleri.
+    if (!k.hazirla && !{ hazirla_kontrol: 1, hazirla_fark: 1, hazirla_sevk: 1 }[a]) throw new Error('Bu işlem için Sipariş Hazırlama yetkisi gerekir');
     return outJson(plsYaz(function () { return fn(k, p); }), callback);
   } catch (err) {
     var m = String(err && err.message || err);
-    if (!/yetki|geçersiz|gir|seç|bulunamadı|zaten|olmalı|boş|meşgul|değil|iptal|hazırlıyor|önce/i.test(m)) gunlukYaz('hazirlama', String(p.user || ''), a + ' hatası: ' + m, true);
+    if (!/yetki|geçersiz|gir|seç|bulunamadı|zaten|olmalı|boş|meşgul|değil|iptal|hazırlıyor|önce|fark|kontrol|neden/i.test(m)) gunlukYaz('hazirlama', String(p.user || ''), a + ' hatası: ' + m, true);
     return outJson({ status: 'error', message: m }, callback);
   }
 }
 
 // Liste: teslim edilmemiş (son 30 gün) + bugün teslim edilenler. Hazırlığı başlamış iptaller de görünür (durdurulsun).
 function hzListe(k) {
-  var bugun = ekipBugun(), sinir = ekipGunEkle(bugun, -30), hz = hzHarita();
+  var bugun = ekipBugun(), sinir = ekipGunEkle(bugun, -30), hz = hzHarita(), kat = plsKatalogStok();
   var liste = [];
   plsOku('PlasiyerBelge').forEach(function (r) {
     if (String(r[4]) !== 'siparis' && String(r[4]) !== 'bekleyen') return;
@@ -4752,21 +4792,26 @@ function hzListe(k) {
     var b = plsBelgeNesne(r, false), h = hz[b.id];
     var durum = h ? h.durum : 'bekliyor';
     if (b.durum === 'iptal' && (durum === 'bekliyor' || durum === 'teslim')) return;
-    if (durum === 'teslim' && String(h.teslimZaman).slice(0, 10) !== bugun) return;
+    // Sevkiyattakiler müşteriye teslim edilene kadar listede kalır; teslim edilenler yalnız o gün.
+    if (durum === 'teslim') { var sv = h.ek.sevk || {}; if (sv.durum === 'edildi' && String(sv.zaman || '').slice(0, 10) !== bugun) return; }
+    if (!k.hazirla && durum !== 'hazir' && durum !== 'teslim') return; // yalnız sevkiyat yetkisi
     var o = h ? hzOzet(h, b) : { durum: 'bekliyor' };
+    if (durum === 'bekliyor' || durum === 'hazirlaniyor') o.stokAz = (b.satirlar || []).filter(function (s) { return kat[s.b] !== undefined && kat[s.b] < s.m; }).length;
     liste.push({ id: b.id, zaman: b.zaman, tarih: b.tarih, plasiyer: b.plasiyer, cariKod: b.cariKod, cariAd: b.cariAd, kalem: b.kalem, not: b.not, bekleyen: b.cesit === 'bekleyen',
       iptal: b.durum === 'iptal', iptalNeden: b.iptalNeden, hazirlik: o, miktar: (b.satirlar || []).reduce(function (t, s) { return t + (Number(s.m) || 0); }, 0) });
   });
   liste.sort(function (x, y) { return x.zaman < y.zaman ? -1 : 1; }); // en eski önce
-  return { status: 'ok', ben: k.ben, yonetim: k.yonetim, siparisler: liste, bugun: bugun };
+  return { status: 'ok', ben: k.ben, yonetim: k.yonetim, hazirla: k.hazirla, sevkiyat: k.sevkiyat, siparisler: liste, bugun: bugun };
 }
 function hzAc(k, id) {
   id = plsMetin(id, 60);
-  var b = hzBelgeBul(id), h = hzHarita()[id] || { id: id, durum: 'bekliyor', hazirlanan: {} };
-  return { status: 'ok', ben: k.ben, yonetim: k.yonetim, belge: { id: b.id, zaman: b.zaman, plasiyer: b.plasiyer, cariKod: b.cariKod, cariAd: b.cariAd, not: b.not, bekleyen: b.cesit === 'bekleyen',
+  var b = hzBelgeBul(id), h = hzHarita()[id] || { id: id, durum: 'bekliyor', hazirlanan: {}, ek: hzEkOku('') };
+  if (!k.hazirla && h.durum !== 'hazir' && h.durum !== 'teslim') throw new Error('Bu sipariş henüz hazır değil');
+  return { status: 'ok', ben: k.ben, yonetim: k.yonetim, hazirla: k.hazirla, sevkiyat: k.sevkiyat, belge: { id: b.id, zaman: b.zaman, plasiyer: b.plasiyer, cariKod: b.cariKod, cariAd: b.cariAd, not: b.not, bekleyen: b.cesit === 'bekleyen',
     iptal: b.durum === 'iptal', iptalNeden: b.iptalNeden, satirlar: hzSatirlar(b, k.stok) },
     hazirlik: { durum: h.durum, hazirlayan: h.hazirlayan || '', basla: h.basla || '', bitis: h.bitis || '', hazirlanan: h.hazirlanan || {}, koli: h.koli || 0, not: h.not || '',
-      teslimAlan: h.teslimAlan || '', teslimZaman: h.teslimZaman || '', teslimEden: h.teslimEden || '' } };
+      teslimAlan: h.teslimAlan || '', teslimZaman: h.teslimZaman || '', teslimEden: h.teslimEden || '',
+      okut: h.ek.okut, elle: h.ek.elle, log: h.ek.log, kontrol: h.ek.kontrol || null, sevk: h.ek.sevk || null } };
 }
 function hzKayit(id) { return hzHarita()[id] || null; }
 function hzSahibiMi(k, h) { return k.yonetim || String(h.hazirlayan).toLowerCase() === k.ben.toLowerCase(); }
@@ -4788,10 +4833,11 @@ function hzBasla(k, p) {
   if (b.durum === 'iptal') throw new Error('Sipariş iptal edilmiş — hazırlanmaz');
   if (h && h.durum === 'hazirlaniyor' && !hzSahibiMi(k, h)) throw new Error(h.hazirlayan + ' bu siparişi hazırlıyor');
   if (h && (h.durum === 'hazir' || h.durum === 'teslim')) throw new Error('Sipariş zaten ' + (h.durum === 'hazir' ? 'hazır' : 'teslim edildi'));
-  h = h || { id: id, hazirlanan: {} };
+  h = h || { id: id, hazirlanan: {}, ek: hzEkOku('') };
   // Yönetim başkasının hazırlığını devralabilir; hazırlanan miktarlar korunur.
   var devir = h.hazirlayan && h.hazirlayan.toLowerCase() !== k.ben.toLowerCase() ? h.hazirlayan : '';
   h.durum = 'hazirlaniyor'; h.hazirlayan = k.ben; h.basla = h.basla || plsZamanMetni();
+  hzLog(h, k.ben, devir ? 'Devraldı (önceki: ' + devir + ')' : 'Hazırlamaya başladı');
   hzYaz(h);
   if (devir) gunlukYaz('hazirlama', k.ben, 'Sipariş ' + id + ' devralındı (önceki: ' + devir + ')', false);
   return { durum: 'hazirlaniyor', hazirlayan: k.ben };
@@ -4801,6 +4847,7 @@ function hzKaydet(k, p) {
   if (!h || h.durum !== 'hazirlaniyor') throw new Error('Önce hazırlamaya başla');
   if (!hzSahibiMi(k, h)) throw new Error(h.hazirlayan + ' bu siparişi hazırlıyor');
   h.hazirlanan = hzMiktarlar(p.miktarlar, b);
+  var ek = hzEkAl(p.ek, b); if (ek) { h.ek.okut = ek.okut; h.ek.elle = ek.elle; }
   if (p.not !== undefined) h.not = plsMetin(p.not, 300);
   hzYaz(h);
   return { iptal: b.durum === 'iptal' };
@@ -4814,6 +4861,13 @@ function hzBitir(k, p) {
   // Dokunulmamış satır kalmasın: bitirirken her kalem ya hazırlanmış ya da "yok" (0) olmalı.
   var bos = (b.satirlar || []).filter(function (s, i) { return h.hazirlanan[i] === undefined; }).length;
   if (bos) throw new Error(bos + ' kalem işaretlenmedi — hazırla ya da "yok" de');
+  // Okutmadan işaretlenen kalemin nedeni olmalı (eski sürüm telefon ek göndermez: kontrol yapılamaz, kayda düşer).
+  var ek = hzEkAl(p.ek, b);
+  if (ek) {
+    var okutmasiz = hzOkutmasiz(b, h.hazirlanan, ek);
+    if (okutmasiz) throw new Error(okutmasiz + ' kalem okutulmadan işaretlenmiş — okut ya da neden seç');
+    h.ek.okut = ek.okut; h.ek.elle = ek.elle;
+  } else hzLog(h, k.ben, 'Okutma kontrolü yapılamadı (eski sürüm uygulama)');
   var koli = parseInt(p.koli, 10);
   if (!(koli >= 0 && koli <= 9999)) throw new Error('Koli / paket sayısını gir');
   h.koli = koli; if (p.not !== undefined) h.not = plsMetin(p.not, 300);
@@ -4821,6 +4875,8 @@ function hzBitir(k, p) {
   var bekleyenId = '';
   if (String(p.bekleyen || '') === '1') bekleyenId = hzBekleyenOlustur(k, b, h);
   h.durum = 'hazir'; h.bitis = plsZamanMetni();
+  var elleSay = Object.keys(h.ek.elle || {}).length;
+  hzLog(h, k.ben, 'Hazır: ' + koli + ' koli' + (elleSay ? ', ' + elleSay + ' kalem elle (okutmasız)' : '') + (bekleyenId ? ', eksikler bekleyen sipariş oldu' : ''));
   hzYaz(h);
   var o = hzOzet(h, b);
   gunlukYaz('hazirlama', k.ben, 'Sipariş hazır: ' + b.cariAd + ' (' + id + '), ' + o.tam + ' tam' + (o.eksik ? ', ' + o.eksik + ' eksik' : '') + (o.fazla ? ', ' + o.fazla + ' fazla' : '') + ', ' + koli + ' koli' + (bekleyenId ? ', bekleyen sipariş ' + bekleyenId : ''), false);
@@ -4846,20 +4902,107 @@ function hzBekleyenOlustur(k, b, h) {
   } finally { genel.releaseLock(); }
   return yeniId;
 }
+// Kontrolsüz teslim: YALNIZ yönetim (acil durum); kayda "kontrolsüz" düşer.
 function hzTeslim(k, p) {
+  if (!k.yonetim) throw new Error('Teslim için siparişi başka biri kontrol etmeli (🔍 Kontrol et ve teslim al)');
   var id = plsMetin(p.id, 60), b = hzBelgeBul(id), h = hzKayit(id);
   if (!h || h.durum !== 'hazir') throw new Error('Sipariş önce hazır olmalı');
   if (b.durum === 'iptal') throw new Error('Sipariş iptal edilmiş');
   h.durum = 'teslim'; h.teslimAlan = plsMetin(p.teslimAlan, 80) || b.plasiyer; h.teslimZaman = plsZamanMetni(); h.teslimEden = k.ben;
+  h.ek.sevk = { durum: 'bekliyor' };
+  hzLog(h, k.ben, 'KONTROLSÜZ teslim (yönetim) → ' + h.teslimAlan);
   hzYaz(h);
   return { durum: 'teslim' };
+}
+// Kontrol ve teslim: hazırlayandan BAŞKA biri her kalemi yeniden sayar; hazırlananla ve koli sayısıyla birebir
+// tutarsa sipariş teslim alınır ve SEVKİYAT bölümüne düşer. Fark varsa teslim olmaz (hzFark ile geri gönderilir).
+function hzKontrol(k, p) {
+  var id = plsMetin(p.id, 60), b = hzBelgeBul(id), h = hzKayit(id);
+  if (!h || h.durum !== 'hazir') throw new Error('Sipariş önce hazır olmalı');
+  if (b.durum === 'iptal') throw new Error('Sipariş iptal edilmiş');
+  if (String(h.hazirlayan).toLowerCase() === k.ben.toLowerCase() && !k.yonetim) throw new Error('Kendi hazırladığın siparişi kontrol edemezsin — başka biri kontrol etmeli');
+  var say = hzMiktarlar(p.miktarlar, b), fark = [];
+  (b.satirlar || []).forEach(function (s, i) {
+    var beklenen = Number(h.hazirlanan[i]) || 0, v = Number(say[i]) || 0;
+    if (Math.abs(beklenen - v) > 0.0005) fark.push(s.a + ': ' + v + ' / ' + beklenen);
+  });
+  if (fark.length) throw new Error('Kontrolde fark var (' + fark.length + ' kalem) — teslim alınamaz: ' + fark.slice(0, 3).join('; '));
+  var koli = parseInt(p.koli, 10);
+  if (koli !== (Number(h.koli) || 0)) throw new Error('Koli sayısı tutmuyor: sayılan ' + (isFinite(koli) ? koli : '—') + ', hazırlanan ' + (h.koli || 0));
+  var ek = hzEkAl(p.ek, b) || { okut: {}, elle: {} };
+  var elle = Object.keys(ek.elle).length;
+  h.durum = 'teslim'; h.teslimAlan = plsMetin(p.teslimAlan, 80) || k.ben; h.teslimZaman = plsZamanMetni(); h.teslimEden = h.hazirlayan;
+  h.ek.kontrol = { kim: k.ben, zaman: h.teslimZaman, koli: koli, elle: elle };
+  h.ek.sevk = { durum: 'bekliyor' };
+  hzLog(h, k.ben, 'Kontrol etti, teslim aldı (' + koli + ' koli' + (elle ? ', ' + elle + ' kalem elle' : '') + ') → sevkiyat');
+  hzYaz(h);
+  return { durum: 'teslim' };
+}
+// Kontrolde fark: sipariş hazırlayana geri döner (hazırlanıyor), fark nota ve kayda yazılır.
+function hzFark(k, p) {
+  var id = plsMetin(p.id, 60), b = hzBelgeBul(id), h = hzKayit(id);
+  if (!h || h.durum !== 'hazir') throw new Error('Sipariş hazır durumda değil');
+  var aciklama = plsMetin(p.fark, 250);
+  if (!aciklama) throw new Error('Farkı yaz');
+  h.durum = 'hazirlaniyor'; h.bitis = '';
+  h.not = plsMetin('KONTROL FARKI (' + k.ben + '): ' + aciklama + (h.not ? ' · ' + h.not : ''), 300);
+  h.ek.farkSay = (Number(h.ek.farkSay) || 0) + 1;
+  hzLog(h, k.ben, 'Kontrolde FARK — hazırlayana geri gönderdi: ' + aciklama);
+  hzYaz(h);
+  gunlukYaz('hazirlama', k.ben, 'Kontrol farkı: ' + b.cariAd + ' (' + id + ') — ' + aciklama, false);
+  return { durum: 'hazirlaniyor' };
+}
+// Sevkiyat: yolda / müşteriye teslim edildi (teslim alan kişi) / teslim edilemedi (neden).
+function hzSevk(k, p) {
+  if (!k.sevkiyat && !k.hazirla) throw new Error('Sevkiyat yetkin yok');
+  var id = plsMetin(p.id, 60), b = hzBelgeBul(id), h = hzKayit(id);
+  if (!h || h.durum !== 'teslim') throw new Error('Sipariş sevkiyatta değil');
+  var adim = String(p.adim || ''), sv = h.ek.sevk || { durum: 'bekliyor' }, z = plsZamanMetni();
+  if (sv.durum === 'edildi' && !k.yonetim) throw new Error('Sipariş zaten müşteriye teslim edildi');
+  if (adim === 'yolda') { sv = { durum: 'yolda', kim: k.ben, cikis: z }; hzLog(h, k.ben, 'Yola çıktı'); }
+  else if (adim === 'edildi') {
+    var kisi = plsMetin(p.kisi, 80); if (!kisi) throw new Error('Teslim alan kişinin adını gir');
+    sv.durum = 'edildi'; sv.kim = k.ben; sv.zaman = z; sv.kisi = kisi; sv.cikis = sv.cikis || z;
+    hzLog(h, k.ben, 'Müşteriye teslim edildi → ' + kisi);
+  } else if (adim === 'edilemedi') {
+    var neden = plsMetin(p.neden, 200); if (!neden) throw new Error('Neden teslim edilemediğini yaz');
+    sv.durum = 'edilemedi'; sv.kim = k.ben; sv.zaman = z; sv.neden = neden;
+    hzLog(h, k.ben, 'Teslim EDİLEMEDİ: ' + neden);
+  } else throw new Error('Geçersiz işlem');
+  h.ek.sevk = sv;
+  hzYaz(h);
+  return { sevk: sv };
+}
+// Performans: ay içinde biten hazırlıklar (kişi başı) + sevkiyat teslimleri.
+function hzRapor(k, p) {
+  if (!k.yonetim) throw new Error('Rapor için Plasiyer Yönetimi yetkisi gerekir');
+  var ay = /^\d{4}-\d{2}$/.test(String(p.ay || '')) ? String(p.ay) : ekipBugun().slice(0, 7);
+  var belge = {}; plsOku('PlasiyerBelge').forEach(function (r) { belge[String(r[0])] = r; });
+  var kisi = {}, sevk = {};
+  var kayit = function (ad) { return kisi[ad] = kisi[ad] || { kisi: ad, siparis: 0, kalem: 0, sure: 0, sureAdet: 0, eksik: 0, fazla: 0, elle: 0, fark: 0, kontrol: 0 }; };
+  plsOku('SiparisHazirlik').forEach(function (r) {
+    var h = hzSatirNesne(r);
+    (h.ek.log || []).forEach(function (l) { if (String(l[0]).slice(0, 7) === ay && /FARK/.test(l[2])) { var x = String(h.hazirlayan || '?'); kayit(x).fark++; } });
+    if (h.ek.kontrol && String(h.ek.kontrol.zaman).slice(0, 7) === ay) kayit(h.ek.kontrol.kim).kontrol++;
+    var sv = h.ek.sevk; if (sv && sv.durum === 'edildi' && String(sv.zaman).slice(0, 7) === ay) { sevk[sv.kim] = sevk[sv.kim] || { kisi: sv.kim, teslim: 0 }; sevk[sv.kim].teslim++; }
+    if (!h.bitis || String(h.bitis).slice(0, 7) !== ay || (h.durum !== 'hazir' && h.durum !== 'teslim')) return;
+    var o = kayit(h.hazirlayan || '?'), br = belge[h.id], b = br ? plsBelgeNesne(br, false) : null;
+    o.siparis++; o.elle += Object.keys(h.ek.elle || {}).length;
+    if (b) { var oz = hzOzet(h, b); o.kalem += (b.satirlar || []).length; o.eksik += oz.eksik; o.fazla += oz.fazla; }
+    var t1 = new Date(String(h.basla).replace(' ', 'T')), t2 = new Date(String(h.bitis).replace(' ', 'T'));
+    if (!isNaN(t1) && !isNaN(t2) && t2 > t1) { o.sure += (t2 - t1) / 60000; o.sureAdet++; }
+  });
+  var l = Object.keys(kisi).map(function (x) { var o = kisi[x]; o.ortDk = o.sureAdet ? Math.round(o.sure / o.sureAdet) : null; delete o.sure; delete o.sureAdet; return o; });
+  l.sort(function (a, b) { return b.siparis - a.siparis; });
+  return { status: 'ok', ay: ay, kisiler: l, sevkiyat: Object.keys(sevk).map(function (x) { return sevk[x]; }) };
 }
 // Hazırlayan bırakır: miktarlar kalır, sipariş yeniden "bekliyor" olur (başkası devam edebilir).
 function hzBirak(k, p) {
   var id = plsMetin(p.id, 60), h = hzKayit(id);
   if (!h || h.durum !== 'hazirlaniyor') throw new Error('Sipariş hazırlanmıyor');
   if (!hzSahibiMi(k, h)) throw new Error(h.hazirlayan + ' bu siparişi hazırlıyor');
-  if (p.miktarlar !== undefined) h.hazirlanan = hzMiktarlar(p.miktarlar, hzBelgeBul(id));
+  if (p.miktarlar !== undefined) { var bb = hzBelgeBul(id); h.hazirlanan = hzMiktarlar(p.miktarlar, bb); var ek = hzEkAl(p.ek, bb); if (ek) { h.ek.okut = ek.okut; h.ek.elle = ek.elle; } }
+  hzLog(h, k.ben, 'Bıraktı');
   h.durum = 'bekliyor'; h.hazirlayan = '';
   hzYaz(h);
   return { durum: 'bekliyor' };
@@ -4869,8 +5012,11 @@ function hzGeri(k, p) {
   if (!k.yonetim) throw new Error('Bu işlem için Plasiyer Yönetimi yetkisi gerekir');
   var id = plsMetin(p.id, 60), h = hzKayit(id);
   if (!h || (h.durum !== 'hazir' && h.durum !== 'teslim')) throw new Error('Sipariş hazır ya da teslim edilmiş değil');
+  if (h.durum === 'teslim' && h.ek.sevk && h.ek.sevk.durum === 'edildi') throw new Error('Müşteriye teslim edilmiş sipariş yeniden açılamaz');
   var once = h.durum;
   h.durum = 'hazirlaniyor'; h.hazirlayan = h.hazirlayan || k.ben; h.bitis = ''; h.teslimAlan = ''; h.teslimZaman = ''; h.teslimEden = '';
+  delete h.ek.kontrol; delete h.ek.sevk;
+  hzLog(h, k.ben, 'Yeniden açtı (' + once + ' → hazırlanıyor)');
   hzYaz(h);
   gunlukYaz('hazirlama', k.ben, 'Sipariş yeniden açıldı (' + once + ' → hazırlanıyor): ' + id, false);
   return { durum: 'hazirlaniyor' };

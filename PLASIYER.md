@@ -166,3 +166,24 @@ depoda okutularak toplanır. ERP'ye yazmaz; `SiparisHazirlik` sekmesinde durur. 
 - Gizlilik: telefona yalnız öneri fiyatı gider; oran ve alış fiyatı sadece `plasiyer_maliyet` yetkilisine
   (o da yalnız 👁 Kâr basılıyken görür). Öneri taban fiyatın altındaysa yine yazılamaz.
 - Kurulum: Supabase'de 011 → 012 → **013** sırayla; ardından Code.gs build182.
+
+## build 221 / Code.gs build183 — güvenli hazırlama, kontrol-teslim, SEVKİYAT
+
+Akış: bekliyor → hazırlanıyor → **hazır** → (başka biri kontrol eder) → **sevkiyat** → yolda → **müşteriye teslim edildi**.
+
+- **Okutmadan işaretleme:** hiç okutulmamış kaleme ✓ / miktar yazılırsa neden sorulur (barkod okunmuyor,
+  barkodsuz, koli içinde, dökme, diğer). Kalem "✋ elle" görünür (fiş, kontrol, rapor). Sunucu nedensiz okutmasız
+  kalemle "Hazır"a izin vermez (eski sürüm telefon gönderirse geçmişe "kontrol yapılamadı" düşer).
+- **↶ Son okutmayı geri al** düğmesi. Elle yazılan miktar siparişin %10'undan fazlaysa onay ister.
+- **Stok uyarısı:** stoğu yetmeyebilecek kalemler listede "⚠️ N kalemde stok az", siparişte en üstte bant
+  (stok yetkisi yoksa sayı gösterilmez).
+- **Kontrol ve teslim:** hazırlayan kendi siparişini teslim EDEMEZ. Başka biri "🔍 Kontrol et ve teslim al" ile
+  her kalemi yeniden okutur; hepsi hazırlananla tutar ve koli sayısı aynıysa teslim alır → Sevkiyat.
+  Fark varsa "⚠️ Fark var" → sipariş açıklamayla hazırlayana geri döner. Kontrolsüz teslim yalnız yönetimde.
+- **🚚 Sevkiyat bölümü:** 🚛 Yola çıktı → 🏁 Müşteriye teslim edildi (teslim alan kişi adı zorunlu) /
+  ⚠️ Teslim edilemedi (neden). Teslim edilen sipariş yeniden açılamaz. Plasiyer durumu kendi ekranında görür.
+- **Yeni yetki `sevkiyat`** (şoför): yalnız Hazır (kontrol) + Sevkiyat + Teslim edildi bölümleri.
+- **🕘 Geçmiş:** her adım kim / ne zaman (başla, devral, bırak, hazır, kontrol, fark, yola çıktı, teslim…).
+- **📊 Rapor (yönetim):** ay içinde kişi başı sipariş, kalem, ortalama süre, eksik/fazla, elle, kontrol farkı;
+  sevkiyatçı başına müşteriye teslim sayısı.
+- Sheets: SiparisHazirlik'e "Ek (JSON)" sütunu kendiliğinden eklenir.

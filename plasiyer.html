@@ -1563,7 +1563,10 @@
   function hazirlikEtiket(h){
     if(h.durum === 'hazirlaniyor') return '<span class="etiket mavi">📦 hazırlanıyor (' + esc(h.hazirlayan) + ')</span>';
     if(h.durum === 'hazir' || h.durum === 'teslim'){
-      return '<span class="etiket yesil">' + (h.durum === 'hazir' ? '📦 hazır' : '🚚 teslim edildi') + ' · ' + (h.koli || 0) + ' koli</span>' +
+      var sv = h.sevk || {}, svm = h.durum === 'hazir' ? '📦 hazır (kontrol bekliyor)' :
+        sv.durum === 'edildi' ? '🏁 müşteriye teslim edildi' + (sv.kisi ? ' → ' + esc(sv.kisi) : '') :
+        sv.durum === 'yolda' ? '🚛 yolda (' + esc(sv.kim || '') + ')' : sv.durum === 'edilemedi' ? '⚠️ teslim edilemedi' + (sv.neden ? ': ' + esc(sv.neden) : '') : '🚚 sevkiyatta';
+      return '<span class="etiket ' + (sv.durum === 'edilemedi' ? 'kirmizi' : 'yesil') + '">' + svm + ' · ' + (h.koli || 0) + ' koli</span>' +
         (h.eksik ? '<span class="etiket sari">' + h.eksik + ' kalem eksik</span>' : '') + (h.fazla ? '<span class="etiket kirmizi">' + h.fazla + ' fazla</span>' : '');
     }
     return '<span class="etiket">📦 depoda bekliyor</span>';

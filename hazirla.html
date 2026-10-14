@@ -9,10 +9,13 @@
   MK ERP — SİPARİŞ HAZIRLAMA (depo). Plasiyerin aldığı siparişler burada toplanır.
   Uygulamanın içinde "📦 Sipariş Hazırlama" ekranında açılır. ERP'YE HİÇBİR ŞEY YAZMAZ.
 
-  Akış: bekliyor → (depocu üstlenir) hazırlanıyor → (okutarak toplar, eksikleri işaretler)
-  hazır (koli sayısı, sevk fişi) → teslim (araca yüklendi / teslim edildi).
+  Akış: bekliyor → (depocu üstlenir) hazırlanıyor → (okutarak toplar; okutmadan işaretlenen kalemin nedeni
+  sorulur) hazır (koli sayısı) → BAŞKA biri her kalemi yeniden okutup kontrol eder, koli sayısı tutarsa
+  teslim alır → SEVKİYAT: yola çıktı → müşteriye teslim edildi (teslim alan kişi) / edilemedi (neden).
   Depocu fiyat GÖRMEZ. Okutulan miktarlar önce telefona yazılır, birkaç saniyede bir sunucuya gider.
-  Yetki: "siparis_hazirla" (ya da "plasiyer_yonetim"; yönetici = hepsi).
+  Her adım siparişin geçmişine (kim, ne zaman) yazılır.
+  Yetki: "siparis_hazirla" (hazırlar + kontrol eder), "sevkiyat" (yalnız kontrol-teslim ve sevkiyat),
+  "plasiyer_yonetim" (hepsi + rapor; yönetici = hepsi).
 -->
 <style>
   :root{
@@ -104,6 +107,18 @@
   #yazdir{position:fixed; inset:0; background:#fff; color:#000; z-index:80; overflow:auto; padding:20px;}
   #yazdir table{width:100%; border-collapse:collapse; font-size:12px;} #yazdir th, #yazdir td{border:1px solid #999; padding:4px 6px; color:#000; text-align:left;}
   @media print{ #yazdir .yazdirma{display:none !important;} #yazdir{position:static; padding:0;} body > *:not(#yazdir){display:none !important;} }
+  .kalem .tag{display:inline-block; font-family:var(--sans); font-size:11px; font-weight:800; padding:1px 7px; border-radius:10px; margin-left:4px;}
+  .tag.elle{background:#d9770622; color:var(--amber);} .tag.az{background:#dc262618; color:var(--red);}
+  .geriAl{margin-top:8px; width:100%; font-size:13.5px; padding:8px 10px;}
+  .gecmis{list-style:none; margin:0; padding:0;}
+  .gecmis li{padding:8px 0; border-bottom:1px solid var(--line); font-size:13.5px;}
+  .gecmis li span{display:block; font-size:11.5px; color:var(--muted); font-family:var(--mono);}
+  .nedenler{display:flex; flex-wrap:wrap; gap:6px;}
+  .nedenler button{font-size:14px; padding:9px 12px; border-radius:20px;}
+  table.rapor{width:100%; border-collapse:collapse; font-size:13px;}
+  table.rapor th, table.rapor td{padding:6px 4px; border-bottom:1px solid var(--line); text-align:right;}
+  table.rapor th:first-child, table.rapor td:first-child{text-align:left;}
+  table.rapor th{font-size:11px; color:var(--muted); text-transform:uppercase;}
   #toast{position:fixed; left:14px; right:14px; top:calc(12px + env(safe-area-inset-top)); max-width:652px; margin:0 auto; padding:13px 16px; border-radius:14px; font-weight:800; color:#fff; z-index:90; text-align:center;}
 </style>
 </head>
@@ -122,6 +137,13 @@
     <div class="cipler" id="filtre"></div>
     <input id="ara" type="search" placeholder="🔎 Müşteri / plasiyer ara" autocomplete="off" style="margin-bottom:10px;">
     <div id="liste"><div class="ipucu">Yükleniyor…</div></div>
+    <div id="raporAlan" class="gizli">
+      <div class="kart">
+        <div class="satirlar"><div><input id="raporAy" type="month"></div><div style="flex:none;"><button type="button" class="ana" id="raporGetir">Getir</button></div></div>
+        <div class="ipucu" style="margin-top:8px;">Ay içinde biten hazırlıklar: kişi başı sipariş, kalem, ortalama süre, eksik/fazla, okutmadan (elle) işaretlenen kalem ve kontrolde çıkan fark sayısı.</div>
+      </div>
+      <div id="raporSonuc"></div>
+    </div>
     <div class="ipucu" id="listeAlt" style="text-align:center; margin-top:6px;"></div>
   </div>
 
@@ -129,6 +151,7 @@
   <div id="sipKatman" class="katman gizli">
     <div class="katmanUst">
       <div class="baslik"><b id="skAd"></b><span id="skAlt"></span></div>
+      <button type="button" class="kucuk" id="gecmisBtn" aria-label="Geçmiş">🕘</button>
       <button type="button" class="kapat" id="skKapat" aria-label="Kapat">✕</button>
     </div>
     <div class="katmanGovde">
@@ -142,6 +165,7 @@
         <div id="kameraAlan" class="gizli">
           <div class="kamera"><video id="video" playsinline muted autoplay></video><div class="cerceve"></div><div class="yazi" id="kameraYazi">Barkodu çerçeveye getir</div></div>
         </div>
+        <button type="button" class="geriAl gizli" id="geriAlBtn">↶ Son okutmayı geri al</button>
         <div class="cipler" id="gorunum" style="margin:10px -14px 4px;">
           <button type="button" class="on" data-g="kalan">Kalanlar üstte</button>
           <button type="button" data-g="sira">Sipariş sırası</button>
@@ -191,6 +215,66 @@
     </div>
   </div>
 
+  <!-- ===== OKUTMADAN İŞARETLEME NEDENİ ===== -->
+  <div id="nedenPerde" class="perde gizli">
+    <div class="pencere">
+      <h3><span>✋ Okutmadan işaretleniyor</span><button type="button" class="kapat" data-kapat="nedenPerde">✕</button></h3>
+      <div class="ipucu" id="ndBilgi"></div>
+      <div class="nedenler" id="ndListe" style="margin-top:10px;">
+        <button type="button">Barkod okunmuyor</button><button type="button">Barkodsuz ürün</button>
+        <button type="button">Koli / paket içinde sayıldı</button><button type="button">Dökme / tartılı ürün</button>
+      </div>
+      <label for="ndDiger">Başka bir neden</label>
+      <input id="ndDiger" maxlength="60" placeholder="Kısaca yaz">
+      <button type="button" class="ana tam" id="ndTamam" style="margin-top:10px;">Kaydet</button>
+      <div class="ipucu" style="margin-top:8px;">Bu kalem sevk fişinde ve kontrolde "✋ elle" diye görünür.</div>
+    </div>
+  </div>
+
+  <!-- ===== KONTROL: TESLİM AL ===== -->
+  <div id="kontrolPerde" class="perde gizli">
+    <div class="pencere">
+      <h3><span>✅ Teslim al</span><button type="button" class="kapat" data-kapat="kontrolPerde">✕</button></h3>
+      <div class="bant yesil" id="ktBilgi"></div>
+      <label for="ktKoli">Saydığın koli / paket sayısı</label>
+      <input id="ktKoli" inputmode="numeric" class="buyukSayi" placeholder="0">
+      <label for="ktAlan">Teslim alan (şoför / plasiyer)</label>
+      <input id="ktAlan" maxlength="80">
+      <button type="button" class="yesil tam" id="ktTamam" style="margin-top:12px; padding:14px; font-size:17px;">Teslim al → Sevkiyat</button>
+    </div>
+  </div>
+
+  <!-- ===== KONTROL: FARK ===== -->
+  <div id="farkPerde" class="perde gizli">
+    <div class="pencere">
+      <h3><span>⚠️ Kontrolde fark var</span><button type="button" class="kapat" data-kapat="farkPerde">✕</button></h3>
+      <div class="ipucu">Sipariş hazırlayana geri döner (hazırlanıyor). Yazdığın açıklama ona ve geçmişe düşer.</div>
+      <textarea id="fkMetin" maxlength="250" style="margin-top:8px; min-height:90px;"></textarea>
+      <button type="button" class="kirmizi tam" id="fkTamam" style="margin-top:10px;">Hazırlayana geri gönder</button>
+    </div>
+  </div>
+
+  <!-- ===== SEVKİYAT: TESLİM EDİLDİ / EDİLEMEDİ ===== -->
+  <div id="sevkPerde" class="perde gizli">
+    <div class="pencere">
+      <h3><span id="svBaslik"></span><button type="button" class="kapat" data-kapat="sevkPerde">✕</button></h3>
+      <label for="svMetin" id="svEtiket"></label>
+      <input id="svMetin" maxlength="200">
+      <div class="nedenler gizli" id="svNedenler" style="margin-top:8px;">
+        <button type="button">Dükkan kapalı</button><button type="button">Müşteri almadı</button><button type="button">Adres bulunamadı</button><button type="button">Ödeme sorunu</button>
+      </div>
+      <button type="button" class="ana tam" id="svTamam" style="margin-top:12px; padding:14px;">Kaydet</button>
+    </div>
+  </div>
+
+  <!-- ===== GEÇMİŞ ===== -->
+  <div id="gecmisPerde" class="perde gizli">
+    <div class="pencere">
+      <h3><span>🕘 Sipariş geçmişi</span><button type="button" class="kapat" data-kapat="gecmisPerde">✕</button></h3>
+      <ul class="gecmis" id="gcListe"></ul>
+    </div>
+  </div>
+
   <div id="yazdir" class="gizli"></div>
   <div id="toast" class="gizli"></div>
 
@@ -228,7 +312,7 @@
   function yerelKaydet(){
     // 3 günden eski, gönderilmiş taslaklar atılır.
     var sinir = Date.now() - 3 * 86400000;
-    Object.keys(yerel).forEach(function(id){ if(!yerel[id].kirli && yerel[id].zaman < sinir) delete yerel[id]; });
+    Object.keys(yerel).forEach(function(id){ if(!yerel[id].kirli && (yerel[id].zaman || 0) < sinir) delete yerel[id]; });
     if(!yaz(YEREL_ANAHTAR, yerel)) toast('Telefon hafızası dolu — okutmalar yazılamadı!', 'hata');
   }
 
@@ -315,7 +399,21 @@
 
   // ---------- Liste ----------
   var L = null, filtre = 'bekliyor';
-  var FILTRELER = [['bekliyor', '⏳ Bekleyen'], ['hazirlaniyor', '🔧 Hazırlanan'], ['hazir', '✅ Hazır'], ['teslim', '🚚 Bugün teslim']];
+  var FILTRELER = [['bekliyor', '⏳ Bekleyen'], ['hazirlaniyor', '🔧 Hazırlanan'], ['hazir', '✅ Hazır (kontrol)'], ['sevk', '🚚 Sevkiyat'], ['bitti', '🏁 Teslim edildi'], ['rapor', '📊 Rapor']];
+  // Sevkiyattaki sipariş: depodan teslim alınmış (teslim), müşteriye henüz teslim edilmemiş.
+  function grup(s){
+    var h = s.hazirlik;
+    if(h.durum === 'teslim') return h.sevk && h.sevk.durum === 'edildi' ? 'bitti' : 'sevk';
+    return h.durum;
+  }
+  function filtreler(){
+    if(!L) return [];
+    return FILTRELER.filter(function(f){
+      if(f[0] === 'rapor') return !!L.yonetim;
+      if(!L.hazirla && (f[0] === 'bekliyor' || f[0] === 'hazirlaniyor')) return false;
+      return true;
+    });
+  }
   function listeGetir(sessiz){
     istek(kimlikli({ action:'hazirla_liste' }), function(r){
       if(r.status !== 'ok'){
@@ -323,46 +421,78 @@
         if(!sessiz || !L) $('liste').innerHTML = '<div class="kart hata">' + esc(r.message) + '</div>';
         return;
       }
-      L = r; listeCiz();
+      var ilk = !L;
+      L = r;
+      if(ilk && L.hazirla === false && (filtre === 'bekliyor' || filtre === 'hazirlaniyor')) filtre = 'sevk';
+      listeCiz();
     });
+  }
+  function sevkEtiket(sv){
+    if(!sv || sv.durum === 'bekliyor') return '<span class="etiket mavi">🚚 sevkiyat bekliyor</span>';
+    if(sv.durum === 'yolda') return '<span class="etiket mavi">🚛 yolda · ' + esc(sv.kim) + ' ' + saat(sv.cikis) + '</span>';
+    if(sv.durum === 'edildi') return '<span class="etiket yesil">🏁 teslim edildi → ' + esc(sv.kisi) + ' ' + saat(sv.zaman) + '</span>';
+    if(sv.durum === 'edilemedi') return '<span class="etiket kirmizi">⚠️ teslim edilemedi: ' + esc(sv.neden) + '</span>';
+    return '';
   }
   function listeCiz(){
     if(!L) return;
-    var say = { bekliyor:0, hazirlaniyor:0, hazir:0, teslim:0 };
-    L.siparisler.forEach(function(s){ say[s.hazirlik.durum] = (say[s.hazirlik.durum] || 0) + 1; });
+    var say = {};
+    L.siparisler.forEach(function(s){ var g = grup(s); say[g] = (say[g] || 0) + 1; });
     var iptalSay = L.siparisler.filter(function(s){ return s.iptal; }).length;
-    $('filtre').innerHTML = FILTRELER.map(function(f){ return '<button type="button" data-f="' + f[0] + '"' + (f[0] === filtre ? ' class="on"' : '') + '>' + f[1] + ' (' + (say[f[0]] || 0) + ')</button>'; }).join('');
+    $('filtre').innerHTML = filtreler().map(function(f){ return '<button type="button" data-f="' + f[0] + '"' + (f[0] === filtre ? ' class="on"' : '') + '>' + f[1] + (f[0] === 'rapor' ? '' : ' (' + (say[f[0]] || 0) + ')') + '</button>'; }).join('');
+    var rapor = filtre === 'rapor';
+    $('raporAlan').classList.toggle('gizli', !rapor); $('liste').classList.toggle('gizli', rapor); $('ara').classList.toggle('gizli', rapor);
+    if(rapor){ if(!$('raporAy').value) $('raporAy').value = (L.bugun || '').slice(0, 7); return; }
     var q = norm($('ara').value);
     var l = L.siparisler.filter(function(s){
-      if(s.hazirlik.durum !== filtre) return false;
+      if(grup(s) !== filtre) return false;
       return !q || norm(s.cariAd).indexOf(q) !== -1 || norm(s.plasiyer).indexOf(q) !== -1 || norm(s.cariKod).indexOf(q) !== -1;
     });
-    if(filtre === 'hazir' || filtre === 'teslim') l = l.slice().reverse();
-    $('liste').innerHTML = (iptalSay ? '<div class="bant kirmizi">🚫 Hazırlanırken iptal edilen ' + iptalSay + ' sipariş var — ürünleri yerine koy.</div>' : '') +
+    if(filtre !== 'bekliyor' && filtre !== 'hazirlaniyor') l = l.slice().reverse();
+    $('liste').innerHTML = (iptalSay && L.hazirla ? '<div class="bant kirmizi">🚫 Hazırlanırken iptal edilen ' + iptalSay + ' sipariş var — ürünleri yerine koy.</div>' : '') +
       (l.map(function(s){
         var h = s.hazirlik, ek = [];
         if(h.durum === 'hazirlaniyor') ek.push('<span class="etiket mavi">🔧 ' + esc(h.hazirlayan) + (h.dokunulan ? ' · ' + h.dokunulan + '/' + s.kalem : '') + '</span>');
         if(h.durum === 'bekliyor' && h.dokunulan) ek.push('<span class="etiket sari">yarım: ' + h.dokunulan + '/' + s.kalem + '</span>');
+        if(h.stokAz) ek.push('<span class="etiket kirmizi">⚠️ ' + h.stokAz + ' kalemde stok az</span>');
         if(h.durum === 'hazir' || h.durum === 'teslim'){
           ek.push('<span class="etiket yesil">' + (h.koli || 0) + ' koli</span>');
           if(h.eksik) ek.push('<span class="etiket sari">' + h.eksik + ' eksik</span>');
           if(h.fazla) ek.push('<span class="etiket kirmizi">' + h.fazla + ' fazla</span>');
+          if(h.elle) ek.push('<span class="etiket sari">✋ ' + h.elle + ' elle</span>');
         }
-        if(h.durum === 'teslim') ek.push('<span class="etiket">→ ' + esc(h.teslimAlan) + ' ' + saat(h.teslimZaman) + '</span>');
+        if(h.durum === 'hazir') ek.push('<span class="etiket">🔧 ' + esc(h.hazirlayan) + ' · kontrol bekliyor</span>');
+        if(h.durum === 'teslim'){ ek.push('<span class="etiket">🔍 ' + esc(h.kontrol ? h.kontrol.kim : h.teslimEden) + ' → ' + esc(h.teslimAlan) + ' ' + saat(h.teslimZaman) + '</span>'); ek.push(sevkEtiket(h.sevk)); }
         if(s.iptal) ek.unshift('<span class="etiket kirmizi">🚫 İPTAL</span>');
         if(s.bekleyen) ek.unshift('<span class="etiket sari">⏳ BEKLEYEN (önceki siparişin eksikleri)</span>');
         if(yerel[s.id] && yerel[s.id].kirli) ek.push('<span class="etiket sari">⏳ gönderilmedi</span>');
+        if(yerel['K:' + s.id] && h.durum === 'hazir') ek.push('<span class="etiket mavi">🔍 kontrol yarım</span>');
         return '<button type="button" class="siparis' + (s.iptal ? ' iptal' : '') + '" data-id="' + esc(s.id) + '"><div class="ust"><div class="ad">' + esc(s.cariAd) + '</div><div class="yas">' + tarihSaat(s.zaman) + '<br>' + yas(s.zaman) + '</div></div>' +
           '<div class="alt">🚚 ' + esc(s.plasiyer) + ' · ' + s.kalem + ' kalem · ' + mk(s.miktar) + ' adet' + (s.not ? ' · 📝 ' + esc(s.not) : '') + '</div><div>' + ek.join('') + '</div></button>';
       }).join('') || '<div class="kart ipucu" style="text-align:center;">Bu bölümde sipariş yok.</div>');
     $('listeAlt').textContent = 'Güncelleme ' + new Date().toLocaleTimeString('tr-TR', { hour:'2-digit', minute:'2-digit' });
   }
-  $('filtre').addEventListener('click', function(e){ var b = e.target.closest('button'); if(!b) return; filtre = b.getAttribute('data-f'); listeCiz(); });
+  $('filtre').addEventListener('click', function(e){ var b = e.target.closest('button'); if(!b) return; filtre = b.getAttribute('data-f'); listeCiz(); if(filtre === 'rapor') raporGetir(); });
   $('ara').addEventListener('input', listeCiz);
   $('liste').addEventListener('click', function(e){ var b = e.target.closest('.siparis'); if(b) siparisAc(b.getAttribute('data-id')); });
 
+  // ---------- Rapor (yönetim) ----------
+  function raporGetir(){
+    $('raporSonuc').innerHTML = '<div class="ipucu">Yükleniyor…</div>';
+    istek(kimlikli({ action:'hazirla_rapor', ay: $('raporAy').value }), function(r){
+      if(r.status !== 'ok'){ $('raporSonuc').innerHTML = '<div class="kart hata">' + esc(r.message) + '</div>'; return; }
+      var h = '<div class="kart"><b>📦 Hazırlayanlar</b><table class="rapor" style="margin-top:6px;"><tr><th>Kişi</th><th>Sipariş</th><th>Kalem</th><th>Ort. dk</th><th>Eksik</th><th>Fazla</th><th>✋ Elle</th><th>Fark</th><th>🔍 Kontrol</th></tr>' +
+        (r.kisiler.map(function(k){ return '<tr><td>' + esc(k.kisi) + '</td><td>' + k.siparis + '</td><td>' + k.kalem + '</td><td>' + (k.ortDk === null ? '—' : k.ortDk) + '</td><td>' + k.eksik + '</td><td>' + k.fazla + '</td><td>' + k.elle + '</td><td' + (k.fark ? ' class="hata"' : '') + '>' + k.fark + '</td><td>' + k.kontrol + '</td></tr>'; }).join('') || '<tr><td colspan="9" class="ipucu">Bu ay kayıt yok</td></tr>') + '</table>' +
+        '<div class="ipucu" style="margin-top:6px;">Fark: kontrolde hazırlayana geri gönderilen sipariş sayısı. Kontrol: başkasının siparişini kontrol edip teslim aldığı sayı.</div></div>';
+      if(r.sevkiyat.length) h += '<div class="kart"><b>🚚 Sevkiyat (müşteriye teslim)</b><table class="rapor" style="margin-top:6px;"><tr><th>Kişi</th><th>Teslim</th></tr>' + r.sevkiyat.map(function(x){ return '<tr><td>' + esc(x.kisi) + '</td><td>' + x.teslim + '</td></tr>'; }).join('') + '</table></div>';
+      $('raporSonuc').innerHTML = h;
+    });
+  }
+  $('raporGetir').addEventListener('click', raporGetir);
+
   // ---------- Sipariş ----------
-  // S: { belge, hazirlik, mik: {sıra: miktar}, not, sahip }
+  // S: { belge, hazirlik, H: {mik, okut, elle} (hazırlık), K: {mik, okut, elle} (kontrol sayımı), mod, not, sahip, ... }
+  // mod: 'hazirla' (sahibi toplar) · 'kontrol' (başkası yeniden sayar) · 'gor' (yalnız bakış)
   var S = null, gorunum = 'kalan', sonSira = -1, kaydetZ = null, kaydediliyor = false;
   function siparisAc(id){
     istek(kimlikli({ action:'hazirla_ac', id: id }), function(r){
@@ -372,85 +502,125 @@
       yaz('mkHazirlaAcik', { id: id, z: Date.now() });
     });
   }
+  function haritaSayi(o){ var m = {}; Object.keys(o || {}).forEach(function(i){ m[i] = Number(o[i]); }); return m; }
   function siparisKur(r){
-    var y = yerel[r.belge.id];
-    var sahip = r.hazirlik.durum === 'hazirlaniyor' && String(r.hazirlik.hazirlayan).toLowerCase() === String(kimlik.user).toLowerCase();
-    var mik = {}; Object.keys(r.hazirlik.hazirlanan || {}).forEach(function(i){ mik[i] = Number(r.hazirlik.hazirlanan[i]); });
-    var not = r.hazirlik.not || '';
+    var y = yerel[r.belge.id], h = r.hazirlik;
+    var sahip = h.durum === 'hazirlaniyor' && String(h.hazirlayan).toLowerCase() === String(kimlik.user).toLowerCase();
+    var H = { mik: haritaSayi(h.hazirlanan), okut: haritaSayi(h.okut), elle: JSON.parse(JSON.stringify(h.elle || {})) };
+    var not = h.not || '';
     // Telefonda gönderilememiş okutma varsa (internet kesilmişti) onlar geçerli.
-    if(sahip && y && y.kirli){ mik = y.miktarlar; not = y.not; }
-    S = { belge: r.belge, hazirlik: r.hazirlik, mik: mik, not: not, sahip: sahip, yonetim: r.yonetim };
+    if(sahip && y && y.kirli){ H.mik = y.miktarlar; H.okut = y.okut || H.okut; H.elle = y.elle || H.elle; not = y.not; }
+    S = { belge: r.belge, hazirlik: h, H: H, K: null, not: not, sahip: sahip, yonetim: r.yonetim, hazirla: r.hazirla !== false, geri: [],
+      mod: sahip && !r.belge.iptal ? 'hazirla' : 'gor' };
+    // Yarım kalan kontrol (uygulama kapanmıştı) kaldığı yerden.
+    var ky = yerel['K:' + r.belge.id];
+    if(ky && h.durum === 'hazir' && kontrolEdebilir()){ S.K = ky; S.mod = 'kontrol'; }
     sonSira = -1;
     $('skNot').value = not;
     siparisCiz();
     if(sahip && y && y.kirli) kaydetPlanla(100);
   }
+  function kontrolEdebilir(){ return S && S.hazirlik.durum === 'hazir' && !S.belge.iptal && (S.yonetim || String(S.hazirlik.hazirlayan).toLowerCase() !== String(kimlik.user).toLowerCase()); }
+  function A(){ return S.mod === 'kontrol' ? S.K : S.H; }           // aktif sayım
+  function hedef(i){ return S.mod === 'kontrol' ? (Number(S.H.mik[i]) || 0) : S.belge.satirlar[i].m; }
   function durumu(i){
-    var v = S.mik[i], m = S.belge.satirlar[i].m;
+    var v = A().mik[i], m = hedef(i);
     if(v === undefined || v === null) return '';
     if(Math.abs(v - m) < 0.0005) return 'tam';
     return v < m ? 'eksik' : 'fazla';
   }
   function ozet(){
-    var o = { tam:0, eksik:0, fazla:0, bos:0, n: S.belge.satirlar.length };
-    S.belge.satirlar.forEach(function(s, i){ var d = durumu(i); if(d) o[d]++; else o.bos++; });
+    var o = { tam:0, eksik:0, fazla:0, bos:0, elle:0, n: S.belge.satirlar.length };
+    S.belge.satirlar.forEach(function(s, i){ var d = durumu(i); if(d) o[d]++; else o.bos++; if(A().elle[i] && A().mik[i] > 0) o.elle++; });
     return o;
   }
   function siparisCiz(){
-    var b = S.belge, h = S.hazirlik, duzenle = S.sahip && !b.iptal;
-    $('skAd').textContent = b.cariAd;
+    var b = S.belge, h = S.hazirlik, kontrol = S.mod === 'kontrol', duzenle = S.mod === 'hazirla' || kontrol;
+    $('skAd').textContent = (kontrol ? '🔍 ' : '') + b.cariAd;
     $('skAlt').textContent = '🚚 ' + b.plasiyer + ' · ' + tarihSaat(b.zaman) + ' · ' + b.satirlar.length + ' kalem';
     var bant = [];
     if(b.iptal) bant.push('<div class="bant kirmizi">🚫 Bu sipariş İPTAL edildi' + (b.iptalNeden ? ': ' + esc(b.iptalNeden) : '') + '. Hazırlamayı durdur, toplanan ürünleri yerine koy.</div>');
+    if(kontrol) bant.push('<div class="bant mavi">🔍 <b>KONTROL</b> — her kalemi yeniden okut. Hazırlayan: ' + esc(h.hazirlayan) + ' · ' + (h.koli || 0) + ' koli. Hepsi tutunca teslim alınır.</div>');
     if(b.not) bant.push('<div class="bant ' + (b.bekleyen ? 'sari' : 'mavi') + '">' + (b.bekleyen ? '⏳ ' : '📝 Plasiyer notu: ') + esc(b.not) + '</div>');
     if(h.durum === 'hazirlaniyor' && !S.sahip) bant.push('<div class="bant sari">🔧 ' + esc(h.hazirlayan) + ' hazırlıyor.</div>');
-    if(h.durum === 'hazir') bant.push('<div class="bant yesil">✅ Hazır — ' + esc(h.hazirlayan) + ', ' + tarihSaat(h.bitis) + ' · ' + (h.koli || 0) + ' koli</div>');
-    if(h.durum === 'teslim') bant.push('<div class="bant yesil">🚚 Teslim edildi: ' + esc(h.teslimAlan) + ' · ' + tarihSaat(h.teslimZaman) + ' (' + esc(h.teslimEden) + ')</div>');
-    if(h.not && !duzenle) bant.push('<div class="bant sari">📝 Hazırlık notu: ' + esc(h.not) + '</div>');
+    if(h.durum === 'bekliyor' || h.durum === 'hazirlaniyor'){
+      var az = b.satirlar.filter(function(x){ return x.az; });
+      if(az.length) bant.push('<div class="bant kirmizi">⚠️ ' + az.length + ' kalemde stok yetmeyebilir: ' + az.slice(0, 4).map(function(x){ return esc(x.a); }).join(', ') + (az.length > 4 ? '…' : '') + '. Önce bunlara bak; yoksa "✗ yok" de, eksikler bekleyen sipariş olur.</div>');
+    }
+    if(h.durum === 'hazir' && !kontrol) bant.push('<div class="bant yesil">✅ Hazır — ' + esc(h.hazirlayan) + ', ' + tarihSaat(h.bitis) + ' · ' + (h.koli || 0) + ' koli' +
+      (kontrolEdebilir() ? '' : '<br><span style="font-weight:600;">Teslim için siparişi <b>başka biri</b> kontrol etmeli.</span>') + '</div>');
+    if(h.durum === 'teslim'){
+      var sv = h.sevk || { durum: 'bekliyor' };
+      bant.push('<div class="bant yesil">🔍 Kontrol: ' + esc(h.kontrol ? h.kontrol.kim : '— (kontrolsüz)') + ' · Teslim alan: ' + esc(h.teslimAlan) + ' · ' + tarihSaat(h.teslimZaman) + '</div>');
+      bant.push('<div class="bant ' + (sv.durum === 'edildi' ? 'yesil' : sv.durum === 'edilemedi' ? 'kirmizi' : 'mavi') + '">' +
+        (sv.durum === 'edildi' ? '🏁 Müşteriye teslim edildi → <b>' + esc(sv.kisi) + '</b> · ' + tarihSaat(sv.zaman) + ' (' + esc(sv.kim) + ')' :
+         sv.durum === 'edilemedi' ? '⚠️ Teslim edilemedi: ' + esc(sv.neden) + ' · ' + tarihSaat(sv.zaman) + ' (' + esc(sv.kim) + ')' :
+         sv.durum === 'yolda' ? '🚛 Yolda — ' + esc(sv.kim) + ', çıkış ' + tarihSaat(sv.cikis) : '🚚 Sevkiyatta — yola çıkmayı bekliyor') + '</div>');
+    }
+    if(h.not && S.mod !== 'hazirla') bant.push('<div class="bant sari">📝 Hazırlık notu: ' + esc(h.not) + '</div>');
+    if(h.not && S.mod === 'hazirla' && /KONTROL FARKI/.test(h.not)) bant.push('<div class="bant kirmizi">↩️ ' + esc(h.not) + '</div>');
     $('skBant').innerHTML = bant.join('');
     var o = ozet(), yuzde = Math.round((o.n - o.bos) / Math.max(1, o.n) * 100);
-    $('skIlerleme').innerHTML = (h.durum === 'bekliyor' && !Object.keys(S.mik).length) ? '' :
-      '<div style="display:flex; justify-content:space-between; font-size:13px; font-weight:800;"><span>' + (o.n - o.bos) + ' / ' + o.n + ' kalem</span><span>' +
-      (o.tam ? '<span class="iyi">' + o.tam + ' tam</span> ' : '') + (o.eksik ? '<span class="uyari">' + o.eksik + ' eksik</span> ' : '') + (o.fazla ? '<span class="hata">' + o.fazla + ' fazla</span>' : '') + '</span></div>' +
+    $('skIlerleme').innerHTML = (h.durum === 'bekliyor' && !Object.keys(S.H.mik).length && !kontrol) ? '' :
+      '<div style="display:flex; justify-content:space-between; font-size:13px; font-weight:800;"><span>' + (kontrol ? 'Kontrol ' : '') + (o.n - o.bos) + ' / ' + o.n + ' kalem</span><span>' +
+      (o.tam ? '<span class="iyi">' + o.tam + ' tam</span> ' : '') + (o.eksik ? '<span class="uyari">' + o.eksik + ' eksik</span> ' : '') + (o.fazla ? '<span class="hata">' + o.fazla + ' fazla</span> ' : '') + (o.elle ? '<span class="uyari">✋' + o.elle + '</span>' : '') + '</span></div>' +
       '<div class="ilerleme"><div style="width:' + yuzde + '%"></div></div>';
     $('skOkutAlan').classList.toggle('gizli', !duzenle);
-    $('skNotAlan').classList.toggle('gizli', !duzenle);
+    $('skNotAlan').classList.toggle('gizli', S.mod !== 'hazirla');
     if(!duzenle) kameraKapat();
+    var son = S.geri.length ? S.geri[S.geri.length - 1] : null;
+    $('geriAlBtn').classList.toggle('gizli', !duzenle || !son);
+    if(son) $('geriAlBtn').textContent = '↶ Son okutmayı geri al: ' + b.satirlar[son.i].a;
     // Kalemler
     var sira = b.satirlar.map(function(s, i){ return i; });
     if(duzenle && gorunum === 'kalan') sira.sort(function(x, y){ var dx = durumu(x) === 'tam' ? 1 : 0, dy = durumu(y) === 'tam' ? 1 : 0; return dx - dy || x - y; });
+    var gElle = S.mod === 'gor' ? S.H.elle : A().elle;
     $('skKalemler').innerHTML = sira.map(function(i){
-      var s = b.satirlar[i], d = durumu(i), v = S.mik[i];
+      var s = b.satirlar[i], d = durumu(i), v = A().mik[i], hd = hedef(i);
+      var etk = (gElle[i] && (S.mod === 'gor' ? S.H.mik[i] : v) > 0 ? '<span class="tag elle">✋ ' + esc(gElle[i]) + '</span>' : '') +
+        (kontrol && S.H.elle[i] ? '<span class="tag elle">hazırlayan elle girdi</span>' : '') +
+        (s.az && (h.durum === 'bekliyor' || h.durum === 'hazirlaniyor') ? '<span class="tag az">stok az</span>' : '');
       return '<div class="kalem ' + d + (i === sonSira ? ' son' : '') + '" data-i="' + i + '">' +
-        '<div class="bilgi" data-ac="' + i + '"><div class="ad">' + esc(s.a) + '</div><div class="alt">' + esc(s.b) + (s.k ? ' · ' + esc(s.k) : '') +
-          (s.stok !== undefined ? ' · <span style="' + (s.stok < s.m ? 'color:var(--red); font-weight:800;' : '') + '">stok ' + mk(s.stok) + '</span>' : '') + '</div></div>' +
-        '<div class="sayi" data-ac="' + i + '"><b>' + (v === undefined ? '—' : mk(v)) + '</b><span>/ ' + mk(s.m) + '</span></div>' +
+        '<div class="bilgi" data-ac="' + i + '"><div class="ad">' + esc(s.a) + etk + '</div><div class="alt">' + esc(s.b) + (s.k ? ' · ' + esc(s.k) : '') +
+          (s.stok !== undefined ? ' · <span style="' + (s.stok < s.m ? 'color:var(--red); font-weight:800;' : '') + '">stok ' + mk(s.stok) + '</span>' : '') +
+          (kontrol ? ' · sipariş ' + mk(s.m) : '') + '</div></div>' +
+        '<div class="sayi" data-ac="' + i + '"><b>' + (v === undefined ? '—' : mk(v)) + '</b><span>/ ' + mk(hd) + '</span></div>' +
         (duzenle ? '<div class="dug"><button type="button" class="yesil" data-tam="' + i + '" aria-label="Tamamı">✓</button><button type="button" data-yok="' + i + '" aria-label="Yok">✗</button></div>' : '') +
         '</div>';
     }).join('');
     // Alt düğmeler
-    var a = [];
+    var a = [], sv2 = h.sevk || { durum: 'bekliyor' };
     if(b.iptal){
       if(h.durum === 'hazirlaniyor' && (S.sahip || S.yonetim)) a.push('<button type="button" class="kirmizi tam" id="dBirak">Hazırlamayı bırak</button>');
+    } else if(kontrol){
+      a.push('<div class="satirlar"><button type="button" class="kirmizi" id="dFark" style="flex:0 0 auto;">⚠️ Fark var</button><button type="button" class="yesil" id="dTeslimAl" style="padding:14px; font-size:17px;"' + (o.tam === o.n ? '' : ' disabled') + '>✅ Teslim al (' + o.tam + '/' + o.n + ')</button></div>' +
+        '<button type="button" class="kucuk tam" id="dKontrolCik" style="margin-top:8px;">Kontrolden çık (sayım telefonda kalır)</button>');
     } else if(h.durum === 'bekliyor'){
-      a.push('<button type="button" class="ana tam" id="dBasla" style="padding:14px; font-size:17px;">▶ Hazırlamaya başla</button>');
+      if(S.hazirla) a.push('<button type="button" class="ana tam" id="dBasla" style="padding:14px; font-size:17px;">▶ Hazırlamaya başla</button>');
     } else if(h.durum === 'hazirlaniyor' && S.sahip){
       a.push('<div class="satirlar"><button type="button" id="dBirak" style="flex:0 0 auto;">Bırak</button><button type="button" class="yesil" id="dBitir" style="padding:14px; font-size:17px;">✅ Hazır</button></div>');
     } else if(h.durum === 'hazirlaniyor' && S.yonetim){
       a.push('<button type="button" class="ana tam" id="dBasla">Devral (' + esc(h.hazirlayan) + ')</button>');
     } else if(h.durum === 'hazir'){
-      a.push('<div class="satirlar"><button type="button" id="dYazdir" style="flex:0 0 auto;">🖨️ Sevk fişi</button><button type="button" class="yesil" id="dTeslim" style="padding:14px;">🚚 Teslim edildi</button></div>');
-      if(S.yonetim) a.push('<button type="button" class="kucuk tam" id="dGeri" style="margin-top:8px;">↩️ Yeniden aç (düzelt)</button>');
+      a.push('<div class="satirlar"><button type="button" id="dYazdir" style="flex:0 0 auto;">🖨️ Fiş</button>' +
+        (kontrolEdebilir() ? '<button type="button" class="yesil" id="dKontrol" style="padding:14px;">🔍 Kontrol et ve teslim al</button>' : '<button type="button" disabled>🔍 Başkası kontrol etmeli</button>') + '</div>');
+      if(S.yonetim) a.push('<div class="satirlar" style="margin-top:8px;"><button type="button" class="kucuk" id="dGeri">↩️ Yeniden aç</button><button type="button" class="kucuk" id="dTeslim">Kontrolsüz teslim (yönetim)</button></div>');
     } else if(h.durum === 'teslim'){
-      a.push('<button type="button" class="tam" id="dYazdir">🖨️ Sevk fişi</button>');
-      if(S.yonetim) a.push('<button type="button" class="kucuk tam" id="dGeri" style="margin-top:8px;">↩️ Yeniden aç (düzelt)</button>');
+      if(sv2.durum === 'edildi') a.push('<button type="button" class="tam" id="dYazdir">🖨️ Sevk fişi</button>');
+      else {
+        a.push('<div class="satirlar"><button type="button" id="dYazdir" style="flex:0 0 auto;">🖨️</button>' +
+          (sv2.durum === 'bekliyor' ? '<button type="button" class="ana" id="dYolda" style="padding:14px;">🚛 Yola çıktı</button>' :
+            '<button type="button" class="kirmizi" id="dEdilemedi" style="flex:0 0 auto;">⚠️ Edilemedi</button><button type="button" class="yesil" id="dEdildi" style="padding:14px;">🏁 Müşteriye teslim edildi</button>') + '</div>');
+        if(sv2.durum === 'bekliyor') a.push('<button type="button" class="kucuk tam" id="dEdildi" style="margin-top:8px;">🏁 Doğrudan müşteriye teslim edildi</button>');
+        if(S.yonetim) a.push('<button type="button" class="kucuk tam" id="dGeri" style="margin-top:8px;">↩️ Yeniden aç (düzelt)</button>');
+      }
     }
     $('skAltDugmeler').innerHTML = a.join('');
     kayitDurumCiz();
   }
   function kayitDurumCiz(){
     var y = S && yerel[S.belge.id];
-    $('skKayit').textContent = !S || !S.sahip ? '' : kaydediliyor ? '⏳ kaydediliyor…' : (y && y.kirli ? '⏳ gönderilmedi (internet gelince gider)' : '✓ kaydedildi');
+    $('skKayit').textContent = !S ? '' : S.mod === 'kontrol' ? '🔍 kontrol sayımı telefonda' : S.mod !== 'hazirla' ? '' : kaydediliyor ? '⏳ kaydediliyor…' : (y && y.kirli ? '⏳ gönderilmedi (internet gelince gider)' : '✓ kaydedildi');
   }
   function kapat(){
     if(S && S.sahip && yerel[S.belge.id] && yerel[S.belge.id].kirli) kaydet();
@@ -459,25 +629,34 @@
   }
   $('skKapat').addEventListener('click', kapat);
   $('gorunum').addEventListener('click', function(e){ var b = e.target.closest('button'); if(!b) return; gorunum = b.getAttribute('data-g'); this.querySelectorAll('button').forEach(function(x){ x.classList.toggle('on', x === b); }); siparisCiz(); });
+  $('gecmisBtn').addEventListener('click', function(){
+    if(!S) return;
+    var l = (S.hazirlik.log || []).slice().reverse();
+    $('gcListe').innerHTML = l.map(function(x){ return '<li>' + esc(x[2]) + '<span>' + tarihSaat(x[0]) + ' · ' + esc(x[1]) + '</span></li>'; }).join('') ||
+      '<li class="ipucu">Henüz kayıt yok.</li>';
+    $('gecmisPerde').classList.remove('gizli');
+  });
 
-  // Miktar değişikliği: önce telefona, sonra (3 sn içinde toplu) sunucuya.
+  // Miktar değişikliği: hazırlıkta önce telefona, sonra (3 sn içinde toplu) sunucuya. Kontrolde yalnız telefona.
   function mikDegisti(i){
     sonSira = i;
-    yerel[S.belge.id] = { miktarlar: S.mik, not: $('skNot').value, kirli: true, zaman: Date.now() };
+    if(S.mod === 'kontrol'){ yerel['K:' + S.belge.id] = S.K; S.K.zaman = Date.now(); yerelKaydet(); siparisCiz(); return; }
+    yerel[S.belge.id] = { miktarlar: S.H.mik, okut: S.H.okut, elle: S.H.elle, not: $('skNot').value, kirli: true, zaman: Date.now() };
     yerelKaydet(); siparisCiz(); kaydetPlanla(3000);
   }
+  function ekJson(X){ return JSON.stringify({ okut: X.okut || {}, elle: X.elle || {} }); }
   function kaydetPlanla(ms){ clearTimeout(kaydetZ); kaydetZ = setTimeout(kaydet, ms); }
   function kaydet(sonra){
     clearTimeout(kaydetZ);
     if(!S || !S.sahip) return;
-    var id = S.belge.id, gonderilen = JSON.stringify(S.mik), not = $('skNot').value;
+    var id = S.belge.id, gonderilen = JSON.stringify(S.H.mik), ek = ekJson(S.H), not = $('skNot').value;
     kaydediliyor = true; kayitDurumCiz();
-    istek(kimlikli({ action:'hazirla_kaydet', id: id, miktarlar: gonderilen, not: not }), function(r){
+    istek(kimlikli({ action:'hazirla_kaydet', id: id, miktarlar: gonderilen, ek: ek, not: not }), function(r){
       kaydediliyor = false;
       if(r.status === 'ok'){
         var y = yerel[id];
-        if(y && JSON.stringify(y.miktarlar) === gonderilen && y.not === not){ y.kirli = false; yerelKaydet(); }
-        if(r.iptal && S && S.belge.id === id && !S.belge.iptal){ S.belge.iptal = true; bip(false); toast('Sipariş İPTAL edildi — hazırlamayı durdur', 'hata'); siparisCiz(); }
+        if(y && JSON.stringify(y.miktarlar) === gonderilen && ekJson(y) === ek && y.not === not){ y.kirli = false; yerelKaydet(); }
+        if(r.iptal && S && S.belge.id === id && !S.belge.iptal){ S.belge.iptal = true; S.mod = 'gor'; bip(false); toast('Sipariş İPTAL edildi — hazırlamayı durdur', 'hata'); siparisCiz(); }
         if(sonra) sonra(true);
       } else {
         var mesgul = /meşgul/i.test(r.message || '');
@@ -489,15 +668,15 @@
       kayitDurumCiz();
     });
   }
-  $('skNot').addEventListener('input', function(){ if(S && S.sahip){ yerel[S.belge.id] = { miktarlar: S.mik, not: this.value, kirli: true, zaman: Date.now() }; yerelKaydet(); kaydetPlanla(3000); } });
+  $('skNot').addEventListener('input', function(){ if(S && S.sahip){ yerel[S.belge.id] = { miktarlar: S.H.mik, okut: S.H.okut, elle: S.H.elle, not: this.value, kirli: true, zaman: Date.now() }; yerelKaydet(); kaydetPlanla(3000); } });
 
   // ---------- Okutma ----------
   // Barkod siparişteki satırla eşleşir; değilse katalogdan aynı stok kodlu satır aranır (ürünün diğer
   // barkodu ya da koli barkodu — koli çarpanı kadar sayılır). Siparişte olmayan ürün: hata sesi.
   function okutuldu(kod){
-    if(!S || !S.sahip || S.belge.iptal) return;
+    if(!S || (S.mod !== 'hazirla' && S.mod !== 'kontrol') || S.belge.iptal) return;
     kod = String(kod || '').trim(); if(!kod) return;
-    var satirlar = S.belge.satirlar, adet = 1, adaylar = [];
+    var satirlar = S.belge.satirlar, adet = 1, adaylar = [], X = A();
     satirlar.forEach(function(s, i){ if(s.b === kod) adaylar.push(i); });
     if(!adaylar.length){
       var kat = katalogBarkod[kod];
@@ -505,44 +684,82 @@
     }
     if(!adaylar.length){ bip(false); toast('Bu ürün siparişte YOK: ' + (katalogBarkod[kod] ? katalogBarkod[kod].a : kod), 'hata'); return; }
     // Aynı ürün birden çok satırdaysa önce tamamlanmamış olana.
-    var i = adaylar.filter(function(x){ return (S.mik[x] || 0) < satirlar[x].m; })[0];
+    var i = adaylar.filter(function(x){ return (X.mik[x] || 0) < hedef(x); })[0];
     if(i === undefined) i = adaylar[0];
-    var yeni = Math.round(((S.mik[i] || 0) + adet) * 1000) / 1000;
-    S.mik[i] = yeni;
-    if(yeni > satirlar[i].m + 0.0005){ bip(false); toast('FAZLA: ' + satirlar[i].a + ' — ' + mk(yeni) + ' / ' + mk(satirlar[i].m), 'hata'); }
-    else { bip(true); if(Math.abs(yeni - satirlar[i].m) < 0.0005) toast('✓ ' + satirlar[i].a + ' tamam'); else if(adet > 1) toast('Koli: +' + adet); }
+    S.geri.push({ i: i, mik: X.mik[i], okut: X.okut[i] }); if(S.geri.length > 40) S.geri.shift();
+    var yeni = Math.round(((X.mik[i] || 0) + adet) * 1000) / 1000;
+    X.mik[i] = yeni; X.okut[i] = (X.okut[i] || 0) + 1;
+    if(yeni > hedef(i) + 0.0005){ bip(false); toast('FAZLA: ' + satirlar[i].a + ' — ' + mk(yeni) + ' / ' + mk(hedef(i)), 'hata'); }
+    else { bip(true); if(Math.abs(yeni - hedef(i)) < 0.0005) toast('✓ ' + satirlar[i].a + ' tamam'); else if(adet > 1) toast('Koli: +' + adet); }
     mikDegisti(i);
   }
   $('okutKutu').addEventListener('keydown', function(e){ if(e.key === 'Enter'){ okutuldu(this.value); this.value = ''; } });
+  $('geriAlBtn').addEventListener('click', function(){
+    if(!S || !S.geri.length) return;
+    var g = S.geri.pop(), X = A();
+    if(g.mik === undefined) delete X.mik[g.i]; else X.mik[g.i] = g.mik;
+    if(!g.okut) delete X.okut[g.i]; else X.okut[g.i] = g.okut;
+    bip(true); toast('↶ Geri alındı: ' + S.belge.satirlar[g.i].a, 'uyari');
+    mikDegisti(g.i);
+  });
+  // Elle miktar: okutulmamış kaleme > 0 yazılıyorsa neden sorulur; siparişten %10 fazlası onay ister.
+  var ndBekleyen = null;
+  function elleYaz(i, v){
+    var X = A(), hd = hedef(i), s = S.belge.satirlar[i];
+    if(v === undefined){ delete X.mik[i]; delete X.elle[i]; mikDegisti(i); return; }
+    if(v > hd * 1.1 + 0.0005 && !confirm(s.a + '\n\nİstenen ' + mk(hd) + ', yazdığın ' + mk(v) + ' (%' + Math.round((v / Math.max(hd, 0.001) - 1) * 100) + ' fazla). Emin misin?')) return;
+    var uygula = function(neden){
+      S.geri.push({ i: i, mik: X.mik[i], okut: X.okut[i] });
+      X.mik[i] = v;
+      if(neden) X.elle[i] = neden; else if(!(v > 0)) delete X.elle[i];
+      mikDegisti(i);
+    };
+    if(v > 0 && !(X.okut[i] > 0)){
+      ndBekleyen = uygula;
+      $('ndBilgi').innerHTML = '<b>' + esc(s.a) + '</b> — ' + mk(v) + ' adet, hiç okutulmadan işaretleniyor. Neden?';
+      $('ndDiger').value = '';
+      $('nedenPerde').classList.remove('gizli');
+      return;
+    }
+    uygula('');
+  }
+  $('ndListe').addEventListener('click', function(e){ var b = e.target.closest('button'); if(!b || !ndBekleyen) return; var f = ndBekleyen; ndBekleyen = null; $('nedenPerde').classList.add('gizli'); f(b.textContent); });
+  $('ndTamam').addEventListener('click', function(){
+    var t = $('ndDiger').value.trim(); if(!t){ toast('Bir neden seç ya da yaz', 'hata'); return; }
+    if(!ndBekleyen) return; var f = ndBekleyen; ndBekleyen = null; $('nedenPerde').classList.add('gizli'); f(t);
+  });
   $('skKalemler').addEventListener('click', function(e){
+    if(!S || (S.mod !== 'hazirla' && S.mod !== 'kontrol')) return;
     var t = e.target, i;
-    if((i = t.getAttribute('data-tam')) !== null){ S.mik[+i] = S.belge.satirlar[+i].m; bip(true); mikDegisti(+i); return; }
-    if((i = t.getAttribute('data-yok')) !== null){ S.mik[+i] = 0; mikDegisti(+i); return; }
-    var a = t.closest('[data-ac]'); if(a && S.sahip && !S.belge.iptal) miktarAc(+a.getAttribute('data-ac'));
+    if((i = t.getAttribute('data-tam')) !== null){ elleYaz(+i, hedef(+i)); return; }
+    if((i = t.getAttribute('data-yok')) !== null){ elleYaz(+i, 0); return; }
+    var a = t.closest('[data-ac]'); if(a && !S.belge.iptal) miktarAc(+a.getAttribute('data-ac'));
   });
 
   var mpSira = -1;
   function miktarAc(i){
-    mpSira = i; var s = S.belge.satirlar[i];
+    mpSira = i; var s = S.belge.satirlar[i], X = A();
     $('mpAd').textContent = s.a;
-    $('mpBilgi').innerHTML = esc(s.b) + ' · istenen <b>' + mk(s.m) + '</b>' + (s.stok !== undefined ? ' · stok ' + mk(s.stok) : '');
-    $('mpKutu').value = S.mik[i] === undefined ? '' : mk(S.mik[i]);
-    $('mpTamami').textContent = '✓ Tamamı (' + mk(s.m) + ')';
+    $('mpBilgi').innerHTML = esc(s.b) + ' · ' + (S.mod === 'kontrol' ? 'hazırlanan' : 'istenen') + ' <b>' + mk(hedef(i)) + '</b>' + (s.stok !== undefined ? ' · stok ' + mk(s.stok) : '') +
+      ' · okutma ' + (X.okut[i] || 0) + (X.okut[i] ? '' : ' <span class="uyari">(okutulmadı)</span>');
+    $('mpKutu').value = X.mik[i] === undefined ? '' : mk(X.mik[i]);
+    $('mpTamami').textContent = '✓ Tamamı (' + mk(hedef(i)) + ')';
     $('miktarPerde').classList.remove('gizli');
     setTimeout(function(){ $('mpKutu').focus(); $('mpKutu').select(); }, 60);
   }
   function mpKapat(){ $('miktarPerde').classList.add('gizli'); }
-  $('mpTamami').addEventListener('click', function(){ S.mik[mpSira] = S.belge.satirlar[mpSira].m; mpKapat(); mikDegisti(mpSira); });
-  $('mpYok').addEventListener('click', function(){ S.mik[mpSira] = 0; mpKapat(); mikDegisti(mpSira); });
-  $('mpTemizle').addEventListener('click', function(){ delete S.mik[mpSira]; mpKapat(); mikDegisti(mpSira); });
+  $('mpTamami').addEventListener('click', function(){ mpKapat(); elleYaz(mpSira, hedef(mpSira)); });
+  $('mpYok').addEventListener('click', function(){ mpKapat(); elleYaz(mpSira, 0); });
+  $('mpTemizle').addEventListener('click', function(){ mpKapat(); elleYaz(mpSira, undefined); });
   $('mpTamam').addEventListener('click', function(){
     var v = sayi($('mpKutu').value);
     if(!(v >= 0) || v > 100000){ toast('Miktar geçersiz', 'hata'); return; }
-    S.mik[mpSira] = Math.round(v * 1000) / 1000; mpKapat(); mikDegisti(mpSira);
+    mpKapat(); elleYaz(mpSira, Math.round(v * 1000) / 1000);
   });
   $('mpKutu').addEventListener('keydown', function(e){ if(e.key === 'Enter') $('mpTamam').click(); });
 
   // ---------- Alt düğmeler ----------
+  var svAdim = '';
   $('skAltDugmeler').addEventListener('click', function(e){
     var b = e.target.closest('button'); if(!b || !S) return;
     var id = S.belge.id;
@@ -552,13 +769,41 @@
     }
     if(b.id === 'dBirak'){
       if(!confirm('Hazırlamayı bırak? Okuttukların kaydedilir, sipariş tekrar "bekleyen"e döner.')) return;
-      islem(b, { action:'hazirla_birak', id: id, miktarlar: JSON.stringify(S.mik) }, 'Bırakıldı', function(){ if(yerel[id]){ yerel[id].kirli = false; yerelKaydet(); } kapat(); });
+      islem(b, { action:'hazirla_birak', id: id, miktarlar: JSON.stringify(S.H.mik), ek: ekJson(S.H) }, 'Bırakıldı', function(){ if(yerel[id]){ yerel[id].kirli = false; yerelKaydet(); } kapat(); });
     }
     if(b.id === 'dBitir') bitirAc();
+    if(b.id === 'dKontrol'){
+      S.K = yerel['K:' + id] || { mik: {}, okut: {}, elle: {} };
+      // Hazırlanmamış (0 / yok) kalemler kontrolde sayılmaz: doğrudan "tam".
+      S.belge.satirlar.forEach(function(s, i){ if(!(Number(S.H.mik[i]) > 0) && S.K.mik[i] === undefined) S.K.mik[i] = 0; });
+      S.mod = 'kontrol'; S.geri = []; gorunum = 'kalan'; mikDegisti(-1);
+      setTimeout(function(){ try { $('okutKutu').focus(); } catch(er){} }, 200);
+    }
+    if(b.id === 'dKontrolCik'){ S.mod = 'gor'; S.geri = []; siparisCiz(); }
+    if(b.id === 'dTeslimAl'){
+      $('ktBilgi').textContent = '✓ ' + S.belge.satirlar.length + ' kalemin hepsi tuttu. Koli sayısını say ve yaz.';
+      $('ktKoli').value = ''; $('ktAlan').value = kimlik.user;
+      $('kontrolPerde').classList.remove('gizli'); setTimeout(function(){ $('ktKoli').focus(); }, 60);
+    }
+    if(b.id === 'dFark'){
+      var l = [];
+      S.belge.satirlar.forEach(function(s, i){ var v = S.K.mik[i], h = Number(S.H.mik[i]) || 0; if(v === undefined) l.push(s.a + ': sayılmadı (' + mk(h) + ')'); else if(Math.abs(v - h) > 0.0005) l.push(s.a + ': sayılan ' + mk(v) + ', hazırlanan ' + mk(h)); });
+      $('fkMetin').value = l.join('; ').slice(0, 250);
+      $('farkPerde').classList.remove('gizli');
+    }
     if(b.id === 'dTeslim'){
-      var alan = prompt('Teslim alan (plasiyer / şoför):', S.belge.plasiyer);
+      var alan = prompt('KONTROLSÜZ teslim (yönetim) — teslim alan:', S.belge.plasiyer);
       if(alan === null) return;
-      islem(b, { action:'hazirla_teslim', id: id, teslimAlan: alan.trim() }, '🚚 Teslim edildi', function(){ kapat(); });
+      islem(b, { action:'hazirla_teslim', id: id, teslimAlan: alan.trim() }, '🚚 Sevkiyata geçti (kontrolsüz)', function(){ siparisAc(id); });
+    }
+    if(b.id === 'dYolda') islem(b, { action:'hazirla_sevk', id: id, adim: 'yolda' }, '🚛 Yola çıktı', function(){ siparisAc(id); });
+    if(b.id === 'dEdildi' || b.id === 'dEdilemedi'){
+      svAdim = b.id === 'dEdildi' ? 'edildi' : 'edilemedi';
+      $('svBaslik').textContent = svAdim === 'edildi' ? '🏁 Müşteriye teslim edildi' : '⚠️ Teslim edilemedi';
+      $('svEtiket').textContent = svAdim === 'edildi' ? 'Teslim alan kişi (müşteride)' : 'Neden';
+      $('svMetin').value = ''; $('svMetin').placeholder = svAdim === 'edildi' ? 'Ad soyad' : 'Kısaca yaz';
+      $('svNedenler').classList.toggle('gizli', svAdim !== 'edilemedi');
+      $('sevkPerde').classList.remove('gizli'); setTimeout(function(){ $('svMetin').focus(); }, 60);
     }
     if(b.id === 'dGeri'){
       if(!confirm('Sipariş yeniden "hazırlanıyor" durumuna alınsın mı?')) return;
@@ -566,14 +811,40 @@
     }
     if(b.id === 'dYazdir') sevkFisi();
   });
+  $('ktTamam').addEventListener('click', function(){
+    var koli = parseInt($('ktKoli').value, 10);
+    if(!(koli >= 0)){ toast('Koli sayısını yaz', 'hata'); return; }
+    var id = S.belge.id;
+    islem(this, { action:'hazirla_kontrol', id: id, miktarlar: JSON.stringify(S.K.mik), koli: koli, teslimAlan: $('ktAlan').value.trim(), ek: ekJson(S.K) }, '✅ Teslim alındı — sevkiyatta', function(){
+      delete yerel['K:' + id]; yerelKaydet();
+      $('kontrolPerde').classList.add('gizli'); filtre = 'sevk'; siparisAc(id);
+    });
+  });
+  $('fkTamam').addEventListener('click', function(){
+    var t = $('fkMetin').value.trim(); if(!t){ toast('Farkı yaz', 'hata'); return; }
+    var id = S.belge.id;
+    islem(this, { action:'hazirla_fark', id: id, fark: t }, 'Hazırlayana geri gönderildi', function(){
+      delete yerel['K:' + id]; yerelKaydet();
+      $('farkPerde').classList.add('gizli'); kapat();
+    });
+  });
+  $('svNedenler').addEventListener('click', function(e){ var b = e.target.closest('button'); if(b) $('svMetin').value = b.textContent; });
+  $('svTamam').addEventListener('click', function(){
+    var t = $('svMetin').value.trim(); if(!t){ toast(svAdim === 'edildi' ? 'Teslim alan kişinin adını yaz' : 'Nedeni yaz', 'hata'); return; }
+    var id = S.belge.id, p = { action:'hazirla_sevk', id: id, adim: svAdim };
+    if(svAdim === 'edildi') p.kisi = t; else p.neden = t;
+    islem(this, p, svAdim === 'edildi' ? '🏁 Müşteriye teslim edildi' : 'Kaydedildi', function(){ $('sevkPerde').classList.add('gizli'); siparisAc(id); });
+  });
 
   function bitirAc(){
     var o = ozet();
     $('btOzet').innerHTML = '<div class="sayilar"><div><b class="iyi">' + o.tam + '</b><span>Tam</span></div><div><b class="uyari">' + o.eksik + '</b><span>Eksik</span></div><div><b class="hata">' + o.fazla + '</b><span>Fazla</span></div><div><b>' + o.bos + '</b><span>İşaretsiz</span></div></div>' +
       (o.bos ? '<div class="bant sari" style="margin-top:10px;">' + o.bos + ' kalem işaretlenmedi. <button type="button" class="kucuk" id="btYokSay">Kalanları "yok" say</button></div>' : '') +
-      (o.eksik || o.fazla ? '<div class="ipucu" style="margin-top:8px;">Eksik/fazla kalemler sevk fişinde ve plasiyerin ekranında görünür.</div>' : '');
+      (o.elle ? '<div class="bant sari" style="margin-top:10px;">✋ ' + o.elle + ' kalem okutulmadan (elle) işaretlendi — fişte ve kontrolde görünür.</div>' : '') +
+      (o.eksik || o.fazla ? '<div class="ipucu" style="margin-top:8px;">Eksik/fazla kalemler sevk fişinde ve plasiyerin ekranında görünür.</div>' : '') +
+      '<div class="ipucu" style="margin-top:8px;">Hazır deyince siparişi <b>başka biri</b> kontrol edip teslim alacak.</div>';
     // Eksik kalan miktar varsa (eksik ya da "yok" denen kalemler) bekleyen sipariş önerilir.
-    var eksikKalem = S.belge.satirlar.filter(function(s, i){ return S.mik[i] !== undefined && S.mik[i] < s.m - 0.0005; });
+    var eksikKalem = S.belge.satirlar.filter(function(s, i){ return S.H.mik[i] !== undefined && S.H.mik[i] < s.m - 0.0005; });
     $('btBekleyenAlan').classList.toggle('gizli', !eksikKalem.length);
     $('btBekleyen').checked = true;
     $('btBekleyenBilgi').textContent = eksikKalem.length ? eksikKalem.length + ' kalem (' + eksikKalem.slice(0, 3).map(function(s){ return s.a; }).join(', ') + (eksikKalem.length > 3 ? '…' : '') + ') mal gelince hazırlanmak üzere ayrı sipariş olarak listeye düşer; plasiyer de görür.' : '';
@@ -583,7 +854,7 @@
   }
   $('btOzet').addEventListener('click', function(e){
     if(e.target.id !== 'btYokSay') return;
-    S.belge.satirlar.forEach(function(s, i){ if(S.mik[i] === undefined) S.mik[i] = 0; });
+    S.belge.satirlar.forEach(function(s, i){ if(S.H.mik[i] === undefined) S.H.mik[i] = 0; });
     mikDegisti(-1); bitirAc();
   });
   $('btTamam').addEventListener('click', function(){
@@ -593,7 +864,7 @@
     if(!(koli >= 0)){ toast('Koli / paket sayısını gir', 'hata'); return; }
     var id = S.belge.id;
     var bekleyen = !$('btBekleyenAlan').classList.contains('gizli') && $('btBekleyen').checked ? 1 : 0;
-    islem(this, { action:'hazirla_bitir', id: id, miktarlar: JSON.stringify(S.mik), koli: koli, not: $('skNot').value, bekleyen: bekleyen }, null, function(r){
+    islem(this, { action:'hazirla_bitir', id: id, miktarlar: JSON.stringify(S.H.mik), ek: ekJson(S.H), koli: koli, not: $('skNot').value, bekleyen: bekleyen }, null, function(r){
       toast(r.bekleyenId ? '✅ Hazır — eksikler bekleyen sipariş oldu' : '✅ Hazır olarak kaydedildi');
       if(yerel[id]){ yerel[id].kirli = false; yerelKaydet(); }
       $('bitirPerde').classList.add('gizli');
@@ -603,22 +874,25 @@
 
   // ---------- Sevk fişi (fiyatsız) ----------
   function sevkFisi(){
-    var b = S.belge, h = S.hazirlik;
+    var b = S.belge, h = S.hazirlik, H = S.H;
     var satir = b.satirlar.map(function(s, i){
-      var v = S.mik[i], d = durumu(i);
+      var v = H.mik[i], m = s.m, d = v === undefined ? '' : Math.abs(v - m) < 0.0005 ? 'tam' : v < m ? 'eksik' : 'fazla';
       return '<tr><td>' + (i + 1) + '</td><td>' + esc(s.a) + '<br><small>' + esc(s.b) + (s.k ? ' · ' + esc(s.k) : '') + '</small></td><td style="text-align:right">' + mk(s.m) + '</td><td style="text-align:right"><b>' + (v === undefined ? '' : mk(v)) + '</b></td><td>' +
-        (d === 'eksik' ? 'EKSİK ' + mk(s.m - v) : d === 'fazla' ? 'FAZLA ' + mk(v - s.m) : d === 'tam' ? '✓' : '') + '</td></tr>';
+        (d === 'eksik' ? 'EKSİK ' + mk(s.m - v) : d === 'fazla' ? 'FAZLA ' + mk(v - s.m) : d === 'tam' ? '✓' : '') + (H.elle[i] && v > 0 ? ' ✋ elle (' + esc(H.elle[i]) + ')' : '') + '</td></tr>';
     }).join('');
+    var sv = h.sevk;
     var y = $('yazdir');
     y.innerHTML = '<div class="yazdirma" style="display:flex; gap:8px; margin-bottom:12px;"><button type="button" id="yzYazdir">🖨️ Yazdır</button><button type="button" id="yzKapat">✕ Kapat</button></div>' +
       '<h2 style="margin:0 0 4px;">Sevk / Hazırlık Fişi</h2>' +
       '<div><b>' + esc(b.cariAd) + '</b> (' + esc(b.cariKod) + ')</div>' +
       '<div>Plasiyer: ' + esc(b.plasiyer) + ' · Sipariş: ' + tarihSaat(b.zaman) + '</div>' +
       '<div>Hazırlayan: ' + esc(h.hazirlayan) + (h.bitis ? ' · ' + tarihSaat(h.bitis) : '') + ' · <b>' + (h.koli || 0) + ' koli / paket</b></div>' +
+      (h.kontrol ? '<div>Kontrol eden: ' + esc(h.kontrol.kim) + ' · ' + tarihSaat(h.kontrol.zaman) + ' · Teslim alan: ' + esc(h.teslimAlan) + '</div>' : '') +
+      (sv && sv.durum === 'edildi' ? '<div>Müşteriye teslim: ' + esc(sv.kisi) + ' · ' + tarihSaat(sv.zaman) + ' (' + esc(sv.kim) + ')</div>' : '') +
       (b.not ? '<div>Sipariş notu: ' + esc(b.not) + '</div>' : '') + (h.not ? '<div>Hazırlık notu: ' + esc(h.not) + '</div>' : '') +
       '<table style="margin-top:10px;"><tr><th>#</th><th>Ürün</th><th>İstenen</th><th>Hazırlanan</th><th>Durum</th></tr>' + satir + '</table>' +
       '<div style="font-size:11px; margin-top:6px;">Bu fiş ERP belgesi değildir; fatura/irsaliye ERP\'de kesilir. Belge: ' + esc(b.id) + '</div>' +
-      '<div style="display:flex; gap:30px; margin-top:40px;"><div style="flex:1; border-top:1px solid #000; text-align:center; padding-top:6px;">Hazırlayan</div><div style="flex:1; border-top:1px solid #000; text-align:center; padding-top:6px;">Teslim alan</div></div>';
+      '<div style="display:flex; gap:20px; margin-top:40px;"><div style="flex:1; border-top:1px solid #000; text-align:center; padding-top:6px;">Hazırlayan</div><div style="flex:1; border-top:1px solid #000; text-align:center; padding-top:6px;">Kontrol / teslim alan</div><div style="flex:1; border-top:1px solid #000; text-align:center; padding-top:6px;">Müşteri</div></div>';
     y.classList.remove('gizli');
     $('yzYazdir').onclick = function(){ window.print(); };
     $('yzKapat').onclick = function(){ y.classList.add('gizli'); y.innerHTML = ''; };
@@ -695,7 +969,7 @@
   // Geri tuşu (uygulama çağırır): en üstteki katmanı kapatır; kapattıysa true.
   window.mkGeri = function(){
     if(!$('yazdir').classList.contains('gizli')){ $('yazdir').classList.add('gizli'); $('yazdir').innerHTML = ''; return true; }
-    var p = ['miktarPerde', 'bitirPerde']; for(var i = 0; i < p.length; i++) if(!$(p[i]).classList.contains('gizli')){ $(p[i]).classList.add('gizli'); return true; }
+    var p = ['nedenPerde', 'miktarPerde', 'bitirPerde', 'kontrolPerde', 'farkPerde', 'sevkPerde', 'gecmisPerde']; for(var i = 0; i < p.length; i++) if(!$(p[i]).classList.contains('gizli')){ $(p[i]).classList.add('gizli'); return true; }
     if(!$('sipKatman').classList.contains('gizli')){ if(akis){ kameraKapat(); return true; } kapat(); return true; }
     return false;
   };
@@ -703,8 +977,8 @@
   // Gönderilememiş okutmalar: internet gelince.
   function bekleyenleriGonder(){
     Object.keys(yerel).forEach(function(id){
-      var y = yerel[id]; if(!y.kirli || (S && S.belge.id === id)) return;
-      istek(kimlikli({ action:'hazirla_kaydet', id: id, miktarlar: JSON.stringify(y.miktarlar), not: y.not || '' }), function(r){
+      var y = yerel[id]; if(id.indexOf('K:') === 0 || !y.kirli || (S && S.belge.id === id)) return;
+      istek(kimlikli({ action:'hazirla_kaydet', id: id, miktarlar: JSON.stringify(y.miktarlar), ek: ekJson(y), not: y.not || '' }), function(r){
         if(r.status === 'ok'){ y.kirli = false; yerelKaydet(); }
         else if(!r.ag){ delete yerel[id]; yerelKaydet(); toast('Önceki bir siparişin okutmaları kaydedilemedi: ' + r.message, 'uyari'); }
       });

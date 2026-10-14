@@ -377,7 +377,7 @@
   <header style="border:none; padding:0 0 16px; background:transparent; display:flex; align-items:flex-start; justify-content:space-between;">
     <div>
       <h1><img src="logo-header.png" alt="Murat Gıda" style="height:30px; width:auto; display:block;"></h1>
-      <div class="sub">MK ERP · Murat Gıda • offline • Android • build 220</div>
+      <div class="sub">MK ERP · Murat Gıda • offline • Android • build 221</div>
     </div>
     <button type="button" id="themeToggleBtn" title="Tema seç" style="background:var(--panel2); border:1.5px solid var(--line); color:var(--text); width:34px; height:34px; border-radius:50%; font-size:15px; padding:0; display:flex; align-items:center; justify-content:center; flex-shrink:0;">🎨</button>
   </header>
@@ -1772,7 +1772,7 @@
   // Plasiyer: sahada çalışır, şube konumu ŞART DEĞİL (fiyat/maliyet yetkisi sunucuda ayrıca denetlenir).
   function canSeePlasiyer(){ return hasPerm('plasiyer') || hasPerm('plasiyer_yonetim'); }
   // Alış fiyatı (maliyet): sunucu kataloğa yalnızca bu kişilere koyar (build 209).
-  function canSeeHazirla(){ return hasPerm('siparis_hazirla') || hasPerm('plasiyer_yonetim'); }
+  function canSeeHazirla(){ return hasPerm('siparis_hazirla') || hasPerm('sevkiyat') || hasPerm('plasiyer_yonetim'); }
   function canSeeAlis(){ return hasPerm('alis_fiyat') || hasPerm('plasiyer_maliyet'); }
   function canSeeHareket(){ return hasPerm('hareket') && konumIzinli(); }
   function canSeeCariHrk(){ return hasPerm('cari_hareket') && konumIzinli(); }
@@ -5915,6 +5915,8 @@
     { key: 'alis_fiyat', label: '💲 Alış Fiyatı (maliyet) Görme' },
     // Depo: plasiyer siparişlerini hazırlar (fiyat görmez). Plasiyer Yönetimi de görür.
     { key: 'siparis_hazirla', label: '📦 Sipariş Hazırlama (depo)' },
+    // Şoför / sevkiyat: hazır siparişi kontrol edip teslim alır, yola çıkar, müşteriye teslim eder.
+    { key: 'sevkiyat', label: '🚚 Sevkiyat (kontrol-teslim, şoför)' },
     // Şube dışındayken de fiyat/stok görebilir (konum kısıtlamasından muaf).
     { key: 'konum_serbest', label: '🌍 Şube Dışında da Görür' },
     { key: 'etiket', label: '🏷️ Etiket Yazdırma' },
