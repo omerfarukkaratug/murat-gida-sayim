@@ -190,14 +190,15 @@ GROUP BY CONVERT(char(10), F.TARIH, 23), FD.FINANS_ISLEM_TURU, FD.DOVIZ_AD
     $netVar = ($kolD -contains "TOPLAM_KDV_MATRAHI") -and ($kolD -contains "TOPLAM_KDV")
     if (-not $miktar) { Yaz-Log "[$Db] UYARI: FIS_DETAY miktar sutunu bulunamadi; belge satirlari gonderilmedi. Sutunlar: $($kolD -join ', ')" }
     else {
-        $fiyatIf = if ($fiyat) { "d.$fiyat" } else { "CAST(NULL AS decimal(18,4))" }
-        $tutarIf = if ($tutarK) { "d.$tutarK" } else { "CAST(NULL AS decimal(18,4))" }
+        # Sayilar float olarak okunur: SQL decimal bolmesi .NET decimal'e sigmayinca "Donusturmede tasma" veriyordu.
+        $fiyatIf = if ($fiyat) { "CAST(d.$fiyat AS float)" } else { "CAST(NULL AS float)" }
+        $tutarIf = if ($tutarK) { "CAST(d.$tutarK AS float)" } else { "CAST(NULL AS float)" }
         $adIf = if ($urunAd) { "ISNULL(s.$urunAd, '')" } else { "''" }
-        $netIf = if ($netVar) { "CASE WHEN d.$miktar > 0 THEN (ISNULL(d.TOPLAM_KDV_MATRAHI, 0) + ISNULL(d.TOPLAM_KDV, 0)) / d.$miktar END" } else { "CAST(NULL AS decimal(18,4))" }
+        $netIf = if ($netVar) { "CASE WHEN d.$miktar >= 0.0005 THEN (CAST(ISNULL(d.TOPLAM_KDV_MATRAHI, 0) AS float) + CAST(ISNULL(d.TOPLAM_KDV, 0) AS float)) / CAST(d.$miktar AS float) END" } else { "CAST(NULL AS float)" }
         $sqlF = @"
 SELECT d.ID AS detay_id, f.ID AS fis_id, f.FIS_TURU AS fis_turu, ISNULL(FT.AD, '') AS tur_ad, FT.GIRIS AS giris, f.FIS_TARIHI AS tarih,
        ISNULL(f.BELGENO, '') AS belge_no, ISNULL(C.KOD, '') AS cari_kod, ISNULL(C.AD, '') AS cari_ad, ISNULL(s.KOD, '') AS stok_kodu, ISNULL(d.BARKOD, '') AS barkod,
-       $adIf AS urun_adi, d.$miktar AS miktar, $fiyatIf AS birim_fiyat, $tutarIf AS tutar, $netIf AS net_fiyat
+       $adIf AS urun_adi, CAST(d.$miktar AS float) AS miktar, $fiyatIf AS birim_fiyat, $tutarIf AS tutar, $netIf AS net_fiyat
 FROM dbo.FIS f
 JOIN dbo.FIS_DETAY d ON d.FIS = f.ID
 LEFT JOIN dbo.CARI C ON C.ID = f.CARI
@@ -234,10 +235,10 @@ WHERE f.FIS_TARIHI >= '$basSql' AND f.FIS_TARIHI < '$bitSql'
         $PerIlkDosya = Join-Path $TamGonderimKlasor "stok-perakende-ilk-$Db.txt"
         $pBas = if (-not (Test-Path $PerIlkDosya)) { [datetime]"2000-01-01" } elseif ($tam) { (Get-Date).Date.AddDays(-60) } else { $bas }
         $pBasSql = $pBas.ToString("yyyy-MM-dd")
-        $tutarP = if ($tutarK) { "d.$tutarK" } elseif ($fiyat) { "d.$miktar * d.$fiyat" } else { "0" }
+        $tutarP = if ($tutarK) { "d.$tutarK" } elseif ($fiyat) { "CAST(d.$miktar AS float) * CAST(d.$fiyat AS float)" } else { "0" }
         $sqlP2 = @"
 SELECT ISNULL(s.KOD, '') AS stok_kodu, CONVERT(char(10), f.FIS_TARIHI, 23) AS gun,
-       SUM(d.$miktar * FT.GIRIS) AS miktar, SUM($tutarP * FT.GIRIS) AS tutar, COUNT(*) AS adet
+       SUM(CAST(d.$miktar AS float) * FT.GIRIS) AS miktar, SUM(CAST($tutarP AS float) * FT.GIRIS) AS tutar, COUNT(*) AS adet
 FROM dbo.FIS f
 JOIN dbo.FIS_DETAY d ON d.FIS = f.ID
 JOIN dbo.STOK s ON s.ID = d.STOK
