@@ -377,7 +377,7 @@
   <header style="border:none; padding:0 0 16px; background:transparent; display:flex; align-items:flex-start; justify-content:space-between;">
     <div>
       <h1><img src="logo-header.png" alt="Murat Gıda" style="height:30px; width:auto; display:block;"></h1>
-      <div class="sub">MK ERP · Murat Gıda • offline • Android • build 226</div>
+      <div class="sub">MK ERP · Murat Gıda • offline • Android • build 227</div>
     </div>
     <button type="button" id="themeToggleBtn" title="Tema seç" style="background:var(--panel2); border:1.5px solid var(--line); color:var(--text); width:34px; height:34px; border-radius:50%; font-size:15px; padding:0; display:flex; align-items:center; justify-content:center; flex-shrink:0;">🎨</button>
   </header>
@@ -2121,11 +2121,11 @@
       renderHareket();
     }, 30000);
   }
-  function hareketSatirHtml(r){
-    // r: [tarih, cari, belge_no, miktar, birim, birim_fiyat (KDV dahil), fis_turu]
+  function hareketSatirHtml(r, gelenMi){
+    // r: [tarih, cari, belge_no, miktar, birim, birim_fiyat (KDV dahil), fis_turu, belge türü adı (diğer belgelerde)]
     var fiyat = (r[5] === null || r[5] === undefined || r[5] === '') ? '' : fmtPara(r[5]);
-    var tur = HAREKET_BELGE[r[6]] || 'Belge';
-    var alis = r[6] === 1 || r[6] === 5;
+    var tur = r[7] || HAREKET_BELGE[r[6]] || 'Belge';
+    var alis = gelenMi === undefined ? (r[6] === 1 || r[6] === 5) : gelenMi;
     return '<div class="hrkSatir"><div class="ust"><span style="overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">' + escapeHtml(r[1] || '—') + '</span>' +
       '<span style="white-space:nowrap; color:var(--green);">' + escapeHtml(fiyat) + '</span></div>' +
       '<div class="alt"><span>' + escapeHtml(r[0]) + (r[2] ? ' · No ' + escapeHtml(r[2]) : '') + '</span><span style="white-space:nowrap; color:var(--text); font-weight:800;">' +
@@ -2148,12 +2148,12 @@
         '<button type="button" class="hrkSekme' + (hareketSekme === 'satilan' ? ' on' : '') + '" data-sekme="satilan"><small>📤 SATILAN</small><b>' + fmtQty(satilanToplam) + '</b></button>' +
       '</div>';
     if(hareketSekme === 'gelen'){
-      html += gelen.length ? gelen.map(hareketSatirHtml).join('') : '<div class="hint">Bu dönemde alış yok.</div>';
+      html += gelen.length ? gelen.map(function(r){ return hareketSatirHtml(r, true); }).join('') : '<div class="hint">Bu dönemde giriş yok.</div>';
     } else {
       html += '<div class="hrkPerakende"><span>🛒 Perakende (kasa + peşin satış)</span><span style="font-family:var(--mono);">' + fmtQty(d.perakende || 0) + '</span></div>';
-      html += satilan.length ? satilan.map(hareketSatirHtml).join('') : '<div class="hint">Bu dönemde firmalara satış yok.</div>';
+      html += satilan.length ? satilan.map(function(r){ return hareketSatirHtml(r, false); }).join('') : '<div class="hint">Bu dönemde firmalara satış yok.</div>';
     }
-    if(hareketSekme === 'gelen' && gelen.length) html += '<div class="hint">Alışların TÜMÜ listelenir (seçilen dönemden bağımsız).</div>';
+    if(hareketSekme === 'gelen' && gelen.length) html += '<div class="hint">Girişlerin TÜMÜ listelenir (seçilen dönemden bağımsız): alışlar ve devir, transfer, sayım fazlası gibi diğer giriş belgeleri.</div>';
     if(hareketSekme === 'satilan' && satilan.length >= 200) html += '<div class="hint">İlk 200 belge gösteriliyor — daha kısa dönem seç.</div>';
     html += '<div class="hint" style="margin-top:10px; font-size:11px;">Fiyatlar KDV dahil birim fiyattır.' + (d.sonVeri ? ' ERP verisi: ' + escapeHtml(d.sonVeri) : '') + '</div>';
     hareketBodyEl.innerHTML = html;
