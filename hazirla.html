@@ -369,6 +369,7 @@
       if(r.status !== 'ok'){ toast(r.message, 'hata'); return; }
       siparisKur(r);
       $('sipKatman').classList.remove('gizli');
+      yaz('mkHazirlaAcik', { id: id, z: Date.now() });
     });
   }
   function siparisKur(r){
@@ -453,6 +454,7 @@
   }
   function kapat(){
     if(S && S.sahip && yerel[S.belge.id] && yerel[S.belge.id].kirli) kaydet();
+    try { localStorage.removeItem('mkHazirlaAcik'); } catch(e){}
     kameraKapat(); $('sipKatman').classList.add('gizli'); S = null; listeGetir(true);
   }
   $('skKapat').addEventListener('click', kapat);
@@ -714,6 +716,9 @@
     $('girisKart').classList.add('gizli'); $('anaAlan').classList.remove('gizli');
     $('kimEl').textContent = '👤 ' + kimlik.user;
     katalogYukle(); listeGetir(); bekleyenleriGonder();
+    // Telefon uygulamayı kapattıysa (bellek, arama, kamera…) açık olan sipariş kaldığı yerden açılır.
+    var acik = oku('mkHazirlaAcik');
+    if(acik && acik.id && Date.now() - acik.z < 12 * 3600000) setTimeout(function(){ siparisAc(acik.id); }, 300);
     setInterval(function(){ if(!S && !document.hidden) listeGetir(true); }, 60000);
   }
   if(kimlik) basla();

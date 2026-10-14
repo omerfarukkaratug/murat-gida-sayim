@@ -210,8 +210,9 @@
   .browseTableHead{position:sticky; top:0; z-index:1; display:flex; justify-content:space-between; align-items:center; background:var(--panel2); border-bottom:1.5px solid var(--line); padding:7px 12px; font-size:10.5px; font-weight:800; color:var(--muted); text-transform:uppercase; letter-spacing:.04em; margin:-10px -12px 6px;}
   .browseItem:nth-child(even){background:var(--panel2);}
   .browseItem{border-radius:8px; padding:9px 10px;}
-  .qtyInput{font-family:var(--mono); font-weight:800; font-size:17px; width:56px; text-align:center;    background:var(--panel2); border:1.5px solid transparent; border-radius:var(--r-sm); color:var(--text); padding:8px 0; transition:border-color .15s;}
-  .qtyInput:focus{outline:none; border-color:var(--accent);}
+  /* input.qtyInput: genel input[type=text] kuralı (width:100%) bunu ezmesin */
+  input.qtyInput{font-family:var(--mono); font-weight:800; font-size:17px; width:64px; flex:none; text-align:center;    background:var(--panel2); border:1.5px solid transparent; border-radius:var(--r-sm); color:var(--text); padding:8px 0; transition:border-color .15s;}
+  input.qtyInput:focus{outline:none; border-color:var(--accent); background:var(--panel2);}
   .qtyInput::-webkit-outer-spin-button, .qtyInput::-webkit-inner-spin-button{-webkit-appearance:none; margin:0;}
   .qtyInput[type=number]{-moz-appearance:textfield;}
   /* Build 90: alttan açılan kart (bottom sheet) + uygulama içi hesap makinesi tuş takımı */
@@ -376,7 +377,7 @@
   <header style="border:none; padding:0 0 16px; background:transparent; display:flex; align-items:flex-start; justify-content:space-between;">
     <div>
       <h1><img src="logo-header.png" alt="Murat Gıda" style="height:30px; width:auto; display:block;"></h1>
-      <div class="sub">MK ERP · Murat Gıda • offline • Android • build 217</div>
+      <div class="sub">MK ERP · Murat Gıda • offline • Android • build 218</div>
     </div>
     <button type="button" id="themeToggleBtn" title="Tema seç" style="background:var(--panel2); border:1.5px solid var(--line); color:var(--text); width:34px; height:34px; border-radius:50%; font-size:15px; padding:0; display:flex; align-items:center; justify-content:center; flex-shrink:0;">🎨</button>
   </header>
@@ -1912,6 +1913,7 @@
   }
   function showLoginUI(){
     closeMesaiScreen(); closePlasiyerScreen(); closeHazirlaScreen();
+    try { localStorage.removeItem('mkSonEkran'); } catch(e){}
     if(typeof katalogAlisDenetle === 'function') setTimeout(katalogAlisDenetle, 0);
     loginCardEl.classList.remove('hidden');
     loggedInCardEl.classList.add('hidden');
@@ -7269,6 +7271,40 @@
   // "Güncelle"ye basar. Basmazsa uygulama bir sonraki tam kapanıp açılışta
   // kendiliğinden güncellenir. Kayıtlar telefonda saklı olduğu için güncelleme
   // hiçbir kaydı silmez.
+  // ---------- Son açık ekran ----------
+  // Telefon uygulamayı arka planda kapatırsa (bellek azlığı, arama, kamera…) açılınca kullanıcı
+  // ana menüye değil KALDIĞI EKRANA döner. Veriler zaten telefonda saklı (sayım, mal giriş/çıkış
+  // taslağı, plasiyer siparişi, hazırlama okutmaları); bu yalnızca ekranı geri açar.
+  var SON_EKRAN = 'mkSonEkran';
+  function aktifEkran(){
+    if(!malScreenEl.classList.contains('hidden')) return malTip;
+    var l = [['mesaiScreen','mesai'], ['plasiyerScreen','plasiyer'], ['hazirlaScreen','hazirla'], ['priceScreen','fiyat'], ['hareketScreen','hareket'], ['stokHrkScreen','stok'], ['cariHrkScreen','cari']];
+    for(var i = 0; i < l.length; i++){ var el = document.getElementById(l[i][0]); if(el && !el.classList.contains('hidden')) return l[i][1]; }
+    if(!afterLoginAreaEl.classList.contains('hidden')) return 'sayim';
+    return '';
+  }
+  function sonEkranYaz(){
+    try {
+      if(!state.currentUser) return;
+      var e = aktifEkran();
+      if(e) localStorage.setItem(SON_EKRAN, JSON.stringify({ e: e, z: Date.now(), u: state.currentUser.name }));
+      else localStorage.removeItem(SON_EKRAN);
+    } catch(x){}
+  }
+  function arkayaGitti(){ sonEkranYaz(); try { save(); } catch(x){} }
+  document.addEventListener('visibilitychange', function(){ if(document.visibilityState === 'hidden') arkayaGitti(); });
+  window.addEventListener('pagehide', arkayaGitti);
+  setInterval(sonEkranYaz, 4000);
+  (function(){
+    var se = null;
+    try { se = JSON.parse(localStorage.getItem(SON_EKRAN) || 'null'); } catch(x){}
+    if(!se || !se.e || !state.currentUser || se.u !== state.currentUser.name || Date.now() - se.z > 12 * 3600000) return;
+    setTimeout(function(){
+      if(aktifEkran()) return; // kullanıcı bu arada kendisi bir yere geçtiyse dokunma
+      try { hizliGec(se.e); } catch(x){}
+    }, 250);
+  })();
+
   if('serviceWorker' in navigator){
     var guncelleIstendi = false, guncelleSerit = null;
     function guncellemeSeridi(bekleyen){

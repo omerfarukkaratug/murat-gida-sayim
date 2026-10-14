@@ -785,7 +785,7 @@
       else t = null;
     }
     B = (t && t.cariKod === m.kod && t.cesit === cesit) ? t : { id: yeniId(), cesit: cesit, cariKod: m.kod, cariAd: m.ad, kalemler: [], not: '' };
-    D.taslak = B; kaydetD();
+    D.taslak = B; D.taslakAcik = true; kaydetD();
     $('bkAd').textContent = (cesit === 'arac' ? '🚚 Araçtan Satış — ' : '🛒 Sipariş — ') + B.cariAd;
     $('bkAlt').textContent = B.cariKod;
     var mm = musteriBul(B.cariKod);
@@ -807,7 +807,8 @@
   function belgeKapat(){ kameraKapat(); $('belgeKatman').classList.add('gizli'); }
   $('bkKapat').addEventListener('click', function(){
     if(B && B.kalemler.length) toast('Taslak saklandı — aynı müşteriden tekrar açınca devam edersin', 'uyari');
-    else { D.taslak = null; kaydetD(); }
+    else { D.taslak = null; }
+    D.taslakAcik = false; kaydetD();
     belgeKapat();
   });
   $('bkNot').addEventListener('input', function(){ if(B){ B.not = this.value; kaydetD(); } });
@@ -1690,7 +1691,13 @@
     sekmeCiz(); durumCiz(); musteriCiz(); kimSecenek('');
     katalogYukle().then(function(){
       if(!katalog.length) toast('Telefonda ürün listesi yok — uygulama internetle açılınca iner', 'uyari');
-      if(D.taslak && D.taslak.kalemler && D.taslak.kalemler.length) toast('Yarım kalan ' + (D.taslak.cesit === 'arac' ? 'araç satışı' : 'sipariş') + ' var: ' + D.taslak.cariAd, 'uyari');
+      var t = D.taslak;
+      if(t && D.taslakAcik && katalog.length){
+        // Telefon uygulamayı kapattıysa açık sipariş kaldığı yerden açılır.
+        belgeAc(t.cesit, musteriBul(t.cariKod) || { kod: t.cariKod, ad: t.cariAd });
+        if(t.kalemler && t.kalemler.length) toast('Kaldığın yerden devam: ' + t.cariAd + ' (' + t.kalemler.length + ' kalem)', 'uyari');
+      }
+      else if(t && t.kalemler && t.kalemler.length) toast('Yarım kalan ' + (t.cesit === 'arac' ? 'araç satışı' : 'sipariş') + ' var: ' + t.cariAd, 'uyari');
     });
     veriYenile();
     setTimeout(gonder, 1500);
