@@ -222,3 +222,8 @@ müşterinin daha önce aldığı ürün önce seçilir. "72 LI / 56 LI" paket a
 - build 225: Düğün/Mevlüt listesi **reyon reyon** (bakliyat-pirinç, un-şeker-irmik, yağlar, salça-turşu-sos,
   baharat-tuz-kuruyemiş, süt ürünleri-yumurta, su-çay, manav, ekmek, et, ambalaj-servis, temizlik-mutfak);
   sepete ve depoya bu sırayla gider. Sipariş kalemleri depoya artık sepetteki sırayla gider (eskiden tersi).
+- build 226: Yağlar ayrı grup (tereyağı, sıvı yağ 5 ml, margarin 3 g — üçü varsayılan seçili; yemek yağı tereyağı →
+  sıvı → margarin sırasıyla çözülür). Baharatlar tek tek (tuz, karabiber, toz biber, pul biber, kimyon, limon suyu).
+  Temizlik ayrı ayrı (krem, bulaşık det., ovma tozu, tel, sünger, bulaşık eldiveni). Nohut ayrı seçenek ("az", 4 g).
+  Liste satırı: ürün + SATIR TUTARI; − miktar + (dökmede 0,5 kg adım) × birim fiyat; 💡 öneri fiyatına tek dokunuş;
+  yazarken tutar ve toplam anında değişir; değiştirilen fiyat sepette taban kontrolünden geçer.
