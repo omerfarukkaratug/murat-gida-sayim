@@ -8,7 +8,7 @@
 // bir sürüm dağıttıktan sonra /exec adresini boş açtığında burada yazan
 // numarayı görmelisin; index.html'in üstündeki "build" numarasıyla
 // eşleşecek şekilde ben her ikisini birlikte güncelliyorum.
-var GS_VERSION = 'build181';
+var GS_VERSION = 'build182';
 
 // Sheets'te "Saat" sütunu zaman biçimli olarak algılanırsa, hücre değeri düz
 // metin değil bir Date nesnesi olarak gelir ve String(...) çirkin bir çıktı
@@ -4245,6 +4245,7 @@ function plasiyerIstek(p, callback) {
     if (a === 'plasiyer_kontrol') return outJson(plsKontrol(p.ids), callback);
     if (a === 'plasiyer_son_fiyat') return outJson(plsSonFiyat(k, p.cariKod), callback);
     if (a === 'plasiyer_urun') return outJson(plsUrun(k, p.stokKodu, p.barkod), callback);
+    if (a === 'plasiyer_oneri') return outJson(plsOneri(k, p), callback);
     if (a === 'plasiyer_risk') return outJson(plsRiskDetay(k, p.cariKod), callback);
     if (a === 'plasiyer_liste') return outJson(plsListe(k, p), callback);
     if (a === 'plasiyer_rapor') return outJson(plsRapor(k, p.ay), callback);
@@ -4385,10 +4386,47 @@ function plsSonFiyat(k, cariKod) {
   try {
     var r = dbCagir(ayar, 'plasiyer_son_fiyat', { p_cari_kod: cariKod, p_gun: 365 });
     if (!r || r.status !== 'ok') throw new Error((r && r.message) || 'cevap yok');
+    // Öneri fiyatı: EN SON alış × bu müşteriye bu üründe ortalama satış oranı (013_oneri_fiyat.sql).
+    // Telefona yalnızca öneri gider; oran ve alış fiyatı SADECE maliyet yetkilisine.
+    r.satirlar = (r.satirlar || []).map(function (x) {
+      var y = x.slice(0, 8), oran = Number(x[8]) || 0, alis = Number(x[9]) || 0;
+      y[8] = (oran > 0 && alis > 0) ? plsOneriYuvarla(alis * oran) : null;
+      y[9] = y[8] ? 'urun' : '';
+      if (k.maliyet) { y[10] = oran || null; y[11] = alis || null; y[12] = Number(x[10]) || 0; }
+      return y;
+    });
+    var genel = Number(r.genelOran) || 0;
+    if (k.maliyet) r.genelOran = genel || null; else delete r.genelOran;
+    try { CacheService.getScriptCache().put('pls_genel_oran_' + cariKod, String(genel), 21600); } catch (e) { /* önbelleksiz */ }
     return r;
   } catch (err) {
     gunlukYaz('veritabani', 'plasiyer son fiyat', 'Sorgu başarısız: ' + err, true);
     return { status: 'error', message: 'Son satış fiyatları alınamadı — biraz sonra tekrar dene' };
+  }
+}
+
+// Öneri fiyatı kuruşu yukarı, 10 kuruşa yuvarlanır (kâr oranı aşağı kaçmasın).
+function plsOneriYuvarla(n) { return Math.ceil(n * 10 - 1e-6) / 10; }
+
+// Müşteriye HİÇ satılmamış ürün: müşterinin genel oranı (ürün oranlarının ortancası) × güncel alış.
+function plsOneri(k, p) {
+  var cariKod = plsMetin(p.cariKod, 80), stokKodu = plsMetin(p.stokKodu, 60), barkod = plsMetin(p.barkod, 60);
+  if (!cariKod || (!stokKodu && !barkod)) throw new Error('Müşteri ve ürün seç');
+  if (!k.yonetim && !plsBenimMi(plsAtamalar()[cariKod], k.ben)) throw new Error('Bu müşteri sana atanmış değil');
+  var ayar = dbAyar(); if (!ayar) return { status: 'ok', oneri: null };
+  var genel = null;
+  try { var c = CacheService.getScriptCache().get('pls_genel_oran_' + cariKod); if (c !== null && c !== undefined) genel = Number(c) || 0; } catch (e) { /* önbelleksiz */ }
+  try {
+    if (genel === null) { var r = dbCagir(ayar, 'plasiyer_son_fiyat', { p_cari_kod: cariKod, p_gun: 365 }); genel = Number(r && r.genelOran) || 0; }
+    if (!genel) return { status: 'ok', oneri: null };
+    var a = dbCagir(ayar, 'plasiyer_guncel_alis', { p_stok_kodu: stokKodu, p_barkod: barkod });
+    var alis = Number(a && a.alis) || 0;
+    if (!alis) return { status: 'ok', oneri: null };
+    var sonuc = { status: 'ok', oneri: plsOneriYuvarla(alis * genel), tur: 'genel' };
+    if (k.maliyet) { sonuc.oran = genel; sonuc.alis = alis; }
+    return sonuc;
+  } catch (err) {
+    return { status: 'ok', oneri: null };
   }
 }
 

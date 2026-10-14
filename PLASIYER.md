@@ -154,3 +154,15 @@ depoda okutularak toplanır. ERP'ye yazmaz; `SiparisHazirlik` sekmesinde durur. 
 - **Sepette ürüne dokun:** düzenleme penceresi — −/+ ve miktar, fiyat, Liste / Özel / Son satış düğmeleri,
   🎨 çeşitler, ℹ️ ürün bilgisi, 🗑 Sil, Tamam. Basılı tutmak yine ürün bilgisini açar.
 - Alt çubuk tek satır: kalem/adet, toplam, 👁 Kâr (basılı tut), 💾 Kaydet. Yarım sipariş sepet sekmesinde açılır.
+
+## build 220 / Code.gs build182 — müşteriye özel ÖNERİ fiyatı (013_oneri_fiyat.sql)
+
+- Siparişe ürün **raf (liste) fiyatıyla** girer; altında yeşil **💡 öneri** fiyatı görünür (arama satırında, sepette,
+  düzenleme penceresinde "💡 Önerilen" düğmesi — dokununca fiyat o olur).
+- Hesap (müşteri müşteri, ürün ürün): bu müşteriye bu ürünün son 6 satışında **satış fiyatı ÷ o günkü son alış**
+  oranlarının ortalaması × **en son alış fiyatı** (net, iskontolar düşülmüş, KDV dahil). Mal zamlı geldiyse öneri de
+  aynı oranla artar. 10 kuruşa yukarı yuvarlanır. 0,5–4 dışındaki oranlar veri hatası sayılıp atlanır.
+- Ürün bu müşteriye hiç satılmadıysa: müşterinin genel oranı (ürün oranlarının ortancası) × son alış.
+- Gizlilik: telefona yalnız öneri fiyatı gider; oran ve alış fiyatı sadece `plasiyer_maliyet` yetkilisine
+  (o da yalnız 👁 Kâr basılıyken görür). Öneri taban fiyatın altındaysa yine yazılamaz.
+- Kurulum: Supabase'de 011 → 012 → **013** sırayla; ardından Code.gs build182.

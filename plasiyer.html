@@ -90,7 +90,8 @@
   .sonuc .ad{flex:1; min-width:0; font-size:14px; font-weight:700;}
   .sonuc .ad small{display:block; font-weight:500; color:var(--muted); font-family:var(--mono); font-size:11.5px;}
   .cesitBtn{font-family:var(--sans, inherit); font-size:12px; font-weight:800; padding:3px 9px; margin-top:3px; border-radius:8px; border:1.5px solid var(--accent, #1d4ed8); background:transparent; color:var(--accent, #1d4ed8); white-space:nowrap;}
-  .sonuc .f{font-family:var(--mono); font-weight:800; white-space:nowrap;}
+  .sonuc .f{font-family:var(--mono); font-weight:800; white-space:nowrap; text-align:right;}
+  .oneri{display:block; font-size:12px; font-weight:800; color:var(--green); margin-top:2px;}
   .sonuc .adt{flex:none; width:66px; text-align:center; font-family:var(--mono); font-weight:800; font-size:17px; padding:9px 4px; border-radius:10px;}
   .sonuc .adt.dolu{border-color:var(--accent); background:#2563eb1f;}
   .sonuc.sepette{background:#2563eb0d;}
@@ -802,7 +803,8 @@
     istek(kimlikli({ action:'plasiyer_son_fiyat', cariKod: kod }), function(r){
       if(r.status === 'ok'){
         // f: NET (iskontolar düşülmüş) KDV dahil son satış; net 0 ise ERP'den net gelmemiş, brüt.
-        var m = {}; (r.satirlar || []).forEach(function(s){ m[s[0] || s[1]] = { f: s[2], t: s[3], m: s[4], kez: s[5], b: s[1], ort: s[6], net: s[7] === undefined ? 1 : s[7] }; });
+        // o: ÖNERİ fiyatı (son alış × bu müşteriye ortalama satış oranı); oran/mal yalnız maliyet yetkilisine gelir.
+        var m = {}; (r.satirlar || []).forEach(function(s){ m[s[0] || s[1]] = { f: s[2], t: s[3], m: s[4], kez: s[5], b: s[1], ort: s[6], net: s[7] === undefined ? 1 : s[7], o: s[8] || null, oran: s[10] || null, mal: s[11] || null, on: s[12] || 0 }; });
         // En fazla 40 müşterinin listesi saklanır (hafıza dolmasın).
         var kodlar = Object.keys(D.sonFiyat).sort(function(a, b){ return D.sonFiyat[a].zaman - D.sonFiyat[b].zaman; });
         while(kodlar.length >= 40){ delete D.sonFiyat[kodlar.shift()]; }
@@ -818,6 +820,22 @@
     var l = bekleyenler(kod); if(!l.length) return '';
     var urun = []; l.forEach(function(b){ b.satirlar.forEach(function(x){ urun.push(esc(x[1]) + ' ×' + miktarMetni(x[2])); }); });
     return '⏳ Bu müşterinin <b>bekleyen siparişi</b> var (' + urun.length + ' kalem, depoda eksik çıktı — mal gelince gidecek): ' + urun.slice(0, 6).join(', ') + (urun.length > 6 ? '…' : '') + '. Aynılarını tekrar yazma.';
+  }
+  // Öneri fiyatı: önce bu müşteriye bu ürünün geçmişinden; yoksa sunucudan (müşterinin genel oranı) bir kez sorulur.
+  var oneriSoruldu = {}, oneriGenel = {};
+  function oneriBul(u){
+    if(!B || !u) return null;
+    var s = sonFiyat(B.cariKod, u); if(s && s.o) return { o: s.o, tur: 'urun', oran: s.oran, mal: s.mal, on: s.on };
+    return oneriGenel[B.cariKod + '|' + u.b] || null;
+  }
+  function oneriSor(u){
+    var anahtar = B.cariKod + '|' + u.b; oneriSoruldu[anahtar] = 1;
+    istek(kimlikli({ action:'plasiyer_oneri', cariKod: B.cariKod, stokKodu: u.k || '', barkod: u.b }), function(r){
+      if(r.status !== 'ok' || !r.oneri) return;
+      oneriGenel[anahtar] = { o: r.oneri, tur: 'genel', oran: r.oran || null, mal: r.alis || null, on: 0 };
+      if(B && B.cariKod + '|' + kpBarkod === anahtar) kpCiz();
+      if(B) kalemCiz();
+    });
   }
   function sonFiyat(kod, u){ var c = D.sonFiyat[kod]; if(!c || !u) return null; return c.m[u.k] || c.m[u.b] || null; }
   function ozelFiyat(kod, u){ var o = D.veri && D.veri.ozel && D.veri.ozel[kod]; if(!o || !u) return null; var x = o[u.k] || o[u.b]; return x ? { f: x[0], t: x[2] } : null; }
@@ -1002,7 +1020,7 @@
     var cs = cesitCizimde ? [] : cesitBul(u); if(cs.length) alt.push('<button type="button" class="cesitBtn" data-cesit="' + esc(u.b) + '">🎨 ' + cs.length + ' çeşit</button>');
     if(s) alt.push('son ' + para(s.f) + (s.net === 0 ? ' brüt' : '') + ' · ' + esc(s.t) + (s.kez > 1 ? ' · ' + s.kez + ' kez, ort. ' + miktarMetni(s.ort || s.m) : ' · ' + miktarMetni(s.m) + ' adet'));
     return '<div class="sonuc' + (var_ ? ' sepette' : '') + '" data-b="' + esc(u.b) + '" data-uzun="1"><div class="ad">' + esc(u.a) + '<small>' + alt.join(' · ') + '</small></div>' +
-      '<div class="f">' + (o ? '<span class="etiket yesil">özel</span><br>' + para(o.f) : (isFinite(u.f) ? para(u.f) : '—')) + '</div>' +
+      '<div class="f">' + (o ? '<span class="etiket yesil">özel</span><br>' + para(o.f) : (isFinite(u.f) ? para(u.f) : '—')) + (s && s.o ? '<small class="oneri" title="Verebileceğin fiyat">💡 ' + para(s.o) + '</small>' : '') + '</div>' +
       '<input class="adt' + (var_ ? ' dolu' : '') + '" data-adt="' + esc(u.b) + '" inputmode="' + (kesirli(u) ? 'decimal' : 'numeric') + '" enterkeyhint="done" autocomplete="off" placeholder="adet" value="' + (var_ ? esc(miktarMetni(var_.m)) : '') + '" aria-label="Adet"></div>';
   }
   function urunAraCiz(){
@@ -1115,6 +1133,7 @@
       if(hata) alt.push('<span class="hata">⚠️ ' + esc(hata) + '</span>');
       else if(k.kontrolsuz) alt.push('<span class="uyari">fiyat kontrol edilemedi</span>');
       if(k.of && Math.abs(k.f - k.of) < 0.005) alt.push('<span class="iyi">özel fiyat</span>');
+      var on = oneriBul(u || k); if(on && Math.abs(k.f - on.o) > 0.004) alt.push('<span class="iyi">💡 verebilirsin ' + para(on.o) + '</span>');
       if(stokGorur() && u && isFinite(u.st) && k.m > u.st) alt.push('<span class="stokYok">stok ' + miktarMetni(u.st) + ' — yetmiyor</span>');
       var bk = bekleyenMiktar(B.cariKod, k.b); if(bk) alt.push('<span class="uyari">⏳ bekleyende ' + miktarMetni(bk) + '</span>');
       if(mg && karAcik){ var mal = maliyetHesap(u); if(mal && k.f > 0) alt.push('<b>Marj %' + (((k.f - mal) / k.f) * 100).toLocaleString('tr-TR', { maximumFractionDigits:1 }) + '</b>'); }
@@ -1142,7 +1161,9 @@
     var bk = bekleyenMiktar(B.cariKod, k.b); if(bk) bilgi.push('<span class="uyari">⏳ bekleyende ' + miktarMetni(bk) + '</span>');
     if(maliyetGorur() && karAcik){ var mal = maliyetHesap(u); if(mal && k.f > 0) bilgi.push('<b>Marj %' + (((k.f - mal) / k.f) * 100).toLocaleString('tr-TR', { maximumFractionDigits:1 }) + '</b>'); }
     var fd = function(ad, f){ var on = Math.abs(k.f - f) < 0.005; return '<button type="button" data-fiyat="' + f + '" data-i="' + i + '"' + (on ? ' class="ana"' : '') + (serbest ? '' : ' disabled') + '>' + ad + ' ' + para(f) + '</button>'; };
-    var dug = [];
+    var dug = [], on = oneriBul(u || k);
+    if(on) dug.push(fd('💡 Önerilen', on.o));
+    else if(!oneriSoruldu[B.cariKod + '|' + k.b]) oneriSor(u || k);
     if(k.lf) dug.push(fd('Liste', k.lf));
     if(k.of) dug.push(fd('Özel', k.of));
     if(s) dug.push(fd('Son satış' + (s.net === 0 ? ' (brüt)' : ''), s.f) + '<span class="ipucu mono" style="align-self:center;">' + esc(s.t) + '</span>');
@@ -1153,6 +1174,8 @@
         '<div class="sag" style="flex:1;"><div class="ipucu">Tutar</div><b class="mono" style="font-size:20px;">' + para(k.m * k.f) + '</b></div></div>' +
       '<label>Birim fiyat (KDV dahil)</label><div class="kpFiyat"><input inputmode="decimal" data-f="' + i + '" value="' + esc(para(k.f)) + '"' + (serbest ? '' : ' readonly') + ' aria-label="Birim fiyat"></div>' +
       (dug.length ? '<div class="kpDug">' + dug.join('') + '</div>' : '') +
+      (on ? '<div class="ipucu" style="margin-top:6px;">💡 Önerilen: ' + (on.tur === 'genel' ? 'bu müşterinin genel kâr oranıyla' : 'bu müşteriye bu ürünü sattığın ortalama kâr oranıyla') + ', <b>en son alış fiyatına göre</b> (mal zamlı geldiyse öneri de artar).' +
+        (maliyetGorur() && karAcik && on.oran ? ' Oran %' + ((on.oran - 1) * 100).toLocaleString('tr-TR', { maximumFractionDigits:1 }) + (on.mal ? ' · son alış ' + para(on.mal) : '') + (on.on ? ' · ' + on.on + ' satış' : '') : '') + '</div>' : '') +
       (hata ? '<div class="hata" style="margin-top:8px;">' + esc(hata) + '</div>' : '') +
       (!hata && k.kontrolsuz ? '<div class="uyari" style="margin-top:8px;">⚠️ Fiyat internetsiz girildi, kontrol edilemedi</div>' : '') +
       (bilgi.length ? '<div class="ipucu" style="margin-top:8px;">' + bilgi.join(' · ') + '</div>' : '') +
