@@ -1387,6 +1387,8 @@
     pul_biber:   { ad:'Pul biber', ara:['pul biber'] },
     nane:        { ad:'Kuru nane', ara:['kuru nane', 'nane'], hayir:['sakiz', 'seker'] },
     limon_tuzu:  { ad:'Limon tuzu', ara:['limon tuzu'] },
+    kimyon:      { ad:'Kimyon', ara:['kimyon'] },
+    limon_suyu:  { ad:'Limon suyu / sosu', ara:['limon suyu', 'limon sosu'], hayir:['tuzu'] },
     sivi_yag:    { ad:'Ayçiçek yağı', ara:['aycicek yagi', 'aycicek', 'sivi yag', 'misir ozu'], hayir:['margarin', 'tereyag'] },
     tereyagi:    { ad:'Tereyağı', ara:['tereyag'] },
     margarin:    { ad:'Margarin', ara:['margarin'] },
@@ -1408,7 +1410,9 @@
     ekmek:       { ad:'Ekmek', ara:['ekmek'], hayir:['kirinti', 'galeta'] },
     et:          { ad:'Et (kuşbaşı)', ara:['dana kusbasi', 'kusbasi', 'dana'], et:1 },
     tavuk:       { ad:'Tavuk', ara:['tavuk but', 'tavuk gogus', 'tavuk'], hayir:['bulyon', 'suyu'], et:1 },
-    kopuk_tabak: { ad:'Köpük tabak (tabldot)', ara:['kopuk tabak', 'tabildot', 'tabldot'] },
+    kopuk_tabak: { ad:'5 gözlü tabldot (köpük tabak)', ara:['5 gozlu tabak', '5 gozlu', 'tabildot 5', 'tabldot 5'] },
+    kopuk_tabak3:{ ad:'3 gözlü tabldot (köpük tabak)', ara:['3 gozlu tabak', '3 gozlu', 'tabildot 3', 'tabldot 3'] },
+    onluk:       { ad:'Önlük (tek kullanımlık)', ara:['onluk'] },
     kasik:       { ad:'Plastik kaşık', ara:['plastik kasik', 'kasik'] },
     sogus_tabagi:{ ad:'Söğüş tabağı', ara:['sogus tabagi'] },
     masa_kagidi: { ad:'Masa kağıdı', ara:['masa kagidi'] },
@@ -1430,9 +1434,9 @@
     naylon:      { ad:'Naylon torba', ara:['naylon torba'] },
     camasir_suyu:{ ad:'Çamaşır suyu', ara:['camasir suyu'] }
   };
-  var ADET_MALZEME = { yumurta:1, ayran:1, ekmek:1, bardak_su:1, damacana:1, karistirici:1, kopuk_tabak:1, kasik:1, sogus_tabagi:1, islak_mendil:1, pecete:1, kagit_bardak:1, sizdirmaz:1, tuzluk:1,
+  var ADET_MALZEME = { kopuk_tabak3:1, onluk:1, yumurta:1, ayran:1, ekmek:1, bardak_su:1, damacana:1, karistirici:1, kopuk_tabak:1, kasik:1, sogus_tabagi:1, islak_mendil:1, pecete:1, kagit_bardak:1, sizdirmaz:1, tuzluk:1,
     ispirto:1, krem_det:1, bulasik_det:1, ovma_tozu:1, tel:1, sunger:1, bulasik_eld:1, muayene_eld:1, cop_poseti:1, camasir_suyu:1 };
-  var ML_MALZEME = { sut:1, sivi_yag:1 };
+  var ML_MALZEME = { sut:1, sivi_yag:1, limon_suyu:1 };
   // [seçenek, ad, [[malzeme, kişi başı], …]] — 'yag' yemek yağı, 'tatli_yag' tatlı yağı (tercihe göre çözülür)
   var YEMEK = {
     corba: { ad:'Çorba', sec:[
@@ -1452,7 +1456,10 @@
       ['irmik', 'İrmik helvası (kunarlı)', [['irmik', 15], ['seker', 30], ['kunar', 0.35], ['tatli_yag', 7]]],
       ['zerde', 'Zerde', [['pirinc', 10], ['seker', 20], ['nisasta', 3]]],
       ['sutlac', 'Sütlaç', [['sut', 120], ['pirinc', 10], ['seker', 15], ['nisasta', 3]]] ] },
-    genel: { ad:'Tuz ve baharat', sec:[ ['genel', 'Tuz, karabiber, toz biber', [['tuz', 9], ['karabiber', 0.22], ['toz_biber', 0.15]]] ] },
+    genel: { ad:'Tuz ve baharat', cok:1, sec:[
+      ['genel', 'Tuz, karabiber, toz biber', [['tuz', 9], ['karabiber', 0.22], ['toz_biber', 0.15]]],
+      ['kimyon', 'Kimyon', [['kimyon', 0.1]]],
+      ['limon_suyu', 'Limon suyu', [['limon_suyu', 1]]] ] },
     salata: { ad:'Yanında', cok:1, sec:[
       ['tursu', 'Turşu', [['tursu', 40]]],
       ['sogus', 'Söğüş (manav)', [['domates', 50], ['salatalik', 40], ['biber', 10]]],
@@ -1463,7 +1470,8 @@
       ['ayran', 'Ayran', [['ayran', 1]]],
       ['cay', 'Çay (küp şeker, karıştırıcı)', [['cay', 1], ['kup_seker', 4], ['karistirici', 0.5]]] ] },
     servis: { ad:'Servis malzemesi', cok:1, sec:[
-      ['kopuk_tabak', 'Köpük tabak', [['kopuk_tabak', 1]]],
+      ['kopuk_tabak', '5 gözlü tabldot', [['kopuk_tabak', 1]]],
+      ['kopuk_tabak3', '3 gözlü tabldot', [['kopuk_tabak3', 1]]],
       ['kasik', 'Plastik kaşık', [['kasik', 1]]],
       ['sogus_tabagi', 'Söğüş tabağı', [['sogus_tabagi', 0.3]]],
       ['masa_kagidi', 'Masa kağıdı', [['masa_kagidi', 12]]],
@@ -1477,6 +1485,7 @@
       ['ispirto', 'İspirto', [['ispirto', 0.003]]],
       ['temizlik', 'Temizlik seti (krem, bulaşık det., ovma tozu, tel, sünger, eldiven)', [['krem_det', 0.003], ['bulasik_det', 0.001], ['ovma_tozu', 0.002], ['tel', 0.002], ['sunger', 0.001], ['bulasik_eld', 0.002]]],
       ['muayene', 'Muayene eldiveni', [['muayene_eld', 0.09]]],
+      ['onluk', 'Önlük', [['onluk', 0.01]]],
       ['cop', 'Çöp poşeti', [['cop_poseti', 0.012]]],
       ['naylon', 'Naylon torba', [['naylon', 1]]],
       ['camasir', 'Çamaşır suyu', [['camasir_suyu', 0.002]]] ] },
@@ -1485,10 +1494,10 @@
   var MN_SORU = [
     { id:'tur', ad:'Ne için?', sec:[['dugun', 'Düğün'], ['mevlut', 'Mevlüt'], ['taziye', 'Taziye / hayır'], ['diger', 'Diğer']], vars:'dugun' },
     { id:'corba', yemek:1, vars:'yayla' }, { id:'ana', yemek:1, vars:'fasulye' }, { id:'pilav', yemek:1, vars:'pirinc' },
-    { id:'tatli', yemek:1, vars:'irmik' }, { id:'salata', yemek:1, vars:'tursu' }, { id:'genel', yemek:1, vars:'genel' },
+    { id:'tatli', yemek:1, vars:'irmik' }, { id:'salata', yemek:1, vars:'tursu' }, { id:'genel', yemek:1, vars:['genel', 'kimyon', 'limon_suyu'] },
     { id:'icecek', yemek:1, vars:['bardak_su', 'damacana'] },
     { id:'servis', yemek:1, vars:['kopuk_tabak', 'kasik', 'sogus_tabagi', 'masa_kagidi', 'islak_mendil', 'sizdirmaz', 'tuzluk'] },
-    { id:'mutfak', yemek:1, vars:['komur', 'ispirto', 'temizlik', 'muayene', 'cop', 'naylon'] },
+    { id:'mutfak', yemek:1, vars:['komur', 'ispirto', 'temizlik', 'muayene', 'onluk', 'cop', 'naylon'] },
     { id:'ekmek', yemek:1, vars:'' },
     { id:'yag', ad:'Yemeklerde yağ', sec:[['tere', 'Tereyağı'], ['sivi', 'Sıvı yağ'], ['yarim', 'Yarı yarıya']], vars:'tere' },
     { id:'et', ad:'Et / tavuk listeye eklensin mi?', sec:[['hayir', 'Hayır (kasaptan)'], ['evet', 'Evet']], vars:'hayir' }

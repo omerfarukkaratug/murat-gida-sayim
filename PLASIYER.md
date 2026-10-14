@@ -217,3 +217,5 @@ Varsayılan menü: yayla çorbası, etli kuru fasulye, pirinç pilavı, kunarlı
 Yeni soru grupları: İçecek (bardak su, damacana, ayran, çay), Servis malzemesi, Mutfak ve temizlik, Tuz-baharat.
 Ürün eşlemesi ERP adlarına göre (BALDO PIRINC KG, OBA IRMIK KG, GURTUZ, K KUNAR ICI, NAZLI BARDAK SU 72 LI …);
 müşterinin daha önce aldığı ürün önce seçilir. "72 LI / 56 LI" paket adedi düzgün okunuyor.
+- build 224: Tuz ve baharat'a kimyon (0,1 g) ve limon suyu (1 ml) eklendi (varsayılan seçili); servis malzemesinde
+  5 gözlü (varsayılan) ve 3 gözlü tabldot ayrı seçenek; mutfak ve temizlikte tek kullanımlık önlük (1000 kişiye 10 adet).
