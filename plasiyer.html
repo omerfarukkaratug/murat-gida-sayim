@@ -1349,7 +1349,8 @@
     if(!confirm((B.cesit === 'arac' ? 'Araçtan satış' : 'Sipariş') + ' kaydedilsin mi?\n\n' + B.cariAd + '\n' + B.kalemler.length + ' kalem · ' + tl(toplam) + (pesin ? '\nPeşin tahsilat: ' + tl(pesin.tutar) : ''))) return;
     var cz = new Date().toISOString();
     var kayit = { tur:'belge', id: B.id, cesit: B.cesit, cariKod: B.cariKod, cariAd: B.cariAd, not: ($('bkNot').value || '').trim(), cz: cz, plasiyer: kimlik.user, toplam: toplam,
-      satirlar: B.kalemler.slice().reverse().map(function(k){ var s = { b:k.b, k:k.k, a:k.a, m:k.m, f:k.f, lf:k.lf, kdv:k.kdv }; if(k.of) s.of = k.of; if(k.sf) s.sf = k.sf; if(k.n) s.n = k.n; return s; }) };
+      satirlar: B.kalemler.map(   // depo sepetteki sırayla görür (düğün listesinde reyon sırası)
+        function(k){ var s = { b:k.b, k:k.k, a:k.a, m:k.m, f:k.f, lf:k.lf, kdv:k.kdv }; if(k.of) s.of = k.of; if(k.sf) s.sf = k.sf; if(k.n) s.n = k.n; return s; }) };
     D.taslak = null;
     kuyrugaEkle(kayit);
     if(pesin) kuyrugaEkle({ tur:'tahsilat', id: yeniId(), cariKod: B.cariKod, cariAd: B.cariAd, tutar: pesin.tutar, yontem: pesin.yontem, not: 'Araçtan satış peşin', bagli: B.id, cz: cz, plasiyer: kimlik.user });
@@ -1434,6 +1435,24 @@
     naylon:      { ad:'Naylon torba', ara:['naylon torba'] },
     camasir_suyu:{ ad:'Çamaşır suyu', ara:['camasir suyu'] }
   };
+  // Liste reyon reyon gösterilir (mağazada / depoda toplama sırası); sepete ve depoya da bu sırayla gider.
+  var REYONLAR = [
+    ['🌾 Bakliyat ve pirinç', ['pirinc', 'bulgur_p', 'bulgur', 'mercimek', 'nohut', 'fasulye', 'dogme']],
+    ['🥣 Un, şeker, irmik, makarna', ['irmik', 'seker', 'kup_seker', 'un', 'nisasta', 'sehriye']],
+    ['🫒 Yağlar', ['sivi_yag', 'margarin']],
+    ['🥫 Salça, turşu, sos', ['salca', 'tursu', 'limon_suyu']],
+    ['🌶️ Baharat, tuz, kuruyemiş', ['tuz', 'karabiber', 'toz_biber', 'pul_biber', 'kimyon', 'nane', 'limon_tuzu', 'kunar']],
+    ['🧈 Süt ürünleri, yumurta (soğuk)', ['tereyagi', 'yogurt', 'sut', 'ayran', 'yumurta']],
+    ['💧 Su, çay, içecek', ['bardak_su', 'damacana', 'cay']],
+    ['🥬 Manav', ['domates', 'salatalik', 'biber', 'sogan', 'sarimsak']],
+    ['🍞 Ekmek', ['ekmek']],
+    ['🥩 Et, tavuk', ['et', 'tavuk']],
+    ['🍽️ Ambalaj ve servis', ['kopuk_tabak', 'kopuk_tabak3', 'kasik', 'sogus_tabagi', 'masa_kagidi', 'islak_mendil', 'pecete', 'kagit_bardak', 'karistirici', 'sizdirmaz', 'tuzluk', 'naylon', 'cop_poseti']],
+    ['🧽 Temizlik ve mutfak', ['krem_det', 'bulasik_det', 'ovma_tozu', 'tel', 'sunger', 'bulasik_eld', 'muayene_eld', 'onluk', 'camasir_suyu', 'komur', 'ispirto']]
+  ];
+  var REYON_SIRA = {};
+  REYONLAR.forEach(function(r, i){ r[1].forEach(function(id, j){ REYON_SIRA[id] = [i, j]; }); });
+  function reyonSira(id){ return REYON_SIRA[id] || [REYONLAR.length, 0]; }
   var ADET_MALZEME = { kopuk_tabak3:1, onluk:1, yumurta:1, ayran:1, ekmek:1, bardak_su:1, damacana:1, karistirici:1, kopuk_tabak:1, kasik:1, sogus_tabagi:1, islak_mendil:1, pecete:1, kagit_bardak:1, sizdirmaz:1, tuzluk:1,
     ispirto:1, krem_det:1, bulasik_det:1, ovma_tozu:1, tel:1, sunger:1, bulasik_eld:1, muayene_eld:1, cop_poseti:1, camasir_suyu:1 };
   var ML_MALZEME = { sut:1, sivi_yag:1, limon_suyu:1 };
@@ -1618,7 +1637,7 @@
       var adetMi = !!ADET_MALZEME[id], u = mnUrunSec(id, top[id]), q = mnMiktar(u, top[id], adetMi);
       return { id: id, toplam: top[id], adetMi: adetMi, u: u, m: q.m, aciklama: q.aciklama, uyari: q.uyari, nereden: nereden[id], not: '', cikar: false };
     });
-    var sira = Object.keys(MALZEME); mnL.sort(function(a, b){ return sira.indexOf(a.id) - sira.indexOf(b.id); });
+    mnL.sort(function(a, b){ var x = reyonSira(a.id), y = reyonSira(b.id); return x[0] - y[0] || x[1] - y[1]; });
     var ozet = [kisi + ' kişi'].concat(Object.keys(YEMEK).map(function(g){ return (mnSecim[g] || []).map(function(sv){ var x = YEMEK[g].sec.filter(function(y){ return y[0] === sv; })[0]; return x ? x[1] + (g === 'corba' ? ' çorbası' : g === 'pilav' ? ' pilavı' : '') : ''; }).join(', '); }).filter(Boolean));
     mnL.ozet = ozet.join(' · ');
     $('mnOzet').innerHTML = '🍲 <b>' + esc(((MN_SORU[0].sec.filter(function(x){ return x[0] === (mnSecim.tur || [])[0]; })[0]) || ['', 'Yemek'])[1]) + '</b> · ' + esc(mnL.ozet) + (pay ? ' · %' + miktarMetni(pay) + ' pay' : '') +
@@ -1629,11 +1648,13 @@
     $('menuPerde').querySelector('.pencere').scrollTop = 0;
   });
   function mnListeCiz(){
-    var top = 0, n = 0;
+    var top = 0, n = 0, sonReyon = -1;
     $('mnSatirlar').innerHTML = mnL.map(function(r, i){
       var m = MALZEME[r.id], u = r.u, f = u ? birimFiyat(u) : 0;
       if(u && !r.cikar){ top += r.m * (f || 0); n++; }
-      return '<div class="mnSatir' + (r.cikar ? ' yok' : '') + '" data-i="' + i + '"><div class="ust"><div class="ad">' + (u ? esc(u.a) : '<span class="hata">' + esc(m.ad) + ' — katalogda bulunamadı</span>') +
+      var ry = reyonSira(r.id)[0], bas = '';
+      if(ry !== sonReyon){ sonReyon = ry; bas = '<div class="bolumBaslik" style="margin-top:14px;">' + esc(REYONLAR[ry] ? REYONLAR[ry][0] : 'Diğer') + '</div>'; }
+      return bas + '<div class="mnSatir' + (r.cikar ? ' yok' : '') + '" data-i="' + i + '"><div class="ust"><div class="ad">' + (u ? esc(u.a) : '<span class="hata">' + esc(m.ad) + ' — katalogda bulunamadı</span>') +
         '<small>' + esc(m.ad) + ' · ' + esc(r.nereden.join(', ')) + '</small><small' + (r.uyari ? ' class="uy"' : '') + '>' + esc(r.aciklama || mnBirim(r.toplam, r.adetMi)) + (u && f ? ' · ' + para(f) + ' ₺' : '') + '</small></div>' +
         (u ? '<input class="mk" inputmode="decimal" data-mk="' + i + '" value="' + esc(miktarMetni(r.m)) + '"' + (r.cikar ? ' disabled' : '') + '>' : '') + '</div>' +
         '<div class="alt"><button type="button" data-degis="' + i + '">🔁 Ürünü değiştir</button>' +
@@ -1684,7 +1705,8 @@
   $('mnGeri').addEventListener('click', function(){ $('mnSoru').classList.remove('gizli'); $('mnListe').classList.add('gizli'); $('mnBaslik').textContent = '🍲 Düğün / Mevlüt yemeği'; });
   $('mnEkle').addEventListener('click', function(){
     var eklenen = 0;
-    mnL.forEach(function(r){
+    // Sepet en yeni ürünü başa koyar: tersten eklenir ki sepette reyon sırası görünsün.
+    mnL.slice().reverse().forEach(function(r){
       if(r.cikar || !r.u || !(r.m > 0)) return;
       kalemEkle(r.u, r.m, true);
       var k = B.kalemler.filter(function(x){ return x.b === r.u.b; })[0];

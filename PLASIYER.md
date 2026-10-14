@@ -219,3 +219,6 @@ Yeni soru grupları: İçecek (bardak su, damacana, ayran, çay), Servis malzeme
 müşterinin daha önce aldığı ürün önce seçilir. "72 LI / 56 LI" paket adedi düzgün okunuyor.
 - build 224: Tuz ve baharat'a kimyon (0,1 g) ve limon suyu (1 ml) eklendi (varsayılan seçili); servis malzemesinde
   5 gözlü (varsayılan) ve 3 gözlü tabldot ayrı seçenek; mutfak ve temizlikte tek kullanımlık önlük (1000 kişiye 10 adet).
+- build 225: Düğün/Mevlüt listesi **reyon reyon** (bakliyat-pirinç, un-şeker-irmik, yağlar, salça-turşu-sos,
+  baharat-tuz-kuruyemiş, süt ürünleri-yumurta, su-çay, manav, ekmek, et, ambalaj-servis, temizlik-mutfak);
+  sepete ve depoya bu sırayla gider. Sipariş kalemleri depoya artık sepetteki sırayla gider (eskiden tersi).
