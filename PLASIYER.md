@@ -249,3 +249,14 @@ müşterinin daha önce aldığı ürün önce seçilir. "72 LI / 56 LI" paket a
   ardından `arsivle`: içinde bulunulan ay + önceki 2 aydan eski, işi bitmiş PlasiyerBelge / PlasiyerTahsilat / SiparisHazirlik satırları
   "Arşiv <sekme> <yıl>" sekmelerine. Açık bekleyen sipariş canlıda kalır. Rapor / liste eski aya bakınca arşivi okur (tekilleştirilir).
 - Yönetim → Güvenlik: "🗄️ Gece Yedeği ve Arşiv" durumu + "💾 Şimdi yedek al".
+
+## build 231 / Code.gs build189 — KENDİ SUNUCUMUZ (sunucu/)
+- `sunucu/`: Code.gs'i değiştirmeden PostgreSQL üzerinde çalıştıran Node sunucusu (ek paket yok; kendi PG istemcisi `pgistemci.js`).
+  `ortam.js` Apps Script servisleri (sekmeler bellekte, değişen satırlar istek sonunda tek işlemde yazılır), `isci.js` Code.gs'i
+  sırayla ve her istekte taze kapsamla çalıştırır (dış işler senkron köprüyle), `ana.js` HTTP (/exec aynı biçim, /saglik, uygulama dosyaları).
+- Veritabanına ulaşılamazsa veri TAM yüklenmeden hiçbir istek çalışmaz; yazılamayan işlem hata döner (telefon tekrar gönderir).
+- Taşıma: Code.gs `?action=tasima` (yalnız yönetici): kilit → liste/sekme dışa aktarım → bitir (Google tüm istekleri yeni sunucuya aktarır,
+  resetcheck `sunucuAdresi` ile telefonlar kendiliğinden geçer) / geri. Araç: `node tasi.js … [--deneme]`, geri yükleme `geri-yukle.js`.
+- Uygulama kendi sitemizden açılırsa varsayılan sunucu aynı adresin /exec'i.
+- Testler: tüm eski testler yeni ortamda (yeni/gasmock.js uyarlayıcı) ve uçtan uca gerçek sunucuda (PostgreSQL) geçti;
+  kill -9 / veritabanı kesintisi / taşıma-yönlendirme senaryoları denendi.

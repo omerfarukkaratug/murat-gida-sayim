@@ -8,7 +8,7 @@
 // bir sürüm dağıttıktan sonra /exec adresini boş açtığında burada yazan
 // numarayı görmelisin; index.html'in üstündeki "build" numarasıyla
 // eşleşecek şekilde ben her ikisini birlikte güncelliyorum.
-var GS_VERSION = 'build188';
+var GS_VERSION = 'build189';
 
 // Sheets'te "Saat" sütunu zaman biçimli olarak algılanırsa, hücre değeri düz
 // metin değil bir Date nesnesi olarak gelir ve String(...) çirkin bir çıktı
@@ -24,6 +24,7 @@ function formatDateValue(v) {
 }
 
 function doGet(e) {
+  var tasima = tasimaKapisi(e, false); if (tasima) return tasima;
   // ?action=katalog ile ürün kataloğunu döndürür.
   // ?action=ilerleme ile ekip genelinde sayım ilerlemesini (%) döndürür.
   // ?callback=xxx varsa (uygulama içinden <script> etiketiyle çağrılır),
@@ -109,7 +110,8 @@ function doGet(e) {
       defaultWakeLock: PropertiesService.getScriptProperties().getProperty('DEFAULT_WAKE_LOCK') || 'true',
       idleMinutes: PropertiesService.getScriptProperties().getProperty('DEFAULT_IDLE_MINUTES') || '0',
       katalogVersion: PropertiesService.getScriptProperties().getProperty('KATALOG_VERSION') || '',
-      cariVersion: PropertiesService.getScriptProperties().getProperty('CARI_VERSION') || ''
+      cariVersion: PropertiesService.getScriptProperties().getProperty('CARI_VERSION') || '',
+      sunucuAdresi: PropertiesService.getScriptProperties().getProperty('SUNUCU_ADRESI') || '' // kendi sunucumuz: telefon bu adrese geçer
     }, e.parameter.callback);
   }
   if (e.parameter && e.parameter.action === 'urun_hareket') {
@@ -1950,6 +1952,7 @@ function sistemDurumu(user, pass, callback) {
 }
 
 function doPost(e) {
+  var tasima = tasimaKapisi(e, true); if (tasima) return tasima;
   var cevap = doPostIsle(e);
   // Veri tabanı gölge kopyası: kilit bırakıldıktan SONRA, en fazla dakikada bir.
   dbGerekirseGonder();
@@ -5233,6 +5236,7 @@ function kurulum() {
 }
 
 function gunlukBakim() {
+  if (PropertiesService.getScriptProperties().getProperty('YENI_SUNUCU')) return { zaman: plsZamanMetni(), atlandi: 'veriler kendi sunucumuzda' };
   var d = { zaman: plsZamanMetni() };
   try { d.yedek = yedekAl(); } catch (e) { d.yedekHata = String(e && e.message || e); }
   try { d.arsiv = arsivle(); } catch (e2) { d.arsivHata = String(e2 && e2.message || e2); }
@@ -5362,4 +5366,80 @@ function bakimIstek(p, callback) {
   } catch (err) {
     return outJson({ status: 'error', message: String(err && err.message || err) + ' — Apps Script\'te "kurulum" işlevini bir kez çalıştırıp izin ver' }, callback);
   }
+}
+
+
+// ============================================================
+// KENDİ SUNUCUMUZA TAŞIMA (build189)
+// sunucu/tasi.js (sunucuda çalışır) şu sırayla çağırır:
+//  1) ne=kilit deger=1  → bu Google sunucusu YAZMAYI durdurur (telefonlar kayıtları saklar, sonra yine gönderir)
+//  2) ne=liste / ne=sekme → tüm sekmeler ve ayarlar (kullanıcılar, oturum anahtarı sırrı, ERP anahtarı dahil) okunur
+//  3) ne=bitir adres=…  → bundan sonra buraya gelen HER istek kendi sunucumuza aktarılır (eski adres de çalışmaya devam eder);
+//     telefonlar "resetcheck" cevabındaki sunucuAdresi ile doğrudan yeni adrese geçer.
+//  Geri dönüş: ne=geri (yönlendirme kalkar, Google sunucusu eskisi gibi çalışır).
+// Yalnız YÖNETİCİ rolü (ayarlar yetkisiyle) kullanabilir; işlemler Sistem Günlüğü'ne yazılır.
+// ============================================================
+function tasimaKapisi(e, post) {
+  var P = (e && e.parameter) || {};
+  if (!post && P.action === 'tasima') return tasimaIslem(P);
+  var props = PropertiesService.getScriptProperties();
+  var yeni = props.getProperty('YENI_SUNUCU');
+  if (yeni) return tasimaYonlendir(e, post, yeni);
+  if (props.getProperty('TASIMA_KILIDI') === '1' && !(P.action === 'resetcheck')) {
+    var m = { status: 'error', tasiniyor: true, message: 'Sunucu taşınıyor — 2-3 dakika sonra tekrar dene. Kayıtların telefonda saklı, kaybolmaz.' };
+    return post ? jsonCikti(m) : outJson(m, P.callback);
+  }
+  return null;
+}
+function tasimaYonlendir(e, post, yeni) {
+  var P = (e && e.parameter) || {};
+  var url = String(yeni).replace(/\/+$/, '') + '/exec';
+  var qs = e && e.queryString ? String(e.queryString) : Object.keys(P).map(function (k) { return encodeURIComponent(k) + '=' + encodeURIComponent(P[k]); }).join('&');
+  try {
+    var r = post
+      ? UrlFetchApp.fetch(url + (qs ? '?' + qs : ''), { method: 'post', contentType: (e.postData && e.postData.type) || 'text/plain', payload: e.postData ? e.postData.contents : '', muteHttpExceptions: true })
+      : UrlFetchApp.fetch(url + (qs ? '?' + qs : ''), { muteHttpExceptions: true });
+    var h = r.getHeaders ? r.getHeaders() : {}, tur = String(h['Content-Type'] || h['content-type'] || '');
+    return ContentService.createTextOutput(r.getContentText()).setMimeType(/javascript/.test(tur) ? ContentService.MimeType.JAVASCRIPT : ContentService.MimeType.JSON);
+  } catch (err) {
+    var m = { status: 'error', message: 'Kendi sunucumuza ulaşılamadı — birazdan tekrar dene (' + String(err && err.message || err).substring(0, 120) + ')' };
+    return post ? jsonCikti(m) : outJson(m, P.callback);
+  }
+}
+function tasimaHucre(v) { return v instanceof Date ? { $d: v.getTime() } : v; }
+function tasimaIslem(P) {
+  var a = requirePermission(P.user, P.pass, 'ayarlar');
+  if (!a.ok || a.role !== 'yonetici') return outJson({ status: 'error', message: a.ok ? 'Taşımayı yalnızca yönetici yapar' : a.message }, P.callback);
+  var props = PropertiesService.getScriptProperties(), ss = SpreadsheetApp.getActiveSpreadsheet(), ne = String(P.ne || '');
+  if (ne === 'liste') {
+    return outJson({ status: 'ok', surum: GS_VERSION, kilit: props.getProperty('TASIMA_KILIDI') === '1', yeni: props.getProperty('YENI_SUNUCU') || '',
+      sekmeler: ss.getSheets().map(function (sh, i) { return { ad: sh.getName(), sira: i, satir: sh.getLastRow(), sutun: sh.getLastColumn(), gizli: sh.isSheetHidden(),
+        donmus: sh.getFrozenRows(), maxSatir: sh.getMaxRows(), maxSutun: sh.getMaxColumns() }; }),
+      ozellikler: props.getProperties() }, P.callback);
+  }
+  if (ne === 'sekme') {
+    var sh = ss.getSheetByName(String(P.ad || '')); if (!sh) return outJson({ status: 'error', message: 'Sekme yok: ' + P.ad }, P.callback);
+    var bas = Math.max(1, parseInt(P.bas, 10) || 1), son = sh.getLastRow(), sut = Math.max(1, sh.getLastColumn());
+    var adet = Math.min(Math.max(1, parseInt(P.adet, 10) || 3000), 5000, Math.max(0, son - bas + 1));
+    var satirlar = adet > 0 ? sh.getRange(bas, 1, adet, sut).getValues().map(function (r) { return r.map(tasimaHucre); }) : [];
+    return outJson({ status: 'ok', ad: sh.getName(), bas: bas, satirlar: satirlar, son: son }, P.callback);
+  }
+  if (ne === 'kilit') {
+    if (String(P.deger) === '1') props.setProperty('TASIMA_KILIDI', '1'); else props.deleteProperty('TASIMA_KILIDI');
+    gunlukYaz('tasima', String(P.user), String(P.deger) === '1' ? 'Taşıma başladı: yazma durduruldu' : 'Taşıma kilidi kaldırıldı', false);
+    return outJson({ status: 'ok' }, P.callback);
+  }
+  if (ne === 'bitir') {
+    var adres = String(P.adres || '').trim();
+    if (!/^https:\/\/[^\s/]+/.test(adres)) return outJson({ status: 'error', message: 'Yeni sunucu adresi https:// ile başlamalı' }, P.callback);
+    props.setProperty('YENI_SUNUCU', adres.replace(/\/+$/, '')); props.setProperty('SUNUCU_ADRESI', adres.replace(/\/+$/, '') + '/exec'); props.deleteProperty('TASIMA_KILIDI');
+    gunlukYaz('tasima', String(P.user), 'Taşındı: tüm istekler ' + adres + ' adresine aktarılıyor', false);
+    return outJson({ status: 'ok' }, P.callback);
+  }
+  if (ne === 'geri') {
+    props.deleteProperty('YENI_SUNUCU'); props.deleteProperty('SUNUCU_ADRESI'); props.deleteProperty('TASIMA_KILIDI');
+    gunlukYaz('tasima', String(P.user), 'Taşıma GERİ ALINDI: Google sunucusu yeniden çalışıyor', true);
+    return outJson({ status: 'ok' }, P.callback);
+  }
+  return outJson({ status: 'error', message: 'Bilinmeyen taşıma işlemi' }, P.callback);
 }

@@ -1,0 +1,9 @@
+{
+  "port": 8080,
+  "veritabani": "postgres://mk:PAROLA@localhost:5432/mkerp",
+  "kod": "../Code.gs",
+  "statik": "..",
+  "yedekDizini": "D:/MK-Yedek",
+  "adres": "https://erp.ornek.com",
+  "smtp": { "host": "smtp.gmail.com", "port": 465, "secure": true, "auth": { "user": "ornek@gmail.com", "pass": "UYGULAMA-SIFRESI" }, "gonderen": "MK ERP <ornek@gmail.com>" }
+}

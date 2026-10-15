@@ -1,0 +1,5 @@
+node_modules/
+ayar.json
+yedekler/
+*.log
+pgpass.conf

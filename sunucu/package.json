@@ -1,0 +1,10 @@
+{
+  "name": "mk-sunucu",
+  "version": "1.0.0",
+  "private": true,
+  "description": "MK ERP kendi sunucusu: Code.gs'i PostgreSQL üzerinde çalıştırır (ek paket gerekmez)",
+  "main": "ana.js",
+  "scripts": { "start": "node ana.js" },
+  "engines": { "node": ">=20" },
+  "optionalDependencies": { "nodemailer": "6.9.16" }
+}

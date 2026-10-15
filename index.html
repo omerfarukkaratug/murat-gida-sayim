@@ -377,7 +377,7 @@
   <header style="border:none; padding:0 0 16px; background:transparent; display:flex; align-items:flex-start; justify-content:space-between;">
     <div>
       <h1><img src="logo-header.png" alt="Murat Gıda" style="height:30px; width:auto; display:block;"></h1>
-      <div class="sub">MK ERP · Murat Gıda • offline • Android • build 230</div>
+      <div class="sub">MK ERP · Murat Gıda • offline • Android • build 231</div>
     </div>
     <button type="button" id="themeToggleBtn" title="Tema seç" style="background:var(--panel2); border:1.5px solid var(--line); color:var(--text); width:34px; height:34px; border-radius:50%; font-size:15px; padding:0; display:flex; align-items:center; justify-content:center; flex-shrink:0;">🎨</button>
   </header>
@@ -1705,7 +1705,7 @@
   // ve unutulursa o telefon sessizce eski/ölü adrese takılı kalır), HER
   // SEFERİNDE güncel adrese zorluyoruz. Bu, hangi eski sürümden geliniyor
   // olursa olsun kesin ve kalıcı bir düzeltme sağlar.
-  var DEFAULT_SERVER_URL = 'https://script.google.com/macros/s/AKfycbwH0hVGDXIQhdSxg2neDBNUEOxY1SNacJRz4cqf3WaP8xgAhlEnKfRv5xnlENKnh3XuYA/exec';
+  var DEFAULT_SERVER_URL = (location.protocol === 'https:' && !/(^|\.)(github\.io|google\.com|googleusercontent\.com)$/.test(location.hostname)) ? location.origin + '/exec' : 'https://script.google.com/macros/s/AKfycbwH0hVGDXIQhdSxg2neDBNUEOxY1SNacJRz4cqf3WaP8xgAhlEnKfRv5xnlENKnh3XuYA/exec'; // kendi sitemizden açıldıysa aynı adres
   if (state.serverUrl !== DEFAULT_SERVER_URL) { state.serverUrl = DEFAULT_SERVER_URL; save(); }
 
   serverInput.value = state.serverUrl || DEFAULT_SERVER_URL;
@@ -2617,6 +2617,11 @@
     var url = state.serverUrl || DEFAULT_SERVER_URL;
     jsonpRequest(url, 'resetcheck', function(err, data){
       if(err || !data) return;
+      // Kendi sunucumuza taşındıysak telefon kalıcı olarak yeni adrese geçer (eski adres de aktardığı için kayıp olmaz).
+      if(data.sunucuAdresi && /^https:\/\/[^\s"'<>]+\/exec$/.test(data.sunucuAdresi) && data.sunucuAdresi !== url){
+        state.serverUrl = data.sunucuAdresi; save();
+        try { warnToast('Sunucu adresi güncellendi — artık kendi sunucumuz kullanılıyor'); } catch(e){}
+      }
       if(data.resetToken){
         if(state.lastResetToken && state.lastResetToken !== data.resetToken){
           var korunan = applyServerReset(data.resetToken);
