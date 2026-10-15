@@ -232,3 +232,11 @@ müşterinin daha önce aldığı ürün önce seçilir. "72 LI / 56 LI" paket a
 - Maliyet / taban / öneri artık ERP'deki son alış faturasının iskontolu NET fiyatından (KDV dahil) hesaplanır; yoksa eski "Alış Fiyatı + KDV".
 - `son_net_alis_harita()` (015) her katalog aktarımında Katalog'un 14. sütununa ("Son Net Alış") yazılır; yetkisiz kullanıcıya gitmez.
 - Yönetici, plasiyeri atanmış bir müşteriye kayıt girerse belge/tahsilat o plasiyer adına yazılır (prim onun), uyarı sütununa "giren: X".
+
+## build 229 / Code.gs build187 — telefon şifre saklamaz (oturum anahtarı)
+- Girişte sunucu HMAC imzalı oturum anahtarı verir (`tk1.<bitiş>.<şifre izi>.<imza>`, gizli `OTURUM_SIRRI`); telefon şifre yerine bunu saklar, tüm istekler (çerçeveler dahil) bununla gider.
+- 30 gün geçerli, telefon kullanıldıkça haftada bir sessizce yenilenir. Şifre değişince / kullanıcı pasife alınınca eski anahtarlar çalışmaz.
+- Eski telefonlarda düz saklanan şifre ilk internet bağlantısında sessizce anahtara çevrilir (yeniden giriş gerekmez).
+- Çevrimdışı giriş şifrenin SHA-256 özetiyle yapılır; artık "Çıkış"tan sonra da çevrimdışı giriş çalışır.
+- Yönetim → Güvenlik: "🚪 Tüm telefonlardaki oturumları kapat" (kaybolan telefon / ayrılan personel). 2 dk içinde herkes yeniden girer.
+- Eski Code.gs ile de çalışır (anahtar gelmezse eskisi gibi).

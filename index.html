@@ -377,7 +377,7 @@
   <header style="border:none; padding:0 0 16px; background:transparent; display:flex; align-items:flex-start; justify-content:space-between;">
     <div>
       <h1><img src="logo-header.png" alt="Murat Gıda" style="height:30px; width:auto; display:block;"></h1>
-      <div class="sub">MK ERP · Murat Gıda • offline • Android • build 228</div>
+      <div class="sub">MK ERP · Murat Gıda • offline • Android • build 229</div>
     </div>
     <button type="button" id="themeToggleBtn" title="Tema seç" style="background:var(--panel2); border:1.5px solid var(--line); color:var(--text); width:34px; height:34px; border-radius:50%; font-size:15px; padding:0; display:flex; align-items:center; justify-content:center; flex-shrink:0;">🎨</button>
   </header>
@@ -1145,6 +1145,7 @@
           <input type="text" id="adminErpAnahtar" readonly style="font-family:var(--mono); font-size:12px; margin-bottom:6px;">
           <button type="button" id="adminErpAnahtarKopyala" style="width:100%; background:var(--panel); border:1.5px solid var(--line); color:var(--text); padding:9px;">📋 Kopyala</button>
         </div>
+        <button type="button" id="adminOturumKapatBtn" style="width:100%; background:var(--panel); border:1.5px dashed var(--line); color:var(--text); padding:11px; margin-bottom:8px;">🚪 Tüm telefonlardaki oturumları kapat</button>
         <button type="button" id="adminErpAnahtarBtn" style="width:100%; background:var(--panel); border:1.5px dashed var(--line); color:var(--text); padding:11px; margin-bottom:8px;">🔑 ERP anahtarı oluştur</button>
         <button type="button" id="adminGuvenlikBtn" class="hidden" style="width:100%; background:var(--ink); color:#fff; padding:11px;">🔒 Kimlik zorunlu: AÇ</button>
       </div>
@@ -2185,16 +2186,20 @@
           // Cihaz "online" görünüyor ama Apps Script'e istek başarısız oldu —
           // önce bu telefonda daha önce başarılı giriş yapılmışsa onu dene,
           // olmazsa gerçek nedeni ("internet yok" DEĞİL, sunucuya ulaşılamadı) göster.
-          if(!tryOfflineLogin(user, pass)){
-            loginHintEl.textContent = '❌ Sunucuya ulaşılamadı (' + err + '). İnternetin çalışıyorsa, Apps Script dağıtım adresi yanlış/eski olabilir — Dağıtımları Yönet\'ten /exec adresini kontrol et.';
-          }
+          tryOfflineLogin(user, pass, function(gecti){
+            if(!gecti) loginHintEl.textContent = '❌ Sunucuya ulaşılamadı (' + err + '). İnternetin çalışıyorsa, Apps Script dağıtım adresi yanlış/eski olabilir — Dağıtımları Yönet\'ten /exec adresini kontrol et.';
+          });
           return;
         }
         if(!data || data.status === 'error'){ loginHintEl.textContent = '❌ ' + ((data && data.message) || 'giriş başarısız'); return; }
         state.currentUser = { name: user, role: data.role, permissions: data.permissions || [] };
-        state.savedCredentials = { name: user, pass: pass };
+        // Güvenlik (build 229): telefon ŞİFREYİ saklamaz — sunucunun verdiği oturum anahtarını saklar.
+        // Çevrimdışı giriş için şifrenin yalnız tek yönlü özeti tutulur.
+        var yeniKimlik = data.token ? { name: user, pass: data.token, tt: Date.now(), u: { role: data.role, permissions: data.permissions || [] } } : { name: user, pass: pass };
+        state.savedCredentials = yeniKimlik;
         state.personnel = user;
         save();
+        if(data.token) sifreIz(user, pass).then(function(iz){ if(state.savedCredentials === yeniKimlik){ yeniKimlik.ph = iz; save(); } });
         showLoggedInUI();
         // Katalog, cari ve personel listesi artık giriş ister: girişten hemen
         // sonra (kimlikle) güncel olanları çek.
@@ -2204,19 +2209,54 @@
         setTimeout(function(){ try { checkResetToken(); fetchUserRoster(); } catch(e){} }, 300);
       }, 20000);
     } else {
-      if(!tryOfflineLogin(user, pass)){
-        loginHintEl.textContent = '❌ İnternet yok — bu telefonda daha önce bu bilgilerle giriş yapılmamış';
-      }
+      tryOfflineLogin(user, pass, function(gecti){
+        if(!gecti) loginHintEl.textContent = '❌ İnternet yok — bu telefonda daha önce bu bilgilerle giriş yapılmamış';
+      });
     }
   });
-  function tryOfflineLogin(user, pass){
-    if(state.savedCredentials && state.savedCredentials.name.toLowerCase() === user.toLowerCase() && state.savedCredentials.pass === pass && state.currentUser){
-      state.personnel = user;
-      save();
-      showLoggedInUI();
-      return true;
-    }
-    return false;
+  function tokenMu(p){ return typeof p === 'string' && p.indexOf('tk1.') === 0; }
+  // Şifrenin tek yönlü özeti (çevrimdışı giriş kontrolü için; şifrenin kendisi saklanmaz).
+  function sifreIz(user, pass){
+    var m = 'mkerp|' + String(user).trim().toLowerCase() + '|' + pass;
+    try {
+      if(window.crypto && crypto.subtle && window.TextEncoder){
+        return crypto.subtle.digest('SHA-256', new TextEncoder().encode(m)).then(function(b){
+          return 's:' + Array.prototype.map.call(new Uint8Array(b), function(x){ return (x < 16 ? '0' : '') + x.toString(16); }).join('');
+        });
+      }
+    } catch(e){}
+    var h = 2166136261; for(var i = 0; i < m.length; i++){ h ^= m.charCodeAt(i); h = Math.imul(h, 16777619) >>> 0; }
+    return Promise.resolve('f:' + h.toString(16));
+  }
+  function tryOfflineLogin(user, pass, sonra){
+    var sc = state.savedCredentials;
+    function gec(){ state.personnel = user; save(); showLoggedInUI(); if(sonra) sonra(true); }
+    if(!(sc && (state.currentUser || (sc.ph && sc.u)) && sc.name.toLowerCase() === user.toLowerCase())){ if(sonra) sonra(false); return; }
+    if(sc.ph){ sifreIz(user, pass).then(function(iz){
+      if(iz !== sc.ph){ if(sonra) sonra(false); return; }
+      // Çıkış yapılmışsa son çevrimiçi girişteki yetkilerle aç (internet gelince sunucu yine denetler).
+      if(!state.currentUser) state.currentUser = { name: sc.name, role: sc.u.role, permissions: sc.u.permissions || [] };
+      gec();
+    }); return; }
+    if(!tokenMu(sc.pass) && sc.pass === pass){ gec(); return; }
+    if(sonra) sonra(false);
+  }
+  // Eski telefonlar şifreyi düz saklıyordu: internet varken sessizce oturum anahtarına çevir.
+  // Anahtar 30 gün geçerli; haftada bir yenilenir (kullanılan telefon hiç düşmez).
+  var oturumTazeleniyor = false;
+  function oturumTazele(zorla){
+    var sc = state.savedCredentials;
+    if(!navigator.onLine || !sc || !sc.pass || !state.currentUser || oturumTazeleniyor) return;
+    if(!zorla && tokenMu(sc.pass) && Date.now() - (sc.tt || 0) < 7 * 864e5) return;
+    oturumTazeleniyor = true;
+    var eskiPass = sc.pass, ad = state.currentUser.name;
+    jsonpRequestP(state.serverUrl || DEFAULT_SERVER_URL, { action:'login', user: ad, pass: eskiPass }, function(err, data){
+      oturumTazeleniyor = false;
+      if(err || !data || data.status !== 'ok' || !data.token) return;   // eski sunucu: değişiklik yok
+      if(state.savedCredentials !== sc || sc.pass !== eskiPass) return;
+      function bitir(iz){ if(iz) sc.ph = iz; sc.pass = data.token; sc.tt = Date.now(); save(); }
+      if(tokenMu(eskiPass)) bitir(); else sifreIz(ad, eskiPass).then(bitir, function(){ bitir(); });
+    }, 20000);
   }
   loginPassInput.addEventListener('keydown', function(e){ if(e.key === 'Enter') document.getElementById('loginBtn').click(); });
 
@@ -2568,6 +2608,7 @@
   var RESET_CHECK_INTERVAL_MS = 60000;
   function checkResetToken(){
     if(!navigator.onLine) return;
+    try { oturumTazele(); } catch(e){}
     lastResetCheckAt = Date.now();
     var url = state.serverUrl || DEFAULT_SERVER_URL;
     jsonpRequest(url, 'resetcheck', function(err, data){
@@ -5875,6 +5916,17 @@
       }, 50);
     }, 20000);
   });
+  document.getElementById('adminOturumKapatBtn').addEventListener('click', function(){
+    var auth = currentAuth(); if(!auth) return;
+    if(!navigator.onLine){ warnToast('İnternet yok — bu işlem için sunucuya bağlanmak gerekiyor'); return; }
+    if(!window.confirm('Kaybolan / çalınan telefon ya da ayrılan personel için:\nTÜM telefonlar (bu dahil) şifreyle yeniden giriş yapmak zorunda kalır.\nTelefonlarda gönderilmemiş kayıtlar silinmez.\n\nDevam edilsin mi?')) return;
+    adminResultEl.textContent = '⏳ Oturumlar kapatılıyor…';
+    jsonpRequestP(state.serverUrl || DEFAULT_SERVER_URL, { action:'oturumlari_kapat', user:auth.user, pass:auth.pass }, function(err, res){
+      if(err){ adminResultEl.textContent = '❌ ' + err; return; }
+      if(!res || res.status !== 'ok'){ adminResultEl.textContent = '❌ ' + ((res && res.message) || 'sunucu kodu build187 olmalı'); return; }
+      adminResultEl.textContent = '✅ Tüm oturumlar kapatıldı — 2 dakika içinde herkes yeniden giriş yapacak (sen de).';
+    }, 20000);
+  });
   document.getElementById('adminErpAnahtarKopyala').addEventListener('click', function(){
     var inp = document.getElementById('adminErpAnahtar');
     inp.select(); inp.setSelectionRange(0, 99);
@@ -6034,8 +6086,10 @@
       if(state.currentUser && state.savedCredentials){
         var ben = adminUsersData.filter(function(u){ return (u.orig || u.name).trim().toLowerCase() === state.currentUser.name.toLowerCase(); })[0];
         if(ben){
-          if(ben.pass.trim()) state.savedCredentials.pass = ben.pass.trim();
+          if(ben.pass.trim()) sifreIz(ben.name.trim(), ben.pass.trim()).then(function(iz){ if(state.savedCredentials) { state.savedCredentials.ph = iz; save(); } });
           if(ben.name.trim() !== state.currentUser.name){ state.currentUser.name = ben.name.trim(); state.savedCredentials.name = ben.name.trim(); }
+          if(res.token){ state.savedCredentials.pass = res.token; state.savedCredentials.tt = Date.now(); }
+          else if(ben.pass.trim()) state.savedCredentials.pass = ben.pass.trim();
           save();
         }
       }

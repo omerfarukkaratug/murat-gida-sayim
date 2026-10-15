@@ -8,7 +8,7 @@
 // bir sürüm dağıttıktan sonra /exec adresini boş açtığında burada yazan
 // numarayı görmelisin; index.html'in üstündeki "build" numarasıyla
 // eşleşecek şekilde ben her ikisini birlikte güncelliyorum.
-var GS_VERSION = 'build186';
+var GS_VERSION = 'build187';
 
 // Sheets'te "Saat" sütunu zaman biçimli olarak algılanırsa, hücre değeri düz
 // metin değil bir Date nesnesi olarak gelir ve String(...) çirkin bir çıktı
@@ -96,6 +96,7 @@ function doGet(e) {
   }
   if (P.action === 'guvenlik_getir') return guvenlikGetir(P.user, P.pass, P.callback);
   if (P.action === 'guvenlik_kaydet') return guvenlikKaydet(P.user, P.pass, P.zorunlu, P.callback);
+  if (P.action === 'oturumlari_kapat') return oturumlariKapat(P.user, P.pass, P.callback);
   if (P.action === 'guvenlik_anahtar') return guvenlikAnahtarUret(P.user, P.pass, P.callback);
   // ---- Giriş / yetkilendirme ----
   if (e.parameter && e.parameter.action === 'login') {
@@ -269,6 +270,47 @@ function sifreDogru(kayitli, pass) {
   return sifreHex(p[1], pass) === p[2];
 }
 
+// ============================================================
+// OTURUM ANAHTARI (build187): telefon ŞİFREYİ saklamaz.
+// Girişte sunucu imzalı bir anahtar verir: "tk1.<bitiş>.<şifre izi>.<imza>".
+//  • imza = HMAC-SHA256(gizli OTURUM_SIRRI, kullanıcı|bitiş|iz) — taklit edilemez,
+//  • iz = kayıtlı şifre özetinin parmak izi → şifre değişince tüm eski anahtarlar geçersiz,
+//  • 30 gün geçerli; telefon kullanıldıkça haftada bir sessizce yeniler,
+//  • kullanıcı pasife alınınca anahtar da çalışmaz (her istekte satır okunur),
+//  • yönetici "Tüm oturumları kapat" ile OTURUM_SIRRI'nı yeniler → herkes yeniden giriş yapar.
+// ============================================================
+var TOKEN_ON = 'tk1.';
+var OTURUM_GUN = 30;
+function tokenSirri() {
+  var p = PropertiesService.getScriptProperties(), s = p.getProperty('OTURUM_SIRRI');
+  if (s) return s;
+  var kilit = LockService.getScriptLock();
+  try { kilit.waitLock(10000); } catch (e) { /* kilitsiz devam */ }
+  try {
+    s = p.getProperty('OTURUM_SIRRI');
+    if (!s) { s = Utilities.getUuid() + Utilities.getUuid(); p.setProperty('OTURUM_SIRRI', s); }
+  } finally { try { kilit.releaseLock(); } catch (e2) {} }
+  return s;
+}
+function tokenImza(govde) {
+  return Utilities.base64EncodeWebSafe(Utilities.computeHmacSha256Signature(govde, tokenSirri())).replace(/=+$/, '').slice(0, 32);
+}
+function tokenIz(kayitli) { return sifreHex('oturum', String(kayitli || '')).slice(0, 10); }
+function tokenUret(user, iz) {
+  var bitis = (Date.now() + OTURUM_GUN * 864e5).toString(36);
+  return TOKEN_ON + bitis + '.' + iz + '.' + tokenImza(String(user).trim().toLowerCase() + '|' + bitis + '|' + iz);
+}
+function tokenDogru(user, kayitli, tk) {
+  var p = String(tk || '').split('.');
+  if (p.length !== 4 || p[0] + '.' !== TOKEN_ON) return false;
+  var bitis = parseInt(p[1], 36);
+  if (!(bitis > Date.now())) return false;
+  if (p[2] !== tokenIz(kayitli)) return false;
+  var bek = tokenImza(String(user).trim().toLowerCase() + '|' + p[1] + '|' + p[2]), fark = bek.length ^ p[3].length;
+  for (var i = 0; i < bek.length; i++) fark |= bek.charCodeAt(i) ^ (p[3].charCodeAt(i) || 0);
+  return fark === 0;
+}
+
 function authenticate(user, pass) {
   user = String(user || '').trim();
   pass = String(pass || '');
@@ -285,13 +327,16 @@ function authenticate(user, pass) {
       var yetkiler = String(values[i][3] || '').split(',').map(function (s) { return s.trim(); }).filter(Boolean);
       var active = String(values[i][4] || 'evet').trim().toLowerCase() !== 'hayir';
       if (!active) return { ok: false, message: 'Bu kullanıcı pasif duruma alınmış' };
-      if (!sifreDogru(pw, pass)) return { ok: false, message: 'Şifre yanlış' };
+      var tokenli = pass.indexOf(TOKEN_ON) === 0;
+      if (tokenli ? !tokenDogru(name, pw, pass) : !sifreDogru(pw, pass)) {
+        return { ok: false, oturum: tokenli, message: tokenli ? 'Oturum süresi doldu ya da şifre değişti — tekrar giriş yap' : 'Şifre yanlış' };
+      }
       // Düz metin duran şifreyi ilk doğru girişte özete çevir (başarısız
       // olursa giriş yine de geçerli; bir sonraki girişte tekrar denenir).
-      if (!sifreOzetMi(pw)) {
-        try { sheet.getRange(i + 2, 2).setValue(sifreOzetle(pass)); } catch (ozErr) { /* geçiş sonraya kalır */ }
+      if (!tokenli && !sifreOzetMi(pw)) {
+        try { var oz = sifreOzetle(pass); sheet.getRange(i + 2, 2).setValue(oz); pw = oz; } catch (ozErr) { /* geçiş sonraya kalır */ }
       }
-      return { ok: true, role: role, permissions: role === 'yonetici' ? ALL_PERMS : yetkiler };
+      return { ok: true, role: role, permissions: role === 'yonetici' ? ALL_PERMS : yetkiler, iz: tokenIz(pw) };
     }
   }
   return { ok: false, message: 'Kullanıcı bulunamadı' };
@@ -416,7 +461,17 @@ function handleLogin(user, pass, callback) {
     gunlukYaz('yetki', String(user || '(boş)'), 'Uygulamaya giriş reddedildi: ' + auth.message, true);
     return outJson({ status: 'error', message: auth.message }, callback);
   }
-  return outJson({ status: 'ok', role: auth.role, permissions: auth.permissions }, callback);
+  var tk = '';
+  try { tk = tokenUret(String(user).trim(), auth.iz); } catch (tkErr) { gunlukYaz('guvenlik', 'oturum', 'Oturum anahtarı üretilemedi: ' + tkErr, true); }
+  return outJson({ status: 'ok', role: auth.role, permissions: auth.permissions, token: tk, oturumGun: OTURUM_GUN }, callback);
+}
+// Yönetici: tüm telefonlardaki oturumları kapat (gizli anahtar yenilenir; herkes yeniden şifreyle girer).
+function oturumlariKapat(user, pass, callback) {
+  var a = requirePermission(user, pass, 'ayarlar');
+  if (!a.ok) return outJson({ status: 'error', message: a.message }, callback);
+  PropertiesService.getScriptProperties().setProperty('OTURUM_SIRRI', Utilities.getUuid() + Utilities.getUuid());
+  gunlukYaz('guvenlik', String(user), 'Tüm oturumlar kapatıldı — telefonlar yeniden giriş yapacak', false);
+  return outJson({ status: 'ok' }, callback);
 }
 
 // Cari (tedarikçi/müşteri) listesi — Mal Giriş/Mal Çıkış ekranlarında
@@ -2795,7 +2850,7 @@ function handleKullanicilarKaydet(user, pass, data, callback) {
 
     // ÖNCE tüm listeyi doğrula — hata varsa tabloya HİÇ dokunulmaz.
     var lines = String(data || '').split('\n');
-    var rows = [], gorulen = {}, aktifYonetici = 0, hata = '';
+    var rows = [], gorulen = {}, aktifYonetici = 0, hata = '', benSatir = null;
     lines.forEach(function (line) {
       if (hata) return;
       line = line.trim();
@@ -2823,6 +2878,7 @@ function handleKullanicilarKaydet(user, pass, data, callback) {
       }
       if (role === 'yonetici' && aktif === 'evet') aktifYonetici++;
       rows.push([name, kayit, role, yetkiler, aktif]);
+      if ((eskiAd || anahtar) === String(user || '').trim().toLowerCase()) benSatir = [name, kayit];
     });
     if (hata) return outJson({ status: 'error', message: hata }, callback);
     if (rows.length === 0) return outJson({ status: 'error', message: 'Liste boş — en az bir kullanıcı olmalı' }, callback);
@@ -2830,7 +2886,10 @@ function handleKullanicilarKaydet(user, pass, data, callback) {
 
     tabloyuDegistir(sheet, ['Ad', 'Şifre', 'Rol', 'Yetkiler', 'Aktif'], rows);
     gunlukYaz('yonetim', String(user || ''), 'Kullanıcı listesi kaydedildi: ' + rows.length + ' kullanıcı', false);
-    return outJson({ status: 'ok', saved: rows.length }, callback);
+    // Kendi adını / şifresini değiştiren yönetici bu telefonda oturumu kaybetmesin: yeni anahtar.
+    var benTk = '';
+    if (benSatir) { try { benTk = tokenUret(benSatir[0], tokenIz(benSatir[1])); } catch (tkErr) { benTk = ''; } }
+    return outJson({ status: 'ok', saved: rows.length, token: benTk }, callback);
   } catch (err) {
     return outJson({ status: 'error', message: err.toString() }, callback);
   } finally {
