@@ -8,7 +8,7 @@
 // bir sürüm dağıttıktan sonra /exec adresini boş açtığında burada yazan
 // numarayı görmelisin; index.html'in üstündeki "build" numarasıyla
 // eşleşecek şekilde ben her ikisini birlikte güncelliyorum.
-var GS_VERSION = 'build185';
+var GS_VERSION = 'build186';
 
 // Sheets'te "Saat" sütunu zaman biçimli olarak algılanırsa, hücre değeri düz
 // metin değil bir Date nesnesi olarak gelir ve String(...) çirkin bir çıktı
@@ -1477,6 +1477,7 @@ function getKatalog(callback, alisGoster) {
         if (r[10]) e.yer = String(r[10]); // üretim yeri (ERP stok kartındaki ülke)
         if (r[11]) { var pr = promosyonMetni(r[11]); if (pr) e.pr = pr; } // kasanın miktar indirimi
         if (alisGoster && typeof r[12] === 'number' && r[12] > 0) e.af = String(r[12]); // son alış fiyatı (KDV hariç) — yalnız yetkiliye
+        if (alisGoster && typeof r[13] === 'number' && r[13] > 0) e.an = String(r[13]); // son NET alış (iskontolu, KDV dahil) — yalnız yetkiliye
         return e;
       });
   }
@@ -2195,7 +2196,7 @@ function koliCarpan(v) {
 // ============================================================
 // 11. sütun 'Üretim Yeri': ERP12 stok kartındaki ülke (dbo.ULKE.AD). Etiketteki
 // "Üretim yeri" ve yerli üretim logosu buradan gelir; ERP'de boşsa boş kalır.
-var KATALOG_BASLIK = ['Ürün Adı', 'Barkod', 'Stok Kodu', 'Eski Stok', 'Fiyat', 'KDV %', 'Koli Çarpanı', 'Birim', 'Fiyat Tarihi', 'Önceki Fiyat', 'Üretim Yeri', 'Promosyon', 'Son Alış'];
+var KATALOG_BASLIK = ['Ürün Adı', 'Barkod', 'Stok Kodu', 'Eski Stok', 'Fiyat', 'KDV %', 'Koli Çarpanı', 'Birim', 'Fiyat Tarihi', 'Önceki Fiyat', 'Üretim Yeri', 'Promosyon', 'Son Alış', 'Son Net Alış'];
 // Promosyon: kasanın miktar indirimi (ERP12 POS_PROMASYON) — "ADET:YÜZDE:BİTİŞ" (örn. "24:10:2029-12-28").
 function promosyonMetni(v) { var m = String(v == null ? '' : v).trim(); return /^\d{1,4}(\.\d+)?:\d{1,2}(\.\d+)?:\d{4}-\d\d-\d\d$/.test(m) ? m : ''; }
 // ERP'den gelen fiyat tarihi: yalnızca 'yyyy-MM-dd' ve bugünden ileri olmayan değer kabul edilir.
@@ -2255,13 +2256,28 @@ function fiyatGecmisYaz(degisen) {
   }
 }
 
+// stok kodu -> son net alış (KDV dahil). Veri tabanı yoksa / hata verirse tablodaki son değerler.
+function katalogNetAlis(sheet) {
+  var h = {};
+  var ayar = dbAyar();
+  if (ayar) {
+    try { var r = dbCagir(ayar, 'son_net_alis_harita', {}); if (r && r.status === 'ok' && r.h) return r.h; }
+    catch (e) { gunlukYaz('veritabani', 'son net alış', 'Alınamadı, eski değerler kullanılıyor: ' + e, true); }
+  }
+  if (sheet && sheet.getLastRow() >= 2 && sheet.getLastColumn() >= 14) {
+    sheet.getRange(2, 3, sheet.getLastRow() - 1, 12).getValues().forEach(function (r) { var n = Number(r[11]); if (r[0] && n > 0) h[String(r[0])] = n; });
+  }
+  return h;
+}
 function saveKatalogBulk(entries) {
   var ss = SpreadsheetApp.getActiveSpreadsheet();
   var sheet = ss.getSheetByName('Katalog');
   if (!sheet) sheet = ss.insertSheet('Katalog');
   var props = PropertiesService.getScriptProperties();
+  // Son NET alış (iskontolu, KDV dahil) veri tabanından; alınamazsa tablodaki eski değerler korunur.
+  var netH = katalogNetAlis(sheet);
   // 'm2|': barkod/stok kodu metin biçimine geçişte katalog bir kez yeniden yazılsın (baştaki 0'lar geri gelsin).
-  var ozet = 'm2|' + listeOzeti(entries.map(function (e) { return [e.name || '', e.barcode || '', e.stockCode || '', cleanNum(e.oldStock), cleanNum(e.price), cleanNum(e.kdv), koliCarpan(e.carpan), String(e.birim || ''), ulkeMetni(e.ulke), erpFiyatTarihi(e.ft), cleanNum(e.of), promosyonMetni(e.pr), cleanNum(e.af)]; }));
+  var ozet = 'm2|' + listeOzeti(entries.map(function (e) { return [e.name || '', e.barcode || '', e.stockCode || '', cleanNum(e.oldStock), cleanNum(e.price), cleanNum(e.kdv), koliCarpan(e.carpan), String(e.birim || ''), ulkeMetni(e.ulke), erpFiyatTarihi(e.ft), cleanNum(e.of), promosyonMetni(e.pr), cleanNum(e.af), netH[String(e.stockCode || '')] || '']; }));
   if (entries.length > 0 && ozet === props.getProperty('KATALOG_OZET') && sheet.getLastRow() === entries.length + 1) {
     return ContentService.createTextOutput(JSON.stringify({ status: 'ok', saved: 0, degisiklikYok: true })).setMimeType(ContentService.MimeType.JSON);
   }
@@ -2298,7 +2314,7 @@ function saveKatalogBulk(entries) {
     if (eft) { ft = eft; var eof = cleanNum(e.of); of = (typeof eof === 'number' && eof > 0) ? eof : ''; erpli[b] = true; }
     return [e.name || '', e.barcode || '', e.stockCode || '', cleanNum(e.oldStock), f, cleanNum(e.kdv), koliCarpan(e.carpan), String(e.birim || ''), ft, of,
       // Ülke alanı HİÇ gelmediyse (eski ERP betiği) tablodaki üretim yeri silinmez, korunur.
-      e.ulke === undefined ? (o ? o.y : '') : ulkeMetni(e.ulke), promosyonMetni(e.pr), cleanNum(e.af)];
+      e.ulke === undefined ? (o ? o.y : '') : ulkeMetni(e.ulke), promosyonMetni(e.pr), cleanNum(e.af), netH[String(e.stockCode || '')] || ''];
   });
   if (degisen.length) {
     var enDusuk = fiyatGecmisEnDusuk(degisenBarkod);
@@ -4214,12 +4230,13 @@ function plsKatalog() {
   var gen = Math.min(sheet.getLastColumn(), KATALOG_BASLIK.length);
   sheet.getRange(2, 1, sheet.getLastRow() - 1, gen).getValues().forEach(function (r) {
     var b = String(r[1] || '').trim(); if (!b) return;
-    m[b] = { ad: String(r[0] || ''), kod: String(r[2] || ''), fiyat: plsSayi(r[4]), kdv: plsSayi(r[5]), af: gen > 12 ? plsSayi(r[12]) : 0 };
+    m[b] = { ad: String(r[0] || ''), kod: String(r[2] || ''), fiyat: plsSayi(r[4]), kdv: plsSayi(r[5]), af: gen > 12 ? plsSayi(r[12]) : 0, an: gen > 13 ? plsSayi(r[13]) : 0 };
   });
   return m;
 }
 // KDV dahil maliyet ve taban (yoksa null).
-function plsMaliyet(k) { return k && k.af > 0 ? plsYuvarla(k.af * (1 + (k.kdv || 0) / 100)) : null; }
+// Maliyet = SON NET ALIŞ (tüm iskontolar düşülmüş, KDV dahil); yoksa ERP'nin son alış fiyatı × (1 + KDV).
+function plsMaliyet(k) { return !k ? null : k.an > 0 ? plsYuvarla(k.an) : k.af > 0 ? plsYuvarla(k.af * (1 + (k.kdv || 0) / 100)) : null; }
 function plsTaban(maliyet, ayar) { return maliyet ? plsYuvarla(maliyet * (1 - (Number(ayar.altYuzde) || 0) / 100)) : null; }
 
 // Risk: vade_raporu('alacak') 20 dakika önbellekte. kod -> [açık, geçmiş, risk, seviye]
@@ -4344,6 +4361,12 @@ function plsKayitKaydet(kayitlar, k) {
     if (!cariKod) { sonuc[id] = 'hata: müşteri yok'; return; }
     var uyarilar = [];
     if (!k.yonetim && !plsBenimMi(atama[cariKod], k.ben)) uyarilar.push('müşteri bu plasiyere atanmış değil');
+    // Prim müşterinin PLASİYERİNE yazılır: yönetici atanmış müşteriye girerse kayıt plasiyerin adına,
+    // girenin adı uyarı/not alanına düşer. Atanmamış müşteride giren kişinin adına.
+    var sahip = k.ben;
+    if (k.yonetim && atama[cariKod] && atama[cariKod].plasiyer && atama[cariKod].plasiyer.toLowerCase() !== k.ben.toLowerCase()) {
+      sahip = atama[cariKod].plasiyer; uyarilar.push('giren: ' + k.ben);
+    }
     // Tarih: telefonda kaydın girildiği an (internetsiz girilen kayıt kendi gününe yazılsın).
     // Telefon saati ileri ya da 7 günden eski ise sunucu günü kullanılır ve uyarı düşülür.
     var cz = new Date(String(x.cz || '')), tarih = bugun;
@@ -4357,7 +4380,7 @@ function plsKayitKaydet(kayitlar, k) {
       var tutar = plsYuvarla(plsSayi(x.tutar));
       if (!(tutar > 0) || tutar > 100000000) { sonuc[id] = 'hata: tutar geçersiz'; return; }
       var yontem = PLS_YONTEMLER[x.yontem] ? x.yontem : 'nakit';
-      tahsilatSatir.push([id, simdiMetin, tarih, k.ben, cariKod, cariAd, tutar, yontem, plsMetin(x.not, 300) + (uyarilar.length ? ' ⚠️ ' + uyarilar.join('; ') : ''),
+      tahsilatSatir.push([id, simdiMetin, tarih, sahip, cariKod, cariAd, tutar, yontem, plsMetin(x.not, 300) + (uyarilar.length ? ' ⚠️ ' + uyarilar.join('; ') : ''),
         plsMetin(x.bagli, 60), 'aktif', '', '', '', czMetin]);
       mevcut[id] = 1; sonuc[id] = 'ok'; return;
     }
@@ -4385,7 +4408,7 @@ function plsKayitKaydet(kayitlar, k) {
     if (tabanAlti) uyarilar.push(tabanAlti + ' kalem taban fiyatın altında');
     var json = JSON.stringify(kalemler);
     if (json.length > PLS_JSON_MAX) { sonuc[id] = 'hata: belge çok büyük'; return; }
-    belgeSatir.push([id, simdiMetin, tarih, k.ben, cesit, cariKod, cariAd, kalemler.length, plsYuvarla(toplam), json, plsMetin(x.not, 300),
+    belgeSatir.push([id, simdiMetin, tarih, sahip, cesit, cariKod, cariAd, kalemler.length, plsYuvarla(toplam), json, plsMetin(x.not, 300),
       uyarilar.join('; '), 'aktif', '', '', '', czMetin]);
     mevcut[id] = 1; sonuc[id] = 'ok';
   });

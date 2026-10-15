@@ -582,7 +582,7 @@
           katalog = []; katalogBarkod = {}; katalogKod = {}; cesitIndeks = null; cesitOnbellek = {};
           tum.forEach(function(e){
             if(!e || !e.barcode) return;
-            var u = { b: String(e.barcode), a: String(e.name || ''), k: String(e.stockCode || ''), f: sayi(e.price), kdv: sayi(e.kdv), af: sayi(e.af), c: Number(e.carpan) > 1 ? Number(e.carpan) : 1, birim: e.birim || '', st: sayi(e.oldStock) };
+            var u = { b: String(e.barcode), a: String(e.name || ''), k: String(e.stockCode || ''), f: sayi(e.price), kdv: sayi(e.kdv), af: sayi(e.af), an: sayi(e.an), c: Number(e.carpan) > 1 ? Number(e.carpan) : 1, birim: e.birim || '', st: sayi(e.oldStock) };
             u.n = norm(u.a);
             katalogBarkod[u.b] = u;
             if(u.c === 1){ katalog.push(u); if(u.k && !katalogKod[u.k]) katalogKod[u.k] = u; }
@@ -595,7 +595,8 @@
     });
   }
   function urunAnahtar(u){ return u.k || u.b; }
-  function maliyetHesap(u){ return (u && u.af > 0) ? yuvarla(u.af * (1 + (isFinite(u.kdv) ? u.kdv : 0) / 100)) : null; }
+  // Maliyet: son NET alış (iskontolar düşülmüş, KDV dahil); yoksa son alış × (1 + KDV).
+  function maliyetHesap(u){ return !u ? null : u.an > 0 ? yuvarla(u.an) : u.af > 0 ? yuvarla(u.af * (1 + (isFinite(u.kdv) ? u.kdv : 0) / 100)) : null; }
   function tabanHesap(u){ var m = maliyetHesap(u); return m ? yuvarla(m * (1 - (Number(ayar().altYuzde) || 0) / 100)) : null; }
   function ayar(){ return (D.veri && D.veri.ayar) || { altYuzde:10, primSatis:0, primTahsilat:0, fiyatSerbest:true }; }
   function maliyetGorur(){ return !!(D.veri && D.veri.maliyet); }
@@ -823,7 +824,7 @@
     seciliMusteri = m;
     $('mpAd').textContent = m.ad;
     var adina = (m.atanmamis || (m.plasiyer && String(m.plasiyer).toLowerCase() !== String(kimlik.user).toLowerCase())) && yonetim()
-      ? '<div class="bant mavi" style="margin:8px 0 0;">Girdiğin sipariş/tahsilat <b>senin adına</b> yazılır' + (m.plasiyer ? ' (müşterinin plasiyeri: ' + esc(m.plasiyer) + ')' : '') + '.</div>' : '';
+      ? '<div class="bant mavi" style="margin:8px 0 0;">' + (m.plasiyer ? 'Girdiğin sipariş/tahsilat müşterinin plasiyeri <b>' + esc(m.plasiyer) + '</b> adına yazılır (prim onun); kayıtta "giren: sen" görünür.' : 'Girdiğin sipariş/tahsilat <b>senin adına</b> yazılır.') + '</div>' : '';
     $('mpBilgi').innerHTML = '<div class="ipucu mono">' + esc(m.kod) + (m.erpteYok ? ' · ⚠️ ERP cari listesinde yok' : '') + '</div>' + adina +
       '<div class="sayilar" style="margin-top:8px;">' +
         '<div><b>' + (m.bakiye === null || m.bakiye === undefined ? '—' : para(Math.abs(m.bakiye))) + '</b><span>Bakiye ' + (Number(m.bakiye) < 0 ? '(A)' : '(B)') + '</span></div>' +
@@ -1867,7 +1868,7 @@
     if(maliyetGorur()){
       var mal = maliyetHesap(u), t = tabanHesap(u), f = isFinite(u.f) ? u.f : 0;
       h += '</table><details id="upMaliyet" style="margin-top:10px;"><summary>🔒 Maliyet, kâr ve tedarikçiler <span class="ipucu">(müşteri görmesin — dokununca açılır)</span></summary><table style="margin-top:6px;">';
-      h += satir('Son alış (KDV hariç)', u.af > 0 ? tl(u.af) : '—') + satir('Maliyet (KDV dahil)', mal ? tl(mal) : '—') +
+      h += satir('Son alış (KDV hariç)', u.af > 0 ? tl(u.af) : '—') + satir(u.an > 0 ? 'Maliyet: son NET alış (iskontolu, KDV dahil)' : 'Maliyet (KDV dahil, iskontosuz)', mal ? tl(mal) : '—') +
         satir('Taban (maliyet −%' + ayar().altYuzde + ')', t ? tl(t) : '—') +
         (mal && f ? satir('Liste fiyatında marj', '%' + (((f - mal) / f) * 100).toLocaleString('tr-TR', { maximumFractionDigits:1 }) + ' · kâr ' + tl(f - mal)) : '');
       if(B){ var k = B.kalemler.filter(function(x){ return x.b === u.b; })[0]; if(k && mal) h += satir('Bu siparişteki fiyatla marj', '%' + (((k.f - mal) / k.f) * 100).toLocaleString('tr-TR', { maximumFractionDigits:1 })); }

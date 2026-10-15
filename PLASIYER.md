@@ -227,3 +227,8 @@ müşterinin daha önce aldığı ürün önce seçilir. "72 LI / 56 LI" paket a
   Temizlik ayrı ayrı (krem, bulaşık det., ovma tozu, tel, sünger, bulaşık eldiveni). Nohut ayrı seçenek ("az", 4 g).
   Liste satırı: ürün + SATIR TUTARI; − miktar + (dökmede 0,5 kg adım) × birim fiyat; 💡 öneri fiyatına tek dokunuş;
   yazarken tutar ve toplam anında değişir; değiştirilen fiyat sepette taban kontrolünden geçer.
+
+## build 228 / Code.gs build186 — iskontolu son NET alış maliyet bazı, prim plasiyere (015_son_net_alis.sql)
+- Maliyet / taban / öneri artık ERP'deki son alış faturasının iskontolu NET fiyatından (KDV dahil) hesaplanır; yoksa eski "Alış Fiyatı + KDV".
+- `son_net_alis_harita()` (015) her katalog aktarımında Katalog'un 14. sütununa ("Son Net Alış") yazılır; yetkisiz kullanıcıya gitmez.
+- Yönetici, plasiyeri atanmış bir müşteriye kayıt girerse belge/tahsilat o plasiyer adına yazılır (prim onun), uyarı sütununa "giren: X".
