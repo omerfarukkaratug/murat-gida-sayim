@@ -8,7 +8,7 @@
 #   3) Gorev Zamanlayici: "MK Sunucu" (bilgisayar acilinca, kapanirsa yeniden) + "MK Yedek" (her gece 02:30)
 #  ERP12 veritabanina HIC dokunmaz.
 # =====================================================================
-param([Parameter(Mandatory = $true)][string]$PostgresSifresi, [string]$Adres = "", [int]$Port = 8080, [string]$YedekDizini = "D:\MK-Yedek")
+param([Parameter(Mandatory = $true)][string]$PostgresSifresi, [string]$Adres = "", [int]$Port = 8080, [string]$YedekDizini = "D:\MK-Yedek", [switch]$Deneme)
 $ErrorActionPreference = "Stop"
 $kok = Split-Path $PSScriptRoot -Parent
 $node = (Get-Command node -ErrorAction SilentlyContinue).Source
@@ -38,6 +38,12 @@ icacls (Join-Path $kok "ayar.json") /inheritance:r /grant:r "SYSTEM:F" "Administ
 icacls (Join-Path $kok "pgpass.conf") /inheritance:r /grant:r "SYSTEM:F" "Administrators:F" | Out-Null
 Write-Host "ayar.json yazildi (yalnizca Yoneticiler ve SYSTEM okuyabilir)"
 
+if ($Deneme) {
+  Write-Host ""
+  Write-Host "DENEME kurulumu: zamanlanmis gorev KURULMADI (bilgisayar surekli acik degil)." -ForegroundColor Yellow
+  Write-Host "Sunucuyu baslatmak icin: windows\baslat.cmd dosyasina cift tikla (pencere acik kaldigi surece calisir)."
+  exit 0
+}
 # 3) zamanlanmis gorevler
 $ayarlar = New-ScheduledTaskSettingsSet -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries -ExecutionTimeLimit ([TimeSpan]::Zero) -RestartCount 999 -RestartInterval (New-TimeSpan -Minutes 1) -StartWhenAvailable
 $sistem = New-ScheduledTaskPrincipal -UserId "SYSTEM" -LogonType ServiceAccount -RunLevel Highest

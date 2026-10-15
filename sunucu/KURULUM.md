@@ -10,6 +10,18 @@ gerçek veritabanı (PostgreSQL). ERP12'ye **dokunmaz**.
 | Yedek | Drive kopyası | 3 kat: uygulama yedeği + pg_dump + (isteğe bağlı) ikinci disk |
 | Kesinti | Google'a bağlı | Bilgisayar/internet kapanırsa telefonlar kayıtları saklar, açılınca gönderir |
 
+## 0. Önce PROVA (geçici bir dizüstü bilgisayarda)
+Kalıcı bilgisayar gelene kadar her şeyi bir dizüstünde **gerçek verinin kopyasıyla** deneriz. Google'a dokunulmaz,
+telefonlar Google'da çalışmaya devam eder; dizüstü istediğin zaman kapatılabilir.
+1. Node.js LTS ve PostgreSQL 16 kur (Adım 2).
+2. https://github.com/omerfarukkaratug/murat-gida-sayim → **Code → Download ZIP** → `C:\MK-ERP` olarak çıkar.
+3. Yönetici PowerShell: `cd C:\MK-ERP\sunucu\windows` →
+   `powershell -ExecutionPolicy Bypass -File kur.ps1 -PostgresSifresi "…" -YedekDizini "C:\MK-Yedek" -Deneme`
+4. `windows\baslat.cmd`'ye çift tıkla (siyah pencere açık kaldığı sürece sunucu çalışır).
+5. İkinci bir PowerShell: `cd C:\MK-ERP\sunucu` → `node tasi.js --kaynak "<Google /exec adresi>" --kullanici <yönetici> --sifre "…" --deneme`
+6. Tarayıcıda `http://localhost:8080` → giriş yap, ekranları dene. Kopyayı tazelemek için 5. adımı tekrar çalıştır.
+Not: provada yapılan kayıtlar Google'a GİTMEZ (deneme kopyası).
+
 ## 1. Gereksinimler
 - Windows 10/11 (64 bit) ya da Windows Server 2016 ve üstü; 7/24 açık, **UPS'li**.
 - En az 4 GB boş RAM, 20 GB boş disk (yedekler için D: önerilir).
@@ -58,6 +70,7 @@ kimse yeniden giriş yapmaz. ERP bilgisayarının programları eski adresle çal
 **Geri dönüş** (gerekirse): tarayıcıda
 `https://script.google.com/macros/s/…/exec?action=tasima&ne=geri&user=admin&pass=…`
 → Google eskisi gibi çalışır (taşımadan sonra yeni sunucuya yazılanlar Google'a geri gelmez).
+Telefonları da Google'a geri çevirmek için yeni sunucu açıkken: `node ozellik.js SUNUCU_ADRESI "https://script.google.com/macros/s/…/exec"`
 
 ## 6. Yedekler ve geri yükleme
 - Uygulama yedeği: her gece 03:00, `D:\MK-Yedek\MK ERP Yedekleri\` (30 gün + 12 ay ayda bir).
