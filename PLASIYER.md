@@ -240,3 +240,12 @@ müşterinin daha önce aldığı ürün önce seçilir. "72 LI / 56 LI" paket a
 - Çevrimdışı giriş şifrenin SHA-256 özetiyle yapılır; artık "Çıkış"tan sonra da çevrimdışı giriş çalışır.
 - Yönetim → Güvenlik: "🚪 Tüm telefonlardaki oturumları kapat" (kaybolan telefon / ayrılan personel). 2 dk içinde herkes yeniden girer.
 - Eski Code.gs ile de çalışır (anahtar gelmezse eskisi gibi).
+
+## build 230 / Code.gs build188 — hız (hedefli okuma) + gece yedeği + arşiv
+- Tek sipariş / tek ürün işlemleri tüm sekmeyi okumaz: `plsSatirBul` (A sütunu + tek satır), `plsKatalogBir` (barkod sütunu + tek satır),
+  `plsOkuDan` (koşulu sağlayan ilk satırdan sona: tarih aralığı, bekleyen). Stok haritası KATALOG_VERSION'a bağlı parçalı önbellekte.
+  Ölçüm (20 bin ürün, 2700 sipariş): sipariş aç 141k→5k hücre, fiyat kontrol 280k→20k, depo listesi 141k→54k, plasiyer açılış 81k→38k.
+- `kurulum()` (düzenleyiciden bir kez) → her gece 03:00 `gunlukBakim`: Drive "MK ERP Yedekleri" klasörüne tam kopya (30 gün + 12 ay ayda bir),
+  ardından `arsivle`: içinde bulunulan ay + önceki 2 aydan eski, işi bitmiş PlasiyerBelge / PlasiyerTahsilat / SiparisHazirlik satırları
+  "Arşiv <sekme> <yıl>" sekmelerine. Açık bekleyen sipariş canlıda kalır. Rapor / liste eski aya bakınca arşivi okur (tekilleştirilir).
+- Yönetim → Güvenlik: "🗄️ Gece Yedeği ve Arşiv" durumu + "💾 Şimdi yedek al".

@@ -377,7 +377,7 @@
   <header style="border:none; padding:0 0 16px; background:transparent; display:flex; align-items:flex-start; justify-content:space-between;">
     <div>
       <h1><img src="logo-header.png" alt="Murat Gıda" style="height:30px; width:auto; display:block;"></h1>
-      <div class="sub">MK ERP · Murat Gıda • offline • Android • build 229</div>
+      <div class="sub">MK ERP · Murat Gıda • offline • Android • build 230</div>
     </div>
     <button type="button" id="themeToggleBtn" title="Tema seç" style="background:var(--panel2); border:1.5px solid var(--line); color:var(--text); width:34px; height:34px; border-radius:50%; font-size:15px; padding:0; display:flex; align-items:center; justify-content:center; flex-shrink:0;">🎨</button>
   </header>
@@ -1148,6 +1148,10 @@
         <button type="button" id="adminOturumKapatBtn" style="width:100%; background:var(--panel); border:1.5px dashed var(--line); color:var(--text); padding:11px; margin-bottom:8px;">🚪 Tüm telefonlardaki oturumları kapat</button>
         <button type="button" id="adminErpAnahtarBtn" style="width:100%; background:var(--panel); border:1.5px dashed var(--line); color:var(--text); padding:11px; margin-bottom:8px;">🔑 ERP anahtarı oluştur</button>
         <button type="button" id="adminGuvenlikBtn" class="hidden" style="width:100%; background:var(--ink); color:#fff; padding:11px;">🔒 Kimlik zorunlu: AÇ</button>
+        <div style="font-weight:800; font-size:13px; margin:18px 0 4px;">🗄️ Gece Yedeği ve Arşiv</div>
+        <div class="hint" style="margin-bottom:8px;">Her gece 03:00'te tablonun tam kopyası Google Drive'da <b>MK ERP Yedekleri</b> klasörüne alınır (son 30 gün + her aydan bir yedek, 12 ay). 2 aydan eski, işi bitmiş plasiyer / sipariş kayıtları yıllık "Arşiv" sekmelerine taşınır — silinmez, raporlarda görünür; ekranlar hızlı kalır.</div>
+        <div id="adminBakimDurum" class="hint" style="margin-bottom:8px; line-height:1.7;">⏳ Yükleniyor…</div>
+        <button type="button" id="adminBakimBtn" style="width:100%; background:var(--panel); border:1.5px dashed var(--line); color:var(--text); padding:11px; margin-bottom:8px;">💾 Şimdi yedek al</button>
       </div>
 
       <div id="adminSectionCanliDurum" class="hidden" style="border-top:1px solid var(--line); margin:14px 0 12px; padding-top:12px;">
@@ -5870,8 +5874,38 @@
     btn.textContent = g.zorunlu ? '🔓 Kimlik zorunlu: KAPAT' : '🔒 Kimlik zorunlu: AÇ';
     document.getElementById('adminErpAnahtarBtn').textContent = g.erpAnahtarVar ? '🔑 ERP anahtarını yenile' : '🔑 ERP anahtarı oluştur';
   }
+  function bakimCiz(d){
+    var el = document.getElementById('adminBakimDurum'); if(!el) return;
+    if(!d){ el.innerHTML = '⚠️ Durum alınamadı (sunucu kodu build188 olmalı).'; return; }
+    var h = [];
+    if(d.kurulu === false) h.push('⚠️ <b>Gece yedeği KURULU DEĞİL</b> — Apps Script düzenleyicisinde <b>kurulum</b> işlevini bir kez çalıştırıp izin ver.');
+    else if(d.kurulu === true) h.push('✅ Her gece 03:00 otomatik');
+    var b = d.durum;
+    if(b){
+      h.push('Son bakım: <b>' + escapeHtml(b.zaman || '') + '</b>');
+      h.push(b.yedekHata ? '❌ Yedek alınamadı: ' + escapeHtml(b.yedekHata) : ('💾 ' + escapeHtml(b.yedek.ad) + ' · klasörde ' + b.yedek.adet + ' yedek'));
+      h.push(b.arsivHata ? '❌ Arşiv: ' + escapeHtml(b.arsivHata) : ('🗄️ Arşive taşınan: ' + b.arsiv.belge + ' belge, ' + b.arsiv.tahsilat + ' tahsilat, ' + b.arsiv.hazirlik + ' hazırlık (' + escapeHtml(b.arsiv.sinir) + ' öncesi)'));
+    } else if(d.kurulu !== false) h.push('Henüz bakım çalışmadı.');
+    el.innerHTML = h.join('<br>');
+  }
+  function bakimYukle(){
+    var auth = currentAuth(); if(!auth || !navigator.onLine) return;
+    jsonpRequestP(state.serverUrl || DEFAULT_SERVER_URL, { action:'bakim_durum', user:auth.user, pass:auth.pass }, function(err, data){
+      bakimCiz(!err && data && data.status === 'ok' ? data : null);
+    }, 20000);
+  }
+  document.getElementById('adminBakimBtn').addEventListener('click', function(){
+    var auth = currentAuth(); if(!auth) return;
+    if(!navigator.onLine){ warnToast('İnternet yok — bu işlem için sunucuya bağlanmak gerekiyor'); return; }
+    var el = document.getElementById('adminBakimDurum'); el.textContent = '⏳ Yedek alınıyor, arşiv düzenleniyor… (1-2 dakika sürebilir)';
+    jsonpRequestP(state.serverUrl || DEFAULT_SERVER_URL, { action:'bakim_calistir', user:auth.user, pass:auth.pass }, function(err, data){
+      if(err || !data || data.status !== 'ok'){ el.textContent = '❌ ' + (err || (data && data.message) || 'bilinmeyen hata'); return; }
+      bakimYukle();
+    }, 300000);
+  });
   function guvenlikYukle(){
     var auth = currentAuth(); if(!auth || !navigator.onLine) return;
+    bakimYukle();
     var url = state.serverUrl || DEFAULT_SERVER_URL;
     document.getElementById('adminErpAnahtarKutu').classList.add('hidden');
     jsonpRequestP(url, { action:'guvenlik_getir', user:auth.user, pass:auth.pass }, function(err, data){

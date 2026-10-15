@@ -8,7 +8,7 @@
 // bir sürüm dağıttıktan sonra /exec adresini boş açtığında burada yazan
 // numarayı görmelisin; index.html'in üstündeki "build" numarasıyla
 // eşleşecek şekilde ben her ikisini birlikte güncelliyorum.
-var GS_VERSION = 'build187';
+var GS_VERSION = 'build188';
 
 // Sheets'te "Saat" sütunu zaman biçimli olarak algılanırsa, hücre değeri düz
 // metin değil bir Date nesnesi olarak gelir ve String(...) çirkin bir çıktı
@@ -96,6 +96,7 @@ function doGet(e) {
   }
   if (P.action === 'guvenlik_getir') return guvenlikGetir(P.user, P.pass, P.callback);
   if (P.action === 'guvenlik_kaydet') return guvenlikKaydet(P.user, P.pass, P.zorunlu, P.callback);
+  if (P.action === 'bakim_durum' || P.action === 'bakim_calistir') return bakimIstek(P, P.callback);
   if (P.action === 'oturumlari_kapat') return oturumlariKapat(P.user, P.pass, P.callback);
   if (P.action === 'guvenlik_anahtar') return guvenlikAnahtarUret(P.user, P.pass, P.callback);
   // ---- Giriş / yetkilendirme ----
@@ -4221,6 +4222,35 @@ function plsOku(ad) {
   if (sh.getLastRow() < 2) return [];
   return sh.getRange(2, 1, sh.getLastRow() - 1, n).getValues().map(function (r, i) { r.satir = i + 2; return r; });
 }
+// ---- HIZ (build188): bütün sekmeyi okumadan hedefli okuma ----
+// Tek bir sütunu okumak, ~17 sütunluk (içinde kalem JSON'u olan) satırların hepsini okumaktan kat kat hızlıdır.
+function plsSutunOku(sh, sutun) { var n = sh.getLastRow(); return n < 2 ? [] : sh.getRange(2, sutun, n - 1, 1).getValues(); }
+// Id ile tek satır: önce A sütunu, sonra yalnız o satır. sonuncu: aynı Id birden çoksa sonuncusu (harita okumasıyla aynı).
+function plsSatirBul(ad, id, sonuncu) {
+  id = String(id || ''); if (!id) return null;
+  var sh = plsSheet(ad), a = plsSutunOku(sh, 1), bul = -1;
+  if (sonuncu) { for (var i = a.length - 1; i >= 0; i--) if (String(a[i][0]) === id) { bul = i; break; } }
+  else { for (var j = 0; j < a.length; j++) if (String(a[j][0]) === id) { bul = j; break; } }
+  if (bul < 0) return null;
+  var r = sh.getRange(bul + 2, 1, 1, PLS_SEKME[ad].length).getValues()[0]; r.satir = bul + 2;
+  return r;
+}
+// Koşulu sağlayan İLK satırdan sona kadar okur (öncesindeki satırların hiçbiri koşulu sağlamaz — kayıp olmaz).
+// Satırlar eklenme sırasında durduğu için "tarih >= X" gibi koşullarda eski satırlar hiç okunmaz.
+function plsOkuDan(ad, sutun, kosul) {
+  var sh = plsSheet(ad), n = PLS_SEKME[ad].length, s = plsSutunOku(sh, sutun), bas = -1;
+  for (var i = 0; i < s.length; i++) if (kosul(s[i][0])) { bas = i; break; }
+  if (bas < 0) return [];
+  return sh.getRange(bas + 2, 1, s.length - bas, n).getValues().map(function (r, j) { r.satir = bas + j + 2; return r; });
+}
+// Tarih (3. sütun) >= bas olan canlı satırlar + gerekiyorsa arşiv (bas, arşiv sınırından eskiyse).
+function plsOkuTarihten(ad, bas) {
+  var canli = plsOkuDan(ad, 3, function (v) { return plsTarih(v) >= bas; });
+  var arsiv = arsivOku(ad, bas); if (!arsiv.length) return canli;
+  var var_ = {}; canli.forEach(function (r) { var_[String(r[0])] = 1; }); // yarıda kalan arşivleme: aynı kayıt iki yerde olabilir
+  return arsiv.filter(function (r) { return plsTarih(r[2]) >= bas && !var_[String(r[0])]; }).concat(canli);
+}
+
 function plsMetin(v, n) { return String(v == null ? '' : v).replace(/[\r\n\t]+/g, ' ').trim().substring(0, n || 200); }
 function plsSayi(v) { var n = Number(String(v == null ? '' : v).replace(',', '.')); return isFinite(n) ? n : 0; }
 function plsYuvarla(n) { return Math.round((Number(n) || 0) * 100) / 100; }
@@ -4289,9 +4319,25 @@ function plsKatalog() {
   var gen = Math.min(sheet.getLastColumn(), KATALOG_BASLIK.length);
   sheet.getRange(2, 1, sheet.getLastRow() - 1, gen).getValues().forEach(function (r) {
     var b = String(r[1] || '').trim(); if (!b) return;
-    m[b] = { ad: String(r[0] || ''), kod: String(r[2] || ''), fiyat: plsSayi(r[4]), kdv: plsSayi(r[5]), af: gen > 12 ? plsSayi(r[12]) : 0, an: gen > 13 ? plsSayi(r[13]) : 0 };
+    m[b] = plsKatalogNesne(r, gen);
   });
   return m;
+}
+function plsKatalogNesne(r, gen) {
+  return { ad: String(r[0] || ''), kod: String(r[2] || ''), fiyat: plsSayi(r[4]), kdv: plsSayi(r[5]), af: gen > 12 ? plsSayi(r[12]) : 0, an: gen > 13 ? plsSayi(r[13]) : 0 };
+}
+// Tek ürün: yalnız barkod sütunu + o satır (~20 bin satırın tamamı okunmaz). Aynı barkod çoksa sonuncusu.
+function plsKatalogBir(barkod) {
+  barkod = String(barkod || '').trim(); if (!barkod) return undefined;
+  var sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName('Katalog');
+  if (!sheet || sheet.getLastRow() < 2) return undefined;
+  var b = sheet.getRange(2, 2, sheet.getLastRow() - 1, 1).getValues();
+  for (var i = b.length - 1; i >= 0; i--) {
+    if (String(b[i][0] || '').trim() !== barkod) continue;
+    var gen = Math.min(sheet.getLastColumn(), KATALOG_BASLIK.length);
+    return plsKatalogNesne(sheet.getRange(i + 2, 1, 1, gen).getValues()[0], gen);
+  }
+  return undefined;
 }
 // KDV dahil maliyet ve taban (yoksa null).
 // Maliyet = SON NET ALIŞ (tüm iskontolar düşülmüş, KDV dahil); yoksa ERP'nin son alış fiyatı × (1 + KDV).
@@ -4377,7 +4423,7 @@ function plsVeri(k) {
   if (k.yonetim) sonuc.plasiyerler = plsKullanicilar();
   // Teslim edilmemiş BEKLEYEN siparişler (depoda eksik çıkan kalemler), müşteri başına — yeni siparişte uyarı için.
   var hz = hzHarita(), bek = {};
-  plsOku('PlasiyerBelge').forEach(function (r) {
+  plsOkuDan('PlasiyerBelge', 5, function (v) { return String(v) === 'bekleyen'; }).forEach(function (r) {
     if (String(r[4]) !== 'bekleyen' || String(r[12]) === 'iptal' || !izinli[String(r[5])]) return;
     var h = hz[String(r[0])]; if (h && h.durum === 'teslim') return;
     var kl = []; try { kl = JSON.parse(String(r[9] || '[]')); } catch (e) { kl = []; }
@@ -4534,7 +4580,7 @@ function plsUrun(k, stokKodu, barkod) {
   if (!k.maliyet) throw new Error('Maliyet bilgisi yetkin yok');
   stokKodu = plsMetin(stokKodu, 60); barkod = plsMetin(barkod, 60);
   if (!stokKodu && !barkod) throw new Error('Ürün seç');
-  var kat = plsKatalog()[barkod] || null, ayar = plsAyar();
+  var kat = plsKatalogBir(barkod) || null, ayar = plsAyar();
   var mal = plsMaliyet(kat);
   var sonuc = { status: 'ok', fiyat: kat ? kat.fiyat : null, kdv: kat ? kat.kdv : null, alisKdvHaric: kat && kat.af ? kat.af : null,
     maliyet: mal, taban: plsTaban(mal, ayar), alislar: [], tedarikciler: [] };
@@ -4568,7 +4614,7 @@ function plsFiyatKontrol(k, p) {
     }
     c.put(ck, String(n + 1), 600);
   }
-  var kat = plsKatalog()[barkod], taban = plsTaban(plsMaliyet(kat), plsAyar());
+  var kat = plsKatalogBir(barkod), taban = plsTaban(plsMaliyet(kat), plsAyar());
   var uygun = !taban || fiyat >= taban - 0.005;
   var sonuc = { status: 'ok', uygun: uygun };
   if (k.maliyet && taban) sonuc.taban = taban;
@@ -4610,10 +4656,10 @@ function plsListe(k, p) {
   if (ekipGunEkle(bas, 62) < bit) throw new Error('En fazla 62 günlük liste alınabilir');
   var kim = k.yonetim ? String(p.kim || '').trim().toLowerCase() : k.ben.toLowerCase();
   var uygun = function (tarih, pls) { return tarih >= bas && tarih <= bit && (!kim || String(pls).trim().toLowerCase() === kim); };
-  var belgeler = plsOku('PlasiyerBelge').filter(function (r) { return uygun(plsTarih(r[2]), r[3]); }).map(function (r) { return plsBelgeNesne(r, k.maliyet); });
-  var hz = hzHarita();
+  var belgeler = plsOkuTarihten('PlasiyerBelge', bas).filter(function (r) { return uygun(plsTarih(r[2]), r[3]); }).map(function (r) { return plsBelgeNesne(r, k.maliyet); });
+  var hz = hzHarita(bas);
   belgeler.forEach(function (b) { var h = hz[b.id]; if (b.cesit === 'siparis' || b.cesit === 'bekleyen') b.hazirlik = h ? hzOzet(h, b) : { durum: 'bekliyor' }; });
-  var tahsilatlar = plsOku('PlasiyerTahsilat').filter(function (r) { return uygun(plsTarih(r[2]), r[3]); }).map(plsTahsilatNesne);
+  var tahsilatlar = plsOkuTarihten('PlasiyerTahsilat', bas).filter(function (r) { return uygun(plsTarih(r[2]), r[3]); }).map(plsTahsilatNesne);
   belgeler.sort(function (x, y) { return x.zaman < y.zaman ? 1 : -1; });
   tahsilatlar.sort(function (x, y) { return x.zaman < y.zaman ? 1 : -1; });
   return { status: 'ok', bas: bas, bit: bit, kim: kim, belgeler: belgeler, tahsilatlar: tahsilatlar, ayar: plsAyar() };
@@ -4629,7 +4675,7 @@ function plsRapor(k, ay) {
       yontem: {}, iptalAdet: 0, iptalTutar: 0, tabanUyari: 0, musteri: {} };
   };
   var izinli = function (ad) { return k.yonetim || String(ad || '').trim().toLowerCase() === k.ben.toLowerCase(); };
-  plsOku('PlasiyerBelge').forEach(function (r) {
+  plsOkuTarihten('PlasiyerBelge', ay + '-01').forEach(function (r) {
     if (plsTarih(r[2]).slice(0, 7) !== ay || !izinli(r[3])) return;
     var o = kisi(r[3]), tutar = plsSayi(r[8]);
     if (String(r[12]) === 'iptal') { o.iptalAdet++; o.iptalTutar += tutar; return; }
@@ -4638,7 +4684,7 @@ function plsRapor(k, ay) {
     if (/taban/.test(String(r[11] || ''))) o.tabanUyari++;
     o.musteri[String(r[5])] = 1;
   });
-  plsOku('PlasiyerTahsilat').forEach(function (r) {
+  plsOkuTarihten('PlasiyerTahsilat', ay + '-01').forEach(function (r) {
     if (plsTarih(r[2]).slice(0, 7) !== ay || !izinli(r[3])) return;
     var o = kisi(r[3]), tutar = plsSayi(r[6]);
     if (String(r[10]) === 'iptal') { o.iptalAdet++; return; }
@@ -4667,9 +4713,8 @@ function plsIptal(k, p) {
   var geri = String(p.geri || '') === '1';
   var neden = plsMetin(p.neden, 200);
   var sutun = tur === 'PlasiyerBelge' ? { durum: 13, pls: 4, tarih: 3 } : { durum: 11, pls: 4, tarih: 3 }; // 1 tabanlı
-  var sh = plsSheet(tur), satirlar = plsOku(tur), hedef = null;
-  for (var i = 0; i < satirlar.length; i++) if (String(satirlar[i][0]) === id) { hedef = satirlar[i]; break; }
-  if (!hedef) throw new Error('Kayıt bulunamadı');
+  var sh = plsSheet(tur), hedef = plsSatirBul(tur, id);
+  if (!hedef) throw new Error('Kayıt bulunamadı' + (arsivSinir() ? ' (2 aydan eski kayıtlar arşivdedir, iptal edilemez)' : ''));
   var kendi = String(hedef[sutun.pls - 1]).trim().toLowerCase() === k.ben.toLowerCase();
   if (!k.yonetim) {
     if (geri) throw new Error('İptali yalnızca yönetici geri alır');
@@ -4680,7 +4725,7 @@ function plsIptal(k, p) {
   if (!geri && !neden) throw new Error('İptal nedenini yaz');
   // Depo hazırlamaya başladıysa siparişi yalnızca yönetim iptal eder (depo ekranında kırmızı görünür).
   if (!geri && !k.yonetim && tur === 'PlasiyerBelge') {
-    var hzk = hzHarita()[id];
+    var hzk = hzKayit(id);
     if (hzk && hzk.durum !== 'bekliyor') throw new Error('Depo bu siparişi hazırlamaya başladı — iptal için yöneticine söyle');
   }
   var deger = geri ? ['aktif', '', '', ''] : ['iptal', k.ben, neden, plsZamanMetni()];
@@ -4757,7 +4802,7 @@ function plsOzelKaydet(k, p) {
   }
   var uyari = '';
   if (fiyat > 0) {
-    var kat = plsKatalog()[barkod], taban = plsTaban(plsMaliyet(kat), plsAyar());
+    var kat = plsKatalogBir(barkod), taban = plsTaban(plsMaliyet(kat), plsAyar());
     if (taban && fiyat < taban - 0.005) throw new Error('Özel fiyat taban fiyatın altında olamaz (maliyetin %' + plsAyar().altYuzde + ' altı)');
     if (!kat) uyari = 'ürün katalogda yok';
   }
@@ -4827,7 +4872,13 @@ function hzEkAl(json, b) {
 function hzOkutmasiz(b, mik, ek) {
   return (b.satirlar || []).filter(function (s, i) { return Number(mik[i]) > 0 && !ek.okut[i] && !ek.elle[i]; }).length;
 }
-function hzHarita() { var m = {}; plsOku('SiparisHazirlik').forEach(function (r) { var o = hzSatirNesne(r); if (o.id) m[o.id] = o; }); return m; }
+// bas verilir ve arşiv sınırından eskiyse arşivdeki hazırlıklar da (salt okunur) eklenir.
+function hzHarita(bas) {
+  var m = {}, ekle = function (r) { var o = hzSatirNesne(r); if (o.id) m[o.id] = o; };
+  if (bas) arsivOku('SiparisHazirlik', bas).forEach(ekle);
+  plsOku('SiparisHazirlik').forEach(ekle);
+  return m;
+}
 function hzYaz(h) {
   var satir = [h.id, h.durum, h.hazirlayan, h.basla, h.bitis, JSON.stringify(h.hazirlanan || {}), h.koli || 0, h.not || '', h.teslimAlan || '', h.teslimZaman || '', h.teslimEden || '', plsZamanMetni(),
     JSON.stringify(h.ek || {})];
@@ -4847,7 +4898,7 @@ function hzOzet(h, b) {
     kontrol: ek.kontrol ? { kim: ek.kontrol.kim, zaman: ek.kontrol.zaman } : null, sevk: ek.sevk || null };
 }
 function hzBelgeBul(id) {
-  var r = plsOku('PlasiyerBelge').filter(function (x) { return String(x[0]) === id; })[0];
+  var r = plsSatirBul('PlasiyerBelge', id);
   if (!r) throw new Error('Sipariş bulunamadı');
   var b = plsBelgeNesne(r, false);
   if (b.cesit !== 'siparis' && b.cesit !== 'bekleyen') throw new Error('Bu bir sipariş değil (araçtan satış)');
@@ -4863,10 +4914,35 @@ function hzSatirlar(b, stokGor, kat) {
     return o;
   });
 }
+// Stok haritası (barkod → stok): katalog her değiştiğinde (KATALOG_VERSION) yeniden okunur, arada önbellekten
+// (parçalı; her parça < 90 KB). Depo ekranında her sipariş açılışında ~20 bin satır okunmaz.
 function plsKatalogStok() {
+  var surum = PropertiesService.getScriptProperties().getProperty('KATALOG_VERSION') || 'yok';
+  var onek = 'kstok_' + sifreHex('kstok', surum).slice(0, 12) + '_', c = null;
+  try {
+    c = CacheService.getScriptCache();
+    var adet = Number(c.get(onek + 'n') || 0);
+    if (adet > 0) {
+      var anahtarlar = []; for (var i = 0; i < adet; i++) anahtarlar.push(onek + i);
+      var parca = c.getAll(anahtarlar), m0 = {}, tam = true;
+      anahtarlar.forEach(function (a) { if (!parca[a]) { tam = false; return; } var o = JSON.parse(parca[a]); for (var x in o) m0[x] = o[x]; });
+      if (tam) return m0;
+    }
+  } catch (e) { /* önbelleksiz devam */ }
   var m = {}, sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName('Katalog');
   if (!sheet || sheet.getLastRow() < 2) return m;
   sheet.getRange(2, 2, sheet.getLastRow() - 1, 3).getValues().forEach(function (r) { if (r[0] && r[2] !== '' && r[2] !== null) m[String(r[0])] = Number(r[2]); });
+  if (c) {
+    try {
+      var yaz = {}, n = 0, cur = {}, boy = 0;
+      Object.keys(m).forEach(function (b) {
+        cur[b] = m[b]; boy += b.length + String(m[b]).length + 6;
+        if (boy > 85000) { yaz[onek + n++] = JSON.stringify(cur); cur = {}; boy = 0; }
+      });
+      if (boy > 0) yaz[onek + n++] = JSON.stringify(cur);
+      if (n <= 60) { c.putAll(yaz, 1800); c.put(onek + 'n', String(n), 1800); }
+    } catch (e2) { /* önemli değil */ }
+  }
   return m;
 }
 
@@ -4895,7 +4971,7 @@ function hazirlaIstek(p, callback) {
 function hzListe(k) {
   var bugun = ekipBugun(), sinir = ekipGunEkle(bugun, -30), hz = hzHarita(), kat = plsKatalogStok();
   var liste = [];
-  plsOku('PlasiyerBelge').forEach(function (r) {
+  plsOkuDan('PlasiyerBelge', 3, function (v) { return plsTarih(v) >= sinir; }).forEach(function (r) {
     if (String(r[4]) !== 'siparis' && String(r[4]) !== 'bekleyen') return;
     var tarih = plsTarih(r[2]); if (tarih < sinir) return;
     var b = plsBelgeNesne(r, false), h = hz[b.id];
@@ -4914,7 +4990,7 @@ function hzListe(k) {
 }
 function hzAc(k, id) {
   id = plsMetin(id, 60);
-  var b = hzBelgeBul(id), h = hzHarita()[id] || { id: id, durum: 'bekliyor', hazirlanan: {}, ek: hzEkOku('') };
+  var b = hzBelgeBul(id), h = hzKayit(id) || { id: id, durum: 'bekliyor', hazirlanan: {}, ek: hzEkOku('') };
   if (!k.hazirla && h.durum !== 'hazir' && h.durum !== 'teslim') throw new Error('Bu sipariş henüz hazır değil');
   return { status: 'ok', ben: k.ben, yonetim: k.yonetim, hazirla: k.hazirla, sevkiyat: k.sevkiyat, belge: { id: b.id, zaman: b.zaman, plasiyer: b.plasiyer, cariKod: b.cariKod, cariAd: b.cariAd, not: b.not, bekleyen: b.cesit === 'bekleyen',
     iptal: b.durum === 'iptal', iptalNeden: b.iptalNeden, satirlar: hzSatirlar(b, k.stok) },
@@ -4922,7 +4998,7 @@ function hzAc(k, id) {
       teslimAlan: h.teslimAlan || '', teslimZaman: h.teslimZaman || '', teslimEden: h.teslimEden || '',
       okut: h.ek.okut, elle: h.ek.elle, log: h.ek.log, kontrol: h.ek.kontrol || null, sevk: h.ek.sevk || null } };
 }
-function hzKayit(id) { return hzHarita()[id] || null; }
+function hzKayit(id) { var r = plsSatirBul('SiparisHazirlik', id, true); return r ? hzSatirNesne(r) : null; }
 function hzSahibiMi(k, h) { return k.yonetim || String(h.hazirlayan).toLowerCase() === k.ben.toLowerCase(); }
 // Gelen miktarlar: { sıra: miktar } — yalnız geçerli sıralar, 0..100000.
 function hzMiktarlar(json, b) {
@@ -5001,7 +5077,7 @@ function hzBekleyenOlustur(k, b, h) {
   });
   if (!eksikler.length) return '';
   var yeniId = ('B' + String(b.id)).substring(0, 60);
-  if (plsOku('PlasiyerBelge').some(function (r) { return String(r[0]) === yeniId; })) return yeniId;
+  if (plsSatirBul('PlasiyerBelge', yeniId)) return yeniId;
   var genel = LockService.getScriptLock();
   try { genel.waitLock(20000); } catch (e) { throw new Error('Sunucu meşgul — birazdan tekrar dene'); }
   try {
@@ -5086,11 +5162,13 @@ function hzSevk(k, p) {
 function hzRapor(k, p) {
   if (!k.yonetim) throw new Error('Rapor için Plasiyer Yönetimi yetkisi gerekir');
   var ay = /^\d{4}-\d{2}$/.test(String(p.ay || '')) ? String(p.ay) : ekipBugun().slice(0, 7);
-  var belge = {}; plsOku('PlasiyerBelge').forEach(function (r) { belge[String(r[0])] = r; });
+  var rbas = ekipGunEkle(ay + '-01', -45); // ay içinde biten hazırlığın siparişi en fazla ~45 gün önce girilmiştir
+  var belge = {}; plsOkuTarihten('PlasiyerBelge', rbas).forEach(function (r) { belge[String(r[0])] = r; });
   var kisi = {}, sevk = {};
   var kayit = function (ad) { return kisi[ad] = kisi[ad] || { kisi: ad, siparis: 0, kalem: 0, sure: 0, sureAdet: 0, eksik: 0, fazla: 0, elle: 0, fark: 0, kontrol: 0 }; };
-  plsOku('SiparisHazirlik').forEach(function (r) {
-    var h = hzSatirNesne(r);
+  var hzm = hzHarita(rbas);
+  Object.keys(hzm).forEach(function (hid) {
+    var h = hzm[hid];
     (h.ek.log || []).forEach(function (l) { if (String(l[0]).slice(0, 7) === ay && /FARK/.test(l[2])) { var x = String(h.hazirlayan || '?'); kayit(x).fark++; } });
     if (h.ek.kontrol && String(h.ek.kontrol.zaman).slice(0, 7) === ay) kayit(h.ek.kontrol.kim).kontrol++;
     var sv = h.ek.sevk; if (sv && sv.durum === 'edildi' && String(sv.zaman).slice(0, 7) === ay) { sevk[sv.kim] = sevk[sv.kim] || { kisi: sv.kim, teslim: 0 }; sevk[sv.kim].teslim++; }
@@ -5129,4 +5207,159 @@ function hzGeri(k, p) {
   hzYaz(h);
   gunlukYaz('hazirlama', k.ben, 'Sipariş yeniden açıldı (' + once + ' → hazırlanıyor): ' + id, false);
   return { durum: 'hazirlaniyor' };
+}
+
+// ============================================================
+// GECE BAKIMI (build188): YEDEK + ARŞİV
+// kurulum() Apps Script düzenleyicisinden BİR KEZ çalıştırılır (Drive ve tetikleyici izni ister);
+// her gece 03:00'te gunlukBakim çalışır:
+//  1) YEDEK: tablonun tam kopyası Drive'da "MK ERP Yedekleri" klasörüne. Son 30 gün her gün,
+//     ayrıca son 12 ayın her birinden bir yedek saklanır; daha eskiler çöp kutusuna gider.
+//  2) ARŞİV: 2 aydan eski, işi bitmiş plasiyer belgeleri / tahsilatlar / hazırlıklar canlı sekmeden
+//     yıllık "Arşiv ..." sekmelerine taşınır. Hiçbir kayıt SİLİNMEZ; raporlar ve listeler eski aya
+//     bakınca arşivi de okur. Canlı sekmeler küçük kalır → plasiyer ve depo ekranları hızlı kalır.
+// ============================================================
+var YEDEK_KLASOR = 'MK ERP Yedekleri';
+var BAKIM_OZELLIK = 'BAKIM_DURUM';
+var ARSIV_OZELLIK = 'ARSIV_SINIR';
+var ARSIV_SEKMELER = ['PlasiyerBelge', 'PlasiyerTahsilat', 'SiparisHazirlik'];
+
+function kurulum() {
+  ScriptApp.getProjectTriggers().forEach(function (t) { if (t.getHandlerFunction() === 'gunlukBakim') ScriptApp.deleteTrigger(t); });
+  ScriptApp.newTrigger('gunlukBakim').timeBased().everyDays(1).atHour(3).create();
+  var r = gunlukBakim();
+  Logger.log('Kurulum tamam. Her gece 03:00 yedek + arşiv. İlk çalıştırma: ' + JSON.stringify(r));
+  return r;
+}
+
+function gunlukBakim() {
+  var d = { zaman: plsZamanMetni() };
+  try { d.yedek = yedekAl(); } catch (e) { d.yedekHata = String(e && e.message || e); }
+  try { d.arsiv = arsivle(); } catch (e2) { d.arsivHata = String(e2 && e2.message || e2); }
+  try { PropertiesService.getScriptProperties().setProperty(BAKIM_OZELLIK, JSON.stringify(d)); } catch (e3) {}
+  var hata = d.yedekHata || d.arsivHata;
+  gunlukYaz('bakim', 'gece', hata ? 'Bakım HATASI: ' + (d.yedekHata ? 'yedek: ' + d.yedekHata + ' ' : '') + (d.arsivHata ? 'arşiv: ' + d.arsivHata : '')
+    : 'Yedek alındı (' + d.yedek.ad + ', toplam ' + d.yedek.adet + '); arşive taşınan: ' + d.arsiv.belge + ' belge, ' + d.arsiv.tahsilat + ' tahsilat, ' + d.arsiv.hazirlik + ' hazırlık', !!hata);
+  return d;
+}
+
+function yedekAl() {
+  var ss = SpreadsheetApp.getActiveSpreadsheet();
+  var it = DriveApp.getFoldersByName(YEDEK_KLASOR), klasor = it.hasNext() ? it.next() : DriveApp.createFolder(YEDEK_KLASOR);
+  var ad = 'Yedek ' + ss.getName() + ' ' + Utilities.formatDate(new Date(), mesaiTz(), 'yyyy-MM-dd HH-mm');
+  DriveApp.getFileById(ss.getId()).makeCopy(ad, klasor);
+  var liste = [], f = klasor.getFiles();
+  while (f.hasNext()) { var x = f.next(); if (x.getName().indexOf('Yedek ') === 0) liste.push(x); }
+  liste.sort(function (a, b) { return a.getDateCreated() - b.getDateCreated(); }); // eskiden yeniye
+  var simdi = Date.now(), ayIlk = {}, silinen = 0;
+  liste.forEach(function (x) {
+    var t = x.getDateCreated().getTime(), ay = Utilities.formatDate(x.getDateCreated(), mesaiTz(), 'yyyy-MM');
+    var ilk = !ayIlk[ay]; ayIlk[ay] = 1;
+    var tut = simdi - t < 31 * 864e5 || (ilk && simdi - t < 366 * 864e5);
+    if (!tut) { x.setTrashed(true); silinen++; }
+  });
+  return { ad: ad, adet: liste.length - silinen, silinen: silinen };
+}
+
+function arsivSinir() { return PropertiesService.getScriptProperties().getProperty(ARSIV_OZELLIK) || ''; }
+// Yeni sınır: içinde bulunulan ay + önceki 2 ay canlı kalır (ör. 15 Ekim → 1 Ağustos'tan eskiler arşive).
+function arsivSinirHesap(bugun) {
+  var y = Number(bugun.slice(0, 4)), m = Number(bugun.slice(5, 7)) - 2;
+  while (m < 1) { m += 12; y--; }
+  return y + '-' + (m < 10 ? '0' : '') + m + '-01';
+}
+function arsivAdi(ad, yil) { return 'Arşiv ' + ad + ' ' + yil; }
+function arsivSekme(ad, yil, olustur) {
+  var ss = SpreadsheetApp.getActiveSpreadsheet(), sh = ss.getSheetByName(arsivAdi(ad, yil));
+  if (!sh && olustur) {
+    sh = ss.insertSheet(arsivAdi(ad, yil));
+    sh.getRange(1, 1, 1, PLS_SEKME[ad].length).setValues([PLS_SEKME[ad]]);
+    sh.setFrozenRows(1);
+  }
+  return sh;
+}
+// bas tarihinden itibaren gereken arşiv satırları (bas arşiv sınırından yeniyse hiç okunmaz). Salt okunur: satir yok.
+function arsivOku(ad, bas) {
+  var sinir = arsivSinir();
+  if (!sinir || !bas || bas >= sinir) return [];
+  var n = PLS_SEKME[ad].length, son = Number(ekipBugun().slice(0, 4)), out = [];
+  for (var y = Math.max(Number(String(bas).slice(0, 4)) || son, 2020); y <= son; y++) {
+    var sh = arsivSekme(ad, y, false); if (!sh || sh.getLastRow() < 2) continue;
+    sh.getRange(2, 1, sh.getLastRow() - 1, n).getValues().forEach(function (r) { r.arsiv = true; out.push(r); });
+  }
+  return out;
+}
+function arsivMetin(v) {
+  if (!(v instanceof Date)) return v;
+  var t = Utilities.formatDate(v, mesaiTz(), 'yyyy-MM-dd HH:mm:ss');
+  return t.slice(11) === '00:00:00' ? t.slice(0, 10) : t;
+}
+// Seçilen satırları arşive ekler (zaten orada olan Id atlanır), sonra canlı sekmeden siler.
+// Silme alttan yukarı, ardışık bloklar hâlinde: kalan satırlara hiç dokunulmaz.
+function arsivTasi(ad, giden, yilFn) {
+  if (!giden.length) return 0;
+  var n = PLS_SEKME[ad].length, gruplar = {};
+  giden.forEach(function (r) { var y = yilFn(r); (gruplar[y] = gruplar[y] || []).push(r); });
+  Object.keys(gruplar).forEach(function (y) {
+    var sh = arsivSekme(ad, y, true), var_ = {};
+    plsSutunOku(sh, 1).forEach(function (r) { var_[String(r[0])] = 1; });
+    var yeni = gruplar[y].filter(function (r) { return !var_[String(r[0])]; }).map(function (r) { return r.slice(0, n).map(arsivMetin); });
+    if (!yeni.length) return;
+    var ss = PLS_SAYI_SUTUN[ad] || {};
+    var bicim = yeni.map(function () { var b = []; for (var i = 0; i < n; i++) b.push(ss[i] ? '0.00' : '@'); return b; });
+    sh.getRange(sh.getLastRow() + 1, 1, yeni.length, n).setNumberFormats(bicim).setValues(yeni);
+  });
+  var canli = plsSheet(ad), satirlar = giden.map(function (r) { return r.satir; }).sort(function (a, b) { return b - a; });
+  for (var i = 0; i < satirlar.length;) {
+    var son = satirlar[i], j = i;
+    while (j + 1 < satirlar.length && satirlar[j + 1] === satirlar[j] - 1) j++;
+    var ilk = satirlar[j], adet = son - ilk + 1;
+    if (canli.getLastRow() - adet >= 2) canli.deleteRows(ilk, adet);
+    else canli.getRange(ilk, 1, adet, canli.getLastColumn()).clearContent(); // sekmede veri satırı kalmıyorsa silmek yerine boşalt
+    i = j + 1;
+  }
+  return giden.length;
+}
+function arsivle() {
+  var genel = LockService.getScriptLock(), belgeKilit = null;
+  try { genel.waitLock(60000); } catch (e) { throw new Error('Sunucu meşgul, arşiv yarın'); }
+  try {
+    try { belgeKilit = LockService.getDocumentLock(); if (belgeKilit) belgeKilit.waitLock(60000); } catch (e1) { belgeKilit = null; }
+    var sinir = arsivSinirHesap(ekipBugun());
+    var hz = hzHarita(), belgeler = plsOku('PlasiyerBelge'), gidenB = [], gidenId = {}, kalanId = {};
+    belgeler.forEach(function (r) {
+      var id = String(r[0]), tarih = plsTarih(r[2]), h = hz[id];
+      // Açık bekleyen sipariş (mal gelince hazırlanacak) yaşına bakılmadan canlıda kalır.
+      var acikBekleyen = String(r[4]) === 'bekleyen' && String(r[12]) !== 'iptal' && !(h && h.durum === 'teslim');
+      if (tarih && tarih < sinir && !acikBekleyen) { gidenB.push(r); gidenId[id] = 1; } else kalanId[id] = 1;
+    });
+    var yilB = function (r) { return plsTarih(r[2]).slice(0, 4) || ekipBugun().slice(0, 4); };
+    var gidenH = plsOku('SiparisHazirlik').filter(function (r) {
+      var id = String(r[0]);
+      return gidenId[id] || (!kalanId[id] && plsTarih(r[11]) && plsTarih(r[11]) < sinir);
+    });
+    var yilH = function (r) { return (plsTarih(r[11]) || plsTarih(r[3]) || ekipBugun()).slice(0, 4); };
+    var gidenT = plsOku('PlasiyerTahsilat').filter(function (r) { var t = plsTarih(r[2]); return t && t < sinir; });
+    // Önce sınır yazılır: taşıma yarıda kalsa da okuyucular arşive bakar (kayıt iki yerde olabilir, tekilleştirilir).
+    PropertiesService.getScriptProperties().setProperty(ARSIV_OZELLIK, sinir > arsivSinir() ? sinir : arsivSinir());
+    var sonuc = { sinir: sinir, belge: arsivTasi('PlasiyerBelge', gidenB, yilB), hazirlik: arsivTasi('SiparisHazirlik', gidenH, yilH),
+      tahsilat: arsivTasi('PlasiyerTahsilat', gidenT, yilB) };
+    return sonuc;
+  } finally {
+    try { if (belgeKilit) belgeKilit.releaseLock(); } catch (e2) {}
+    genel.releaseLock();
+  }
+}
+// Yönetim paneli: son bakımın durumu / şimdi çalıştır.
+function bakimIstek(p, callback) {
+  var a = requirePermission(p.user, p.pass, 'ayarlar');
+  if (!a.ok) return outJson({ status: 'error', message: a.message }, callback);
+  try {
+    if (p.action === 'bakim_calistir') return outJson({ status: 'ok', durum: gunlukBakim() }, callback);
+    var d = null; try { d = JSON.parse(PropertiesService.getScriptProperties().getProperty(BAKIM_OZELLIK) || 'null'); } catch (e) { d = null; }
+    var kurulu = null; try { kurulu = ScriptApp.getProjectTriggers().some(function (t) { return t.getHandlerFunction() === 'gunlukBakim'; }); } catch (e2) { kurulu = null; }
+    return outJson({ status: 'ok', durum: d, kurulu: kurulu, arsivSinir: arsivSinir() }, callback);
+  } catch (err) {
+    return outJson({ status: 'error', message: String(err && err.message || err) + ' — Apps Script\'te "kurulum" işlevini bir kez çalıştırıp izin ver' }, callback);
+  }
 }
