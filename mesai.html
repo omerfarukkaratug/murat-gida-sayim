@@ -250,7 +250,7 @@
 <script>
 (function(){
   'use strict';
-  var SUNUCU_VARSAYILAN = (location.protocol === 'https:' && !/(^|\.)(github\.io|google\.com|googleusercontent\.com)$/.test(location.hostname)) ? location.origin + '/exec' : 'https://script.google.com/macros/s/AKfycbwH0hVGDXIQhdSxg2neDBNUEOxY1SNacJRz4cqf3WaP8xgAhlEnKfRv5xnlENKnh3XuYA/exec'; // kendi sitemizden açıldıysa aynı adres
+  var SUNUCU_VARSAYILAN = 'https://script.google.com/macros/s/AKfycbwH0hVGDXIQhdSxg2neDBNUEOxY1SNacJRz4cqf3WaP8xgAhlEnKfRv5xnlENKnh3XuYA/exec'; // kendi sunucumuza taşınınca adresi sunucu bildirir (resetcheck → sunucuAdresi)
   var SAYIM_ANAHTAR = 'sayimApp_meta_v2'; // sayım uygulamasının girişi (sadece OKUNUR)
   var MESAI_ANAHTAR = 'mkMesai_v1';
   var QR_LIB = 'https://cdn.jsdelivr.net/npm/qrcode-generator@1.4.4/qrcode.js';
