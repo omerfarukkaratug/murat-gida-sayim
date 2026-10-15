@@ -1699,6 +1699,7 @@ function writeSayimRows(sheet, rows, personnel, sessionId, silinenler) {
       var mevcutV = existingV[id];
       var yaz = surumVar ? (v > mevcutV) : (mevcutV <= 1);
       if (!yaz) { sonuc.skipped++; sonuc.ack[id] = [mevcutV, existingQ[id]]; return; }
+      sheet.getRange(existing[id], 5, 1, 2).setNumberFormat('@');
       sheet.getRange(existing[id], 1, 1, HEADERS.length).setValues([rowData]);
       existingV[id] = v; existingQ[id] = row.qty;
       sonuc.ack[id] = [v, row.qty];
@@ -1708,6 +1709,8 @@ function writeSayimRows(sheet, rows, personnel, sessionId, silinenler) {
     }
   });
   if (newRows.length > 0) {
+    // Stok kodu ve barkod METİN (baştaki 0 düşmesin, 13 hane bilimsel sayıya dönmesin).
+    sheet.getRange(sheet.getLastRow() + 1, 5, newRows.length, 2).setNumberFormat('@');
     sheet.getRange(sheet.getLastRow() + 1, 1, newRows.length, HEADERS.length).setValues(newRows);
   }
   sonuc.tablo = { v: existingV, q: existingQ };
