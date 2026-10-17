@@ -26,6 +26,7 @@ function ayarOku() {
     statik: a.statik === false ? null : path.resolve(KOK, process.env.MK_STATIK || a.statik || '..'),
     yedekDizini: path.resolve(KOK, process.env.MK_YEDEK || a.yedekDizini || './yedekler'),
     adres: process.env.MK_ADRES || a.adres || '',
+    host: process.env.MK_HOST || a.host || '', // ör. '127.0.0.1': yalnız önündeki https katmanından erişilsin
     smtp: a.smtp || null,
     // ERP verisi (Supabase fonksiyonları) kendi veritabanımızda: DB_URL bu önekle başlarsa RPC yerelde çalışır.
     yerelRpc: a.yerelRpc || null, // { onEk: 'http://yerel', veritabani: 'postgres://…' }
@@ -189,18 +190,22 @@ function baslat(ayar) {
     const ext = path.extname(tam);
     gonder(req, res, 200, { 'Content-Type': TURLER[ext] || 'application/octet-stream', 'Cache-Control': /sw\.js$|index\.html$/.test(tam) ? 'no-cache' : 'public, max-age=300' }, fs.readFileSync(tam));
   }
+  // Yönetim uçları yalnızca bu bilgisayarın içinden çağrılabilir. Önde https katmanı (Caddy/Cloudflare tüneli) varsa
+  // dışarıdan gelen istek de 127.0.0.1'den geliyormuş gibi görünür; bu katmanlar yönlendirme başlığı eklediği için onlar reddedilir.
+  const yerelMi = (req) => ['127.0.0.1', '::1', '::ffff:127.0.0.1'].includes(req.socket.remoteAddress) &&
+    !['x-forwarded-for', 'x-forwarded-host', 'x-real-ip', 'forwarded', 'cf-connecting-ip', 'via'].some((b) => b in req.headers);
   const sunucu = http.createServer(async (req, res) => {
     let u; try { u = new URL(req.url, 'http://yerel'); } catch (e) { res.writeHead(400); return res.end(); }
     try {
       if (req.method === 'OPTIONS') { res.writeHead(204, CORS); return res.end(); }
       if (u.pathname === '/exec' || /\/macros\/s\/[^/]+\/exec$/.test(u.pathname)) return await exec(req, res, u);
       if (u.pathname === '/__yonetim/yeniden' && req.method === 'POST') {
-        const yerel = ['127.0.0.1', '::1', '::ffff:127.0.0.1'].includes(req.socket.remoteAddress);
+        const yerel = yerelMi(req);
         if (!yerel) { res.writeHead(403); return res.end(); }
         await isciye({ tur: 'yeniden' }); return gonder(req, res, 200, { 'Content-Type': 'application/json' }, '{"status":"ok"}');
       }
       if (u.pathname === '/__yonetim/islev' && req.method === 'POST') {
-        const yerel = ['127.0.0.1', '::1', '::ffff:127.0.0.1'].includes(req.socket.remoteAddress);
+        const yerel = yerelMi(req);
         if (!yerel) { res.writeHead(403); return res.end(); }
         const g = JSON.parse(await govdeOku(req, 1e6)); const r = await isciye({ tur: 'islev', ad: g.ad, args: g.args || [] });
         return gonder(req, res, 200, { 'Content-Type': 'application/json' }, JSON.stringify({ status: 'ok', sonuc: r }));
@@ -222,7 +227,7 @@ function baslat(ayar) {
 
   let saat = null, kapaniyor = false;
   async function ac() {
-    await new Promise((coz) => sunucu.listen(ayar.port, coz));
+    await new Promise((coz) => sunucu.listen(ayar.port, ayar.host || undefined, coz));
     gunluk('[sunucu] dinliyor: ' + ayar.port + (ayar.statik ? ' (uygulama: ' + ayar.statik + ')' : ''));
     // Bilgisayar açılırken veritabanı servisi bizden geç başlayabilir: hazır olana kadar 5 sn'de bir dene.
     for (let deneme = 1; !kapaniyor; deneme++) {

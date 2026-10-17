@@ -1,0 +1,43 @@
+#!/usr/bin/env bash
+# KRT Saha sunucu yönetimi. Örnek: krtsaha durum | krtsaha prova | krtsaha guncelle
+set -euo pipefail
+KOK=/opt/krtsaha; export MK_AYAR=/etc/krtsaha/ayar.json
+GOOGLE="${KRTSAHA_GOOGLE:-https://script.google.com/macros/s/AKfycbwH0hVGDXIQhdSxg2neDBNUEOxY1SNacJRz4cqf3WaP8xgAhlEnKfRv5xnlENKnh3XuYA/exec}"
+js() { cd "$KOK/sunucu" && runuser -u mk -- env MK_AYAR="$MK_AYAR" node "$@"; }
+sor() { read -r -p "$1: " x </dev/tty; echo "$x"; }
+sorGizli() { read -r -s -p "$1: " x </dev/tty; echo >&2; echo "$x"; }
+adres() { node -e 'console.log(require(process.argv[1]).adres)' "$MK_AYAR"; }
+case "${1:-yardim}" in
+  durum)
+    systemctl --no-pager --lines=0 status krtsaha | head -5
+    echo; curl -fs http://127.0.0.1:8080/saglik && echo
+    echo; echo "Son yedekler:"; ls -1t /var/lib/krtsaha/pg/*.dump 2>/dev/null | head -3 || echo "  (henüz yok)"
+    df -h / | tail -1 | awk '{print "Disk: "$3" / "$2" kullanılıyor"}' ;;
+  log)       journalctl -u krtsaha -n "${2:-100}" --no-pager ;;
+  izle)      journalctl -u krtsaha -f ;;
+  yeniden)   systemctl restart krtsaha && echo "✓ yeniden başlatıldı" ;;
+  guncelle)
+    git -C "$KOK" pull --ff-only && install -m 755 "$KOK/sunucu/linux/krtsaha" /usr/local/bin/krtsaha
+    systemctl restart krtsaha && echo "✓ güncellendi: $(git -C "$KOK" log -1 --format='%h %s')" ;;
+  prova)
+    echo "PROVA: Google'daki veriler bu sunucuya KOPYALANIR. Google'a ve telefonlara dokunulmaz."
+    js tasi.js --kaynak "$GOOGLE" --kullanici "$(sor 'Yönetici kullanıcı adı')" --sifre "$(sorGizli 'Şifre')" --deneme ;;
+  tasi)
+    echo "GERÇEK TAŞIMA: Google yazmayı durdurur, veri buraya taşınır, telefonlar $(adres) adresine geçer."
+    [ "$(sor 'Devam etmek için EVET yaz')" = EVET ] || { echo "vazgeçildi"; exit 1; }
+    js tasi.js --kaynak "$GOOGLE" --kullanici "$(sor 'Yönetici kullanıcı adı')" --sifre "$(sorGizli 'Şifre')" --adres "$(adres)" ;;
+  ozellik)   shift; js ozellik.js "$@" ;;
+  yedek)     /usr/local/sbin/krtsaha-pg-yedek && tail -1 /var/lib/krtsaha/pg/yedek-log.txt ;;
+  geri-yukle) shift; js geri-yukle.js "$@" ;;
+  *) cat <<'EOF'
+krtsaha durum        servis, sağlık, son yedekler, disk
+krtsaha log [n]      son n satır kayıt (varsayılan 100) — canlı izlemek için: krtsaha izle
+krtsaha yeniden      servisi yeniden başlat
+krtsaha guncelle     GitHub'daki son sürümü al ve yeniden başlat
+krtsaha prova        Google verisini KOPYALA (Google'a dokunmaz)
+krtsaha tasi         GERÇEK taşıma (onay ister)
+krtsaha yedek        şimdi veritabanı yedeği al
+krtsaha ozellik AD "DEĞER"   sunucu ayarı değiştir
+krtsaha geri-yukle "<yedek .json.gz>" --evet
+EOF
+esac

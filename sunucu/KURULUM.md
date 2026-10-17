@@ -10,6 +10,20 @@ gerçek veritabanı (PostgreSQL). ERP12'ye **dokunmaz**.
 | Yedek | Drive kopyası | 3 kat: uygulama yedeği + pg_dump + (isteğe bağlı) ikinci disk |
 | Kesinti | Google'a bağlı | Bilgisayar/internet kapanırsa telefonlar kayıtları saklar, açılınca gönderir |
 
+## ★ Kiralık sunucu (Hetzner, Linux) — SEÇİLEN YÖNTEM
+1. Hetzner Cloud'da sunucu: **Ubuntu 24.04**, **CX23** (2 çekirdek, 4 GB), konum Almanya, **Backups açık**.
+   Root şifresi e-postayla gelir.
+2. Windows'ta PowerShell: `ssh root@SUNUCU-IP` (ilk girişte şifreyi değiştirir).
+3. Tek komut:
+   ```
+   curl -fsSL https://raw.githubusercontent.com/omerfarukkaratug/murat-gida-sayim/main/sunucu/linux/kur.sh | bash
+   ```
+   Node 22, PostgreSQL, Caddy (https), servis, gece yedeği, güvenlik duvarı, otomatik güncellemeler kurulur.
+4. Cloudflare → krtsaha.com → DNS → **A** kaydı: `sunucu` → SUNUCU-IP, **gri bulut**.
+5. `https://sunucu.krtsaha.com/saglik` → `{"durum":"ok"}`
+6. Prova: `krtsaha prova` · Gerçek taşıma: `krtsaha tasi` · Diğerleri: `krtsaha yardim`
+Ayarlar `/etc/krtsaha/ayar.json`, kod `/opt/krtsaha`, yedekler `/var/lib/krtsaha`. Yönetim uçları dışarıya kapalıdır.
+
 ## 0. Önce PROVA (geçici bir dizüstü bilgisayarda)
 Kalıcı bilgisayar gelene kadar her şeyi bir dizüstünde **gerçek verinin kopyasıyla** deneriz. Google'a dokunulmaz,
 telefonlar Google'da çalışmaya devam eder; dizüstü istediğin zaman kapatılabilir.
