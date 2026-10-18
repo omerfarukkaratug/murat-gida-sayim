@@ -89,6 +89,7 @@ async function gonder(ayar, m) {
   try {
     await komut(null, [220]);
     let ehlo = await komut('EHLO krtsaha', [250]);
+    if (ayar.secure === false && !/STARTTLS/i.test(ehlo.metin) && !ayar.sifresizIzin) throw new Error('Sunucu şifreli bağlantı (STARTTLS) sunmuyor — şifre açık gönderilmez');
     if (ayar.secure === false && /STARTTLS/i.test(ehlo.metin)) {
       await komut('STARTTLS', [220]);
       sok.removeAllListeners('data'); sok.removeAllListeners('close'); sok.removeAllListeners('error');

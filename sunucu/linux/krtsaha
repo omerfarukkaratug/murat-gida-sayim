@@ -32,7 +32,7 @@ case "${1:-yardim}" in
     G="$(sor 'Gmail adresi')"; P="$(sorGizli 'Uygulama şifresi (16 harf, boşluklar önemli değil)' | tr -d ' ')"
     node -e '
       const fs=require("fs"),y=process.argv[1],a=JSON.parse(fs.readFileSync(y,"utf8"));
-      a.smtp={host:"smtp.gmail.com",port:465,secure:true,auth:{user:process.argv[2],pass:process.argv[3]},gonderen:"KRT Saha <"+process.argv[2]+">"};
+      a.smtp={host:"smtp.gmail.com",port:587,secure:false,auth:{user:process.argv[2],pass:process.argv[3]},gonderen:"KRT Saha <"+process.argv[2]+">"};
       fs.writeFileSync(y,JSON.stringify(a,null,2));' "$MK_AYAR" "$G" "$P"
     chown root:mk "$MK_AYAR"; chmod 640 "$MK_AYAR"
     js eposta-dene.js "$G" && systemctl restart krtsaha && echo "✓ Sunucu yeni e-posta ayarıyla yeniden başladı" ;;
