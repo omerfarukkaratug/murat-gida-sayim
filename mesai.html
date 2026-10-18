@@ -251,6 +251,7 @@
 (function(){
   'use strict';
   var SUNUCU_VARSAYILAN = 'https://script.google.com/macros/s/AKfycbwH0hVGDXIQhdSxg2neDBNUEOxY1SNacJRz4cqf3WaP8xgAhlEnKfRv5xnlENKnh3XuYA/exec'; // kendi sunucumuza taşınınca adresi sunucu bildirir (resetcheck → sunucuAdresi)
+  if (/^(sunucu\.|localhost$|127\.0\.0\.1$)/.test(location.hostname) && /^https?:$/.test(location.protocol)) SUNUCU_VARSAYILAN = location.origin + '/exec'; // kendi sunucumuzdan açıldıysa
   var SAYIM_ANAHTAR = 'sayimApp_meta_v2'; // sayım uygulamasının girişi (sadece OKUNUR)
   var MESAI_ANAHTAR = 'mkMesai_v1';
   var QR_LIB = 'https://cdn.jsdelivr.net/npm/qrcode-generator@1.4.4/qrcode.js';

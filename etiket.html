@@ -2075,7 +2075,8 @@
   // ---------- Liste aktarma (telefon → bilgisayar) ----------
   // (Yalnızca yerel denemede: ?sunucu= ile sahte sunucu adresi verilebilir.)
   var DENEME_SUNUCU = /^(localhost|127\.0\.0\.1)$/.test(location.hostname) ? decodeURIComponent((/[?&]sunucu=([^&]+)/.exec(location.search) || [])[1] || '') : '';
-  var SUNUCU = DENEME_SUNUCU || sayim.serverUrl || 'https://script.google.com/macros/s/AKfycbwH0hVGDXIQhdSxg2neDBNUEOxY1SNacJRz4cqf3WaP8xgAhlEnKfRv5xnlENKnh3XuYA/exec';
+  var YEREL_SUNUCU = (/^(sunucu\.|localhost$|127\.0\.0\.1$)/.test(location.hostname) && /^https?:$/.test(location.protocol)) ? location.origin + '/exec' : '';
+  var SUNUCU = DENEME_SUNUCU || YEREL_SUNUCU || sayim.serverUrl || 'https://script.google.com/macros/s/AKfycbwH0hVGDXIQhdSxg2neDBNUEOxY1SNacJRz4cqf3WaP8xgAhlEnKfRv5xnlENKnh3XuYA/exec';
   function kimlikBilgisi(){
     return (kullanici && sayim.savedCredentials && sayim.savedCredentials.pass) ? { user: kullanici.name, pass: sayim.savedCredentials.pass } : null;
   }

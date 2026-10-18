@@ -380,7 +380,7 @@
   <header style="border:none; padding:0 0 16px; background:transparent; display:flex; align-items:flex-start; justify-content:space-between;">
     <div>
       <h1><img src="logo-header.png" alt="Murat Gıda" style="height:30px; width:auto; display:block;"></h1>
-      <div class="sub"><img src="icon.svg" alt="" style="width:15px;height:15px;vertical-align:-3px;margin-right:5px;">KRT Saha · Murat Gıda • offline • Android • build 236</div>
+      <div class="sub"><img src="icon.svg" alt="" style="width:15px;height:15px;vertical-align:-3px;margin-right:5px;">KRT Saha · Murat Gıda • offline • Android • build 237</div>
     </div>
     <button type="button" id="themeToggleBtn" title="Tema seç" style="background:var(--panel2); border:1.5px solid var(--line); color:var(--text); width:34px; height:34px; border-radius:50%; font-size:15px; padding:0; display:flex; align-items:center; justify-content:center; flex-shrink:0;">🎨</button>
   </header>
@@ -1710,7 +1710,11 @@
   // olursa olsun kesin ve kalıcı bir düzeltme sağlar.
   var DEFAULT_SERVER_URL = 'https://script.google.com/macros/s/AKfycbwH0hVGDXIQhdSxg2neDBNUEOxY1SNacJRz4cqf3WaP8xgAhlEnKfRv5xnlENKnh3XuYA/exec'; // kendi sunucumuza taşınınca adresi sunucu bildirir (resetcheck → sunucuAdresi)
   // İstisna: sunucunun kendisi "artık şu adresteyim" dediyse (kendi sunucumuza taşıma) o adres kullanılır.
-  var HEDEF_SUNUCU = (state.tasinanSunucu && /^https:\/\/[^\s"'<>]+\/exec$/.test(state.tasinanSunucu)) ? state.tasinanSunucu : DEFAULT_SERVER_URL;
+  // Uygulama doğrudan kendi sunucumuzdan açıldıysa (sunucu.krtsaha.com, localhost) o sunucuya bağlan.
+  // GitHub Pages / app.krtsaha.com gibi yalnız dosya sunan adreslerde bu devreye girmez.
+  var YEREL_SUNUCU = (/^(sunucu\.|localhost$|127\.0\.0\.1$)/.test(location.hostname) && /^https?:$/.test(location.protocol)) ? location.origin + '/exec' : '';
+  if (YEREL_SUNUCU) DEFAULT_SERVER_URL = YEREL_SUNUCU;
+  var HEDEF_SUNUCU = YEREL_SUNUCU || ((state.tasinanSunucu && /^https:\/\/[^\s"'<>]+\/exec$/.test(state.tasinanSunucu)) ? state.tasinanSunucu : DEFAULT_SERVER_URL);
   if (state.serverUrl !== HEDEF_SUNUCU) { state.serverUrl = HEDEF_SUNUCU; save(); }
 
   serverInput.value = state.serverUrl || DEFAULT_SERVER_URL;
