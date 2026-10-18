@@ -27,6 +27,16 @@ case "${1:-yardim}" in
     [ "$(sor 'Devam etmek için EVET yaz')" = EVET ] || { echo "vazgeçildi"; exit 1; }
     js tasi.js --kaynak "$GOOGLE" --kullanici "$(sor 'Yönetici kullanıcı adı')" --sifre "$(sorGizli 'Şifre')" --adres "$(adres)" ;;
   ozellik)   shift; js ozellik.js "$@" ;;
+  eposta)
+    echo "E-posta ayarı (Gmail). Uygulama şifresi: myaccount.google.com/apppasswords → 16 harf."
+    G="$(sor 'Gmail adresi')"; P="$(sorGizli 'Uygulama şifresi (16 harf, boşluklar önemli değil)' | tr -d ' ')"
+    node -e '
+      const fs=require("fs"),y=process.argv[1],a=JSON.parse(fs.readFileSync(y,"utf8"));
+      a.smtp={host:"smtp.gmail.com",port:465,secure:true,auth:{user:process.argv[2],pass:process.argv[3]},gonderen:"KRT Saha <"+process.argv[2]+">"};
+      fs.writeFileSync(y,JSON.stringify(a,null,2));' "$MK_AYAR" "$G" "$P"
+    chown root:mk "$MK_AYAR"; chmod 640 "$MK_AYAR"
+    js eposta-dene.js "$G" && systemctl restart krtsaha && echo "✓ Sunucu yeni e-posta ayarıyla yeniden başladı" ;;
+  eposta-dene) shift; js eposta-dene.js "$@" ;;
   yedek)     /usr/local/sbin/krtsaha-pg-yedek && tail -1 /var/lib/krtsaha/pg/yedek-log.txt ;;
   geri-yukle) shift; js geri-yukle.js "$@" ;;
   *) cat <<'EOF'
@@ -38,6 +48,8 @@ krtsaha prova        Google verisini KOPYALA (Google'a dokunmaz)
 krtsaha tasi         GERÇEK taşıma (onay ister)
 krtsaha yedek        şimdi veritabanı yedeği al
 krtsaha ozellik AD "DEĞER"   sunucu ayarı değiştir
+krtsaha eposta       Gmail e-posta ayarını gir ve deneme e-postası gönder
+krtsaha eposta-dene <adres>   deneme e-postası gönder
 krtsaha geri-yukle "<yedek .json.gz>" --evet
 EOF
 esac

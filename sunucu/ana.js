@@ -97,15 +97,15 @@ function baslat(ayar) {
     if (epostaCalisiyor || !ayar.smtp) return;
     epostaCalisiyor = true;
     try {
-      let nodemailer; try { nodemailer = require('nodemailer'); } catch (e) { gunluk('[e-posta] nodemailer kurulu değil'); return; }
-      const tasiyici = nodemailer.createTransport(ayar.smtp);
+      const smtp = require('./smtp');
       const r = await depo.havuz.query("select * from mk.eposta where durum = 'bekliyor' and deneme < 5 order by id limit 20");
       for (const m of r.rows) {
         try {
-          await tasiyici.sendMail({ from: ayar.smtp.gonderen || ayar.smtp.auth && ayar.smtp.auth.user, to: m.alici, subject: m.konu, text: m.metin, html: m.html || undefined,
+          await smtp.gonder(ayar.smtp, { to: m.alici, subject: m.konu, text: m.metin, html: m.html || undefined,
             attachments: (m.ekler || []).map((x) => ({ filename: x.ad, contentType: x.tur, content: Buffer.from(x.b64, 'base64') })) });
           await depo.havuz.query("update mk.eposta set durum = 'gitti' where id = $1", [m.id]);
-        } catch (e) { await depo.havuz.query('update mk.eposta set deneme = deneme + 1, hata = $2 where id = $1', [m.id, String(e.message).slice(0, 500)]); }
+          gunluk('[e-posta] gönderildi →', m.alici, '|', m.konu);
+        } catch (e) { gunluk('[e-posta] HATA', m.alici, e.message); await depo.havuz.query('update mk.eposta set deneme = deneme + 1, hata = $2 where id = $1', [m.id, String(e.message).slice(0, 500)]); }
       }
     } finally { epostaCalisiyor = false; }
   }

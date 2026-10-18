@@ -97,5 +97,5 @@ Telefonları da Google'a geri çevirmek için yeni sunucu açıkken: `node ozell
 - Kayıt dosyası: `C:\MK-ERP\sunucu\sunucu.log`.
 - Yeni Code.gs geldiğinde: dosyayı değiştir, **MK Sunucu** görevini Görev Zamanlayıcı'dan durdur/başlat
   (ya da bilgisayarı yeniden başlat).
-- E-posta (sayım raporu, mal giriş Excel'i): `ayar.json` içine `smtp` bilgisi girilirse gönderilir
+- E-posta (sayım raporu, mal giriş Excel'i): Linux'ta `krtsaha eposta` (Gmail + uygulama şifresi). Girilmezse e-postalar veritabanında bekler, kaybolmaz.
   (örnek: `ayar.ornek.json`); girilmezse e-postalar veritabanında bekler, kaybolmaz.

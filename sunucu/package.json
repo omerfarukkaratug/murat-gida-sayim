@@ -5,6 +5,5 @@
   "description": "MK ERP kendi sunucusu: Code.gs'i PostgreSQL üzerinde çalıştırır (ek paket gerekmez)",
   "main": "ana.js",
   "scripts": { "start": "node ana.js" },
-  "engines": { "node": ">=20" },
-  "optionalDependencies": { "nodemailer": "6.9.16" }
+  "engines": { "node": ">=20" }
 }
