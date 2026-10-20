@@ -407,7 +407,7 @@
   <header style="border:none; padding:0 0 16px; background:transparent; display:flex; align-items:flex-start; justify-content:space-between;">
     <div>
       <h1><img src="logo-header.png" alt="Murat Gıda" style="height:30px; width:auto; display:block;"></h1>
-      <div class="sub"><img src="icon.svg" alt="" style="width:15px;height:15px;vertical-align:-3px;margin-right:5px;">KRT Saha · Murat Gıda • offline • Android • build 240</div>
+      <div class="sub"><img src="icon.svg" alt="" style="width:15px;height:15px;vertical-align:-3px;margin-right:5px;">KRT Saha · Murat Gıda • offline • Android • build 241</div>
     </div>
     <button type="button" id="themeToggleBtn" title="Tema seç" style="background:var(--panel2); border:1.5px solid var(--line); color:var(--text); width:34px; height:34px; border-radius:50%; font-size:15px; padding:0; display:flex; align-items:center; justify-content:center; flex-shrink:0;">🎨</button>
   </header>
@@ -4379,6 +4379,7 @@
     if(R.yukleniyor){ cariHrkBodyEl.innerHTML = html + '<div class="hint">⏳ Hesaplanıyor…</div>'; return; }
     if(R.hata){ cariHrkBodyEl.innerHTML = html + '<div class="hint" style="color:var(--red);">❌ ' + escapeHtml(R.hata) + '</div>'; return; }
     var d = R.veri || {}, sat = d.satirlar || [];
+    if(Number(d.eksik || 0) > 0) html += '<div class="hint" style="color:var(--amber);">⏳ ' + escapeHtml(String(d.eksik)) + ' carinin ödeme riski henüz hesaplanmadı — raporu birazdan tekrar açınca tamamlanır.</div>';
     html += '<div class="chOzet"><div>⏰ VADESİ GEÇMİŞ<b style="color:var(--red);">' + escapeHtml(fmtMoney(d.gecmis || 0)) + '</b></div><div>📆 7 GÜN İÇİNDE<b style="color:var(--amber);">' + escapeHtml(fmtMoney(d.hafta || 0)) + '</b></div><div>⏳ İLERİ VADE<b>' + escapeHtml(fmtMoney(d.ileri || 0)) + '</b></div></div>' +
       '<div class="hint" style="margin:-4px 0 10px;">Toplam açık: <b>' + escapeHtml(fmtMoney(d.toplam || 0)) + '</b> · ' + sat.length + ' cari</div>';
     if(alacak && (d.riskli || d.dikkat)) html += '<div class="hint" style="margin:-6px 0 10px;"><b style="color:var(--red);">🔴 ' + (d.riskli || 0) + ' riskli</b> · <b style="color:var(--amber);">🟡 ' + (d.dikkat || 0) + ' dikkat</b> — riskliler en üstte.</div>';
