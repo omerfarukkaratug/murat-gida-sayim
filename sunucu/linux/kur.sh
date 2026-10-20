@@ -136,6 +136,7 @@ WantedBy=timers.target
 EOF
 systemctl daemon-reload
 systemctl enable --now krtsaha-yedek.timer >/dev/null
+bash "$KOK/sunucu/linux/yama.sh" >/dev/null
 systemctl enable krtsaha >/dev/null
 systemctl restart krtsaha
 

@@ -14,10 +14,13 @@ case "${1:-yardim}" in
     echo; echo "Son yedekler:"; ls -1t /var/lib/krtsaha/pg/*.dump 2>/dev/null | head -3 || echo "  (henüz yok)"
     df -h / | tail -1 | awk '{print "Disk: "$3" / "$2" kullanılıyor"}' ;;
   log)       journalctl -u krtsaha -n "${2:-100}" --no-pager ;;
+  yama)      bash "$KOK/sunucu/linux/yama.sh" ;;
+  yedek-al)  /usr/local/sbin/krtsaha-pg-yedek && ls -1t /var/lib/krtsaha/pg/*.dump | head -1 ;;
   izle)      journalctl -u krtsaha -f ;;
   yeniden)   systemctl restart krtsaha && echo "✓ yeniden başlatıldı" ;;
   guncelle)
     git -C "$KOK" pull --ff-only && install -m 755 "$KOK/sunucu/linux/krtsaha" /usr/local/bin/krtsaha
+    bash "$KOK/sunucu/linux/yama.sh"
     systemctl restart krtsaha && echo "✓ güncellendi: $(git -C "$KOK" log -1 --format='%h %s')" ;;
   prova)
     echo "PROVA: Google'daki veriler bu sunucuya KOPYALANIR. Google'a ve telefonlara dokunulmaz."

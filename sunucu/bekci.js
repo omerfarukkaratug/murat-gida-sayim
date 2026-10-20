@@ -78,7 +78,7 @@ function bekciOlustur({ ayar, depo, gunluk, epostaGonder, disIstek }) {
   function yedekKontrol() {
     try {
       if (!fs.existsSync(pgYedek)) return { ad: 'Gece veritabanı yedeği', durum: 'bilinmiyor', metin: 'Yedek klasörü yok (' + pgYedek + ')' };
-      const d = fs.readdirSync(pgYedek).map((f) => ({ f, st: fs.statSync(path.join(pgYedek, f)) })).filter((x) => x.st.isFile()).sort((a, b) => b.st.mtimeMs - a.st.mtimeMs);
+      const d = fs.readdirSync(pgYedek).filter((f) => /^mkerp-.*\.dump$/.test(f)).map((f) => ({ f, st: fs.statSync(path.join(pgYedek, f)) })).filter((x) => x.st.isFile()).sort((a, b) => b.st.mtimeMs - a.st.mtimeMs);
       if (!d.length) return { ad: 'Gece veritabanı yedeği', durum: 'acil', metin: 'Hiç yedek yok' };
       const yas = Date.now() - d[0].st.mtimeMs;
       return { ad: 'Gece veritabanı yedeği', durum: yas > 50 * 3600000 ? 'acil' : yas > 30 * 3600000 ? 'uyari' : 'ok',

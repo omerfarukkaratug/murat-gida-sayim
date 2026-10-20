@@ -29,6 +29,8 @@ function ayarOku() {
     adres: process.env.MK_ADRES || a.adres || '',
     host: process.env.MK_HOST || a.host || '', // ör. '127.0.0.1': yalnız önündeki https katmanından erişilsin
     smtp: a.smtp || null,
+    pgYedekDizini: process.env.MK_PG_YEDEK || a.pgYedekDizini || '/var/lib/krtsaha/pg', // gece yedekleri (pg_dump)
+    alanAdi: a.alanAdi || 'krtsaha.com', bekciAlici: a.bekciAlici || 'muratgida_avm@hotmail.com',
     // ERP verisi (Supabase fonksiyonları) kendi veritabanımızda: DB_URL bu önekle başlarsa RPC yerelde çalışır.
     yerelRpc: a.yerelRpc || null, // { onEk: 'http://yerel', veritabani: 'postgres://…' }
     defterAdi: a.defterAdi || 'MK ERP'
@@ -198,6 +200,31 @@ function baslat(ayar) {
     const ext = path.extname(tam);
     gonder(req, res, 200, { 'Content-Type': TURLER[ext] || 'application/octet-stream', 'Cache-Control': /sw\.js$|index\.html$/.test(tam) ? 'no-cache' : 'public, max-age=300' }, fs.readFileSync(tam));
   }
+  // ---------------- son gece yedeğini ERP bilgisayarına verme (erp/yedek-indir.ps1) ----------------
+  // Yalnız ERP anahtarıyla (X-Erp-Anahtar başlığı; uygulamadaki Ayarlar > Veri Güvenliği ile aynı anahtar).
+  // Yanlış anahtar denemeleri yavaşlatılır. Dosya pg_dump biçiminde (pg_restore ile geri yüklenir).
+  const yedekDeneme = new Map();
+  async function yedekIndir(req, res) {
+    const ip = String(req.headers['x-forwarded-for'] || req.socket.remoteAddress || '').split(',').pop().trim();
+    const d = yedekDeneme.get(ip) || { n: 0, t: 0 };
+    if (d.n >= 5 && Date.now() - d.t < 15 * 60000) { res.writeHead(429); return res.end('cok fazla deneme'); }
+    const verilen = String(req.headers['x-erp-anahtar'] || '');
+    let dogru = '';
+    try { const r = await depo.havuz.query("select deger from mk.ozellik where anahtar = 'ERP_ANAHTAR'"); dogru = r.rows.length ? String(r.rows[0].deger) : ''; } catch (e) { dogru = ''; }
+    const a = Buffer.from(verilen), b = Buffer.from(dogru);
+    if (!dogru || a.length !== b.length || !require('crypto').timingSafeEqual(a, b)) {
+      yedekDeneme.set(ip, { n: d.n + 1, t: Date.now() }); gunluk('[yedek] yanlış anahtar', ip);
+      res.writeHead(403); return res.end('yetkisiz');
+    }
+    yedekDeneme.delete(ip);
+    const dizin = ayar.pgYedekDizini || '/var/lib/krtsaha/pg';
+    let son = null;
+    try { son = fs.readdirSync(dizin).filter((f) => /^mkerp-.*\.dump$/.test(f)).map((f) => ({ f, st: fs.statSync(path.join(dizin, f)) })).sort((x, y) => y.st.mtimeMs - x.st.mtimeMs)[0]; } catch (e) { son = null; }
+    if (!son) { res.writeHead(404); return res.end('yedek yok'); }
+    gunluk('[yedek] indiriliyor', son.f, '→', ip);
+    res.writeHead(200, { 'Content-Type': 'application/octet-stream', 'Content-Length': son.st.size, 'Content-Disposition': 'attachment; filename="' + son.f + '"', 'Cache-Control': 'no-store' });
+    fs.createReadStream(path.join(dizin, son.f)).pipe(res);
+  }
   // Yönetim uçları yalnızca bu bilgisayarın içinden çağrılabilir. Önde https katmanı (Caddy/Cloudflare tüneli) varsa
   // dışarıdan gelen istek de 127.0.0.1'den geliyormuş gibi görünür; bu katmanlar yönlendirme başlığı eklediği için onlar reddedilir.
   const yerelMi = (req) => ['127.0.0.1', '::1', '::ffff:127.0.0.1'].includes(req.socket.remoteAddress) &&
@@ -223,6 +250,7 @@ function baslat(ayar) {
         const g = u.pathname === '/__mal' ? (await sk('MalHareket')).slice(1) : { postSay: 0, belge: await sk('PlasiyerBelge'), tahsilat: await sk('PlasiyerTahsilat') };
         return gonder(req, res, 200, { 'Content-Type': 'application/json' }, JSON.stringify(g));
       }
+      if (u.pathname === '/yedek/son' && req.method === 'GET') return await yedekIndir(req, res);
       if (u.pathname === '/saglik') return gonder(req, res, hazir ? 200 : 503, Object.assign({ 'Content-Type': 'application/json' }, CORS), JSON.stringify({ durum: hazir ? 'ok' : 'hazirlaniyor', zaman: new Date().toISOString() }));
       if (req.method === 'GET') return statik(req, res, u);
       res.writeHead(405); res.end();
