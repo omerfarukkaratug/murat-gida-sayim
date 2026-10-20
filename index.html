@@ -429,7 +429,7 @@
   <header style="border:none; padding:0 0 16px; background:transparent; display:flex; align-items:flex-start; justify-content:space-between;">
     <div>
       <h1><img src="logo-header.png" alt="Murat Gıda" style="height:30px; width:auto; display:block;"></h1>
-      <div class="sub"><img src="icon.svg" alt="" style="width:15px;height:15px;vertical-align:-3px;margin-right:5px;">KRT Saha · Murat Gıda • offline • Android • build 244</div>
+      <div class="sub"><img src="icon.svg" alt="" style="width:15px;height:15px;vertical-align:-3px;margin-right:5px;">KRT Saha · Murat Gıda • offline • Android • build 245</div>
     </div>
     <button type="button" id="themeToggleBtn" title="Tema seç" style="background:var(--panel2); border:1.5px solid var(--line); color:var(--text); width:34px; height:34px; border-radius:50%; font-size:15px; padding:0; display:flex; align-items:center; justify-content:center; flex-shrink:0;">🎨</button>
   </header>
@@ -447,6 +447,7 @@
     <button class="btn-main" id="loginBtn" style="margin-top:14px;">Giriş Yap</button>
     <div class="hint" id="loginHint" style="text-align:center; margin-top:8px; min-height:14px;"></div>
     <div class="hint" style="text-align:center; margin-top:10px;">Giriş bilgilerini yöneticinden al.</div>
+    <div class="hint" style="text-align:center; margin-top:6px;"><a href="#" class="telKontrolAc" style="color:var(--accent); font-weight:700;">🩺 Telefonu kontrol et</a> · <a href="https://krtsaha.com/kurulum.html" target="_blank" rel="noopener" style="color:var(--accent); font-weight:700;">❓ Kurulum ve yardım</a></div>
     <div class="hidden">
       <input type="url" id="serverInput" value="">
     </div>
@@ -482,7 +483,7 @@
       <button type="button" class="menuBtn hidden" id="menuStokHrkBtn"><span class="menuIcon">📦</span><span>Stok Hareketleri<span class="menuSub">Ürünün tüm giriş/çıkışları, fatura ve fiş detayı</span></span></button>
       <button type="button" class="menuBtn hidden" id="menuCariHrkBtn"><span class="menuIcon">📒</span><span>Cari Hareketleri<span class="menuSub">Cari ekstresi: borç, alacak, bakiye</span></span></button>
     </div>
-    <div class="hint" style="text-align:center; margin-top:14px;"><a href="#" id="menuDuzenLink" class="menuDuzenLink">✏️ Menüyü düzenle</a></div>
+    <div class="hint" style="text-align:center; margin-top:14px;"><a href="#" id="menuDuzenLink" class="menuDuzenLink">✏️ Menüyü düzenle</a> · <a href="#" class="telKontrolAc menuDuzenLink">🩺 Telefonu kontrol et</a> · <a href="https://krtsaha.com/kurulum.html" target="_blank" rel="noopener" class="menuDuzenLink">❓ Yardım</a></div>
     <div class="hint hidden" id="adminOpenLinkWrap" style="text-align:center; margin-top:8px;"><a href="#" id="adminOpenLink" style="color:var(--muted); text-decoration:underline;">⚙ Yönetici Paneli</a></div>
   </div>
 
@@ -1035,6 +1036,19 @@
        AYNI alttan açılan kartı ve AYNI hesap makinesi tuş takımını kullanır —
        uygulamanın her yerinde tek tip miktar girişi. -->
   <!-- Bekleyen alıştan iade irsaliyeleri: mal kabulde cari seçilince uyarı + içerik -->
+  <div id="telKontrolModal" class="sheetOverlay hidden">
+    <div class="sheetCard" style="text-align:left; max-height:calc(92 * var(--eh)); overflow-y:auto;">
+      <div class="sheetGrip"></div>
+      <div class="sheetTitle">🩺 Telefon kontrolü</div>
+      <div class="hint" style="margin:0 0 10px;">Uygulamanın düzgün çalışması için gereken ayarlara bakılıyor.</div>
+      <div id="telKontrolListe"><div class="hint">⏳ Kontrol ediliyor…</div></div>
+      <div style="display:flex; gap:8px; margin-top:12px;">
+        <a class="choiceBtn" href="https://krtsaha.com/kurulum.html" target="_blank" rel="noopener" style="flex:1; text-align:center; text-decoration:none;">❓ Kurulum ve yardım</a>
+        <button type="button" class="choiceBtn main" id="telKontrolKapat" style="flex:1; text-align:center;">Tamam</button>
+      </div>
+    </div>
+  </div>
+
   <div id="menuDuzenModal" class="sheetOverlay hidden">
     <div class="sheetCard" style="text-align:left; max-height:calc(92 * var(--eh)); overflow-y:auto;">
       <div class="sheetGrip"></div>
@@ -2111,6 +2125,66 @@
       var p = a.sira.indexOf(id), q = a.sira.indexOf(komsu); a.sira[p] = komsu; a.sira[q] = id;
     });
   });
+
+  // ---------- Telefon kontrolü: izinler, bağlantı, sürüm, bekleyen kayıt ----------
+  var YARDIM_URL = 'https://krtsaha.com/kurulum.html';
+  function telIzin(ad){
+    if(!navigator.permissions || !navigator.permissions.query) return Promise.resolve('bilinmiyor');
+    return navigator.permissions.query({ name: ad }).then(function(r){ return r.state; }, function(){ return 'bilinmiyor'; });
+  }
+  function telKontrolCalistir(){
+    var el = document.getElementById('telKontrolListe');
+    el.innerHTML = '<div class="hint">⏳ Kontrol ediliyor…</div>';
+    var ua = navigator.userAgent || '', android = /Android/i.test(ua), ios = /iPhone|iPad|iPod/i.test(ua) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+    var kurulu = (window.matchMedia && window.matchMedia('(display-mode: standalone)').matches) || window.navigator.standalone === true || document.referrer.indexOf('android-app://') === 0;
+    var satirlar = [];
+    function ekle(durum, ad, metin, yardim){ satirlar.push({ durum: durum, ad: ad, metin: metin, yardim: yardim }); }
+    var sunucuTaban = String(state.serverUrl || DEFAULT_SERVER_URL || '').replace(/\/exec$/, '');
+    var sunucuSor = /script\.google\.com/.test(sunucuTaban) ? Promise.resolve(null) : new Promise(function(coz){
+      var bas = Date.now(), bitti = false, t = setTimeout(function(){ if(!bitti){ bitti = true; coz({ hata: 'zaman aşımı' }); } }, 10000);
+      fetch(sunucuTaban + '/saglik', { cache: 'no-store' }).then(function(r){ return r.json(); }).then(function(j){ if(!bitti){ bitti = true; clearTimeout(t); coz({ ok: j && j.durum === 'ok', ms: Date.now() - bas }); } })
+        .catch(function(e){ if(!bitti){ bitti = true; clearTimeout(t); coz({ hata: String(e && e.message || e) }); } });
+    });
+    Promise.all([telIzin('geolocation'), telIzin('camera'), sunucuSor]).then(function(s){
+      var konum = s[0], kamera = s[1], sunucu = s[2];
+      ekle('ok', 'Sürüm', (APP_BUILD || '?') + (kurulu ? ' · uygulama olarak kurulu' : ' · tarayıcıda açık'), null);
+      if(!kurulu) ekle('uyari', 'Kurulum', 'Uygulama ana ekrana kurulu değil — ' + (ios ? 'Safari → Paylaş → Ana Ekrana Ekle' : 'Play Store ya da Chrome → ⋮ → Ana ekrana ekle') + '.', ios ? '#iphone' : '#android');
+      if(!navigator.onLine) ekle('acil', 'İnternet', 'Bağlantı yok. Kayıtların telefonda saklanıyor, bağlanınca gönderilir.', '#ayarlar');
+      else if(sunucu === null) ekle('ok', 'Sunucu', 'Bağlantı Google üzerinden.', null);
+      else if(sunucu.ok) ekle(sunucu.ms > 3000 ? 'uyari' : 'ok', 'Sunucu', 'Ulaşılıyor (' + sunucu.ms + ' ms)' + (sunucu.ms > 3000 ? ' — bağlantı yavaş' : ''), sunucu.ms > 3000 ? '#sorunlar' : null);
+      else ekle('acil', 'Sunucu', 'Ulaşılamadı' + (sunucu.hata === 'zaman aşımı' ? ' (10 sn içinde cevap gelmedi)' : '') + '. WiFi ↔ mobil veri değiştirip tekrar dene.', '#sorunlar');
+      var kl = konumSonuc ? (konumSonuc.durum === 'icerde' ? (konumSonuc.yol === 'ag' ? '📶 ' + konumSonuc.sube + ' ağında' : '📍 ' + konumSonuc.sube + ' içinde') : konumMetni()) : (subeListesi().length ? 'henüz ölçülmedi' : 'şube tanımlı değil');
+      if(!subeListesi().length) ekle('bilgi', 'Konum', 'Şube tanımlı değil — konum gerekmiyor' + (konum === 'denied' ? ' (izin kapalı; mesai için gerekir)' : ''), konum === 'denied' ? '#ayarlar' : null);
+      else if(konum === 'denied') ekle('acil', 'Konum izni', 'Kapalı — fiyat/stok şube dışında gizli kalır, mesai yapılamaz. Telefon ayarlarından konum iznini aç. (' + kl + ')', '#ayarlar');
+      else if(konum === 'prompt') ekle('uyari', 'Konum izni', 'Henüz sorulmadı — sorulunca "İzin ver" de. (' + kl + ')', '#ayarlar');
+      else ekle(konumSonuc && konumSonuc.durum === 'hata' ? 'uyari' : 'ok', 'Konum', kl, konumSonuc && konumSonuc.durum === 'hata' ? '#ayarlar' : null);
+      if(kamera === 'denied') ekle('acil', 'Kamera izni', 'Kapalı — barkod okutulamaz. Telefon ayarlarından kamera iznini aç.', '#ayarlar');
+      else if(kamera === 'prompt') ekle('uyari', 'Kamera izni', 'Henüz sorulmadı — ilk okutmada "İzin ver" de.', '#ayarlar');
+      else if(kamera === 'granted') ekle('ok', 'Kamera izni', 'Açık', null);
+      if(android && /SamsungBrowser|MiuiBrowser|OPR\//.test(ua)) ekle('uyari', 'Tarayıcı', 'Chrome dışı bir tarayıcı kullanılıyor; varsayılan tarayıcıyı Chrome yap.', '#android');
+      var bek = state.pendingSessions.length + (state.session.scans || []).filter(function(it){ return !isScanSent(it); }).length;
+      ekle(bek ? 'uyari' : 'ok', 'Bekleyen kayıt', bek ? bek + ' kayıt henüz gönderilmedi — internete bağlanınca gider. Bu sırada uygulamayı/verileri silme.' : 'Yok, hepsi gönderilmiş', bek ? '#ayarlar' : null);
+      if(android) ekle(navigator.bluetooth ? 'ok' : 'bilgi', 'Bluetooth yazıcı', navigator.bluetooth ? 'Destekleniyor' : 'Bu tarayıcıda yok (Chrome ya da Play uygulamasında olur)', navigator.bluetooth ? null : '#yazici');
+      var R = { ok: ['✅', 'var(--green)'], uyari: ['⚠️', 'var(--amber)'], acil: ['❌', 'var(--red)'], bilgi: ['ℹ️', 'var(--muted)'] };
+      var sira = { acil: 0, uyari: 1, bilgi: 2, ok: 3 };
+      satirlar.sort(function(a, b){ return sira[a.durum] - sira[b.durum]; });
+      var sorun = satirlar.filter(function(x){ return x.durum === 'acil' || x.durum === 'uyari'; }).length;
+      el.innerHTML = '<div style="font-weight:800; margin:0 0 8px; color:' + (sorun ? 'var(--amber)' : 'var(--green)') + ';">' + (sorun ? sorun + ' konu düzeltilmeli' : 'Her şey yolunda 👍') + '</div>' +
+        satirlar.map(function(x){
+          var r = R[x.durum];
+          return '<div style="display:flex; gap:9px; align-items:flex-start; background:var(--panel2); border-radius:12px; padding:9px 11px; margin-bottom:6px;">' +
+            '<span style="font-size:17px;">' + r[0] + '</span><div style="flex:1; min-width:0;"><b style="color:' + r[1] + ';">' + escapeHtml(x.ad) + '</b>' +
+            '<div style="font-size:13px; color:var(--muted); margin-top:2px;">' + escapeHtml(x.metin) + '</div>' +
+            (x.yardim ? '<a href="' + YARDIM_URL + x.yardim + '" target="_blank" rel="noopener" style="font-size:12.5px; color:var(--accent); font-weight:700;">Nasıl düzeltilir? →</a>' : '') + '</div></div>';
+        }).join('');
+    });
+  }
+  document.addEventListener('click', function(e){
+    var a = e.target.closest && e.target.closest('.telKontrolAc'); if(!a) return;
+    e.preventDefault(); document.getElementById('telKontrolModal').classList.remove('hidden'); telKontrolCalistir();
+  });
+  document.getElementById('telKontrolKapat').addEventListener('click', function(){ document.getElementById('telKontrolModal').classList.add('hidden'); });
+  document.getElementById('telKontrolModal').addEventListener('click', function(e){ if(e.target === this) this.classList.add('hidden'); });
 
   // ---------- Eski adres (github.io) → yeni adres (app.krtsaha.com) ----------
   // Telefonun hafızası adrese bağlıdır: yeni adreste kayıtlar görünmez. Bu yüzden önce bu telefonda
