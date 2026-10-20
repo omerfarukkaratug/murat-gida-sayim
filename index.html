@@ -429,7 +429,7 @@
   <header style="border:none; padding:0 0 16px; background:transparent; display:flex; align-items:flex-start; justify-content:space-between;">
     <div>
       <h1><img src="logo-header.png" alt="Murat Gıda" style="height:30px; width:auto; display:block;"></h1>
-      <div class="sub"><img src="icon.svg" alt="" style="width:15px;height:15px;vertical-align:-3px;margin-right:5px;">KRT Saha · Murat Gıda • offline • Android • build 242</div>
+      <div class="sub"><img src="icon.svg" alt="" style="width:15px;height:15px;vertical-align:-3px;margin-right:5px;">KRT Saha · Murat Gıda • offline • Android • build 243</div>
     </div>
     <button type="button" id="themeToggleBtn" title="Tema seç" style="background:var(--panel2); border:1.5px solid var(--line); color:var(--text); width:34px; height:34px; border-radius:50%; font-size:15px; padding:0; display:flex; align-items:center; justify-content:center; flex-shrink:0;">🎨</button>
   </header>
@@ -1194,7 +1194,7 @@
 
       <div id="adminSectionAyarlar" class="hidden" style="border-top:1px solid var(--line); margin:14px 0 12px; padding-top:12px;">
         <div style="font-weight:800; font-size:13px; margin-bottom:4px;">📍 Şube Konumları</div>
-        <div class="hint" style="margin-bottom:8px;">Personel uygulamaya girerken bu şubelerden birinin içinde değilse fiyat ve stok gizlenir (sayım ve mal kaydı çalışmaya devam eder). Yöneticiler etkilenmez. Hiç şube yoksa kısıtlama yoktur.</div>
+        <div class="hint" style="margin-bottom:8px;">Personel uygulamaya girerken bu şubelerden birinin içinde değilse fiyat ve stok gizlenir (sayım ve mal kaydı çalışmaya devam eder). Yöneticiler etkilenmez. Hiç şube yoksa kısıtlama yoktur. <b>📶 Bu ağı ekle:</b> şubenin WiFi'ına bağlıyken bas; o ağdaki telefonlar konum beklemeden şubede sayılır.</div>
         <div id="adminSubeList" style="margin-bottom:8px;"><div class="hint">⏳ Yükleniyor…</div></div>
         <div style="display:flex; gap:6px; margin-bottom:6px;">
           <input type="text" id="adminSubeAd" placeholder="Şube adı (örn. Merkez)" style="flex:1; padding:8px; font-size:13px;">
@@ -1907,7 +1907,7 @@
         var yon = konumMuaf(); // muaf olana "fiyat ve stok gizli" yazma
         var tekrar = ' <a href="#" id="konumTekrarBtn" style="color:var(--accent); font-weight:700;">Tekrar dene</a>';
         if(!konumSonuc || konumSonuc.durum === 'bekliyor') el.innerHTML = '📍 Konum kontrol ediliyor…';
-        else if(konumSonuc.durum === 'icerde') el.innerHTML = '<span style="color:var(--green); font-weight:700;">📍 ' + escapeHtml(konumSonuc.sube) + ' içinde</span>';
+        else if(konumSonuc.durum === 'icerde') el.innerHTML = '<span style="color:var(--green); font-weight:700;">' + (konumSonuc.yol === 'ag' ? '📶 ' + escapeHtml(konumSonuc.sube) + ' ağında' : '📍 ' + escapeHtml(konumSonuc.sube) + ' içinde') + '</span>';
         else if(konumSonuc.durum === 'disarda') el.innerHTML = '<span style="color:var(--amber); font-weight:700;">📍 Şube dışında (' + escapeHtml(konumSonuc.sube) + '\'e ' + mesafeMetni(konumSonuc.mesafe) + ')</span>' +
           (yon ? '' : ' — fiyat ve stok gizli.') + tekrar;
         else el.innerHTML = '<span style="color:var(--amber); font-weight:700;">📍 Konum alınamadı</span>' + (yon ? '' : ' — fiyat ve stok gizli.') +
@@ -1938,36 +1938,60 @@
       sube: konumSonuc.sube || '', mesafe: konumSonuc.mesafe ? mesafeMetni(konumSonuc.mesafe) : '', dogruluk: konumSonuc.dogruluk || '', hata: konumSonuc.hata || '' };
     jsonpRequestP(url, p, function(){}, 20000);
   }
+  // Konum: önce telefonun yakın zamanda bildiği konum (hızlı, 1-2 sn); şubede çıkmazsa hassas GPS.
+  // "Şubede" sonucu 20 dakika hatırlanır: uygulama her açılışta tekrar bekletmez (arkada yine kontrol edilir).
+  var KONUM_HATIRLA_MS = 20 * 60 * 1000;
+  function konumHesapla(c, subeler){
+    var enYakin = null;
+    subeler.forEach(function(b){
+      var m = mesafeMetre(c.latitude, c.longitude, b.enlem, b.boylam);
+      if(!enYakin || m - b.yaricap < enYakin.m - enYakin.b.yaricap) enYakin = { b: b, m: m };
+    });
+    return { durum: enYakin.m <= enYakin.b.yaricap ? 'icerde' : 'disarda', sube: enYakin.b.ad, mesafe: Math.round(enYakin.m), dogruluk: Math.round(c.accuracy || 0) };
+  }
+  function konumSonucYaz(sonuc){
+    konumSonuc = sonuc;
+    if(sonuc && sonuc.durum === 'icerde' && state.currentUser) state.konumHatira = { kim: state.currentUser.name, sube: sonuc.sube, yol: sonuc.yol || 'gps', zaman: Date.now() };
+    else if(sonuc && sonuc.durum !== 'bekliyor') state.konumHatira = null;
+    save(); konumGorunumuYenile(); if(sonuc && sonuc.durum !== 'bekliyor') konumSunucuyaBildir();
+  }
   function konumOlc(){
     var subeler = subeListesi();
     if(subeler.length === 0){ konumSonuc = null; konumGorunumuYenile(); return; }
-    if(!navigator.geolocation){ konumSonuc = { durum: 'hata', hata: 'bu cihaz konum desteklemiyor' }; konumGorunumuYenile(); konumSunucuyaBildir(); return; }
-    konumSonuc = { durum: 'bekliyor' }; konumGorunumuYenile();
+    if(!navigator.geolocation){ konumSonucYaz({ durum: 'hata', hata: 'bu cihaz konum desteklemiyor' }); return; }
+    var hatirlanan = konumSonuc && konumSonuc.durum === 'icerde';
+    if(!hatirlanan){ konumSonuc = { durum: 'bekliyor' }; konumGorunumuYenile(); }
+    function hassas(){
+      navigator.geolocation.getCurrentPosition(function(pos){ konumSonucYaz(konumHesapla(pos.coords, subeler)); }, function(err){
+        var neden = err && err.code === 1 ? 'konum izni verilmedi' : (err && err.code === 3 ? 'zaman aşımı' : 'konum alınamadı');
+        if(hatirlanan) return; // hatırlanan "şubede" sonucu, arka plandaki deneme başarısız diye bozulmaz
+        konumSonucYaz({ durum: 'hata', hata: neden });
+      }, { enableHighAccuracy: true, timeout: 15000, maximumAge: 0 });
+    }
     navigator.geolocation.getCurrentPosition(function(pos){
-      var c = pos.coords, enYakin = null;
-      subeler.forEach(function(b){
-        var m = mesafeMetre(c.latitude, c.longitude, b.enlem, b.boylam);
-        if(!enYakin || m - b.yaricap < enYakin.m - enYakin.b.yaricap) enYakin = { b: b, m: m };
-      });
-      konumSonuc = { durum: enYakin.m <= enYakin.b.yaricap ? 'icerde' : 'disarda', sube: enYakin.b.ad, mesafe: Math.round(enYakin.m), dogruluk: Math.round(c.accuracy || 0) };
-      konumGorunumuYenile(); konumSunucuyaBildir();
-    }, function(err){
-      var neden = err && err.code === 1 ? 'konum izni verilmedi' : (err && err.code === 3 ? 'zaman aşımı' : 'konum alınamadı');
-      konumSonuc = { durum: 'hata', hata: neden };
-      konumGorunumuYenile(); konumSunucuyaBildir();
-    }, { enableHighAccuracy: true, timeout: 15000, maximumAge: 0 });
+      var r = konumHesapla(pos.coords, subeler);
+      if(r.durum === 'icerde') konumSonucYaz(r); else hassas();
+    }, function(err){ if(err && err.code === 1){ if(!hatirlanan) konumSonucYaz({ durum: 'hata', hata: 'konum izni verilmedi' }); } else hassas(); },
+    { enableHighAccuracy: false, timeout: 4000, maximumAge: 10 * 60 * 1000 });
   }
-  // Girişte: önce güncel şube listesini çek (olmazsa telefondaki son listeyle devam), sonra konumu ölç.
+  // Girişte: önce güncel şube listesini çek. Telefon şubenin WiFi'ındaysa (sunucu internet adresinden tanır)
+  // GPS hiç beklenmez. Değilse konum ölçülür.
   function konumKontrol(zorla){
     if(!state.currentUser) return;
     if(!zorla && konumKontrolKullanici === state.currentUser.name) return; // bu açılışta zaten yapıldı
     konumKontrolKullanici = state.currentUser.name;
-    konumSonuc = subeListesi().length ? { durum: 'bekliyor' } : null;
+    var h = state.konumHatira, sbl = subeListesi();
+    if(!zorla && h && h.kim === state.currentUser.name && Date.now() - h.zaman < KONUM_HATIRLA_MS && sbl.some(function(b){ return b.ad === h.sube; })){
+      konumSonuc = { durum: 'icerde', sube: h.sube, yol: h.yol, hatira: true };
+    } else konumSonuc = sbl.length ? { durum: 'bekliyor' } : null;
     konumGorunumuYenile();
     var url = state.serverUrl || DEFAULT_SERVER_URL;
     if(!navigator.onLine){ konumOlc(); return; }
     jsonpRequestP(url, { action: 'subeler' }, function(err, data){
-      if(!err && data && data.status === 'ok' && Array.isArray(data.subeler)){ state.subeler = data.subeler; save(); }
+      if(!err && data && data.status === 'ok' && Array.isArray(data.subeler)){
+        state.subeler = data.subeler; state.agIp = data.ip || ''; save();
+        if(data.agSube){ konumSonucYaz({ durum: 'icerde', sube: data.agSube, yol: 'ag' }); return; }
+      }
       konumOlc();
     }, 15000);
   }
@@ -5936,11 +5960,32 @@
     el.innerHTML = adminSubeler.map(function(b, i){
       return '<div style="display:flex; align-items:center; gap:8px; background:var(--panel2); border-radius:10px; padding:8px 10px; margin-bottom:6px; font-size:12.5px;">' +
         '<div style="flex:1;"><b>' + escapeHtml(b.ad) + '</b><div style="color:var(--muted); font-family:var(--mono); font-size:11px;">' +
-        Number(b.enlem).toFixed(5) + ', ' + Number(b.boylam).toFixed(5) + ' · ' + b.yaricap + ' m</div></div>' +
+        Number(b.enlem).toFixed(5) + ', ' + Number(b.boylam).toFixed(5) + ' · ' + b.yaricap + ' m</div>' +
+        '<div style="margin-top:4px; display:flex; flex-wrap:wrap; gap:4px; align-items:center;">' +
+        (b.ipler || []).map(function(ip){ return '<span style="font-family:var(--mono); font-size:11px; background:var(--panel); border:1px solid var(--line); border-radius:8px; padding:2px 6px;">📶 ' + escapeHtml(ip) +
+          ' <a href="#" class="adminSubeIpSil" data-i="' + i + '" data-ip="' + escapeHtml(ip) + '" style="color:var(--red); text-decoration:none;">✕</a></span>'; }).join('') +
+        '<button type="button" class="adminSubeAgEkle" data-i="' + i + '" style="font-size:11.5px; padding:4px 8px; border-radius:8px;">📶 Bu ağı ekle</button></div></div>' +
         '<button type="button" class="adminSubeSil" data-i="' + i + '" style="background:transparent; border:none; font-size:17px; padding:2px 4px;" title="Sil">🗑️</button></div>';
     }).join('');
   }
   document.getElementById('adminSubeList').addEventListener('click', function(e){
+    var ipSil = e.target.closest('.adminSubeIpSil');
+    if(ipSil){ e.preventDefault(); var sb = adminSubeler[Number(ipSil.getAttribute('data-i'))]; var ipx = ipSil.getAttribute('data-ip');
+      sb.ipler = (sb.ipler || []).filter(function(x){ return x !== ipx; }); renderAdminSubeler(); warnToast('Ağ çıkarıldı — kalıcı olması için "Şubeleri Kaydet"e bas'); return; }
+    var agEkle = e.target.closest('.adminSubeAgEkle');
+    if(agEkle){
+      // Bu telefonun şu anki internet adresini sunucudan öğren; telefon şubenin WiFi'ına bağlı olmalı.
+      var sb2 = adminSubeler[Number(agEkle.getAttribute('data-i'))];
+      if(navigator.connection && navigator.connection.type === 'cellular'){ warnToast('Telefon mobil veride — önce şubenin WiFi\'ına bağlan'); return; }
+      agEkle.disabled = true; agEkle.textContent = '⏳';
+      jsonpRequestP(state.serverUrl || DEFAULT_SERVER_URL, { action: 'subeler' }, function(err, data){
+        agEkle.disabled = false; agEkle.textContent = '📶 Bu ağı ekle';
+        if(err || !data || !data.ip){ errorToast('Ağ adresi alınamadı' + (data && data.status === 'ok' ? ' (uygulama yeni sunucuya bağlı değil)' : '')); return; }
+        sb2.ipler = (sb2.ipler || []).filter(function(x){ return x !== data.ip; }); sb2.ipler.push(data.ip);
+        renderAdminSubeler(); successToast(sb2.ad + ' için ağ eklendi (' + data.ip + ') — "Şubeleri Kaydet"e bas');
+      }, 15000);
+      return;
+    }
     var b = e.target.closest('.adminSubeSil'); if(!b) return;
     adminSubeler.splice(Number(b.getAttribute('data-i')), 1); renderAdminSubeler();
     warnToast('Silindi — kalıcı olması için "Şubeleri Kaydet"e bas');
@@ -5954,8 +5999,9 @@
     navigator.geolocation.getCurrentPosition(function(pos){
       btn.disabled = false; btn.textContent = '📍 Bulunduğum yeri bu şube olarak ekle';
       var c = pos.coords;
+      var eskiIp = (adminSubeler.filter(function(b){ return b.ad === ad; })[0] || {}).ipler || [];
       adminSubeler = adminSubeler.filter(function(b){ return b.ad !== ad; });
-      adminSubeler.push({ ad: ad, enlem: Math.round(c.latitude * 1e6) / 1e6, boylam: Math.round(c.longitude * 1e6) / 1e6, yaricap: Math.max(50, Math.min(yaricap, 5000)) });
+      adminSubeler.push({ ipler: eskiIp, ad: ad, enlem: Math.round(c.latitude * 1e6) / 1e6, boylam: Math.round(c.longitude * 1e6) / 1e6, yaricap: Math.max(50, Math.min(yaricap, 5000)) });
       renderAdminSubeler();
       document.getElementById('adminSubeAd').value = '';
       successToast(ad + ' eklendi (GPS ±' + Math.round(c.accuracy || 0) + ' m) — "Şubeleri Kaydet"e bas');
