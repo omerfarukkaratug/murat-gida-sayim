@@ -13,6 +13,8 @@
 # =====================================================================
 
 $Klasor        = "C:\MKBaski"
+# Once kendi sunucumuz (dogrudan, hizli); ulasilamazsa eski Google adresi (oradan yine ayni sunucuya gider).
+$SunucuUrl     = "https://sunucu.krtsaha.com/exec"
 $AppsScriptUrl = "https://script.google.com/macros/s/AKfycbwH0hVGDXIQhdSxg2neDBNUEOxY1SNacJRz4cqf3WaP8xgAhlEnKfRv5xnlENKnh3XuYA/exec"
 $SayfaUrl      = "https://omerfarukkaratug.github.io/murat-gida-sayim/etiket.html"
 $AnahtarDosyasi = Join-Path $Klasor "baski-anahtar.txt"
@@ -64,7 +66,17 @@ if (-not $Tarayici) { Yaz-Log "HATA: Chrome ya da Edge bulunamadi."; exit 1 }
 
 function Sor($parametreler) {
     $parcalar = foreach ($k in $parametreler.Keys) { "$k=" + [uri]::EscapeDataString([string]$parametreler[$k]) }
-    return Invoke-RestMethod -Uri ($AppsScriptUrl + "?" + ($parcalar -join "&")) -Method Get -TimeoutSec 60
+    $q = "?" + ($parcalar -join "&")
+    if ($script:SunucuHataZamani -and ((Get-Date) - $script:SunucuHataZamani).TotalMinutes -lt 5) {
+        return Invoke-RestMethod -Uri ($AppsScriptUrl + $q) -Method Get -TimeoutSec 60
+    }
+    try { return Invoke-RestMethod -Uri ($SunucuUrl + $q) -Method Get -TimeoutSec 60 }
+    catch {
+        # Sunucuya dogrudan ulasilamadi: 5 dakika Google uzerinden devam et, sonra yine dogrudan dene.
+        $script:SunucuHataZamani = Get-Date
+        Yaz-Log "UYARI: sunucuya dogrudan ulasilamadi, 5 dk Google uzerinden: $($_.Exception.Message)"
+        return Invoke-RestMethod -Uri ($AppsScriptUrl + $q) -Method Get -TimeoutSec 60
+    }
 }
 
 function Yazici-Adlari {

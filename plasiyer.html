@@ -476,6 +476,7 @@
   <div id="yazdir" class="gizli"></div>
   <div id="toast" class="gizli"></div>
 
+<script src="bt-yazici.js?v=239"></script>
 <script>
 (function(){
   'use strict';
@@ -2174,6 +2175,7 @@
     y.innerHTML = '<div class="yazdirma" style="display:flex; gap:8px; margin-bottom:12px;"><button type="button" id="yzYazdir">🖨️ Yazdır</button><button type="button" id="yzKapat">✕ Kapat</button></div>' + html;
     y.classList.remove('gizli');
     $('yzYazdir').onclick = function(){ window.print(); };
+    if(window.BtYazici) BtYazici.dugmeEkle($('yazdir'), 'Plasiyer');
     $('yzKapat').onclick = function(){ y.classList.add('gizli'); y.innerHTML = ''; };
   }
 

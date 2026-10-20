@@ -31,6 +31,8 @@ $SqlServer     = "SERVER\ERP12"
 # Bos: ERP12'nin AKTIF yil veri tabani otomatik bulunur (yil devrinden sonra
 # kendiliginden yeni yila gecer). Elle sabitlemek icin: "ERP122026"
 $Database      = ""
+# Once kendi sunucumuz (dogrudan, hizli); ulasilamazsa eski Google adresi (oradan yine ayni sunucuya gider).
+$SunucuUrl     = "https://sunucu.krtsaha.com/exec"
 $AppsScriptUrl = "https://script.google.com/macros/s/AKfycbwH0hVGDXIQhdSxg2neDBNUEOxY1SNacJRz4cqf3WaP8xgAhlEnKfRv5xnlENKnh3XuYA/exec"
 $LogFile       = "C:\Scripts\stok-gonderim-log.txt"
 $DbUrl         = "https://wjyqempcmyrmruhdpcwk.supabase.co"
@@ -71,7 +73,12 @@ function Cevap-Basarili($sonuc) {
 function Gonder-Sheets($govde, $ne, $adet) {
     for ($deneme = 1; $deneme -le 2; $deneme++) {
         try {
-            $sonuc = Invoke-RestMethod -Uri $AppsScriptUrl -Method Post -Body ([System.Text.Encoding]::UTF8.GetBytes($govde)) -ContentType "application/json; charset=utf-8" -TimeoutSec 300
+            $baytlar = [System.Text.Encoding]::UTF8.GetBytes($govde)
+            try { $sonuc = Invoke-RestMethod -Uri $SunucuUrl -Method Post -Body $baytlar -ContentType "application/json; charset=utf-8" -TimeoutSec 300 }
+            catch {
+                Yaz-Log "UYARI: sunucuya dogrudan ulasilamadi, Google uzerinden deneniyor: $($_.Exception.Message)"
+                $sonuc = Invoke-RestMethod -Uri $AppsScriptUrl -Method Post -Body $baytlar -ContentType "application/json; charset=utf-8" -TimeoutSec 300
+            }
             $cevapMetni = if ($sonuc -is [string]) { $sonuc.Substring(0, [Math]::Min(120, $sonuc.Length)) } else { $sonuc | ConvertTo-Json -Compress }
             if (Cevap-Basarili $sonuc) {
                 Yaz-Log "BASARILI: $adet $ne gonderildi. Sunucu yaniti: $cevapMetni"

@@ -22,6 +22,8 @@
 # =====================================================================
 
 # ---------------------- AYARLAR (kendine gore kontrol et) ----------------------
+# Once kendi sunucumuz (dogrudan, hizli); ulasilamazsa eski Google adresi (oradan yine ayni sunucuya gider).
+$SunucuUrl     = "https://sunucu.krtsaha.com/exec"
 $AppsScriptUrl = "https://script.google.com/macros/s/AKfycbwH0hVGDXIQhdSxg2neDBNUEOxY1SNacJRz4cqf3WaP8xgAhlEnKfRv5xnlENKnh3XuYA/exec"
 # Dosyalarin konacagi ana klasor. Icinde "Mal Alis" ve "Mal Cikis" klasorleri kendiliginden acilir.
 # Bos birakilirsa: Masaustu\Mal Aktarim
@@ -65,9 +67,14 @@ try {
     # Sunucu yanitini UTF-8 olarak oku (Turkce harfler bozulmasin).
     function Sunucu-Get($parametreler) {
         $q = ($parametreler.GetEnumerator() | ForEach-Object { [Uri]::EscapeDataString($_.Key) + "=" + [Uri]::EscapeDataString([string]$_.Value) }) -join "&"
-        $wc = New-Object System.Net.WebClient
-        $wc.Encoding = [System.Text.Encoding]::UTF8
-        try { $metin = $wc.DownloadString($AppsScriptUrl + "?" + $q) } finally { $wc.Dispose() }
+        $metin = $null
+        foreach ($adres in @($SunucuUrl, $AppsScriptUrl)) {
+            $wc = New-Object System.Net.WebClient
+            $wc.Encoding = [System.Text.Encoding]::UTF8
+            try { $metin = $wc.DownloadString($adres + "?" + $q); break }
+            catch { if ($adres -eq $AppsScriptUrl) { throw }; Yaz-Log "UYARI: sunucuya dogrudan ulasilamadi, Google uzerinden deneniyor: $($_.Exception.Message)" }
+            finally { $wc.Dispose() }
+        }
         return ($metin | ConvertFrom-Json)
     }
 

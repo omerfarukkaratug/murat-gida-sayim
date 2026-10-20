@@ -624,6 +624,7 @@
 <div id="toast" class="gizli"></div>
 <div id="baski"></div>
 
+<script src="bt-yazici.js?v=239"></script>
 <script>
 (function(){
   'use strict';
@@ -2818,7 +2819,8 @@
           '<div class="yzDugme">' + (g.adet ? '<button type="button" class="ana" data-yz="bas" data-f="' + f + '">🖨️ Yazdır</button>' : '') +
             '<button type="button" data-yz="onizle" data-f="' + f + '">Önizle</button>' +
             (g.adet && f === 'zebra' ? '<button type="button" data-yz="deneme" data-f="' + f + '">1 deneme etiketi</button>' : '') +
-            (g.adet && yt('etiket_yazici') ? '<button type="button" data-yz="cihaz" data-f="' + f + '">Bu cihazdan</button>' : '') + '</div>' +
+            (g.adet && yt('etiket_yazici') ? '<button type="button" data-yz="cihaz" data-f="' + f + '">Bu cihazdan</button>' : '') +
+            (g.adet && yt('etiket_yazici') && window.BtYazici && BtYazici.destekli() ? '<button type="button" data-yz="bt" data-f="' + f + '">🔵 Bluetooth</button>' : '') + '</div>' +
         '</div>';
       }).join('') +
       (sira.some(function(f){ return f !== 'zebra' && f !== 'raf'; }) ? '<label style="display:flex; gap:10px; align-items:flex-start; margin-top:10px; padding:8px 10px; border:1px solid var(--line); border-radius:12px; font-size:13.5px; font-weight:700; cursor:pointer;">' +
@@ -2837,6 +2839,7 @@
     if(is === 'temizle'){ durum.liste = durum.liste.filter(function(u){ return !u.basildi; }); kaydet(); listeCiz(); ciz(); return; }
     if(is === 'onizle'){ bicimSec(f); yazdirCiz(); $('onizleKart').scrollIntoView({ behavior: 'smooth' }); return; }
     if(is === 'cihaz'){ bicimSec(f); $('yazdirBtn').click(); return; }
+    if(is === 'bt'){ bicimSec(f); btBaski = true; try { $('yazdirBtn').click(); } finally { btBaski = false; } return; }
     if(is === 'yazici'){ bicimSec(f); ysYalnizSec = true; baskiYukle(function(){ yaziciSecAc(); }); return; }
     // İptal: sunucuda iş "iptal" olur; bilgisayar basmadan önce sorduğu için basmaz. Kâğıt zaten çıkmışsa yalnızca takip durur.
     if(is === 'iptal'){
@@ -3566,6 +3569,7 @@
 
   // ---------- Yazdır ----------
   if(!yt('etiket_yazici')) $('yazdirBtn').classList.add('yetkiGizli');
+  var btBaski = false;   // "🔵 Bluetooth": aynı kontrollerden geçer, sistem yazdırma yerine telefondan Bluetooth yazıcıya gider
   $('yazdirBtn').addEventListener('click', function(){
     if(!yt('etiket_yazici')){ toast('Bu cihazdan basma yetkin yok', 'uyari'); return; }
     if(!aktifListe().length){ toast('Bu biçimde basılacak ürün yok', 'uyari'); return; }
@@ -3593,6 +3597,13 @@
         ciftKapat(); kaydet(); yazdirCiz();
       }, 400);
     };
+    if(btBaski){
+      baskiKaydiGonder('bluetooth');
+      var zb = durum.bicim === 'zebra' ? durum.zebra : null;
+      BtYazici.yazdir({ sayfalar: document.querySelectorAll('#baski .sayfa'), baslik: BICIM[durum.bicim].ad + ' · ' + basilanIdler.length + ' ürün',
+        etiket: zb ? { w: zb.w, h: zb.h } : null, bitti: sor });
+      return;
+    }
     window.addEventListener('afterprint', function bitti(){ window.removeEventListener('afterprint', bitti); sor(); });
     baskiKaydiGonder('bu cihazdan');
     setTimeout(function(){ window.print(); }, 150);

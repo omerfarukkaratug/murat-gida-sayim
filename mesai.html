@@ -247,6 +247,7 @@
   <div id="yazdir" class="gizli"></div>
   <div id="toast" class="gizli"></div>
 
+<script src="bt-yazici.js?v=239"></script>
 <script>
 (function(){
   'use strict';
@@ -760,6 +761,7 @@
     $('yazdir').innerHTML = '<div class="yazdirma" style="display:flex; gap:8px; margin-bottom:14px;"><button class="ana" id="yzYazdir">🖨 Yazdır</button><button id="yzKapat">✕ Kapat</button></div>' + html;
     $('yazdir').classList.remove('gizli');
     $('yzYazdir').onclick = function(){ window.print(); };
+    if(window.BtYazici) BtYazici.dugmeEkle($('yazdir'), 'Mesai');
     $('yzKapat').onclick = function(){ $('yazdir').classList.add('gizli'); $('yazdir').innerHTML = ''; };
   }
   function imzaSayfasi(k, ay){

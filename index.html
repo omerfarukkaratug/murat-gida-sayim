@@ -111,6 +111,33 @@
   .menuBtn{display:flex; align-items:center; gap:12px; width:100%; text-align:left; padding:16px; background:var(--panel2); border:1.5px solid var(--line); border-radius:var(--r-md); font-size:15px; font-weight:800; color:var(--text);}
   .menuBtn .menuIcon{font-size:22px; flex-shrink:0;}
   .menuBtn .menuSub{display:block; font-weight:500; font-size:11.5px; color:var(--muted); margin-top:2px;}
+  /* Kişisel menü: 1 / 2 / 3 sütun, küçük / normal / büyük (her kullanıcı kendi telefonunda ayarlar) */
+  #menuListe{display:grid; grid-template-columns:1fr; gap:10px;}
+  #menuListe.sutun2{grid-template-columns:1fr 1fr;}
+  #menuListe.sutun3{grid-template-columns:1fr 1fr 1fr; gap:8px;}
+  #menuListe .menuGizli{display:none !important;}
+  #menuListe.sutun2 .menuBtn, #menuListe.sutun3 .menuBtn{flex-direction:column; justify-content:center; text-align:center; gap:6px; padding:14px 8px; min-height:96px;}
+  #menuListe.sutun3 .menuBtn{font-size:13px; padding:12px 4px; min-height:84px; line-height:1.2;}
+  #menuListe.sutun3 .menuSub{display:none;}
+  #menuListe.kucuk .menuBtn{padding:10px 12px; font-size:14px; min-height:0;}
+  #menuListe.kucuk .menuSub{display:none;}
+  #menuListe.kucuk .menuIcon{font-size:19px;}
+  #menuListe.kucuk.sutun2 .menuBtn, #menuListe.kucuk.sutun3 .menuBtn{min-height:64px; padding:10px 4px;}
+  #menuListe.buyuk .menuBtn{padding:22px 18px; font-size:17px;}
+  #menuListe.buyuk .menuIcon{font-size:30px;}
+  #menuListe.buyuk .menuSub{font-size:12.5px;}
+  #menuListe.buyuk.sutun2 .menuBtn{min-height:128px;}
+  #menuListe.buyuk.sutun3 .menuBtn{min-height:108px; font-size:14.5px;}
+  .mnSatir{display:flex; align-items:center; gap:8px; padding:9px 2px; border-top:1px solid var(--line);}
+  .mnSatir:first-child{border-top:0;}
+  .mnSatir .ad{flex:1; min-width:0; font-weight:700; font-size:14px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;}
+  .mnSatir.kapali .ad{color:var(--muted); text-decoration:line-through;}
+  .mnSatir button{width:40px; height:38px; border-radius:10px; background:var(--panel2); border:1.5px solid var(--line); font-size:16px; color:var(--text); flex-shrink:0;}
+  .mnSatir button:disabled{opacity:.3;}
+  .menuDuzenLink{color:var(--muted); text-decoration:underline; font-size:12.5px;}
+  #setup #yeniAdresKart{background:linear-gradient(135deg,#5546ea,#7a6cff); color:#fff; border:0;}
+  #setup #yeniAdresKart .hint{color:rgba(255,255,255,.88);}
+  #setup #yeniAdresKart a.git{display:block; text-align:center; margin-top:10px; background:#fff; color:#3b2fd0; font-weight:800; padding:12px; border-radius:12px; text-decoration:none;}
   .filebtn{display:inline-block; background:var(--panel2); border:1.5px dashed #c4c4c9; color:var(--text);
     padding:16px; border-radius:var(--r-sm); text-align:center; font-size:13px; cursor:pointer; width:100%; font-weight:600; transition:background .15s, border-color .15s;}
   .filebtn input{display:none;}
@@ -380,7 +407,7 @@
   <header style="border:none; padding:0 0 16px; background:transparent; display:flex; align-items:flex-start; justify-content:space-between;">
     <div>
       <h1><img src="logo-header.png" alt="Murat Gıda" style="height:30px; width:auto; display:block;"></h1>
-      <div class="sub"><img src="icon.svg" alt="" style="width:15px;height:15px;vertical-align:-3px;margin-right:5px;">KRT Saha · Murat Gıda • offline • Android • build 238</div>
+      <div class="sub"><img src="icon.svg" alt="" style="width:15px;height:15px;vertical-align:-3px;margin-right:5px;">KRT Saha · Murat Gıda • offline • Android • build 239</div>
     </div>
     <button type="button" id="themeToggleBtn" title="Tema seç" style="background:var(--panel2); border:1.5px solid var(--line); color:var(--text); width:34px; height:34px; border-radius:50%; font-size:15px; padding:0; display:flex; align-items:center; justify-content:center; flex-shrink:0;">🎨</button>
   </header>
@@ -410,10 +437,16 @@
     </div>
   </div>
 
+  <div class="card hidden" id="yeniAdresKart">
+    <div style="font-weight:800; font-size:16px;">🚀 Uygulamanın yeni adresi: app.krtsaha.com</div>
+    <div class="hint" id="yeniAdresYazi" style="margin:6px 0 0;"></div>
+    <a class="git hidden" id="yeniAdresGit" href="https://app.krtsaha.com/">Yeni adrese geç →</a>
+  </div>
+
   <div class="card hidden" id="homeMenuScreen">
     <div id="konumDurumu" class="hint hidden" style="text-align:center; margin:-4px 0 12px;"></div>
     <div style="text-align:center; font-weight:800; font-size:12px; color:var(--muted); text-transform:uppercase; letter-spacing:.06em; margin-bottom:14px;">Ne yapmak istersin?</div>
-    <div style="display:flex; flex-direction:column; gap:10px;">
+    <div id="menuListe">
       <button type="button" class="menuBtn" id="menuSayimBtn"><span class="menuIcon">📋</span><span>Sayım<span class="menuSub">Barkod okutarak stok sayımı</span></span></button>
       <button type="button" class="menuBtn" id="menuMalGirisBtn"><span class="menuIcon">📥</span><span>Mal Giriş<span class="menuSub">Fatura/irsaliye ile stok girişi</span></span></button>
       <button type="button" class="menuBtn" id="menuMalCikisBtn"><span class="menuIcon">📤</span><span>Mal Çıkış<span class="menuSub">Fatura/irsaliye ile stok çıkışı</span></span></button>
@@ -427,7 +460,8 @@
       <button type="button" class="menuBtn hidden" id="menuStokHrkBtn"><span class="menuIcon">📦</span><span>Stok Hareketleri<span class="menuSub">Ürünün tüm giriş/çıkışları, fatura ve fiş detayı</span></span></button>
       <button type="button" class="menuBtn hidden" id="menuCariHrkBtn"><span class="menuIcon">📒</span><span>Cari Hareketleri<span class="menuSub">Cari ekstresi: borç, alacak, bakiye</span></span></button>
     </div>
-    <div class="hint hidden" id="adminOpenLinkWrap" style="text-align:center; margin-top:16px;"><a href="#" id="adminOpenLink" style="color:var(--muted); text-decoration:underline;">⚙ Yönetici Paneli</a></div>
+    <div class="hint" style="text-align:center; margin-top:14px;"><a href="#" id="menuDuzenLink" class="menuDuzenLink">✏️ Menüyü düzenle</a></div>
+    <div class="hint hidden" id="adminOpenLinkWrap" style="text-align:center; margin-top:8px;"><a href="#" id="adminOpenLink" style="color:var(--muted); text-decoration:underline;">⚙ Yönetici Paneli</a></div>
   </div>
 
   <div id="afterLoginArea" class="hidden">
@@ -979,6 +1013,25 @@
        AYNI alttan açılan kartı ve AYNI hesap makinesi tuş takımını kullanır —
        uygulamanın her yerinde tek tip miktar girişi. -->
   <!-- Bekleyen alıştan iade irsaliyeleri: mal kabulde cari seçilince uyarı + içerik -->
+  <div id="menuDuzenModal" class="sheetOverlay hidden">
+    <div class="sheetCard" style="text-align:left; max-height:calc(92 * var(--eh)); overflow-y:auto;">
+      <div class="sheetGrip"></div>
+      <div class="sheetTitle">✏️ Menüyü düzenle</div>
+      <div class="hint" style="margin:0 0 12px;">Sadece bu telefonda ve sadece senin menün değişir.</div>
+      <label style="margin:0 0 6px; display:block;">Yan yana kaç buton</label>
+      <div class="segRow" id="mnSutun"><button type="button" class="segBtn" data-v="1">▭ Tek</button><button type="button" class="segBtn" data-v="2">▭▭ İkili</button><button type="button" class="segBtn" data-v="3">▭▭▭ Üçlü</button></div>
+      <label style="margin:14px 0 6px; display:block;">Buton boyu</label>
+      <div class="segRow" id="mnBoyut"><button type="button" class="segBtn" data-v="kucuk">Küçük</button><button type="button" class="segBtn" data-v="normal">Normal</button><button type="button" class="segBtn" data-v="buyuk">Büyük</button></div>
+      <label style="margin:14px 0 4px; display:block;">Sıra ve görünürlük</label>
+      <div class="hint" style="margin:0 0 6px;">↑ ↓ ile yerini değiştir, 👁 ile gizle / göster.</div>
+      <div id="mnListe"></div>
+      <div style="display:flex; gap:8px; margin-top:14px;">
+        <button type="button" class="choiceBtn" id="mnSifirla" style="flex:1; text-align:center;">Varsayılana dön</button>
+        <button type="button" class="choiceBtn main" id="mnBitti" style="flex:1; text-align:center;">Bitti</button>
+      </div>
+    </div>
+  </div>
+
   <div id="malIadeModal" class="sheetOverlay hidden">
     <div class="sheetCard" style="text-align:left; max-height:calc(92 * var(--eh)); overflow-y:auto;">
       <div class="sheetGrip"></div>
@@ -1924,7 +1977,105 @@
     startBtn.textContent = (state.session.scans && state.session.scans.length > 0) ? '▶ Sayıma Devam Et' : 'Sayıma Başla';
     katalogAlisDenetle();
     konumKontrol(); // girişte (açılışta ve giriş yapınca) bir kez
+    menuUygula();
+    yeniAdresDenetle();
   }
+
+  // ---------- Kişisel ana menü: sütun sayısı, boy, sıra, gizleme (kullanıcı başına, bu telefonda) ----------
+  function menuAnahtar(){ return 'mkMenu_v1'; }
+  // (showLoggedInUI açılışta bu satırlardan önce çağrılabildiği için değerler ilk kullanımda hesaplanır)
+  var menuVarsayilan = null;
+  function menuVarsayilanSira(){ if(!menuVarsayilan) menuVarsayilan = Array.prototype.map.call(document.getElementById('menuListe').children, function(b){ return b.id; }); return menuVarsayilan; }
+  function menuTumAyar(){ try { return JSON.parse(localStorage.getItem(menuAnahtar()) || '{}') || {}; } catch(e){ return {}; } }
+  function menuKimin(){ return (state.currentUser && state.currentUser.name) ? String(state.currentUser.name).toLowerCase() : '_'; }
+  function menuAyar(){
+    var a = menuTumAyar()[menuKimin()] || {};
+    return { sutun: [1, 2, 3].indexOf(Number(a.sutun)) !== -1 ? Number(a.sutun) : 1,
+             boyut: ['kucuk', 'normal', 'buyuk'].indexOf(a.boyut) !== -1 ? a.boyut : 'normal',
+             sira: Array.isArray(a.sira) ? a.sira : [], gizli: Array.isArray(a.gizli) ? a.gizli : [] };
+  }
+  function menuKaydet(a){ var t = menuTumAyar(); t[menuKimin()] = a; try { localStorage.setItem(menuAnahtar(), JSON.stringify(t)); } catch(e){} }
+  function menuSira(a){
+    var sira = a.sira.filter(function(id){ return menuVarsayilanSira().indexOf(id) !== -1; });
+    menuVarsayilanSira().forEach(function(id){ if(sira.indexOf(id) === -1) sira.push(id); });
+    return sira;
+  }
+  function menuUygula(){
+    var menuListeEl = document.getElementById('menuListe');
+    var a = menuAyar();
+    menuListeEl.classList.toggle('sutun2', a.sutun === 2);
+    menuListeEl.classList.toggle('sutun3', a.sutun === 3);
+    menuListeEl.classList.toggle('kucuk', a.boyut === 'kucuk');
+    menuListeEl.classList.toggle('buyuk', a.boyut === 'buyuk');
+    menuSira(a).forEach(function(id){
+      var b = document.getElementById(id); if(!b) return;
+      menuListeEl.appendChild(b);
+      b.classList.toggle('menuGizli', a.gizli.indexOf(id) !== -1);
+    });
+  }
+  function menuButonAdi(b){ var ad = b.textContent; ['.menuSub', '.menuIcon'].forEach(function(k){ var t = b.querySelector(k); if(t) ad = ad.replace(t.textContent, ''); }); return ad.trim(); }
+  function menuDuzenCiz(){
+    var a = menuAyar();
+    Array.prototype.forEach.call(document.querySelectorAll('#mnSutun .segBtn'), function(x){ x.classList.toggle('active', Number(x.getAttribute('data-v')) === a.sutun); });
+    Array.prototype.forEach.call(document.querySelectorAll('#mnBoyut .segBtn'), function(x){ x.classList.toggle('active', x.getAttribute('data-v') === a.boyut); });
+    // Yalnızca bu kullanıcının yetkisi olan butonlar listelenir.
+    var gorunen = menuSira(a).filter(function(id){ var b = document.getElementById(id); return b && !b.classList.contains('hidden'); });
+    document.getElementById('mnListe').innerHTML = gorunen.map(function(id, i){
+      var b = document.getElementById(id), kapali = a.gizli.indexOf(id) !== -1;
+      return '<div class="mnSatir' + (kapali ? ' kapali' : '') + '"><span style="font-size:20px;">' + escapeHtml((b.querySelector('.menuIcon') || {}).textContent || '') + '</span>' +
+        '<span class="ad">' + escapeHtml(menuButonAdi(b)) + '</span>' +
+        '<button type="button" data-mnyukari="' + id + '"' + (i === 0 ? ' disabled' : '') + ' aria-label="Yukarı">↑</button>' +
+        '<button type="button" data-mnasagi="' + id + '"' + (i === gorunen.length - 1 ? ' disabled' : '') + ' aria-label="Aşağı">↓</button>' +
+        '<button type="button" data-mngoz="' + id + '" aria-label="Gizle / göster">' + (kapali ? '🚫' : '👁') + '</button></div>';
+    }).join('');
+  }
+  function menuDegistir(fn){ var a = menuAyar(); a.sira = menuSira(a); fn(a); menuKaydet(a); menuUygula(); menuDuzenCiz(); }
+  document.getElementById('menuDuzenLink').addEventListener('click', function(e){ e.preventDefault(); menuDuzenCiz(); document.getElementById('menuDuzenModal').classList.remove('hidden'); });
+  document.getElementById('mnBitti').addEventListener('click', function(){ document.getElementById('menuDuzenModal').classList.add('hidden'); });
+  document.getElementById('menuDuzenModal').addEventListener('click', function(e){ if(e.target === this) this.classList.add('hidden'); });
+  document.getElementById('mnSifirla').addEventListener('click', function(){ menuDegistir(function(a){ a.sutun = 1; a.boyut = 'normal'; a.sira = menuVarsayilanSira().slice(); a.gizli = []; }); });
+  document.getElementById('mnSutun').addEventListener('click', function(e){ var b = e.target.closest('.segBtn'); if(b) menuDegistir(function(a){ a.sutun = Number(b.getAttribute('data-v')); }); });
+  document.getElementById('mnBoyut').addEventListener('click', function(e){ var b = e.target.closest('.segBtn'); if(b) menuDegistir(function(a){ a.boyut = b.getAttribute('data-v'); }); });
+  document.getElementById('mnListe').addEventListener('click', function(e){
+    var b = e.target.closest('button'); if(!b || b.disabled) return;
+    var yukari = b.getAttribute('data-mnyukari'), asagi = b.getAttribute('data-mnasagi'), goz = b.getAttribute('data-mngoz');
+    menuDegistir(function(a){
+      if(goz){ var i = a.gizli.indexOf(goz); if(i === -1) a.gizli.push(goz); else a.gizli.splice(i, 1); return; }
+      var id = yukari || asagi, yon = yukari ? -1 : 1;
+      // Yetkisi olmayan (görünmeyen) butonların üstünden atlanır: komşu, listede görünen bir sonraki buton.
+      var gorunen = a.sira.filter(function(x){ var el = document.getElementById(x); return el && !el.classList.contains('hidden'); });
+      var j = gorunen.indexOf(id), komsu = gorunen[j + yon]; if(!komsu) return;
+      var p = a.sira.indexOf(id), q = a.sira.indexOf(komsu); a.sira[p] = komsu; a.sira[q] = id;
+    });
+  });
+
+  // ---------- Eski adres (github.io) → yeni adres (app.krtsaha.com) ----------
+  // Telefonun hafızası adrese bağlıdır: yeni adreste kayıtlar görünmez. Bu yüzden önce bu telefonda
+  // gönderilmemiş HİÇBİR kayıt kalmadığı görülür, sonra geçiş düğmesi çıkar.
+  function eskiAdresBekleyen(){
+    var n = 0, liste = [];
+    function oku(k){ try { return JSON.parse(localStorage.getItem(k) || 'null'); } catch(e){ return null; } }
+    var say = state.pendingSessions.length + state.session.scans.filter(function(it){ return !isScanSent(it); }).length + (state.session.deletedIds || []).length;
+    if(say){ n += say; liste.push('sayım / mal'); }
+    var pl = oku('mkPlasiyer_v1'); if(pl && pl.kuyruk && pl.kuyruk.length){ n += pl.kuyruk.length; liste.push('plasiyer'); }
+    var hz = oku('mkHazirla_v1'); if(hz){ var k = Object.keys(hz).filter(function(id){ return hz[id] && hz[id].kirli; }).length; if(k){ n += k; liste.push('sipariş hazırlama'); } }
+    return { n: n, liste: liste };
+  }
+  function yeniAdresDenetle(){
+    var kart = document.getElementById('yeniAdresKart');
+    if(!eskiAdresMi() || !state.currentUser){ kart.classList.add('hidden'); return; }
+    kart.classList.remove('hidden');
+    var b = eskiAdresBekleyen(), yazi = document.getElementById('yeniAdresYazi'), git = document.getElementById('yeniAdresGit');
+    if(b.n){
+      git.classList.add('hidden');
+      yazi.innerHTML = 'Bu telefonda henüz gönderilmemiş <b>' + b.n + '</b> kayıt var (' + escapeHtml(b.liste.join(', ')) + '). İnternete bağlanıp gönderilmesini bekle (plasiyer ya da sipariş hazırlama kaydıysa o ekranı bir kez aç); bitince buradan yeni adrese geçebilirsin.';
+    } else {
+      git.classList.remove('hidden');
+      yazi.innerHTML = 'Bekleyen kaydın yok, geçmeye hazırsın. Yeni adreste bir kez giriş yap ve <b>Ana ekrana ekle</b>. Sonra bu eski simgeyi telefondan silebilirsin.';
+    }
+  }
+  function eskiAdresMi(){ return /(^|\.)github\.io$/i.test(location.hostname); }
+  if(eskiAdresMi()) setInterval(function(){ if(!document.hidden) yeniAdresDenetle(); }, 15000);
   function showLoginUI(){
     closeMesaiScreen(); closePlasiyerScreen(); closeHazirlaScreen();
     try { localStorage.removeItem('mkSonEkran'); } catch(e){}

@@ -278,6 +278,7 @@
   <div id="yazdir" class="gizli"></div>
   <div id="toast" class="gizli"></div>
 
+<script src="bt-yazici.js?v=239"></script>
 <script>
 (function(){
   'use strict';
@@ -896,6 +897,7 @@
       '<div style="display:flex; gap:20px; margin-top:40px;"><div style="flex:1; border-top:1px solid #000; text-align:center; padding-top:6px;">Hazırlayan</div><div style="flex:1; border-top:1px solid #000; text-align:center; padding-top:6px;">Kontrol / teslim alan</div><div style="flex:1; border-top:1px solid #000; text-align:center; padding-top:6px;">Müşteri</div></div>';
     y.classList.remove('gizli');
     $('yzYazdir').onclick = function(){ window.print(); };
+    if(window.BtYazici) BtYazici.dugmeEkle($('yazdir'), 'Sipariş hazırlama fişi');
     $('yzKapat').onclick = function(){ y.classList.add('gizli'); y.innerHTML = ''; };
   }
 
