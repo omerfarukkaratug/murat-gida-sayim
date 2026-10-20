@@ -407,7 +407,7 @@
   <header style="border:none; padding:0 0 16px; background:transparent; display:flex; align-items:flex-start; justify-content:space-between;">
     <div>
       <h1><img src="logo-header.png" alt="Murat Gıda" style="height:30px; width:auto; display:block;"></h1>
-      <div class="sub"><img src="icon.svg" alt="" style="width:15px;height:15px;vertical-align:-3px;margin-right:5px;">KRT Saha · Murat Gıda • offline • Android • build 239</div>
+      <div class="sub"><img src="icon.svg" alt="" style="width:15px;height:15px;vertical-align:-3px;margin-right:5px;">KRT Saha · Murat Gıda • offline • Android • build 240</div>
     </div>
     <button type="button" id="themeToggleBtn" title="Tema seç" style="background:var(--panel2); border:1.5px solid var(--line); color:var(--text); width:34px; height:34px; border-radius:50%; font-size:15px; padding:0; display:flex; align-items:center; justify-content:center; flex-shrink:0;">🎨</button>
   </header>
@@ -1761,7 +1761,7 @@
   // ve unutulursa o telefon sessizce eski/ölü adrese takılı kalır), HER
   // SEFERİNDE güncel adrese zorluyoruz. Bu, hangi eski sürümden geliniyor
   // olursa olsun kesin ve kalıcı bir düzeltme sağlar.
-  var DEFAULT_SERVER_URL = 'https://script.google.com/macros/s/AKfycbwH0hVGDXIQhdSxg2neDBNUEOxY1SNacJRz4cqf3WaP8xgAhlEnKfRv5xnlENKnh3XuYA/exec'; // kendi sunucumuza taşınınca adresi sunucu bildirir (resetcheck → sunucuAdresi)
+  var DEFAULT_SERVER_URL = (/(^|\.)(krtsaha\.com|github\.io)$/.test(location.hostname) ? 'https://sunucu.krtsaha.com/exec' : 'https://script.google.com/macros/s/AKfycbwH0hVGDXIQhdSxg2neDBNUEOxY1SNacJRz4cqf3WaP8xgAhlEnKfRv5xnlENKnh3XuYA/exec'); // kendi uygulama adreslerimizde doğrudan kendi sunucumuz (Google aracı günlük kotaya takılıyordu) // kendi sunucumuza taşınınca adresi sunucu bildirir (resetcheck → sunucuAdresi)
   // İstisna: sunucunun kendisi "artık şu adresteyim" dediyse (kendi sunucumuza taşıma) o adres kullanılır.
   // Uygulama doğrudan kendi sunucumuzdan açıldıysa (sunucu.krtsaha.com, localhost) o sunucuya bağlan.
   // GitHub Pages / app.krtsaha.com gibi yalnız dosya sunan adreslerde bu devreye girmez.

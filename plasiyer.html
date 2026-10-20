@@ -480,7 +480,7 @@
 <script>
 (function(){
   'use strict';
-  var SUNUCU_VARSAYILAN = 'https://script.google.com/macros/s/AKfycbwH0hVGDXIQhdSxg2neDBNUEOxY1SNacJRz4cqf3WaP8xgAhlEnKfRv5xnlENKnh3XuYA/exec'; // kendi sunucumuza taşınınca adresi sunucu bildirir (resetcheck → sunucuAdresi)
+  var SUNUCU_VARSAYILAN = (/(^|\.)(krtsaha\.com|github\.io)$/.test(location.hostname) ? 'https://sunucu.krtsaha.com/exec' : 'https://script.google.com/macros/s/AKfycbwH0hVGDXIQhdSxg2neDBNUEOxY1SNacJRz4cqf3WaP8xgAhlEnKfRv5xnlENKnh3XuYA/exec'); // kendi uygulama adreslerimizde doğrudan kendi sunucumuz (Google aracı günlük kotaya takılıyordu) // kendi sunucumuza taşınınca adresi sunucu bildirir (resetcheck → sunucuAdresi)
   if (/^(sunucu\.|localhost$|127\.0\.0\.1$)/.test(location.hostname) && /^https?:$/.test(location.protocol)) SUNUCU_VARSAYILAN = location.origin + '/exec'; // kendi sunucumuzdan açıldıysa
   var SAYIM_ANAHTAR = 'sayimApp_meta_v2';  // sayım uygulamasının girişi (sadece OKUNUR)
   var GIRIS_ANAHTAR = 'mkPlasiyerGiris_v1';
@@ -505,7 +505,7 @@
 
   var GOMULU = /[?&]gomulu=1/.test(location.search);
   var sayimMeta = oku(SAYIM_ANAHTAR) || {};
-  var sunucu = sayimMeta.serverUrl || SUNUCU_VARSAYILAN;
+  var sunucu = (sayimMeta.serverUrl && sayimMeta.serverUrl.indexOf('script.google.com') === -1) ? sayimMeta.serverUrl : SUNUCU_VARSAYILAN;
   var sayimKimlik = (sayimMeta.currentUser && sayimMeta.savedCredentials) ? { user: sayimMeta.currentUser.name, pass: sayimMeta.savedCredentials.pass } : null;
   var kimlik = GOMULU ? sayimKimlik : (oku(GIRIS_ANAHTAR) || sayimKimlik);
   if(GOMULU) $('ustBaslik').classList.add('gizli');
