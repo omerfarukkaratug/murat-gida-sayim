@@ -3523,12 +3523,15 @@ function cariHareket(p, callback) {
     if (!kod) return outJson({ status: 'error', message: 'Carinin kodu yok — ERP\'de cari koduna bak' }, callback);
     var gun = parseInt(p.gun, 10); if (isNaN(gun) || gun < 0 || gun > 3650) gun = 90;
     if (ne === 'vade') { fn = 'cari_vade'; govde = { p_cari_kod: kod }; }
+    else if (ne === 'oneri') { fn = 'tedarikci_oneri'; govde = { p_cari_kod: kod, p_gun: 365, p_satis_gun: 60 }; }
     else { fn = ne === 'stok' ? 'cari_stok' : 'cari_hareket'; govde = { p_cari_kod: kod, p_gun: gun, p_limit: 500 }; }
   }
   try {
     var sonuc = dbCagir({ url: url, anahtar: anahtar }, fn, govde);
     if (!sonuc || sonuc.status !== 'ok') return outJson({ status: 'error', message: (sonuc && sonuc.message) || 'Veri tabanı cevap vermedi' }, callback);
     // Vade sekmesi: ödeme alışkanlığı ve risk de eklenir (009_odeme_risk.sql yoksa sessizce atlanır).
+    // Sipariş önerisi: alış fiyatı (maliyet) yalnız yetkiliye gider.
+    if (fn === 'tedarikci_oneri' && !alisGorur(auth)) { (sonuc.satirlar || []).forEach(function (r) { r[5] = null; }); }
     if (fn === 'cari_vade') { try { sonuc.odeme = dbCagir({ url: url, anahtar: anahtar }, 'cari_odeme', { p_cari_kod: govde.p_cari_kod }); } catch (oe) { sonuc.odeme = null; } }
     return outJson(sonuc, callback);
   } catch (err) {
