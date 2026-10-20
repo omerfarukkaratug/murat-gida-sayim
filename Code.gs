@@ -159,7 +159,9 @@ function doGet(e) {
   // Şube konumları: telefonlar girişte konumlarını bunlarla karşılaştırır.
   if (P.action === 'subeler') {
     k = kapi('şube listesi okuma'); if (!k.ok) return kimlikRed(k, P.callback);
-    return outJson({ status: 'ok', subeler: subeleriOku() }, P.callback);
+    var sbl = subeleriOku(), ip = istemciIp(e);
+    var agSube = ip ? (sbl.filter(function (b) { return b.ipler.indexOf(ip) !== -1; })[0] || {}).ad || '' : '';
+    return outJson({ status: 'ok', subeler: sbl, ip: ip, agSube: agSube }, P.callback);
   }
   if (e.parameter && e.parameter.action === 'sube_kaydet') {
     return subeKaydet(e.parameter.user, e.parameter.pass, e.parameter.data, e.parameter.callback);
@@ -1868,12 +1870,16 @@ function gunlukYaz(tur, kaynak, detay, hata) {
 // stok (yetkisi varsa) görünür, dışındaysa gizlenir. Sayım ve mal kaydı her
 // durumda çalışır. Hiç şube tanımlı değilse kısıtlama uygulanmaz.
 // ============================================================
-var SUBE_BASLIK = ['Ad', 'Enlem', 'Boylam', 'Yarıçap (m)'];
+// 5. sütun: şubenin WiFi internet adres(ler)i. Bu ağdan bağlanan telefon GPS beklemeden "şubede" sayılır.
+var SUBE_BASLIK = ['Ad', 'Enlem', 'Boylam', 'Yarıçap (m)', 'Ağ IP'];
+// Kendi sunucumuzda isteğin geldiği adres (sunucu/ana.js koyar); Google'da yoktur, boş döner.
+function istemciIp(e) { return String((e && e.istemciIp) || '').trim(); }
 function subeleriOku() {
   var sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName('Subeler');
   if (!sheet || sheet.getLastRow() < 2) return [];
   return sheet.getRange(2, 1, sheet.getLastRow() - 1, SUBE_BASLIK.length).getValues().map(function (r) {
-    return { ad: String(r[0] || '').trim(), enlem: Number(r[1]), boylam: Number(r[2]), yaricap: Number(r[3]) || 300 };
+    return { ad: String(r[0] || '').trim(), enlem: Number(r[1]), boylam: Number(r[2]), yaricap: Number(r[3]) || 300,
+             ipler: String(r[4] || '').split(/[\s,;]+/).filter(Boolean) };
   }).filter(function (b) { return b.ad && !isNaN(b.enlem) && !isNaN(b.boylam) && b.enlem !== 0 && b.boylam !== 0; });
 }
 function subeKaydet(user, pass, data, callback) {
@@ -1890,7 +1896,9 @@ function subeKaydet(user, pass, data, callback) {
     if (!ad || isNaN(enlem) || isNaN(boylam) || Math.abs(enlem) > 90 || Math.abs(boylam) > 180) {
       return outJson({ status: 'error', message: 'Geçersiz şube: ' + (ad || '(adsız)') }, callback);
     }
-    satirlar.push([ad, enlem, boylam, Math.max(50, Math.min(yaricap, 5000))]);
+    var ipler = (Array.isArray(b.ipler) ? b.ipler : []).map(function (x) { return String(x || '').trim(); })
+      .filter(function (x) { return /^[0-9a-fA-F:.]{3,45}$/.test(x); }).slice(0, 10);
+    satirlar.push([ad, enlem, boylam, Math.max(50, Math.min(yaricap, 5000)), ipler.join(', ')]);
   }
   var ss = SpreadsheetApp.getActiveSpreadsheet();
   var sheet = ss.getSheetByName('Subeler');

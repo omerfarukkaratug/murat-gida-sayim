@@ -159,6 +159,11 @@ function baslat(ayar) {
   }
   async function exec(req, res, u) {
     const e = parametreler(u);
+    // İsteği yapan cihazın internet adresi (şube WiFi tanıma). Parametre değil: telefon bunu kendisi yazamaz.
+    // Önde Caddy varsa gerçek adres X-Forwarded-For'un SON değeridir (Caddy dışarıdan gelen başlığa güvenmez).
+    { const xff = String(req.headers['x-forwarded-for'] || '').split(',').map((x) => x.trim()).filter(Boolean);
+      const yerelden = ['127.0.0.1', '::1', '::ffff:127.0.0.1'].includes(req.socket.remoteAddress);
+      e.istemciIp = String((yerelden && xff.length ? xff[xff.length - 1] : req.socket.remoteAddress) || '').replace(/^::ffff:/, ''); }
     let yontem = 'GET';
     if (req.method === 'POST') {
       yontem = 'POST';
