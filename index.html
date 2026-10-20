@@ -354,6 +354,28 @@
   .hizliGecis button{flex:1 1 0; min-width:0; display:flex; flex-direction:column; align-items:center; gap:1px; padding:5px 2px; border-radius:12px; border:1.5px solid var(--line); background:var(--panel2); color:var(--text); font-weight:800; font-size:11.5px; line-height:1.2; white-space:nowrap; overflow:hidden;}
   .hizliGecis button span:first-child{font-size:17px;}
   .hizliGecis button.on{background:var(--accent); border-color:var(--accent); color:#fff;}
+
+  /* ---------- BİLGİSAYAR (geniş ekran) ----------
+     Uygulama telefon için tasarlandı; geniş ekranda her şey ortada, okunur genişlikte bir sütunda durur.
+     Tam ekran sayfalar (Cari, Stok Hareketleri…) arka planı tam kaplar, içerik ortalanır.
+     Yönetici paneli bilgisayarda geniş açılır ve bölümleri yan yana dizer. */
+  @media (min-width: 900px){
+    :root{--pcSutun:900px; --pcKenar:max(16px, calc((100vw - var(--pcSutun)) / 2));}
+    #setup{padding-left:var(--pcKenar); padding-right:var(--pcKenar);}
+    div[style*="inset:0; background:var(--bg)"]{padding-left:var(--pcKenar); padding-right:var(--pcKenar); box-sizing:border-box;}
+    .hizliGecis button{padding:7px 4px; font-size:12.5px;}
+    #menuListe:not(.sutun2):not(.sutun3){grid-template-columns:1fr 1fr;}
+    #adminModal{padding:28px;}
+    #adminKart{max-width:1180px !important; max-height:calc(92 * var(--eh)) !important; padding:22px 26px !important;
+      display:grid; grid-template-columns:repeat(2, minmax(0, 1fr)); column-gap:28px; align-content:start;}
+    #adminKart > *{grid-column:span 1; min-width:0;}
+    #adminKart > :first-child, #adminKart > #adminSectionRapor, #adminKart > #adminSectionTemizle{grid-column:1 / -1;}
+    #adminKart > div[id^="adminSection"]{margin-top:10px !important;}
+    #adminKart > button, #adminKart > .hint, #adminKart > #adminResult{grid-column:1 / -1;}
+  }
+  @media (min-width: 1400px){
+    #adminKart{grid-template-columns:repeat(3, minmax(0, 1fr));}
+  }
   /* Mal Giriş/Çıkış: ürün listesine daha çok yer kalsın */
   #malHareketScan #malHareketMeta{padding:8px 16px !important;}
   #malScanArea .scanPlaceholderBlock{padding:10px 14px;}
@@ -407,7 +429,7 @@
   <header style="border:none; padding:0 0 16px; background:transparent; display:flex; align-items:flex-start; justify-content:space-between;">
     <div>
       <h1><img src="logo-header.png" alt="Murat Gıda" style="height:30px; width:auto; display:block;"></h1>
-      <div class="sub"><img src="icon.svg" alt="" style="width:15px;height:15px;vertical-align:-3px;margin-right:5px;">KRT Saha · Murat Gıda • offline • Android • build 241</div>
+      <div class="sub"><img src="icon.svg" alt="" style="width:15px;height:15px;vertical-align:-3px;margin-right:5px;">KRT Saha · Murat Gıda • offline • Android • build 242</div>
     </div>
     <button type="button" id="themeToggleBtn" title="Tema seç" style="background:var(--panel2); border:1.5px solid var(--line); color:var(--text); width:34px; height:34px; border-radius:50%; font-size:15px; padding:0; display:flex; align-items:center; justify-content:center; flex-shrink:0;">🎨</button>
   </header>
@@ -1143,7 +1165,7 @@
 
   <!-- Yönetici Paneli: giriş yapan kullanıcının yetkilerine göre bölümler görünür -->
   <div id="adminModal" class="hidden" style="position:fixed; inset:0; background:rgba(10,10,10,.55); z-index:49; display:flex; align-items:center; justify-content:center; padding:22px;">
-    <div class="qtyEntryCard" style="width:100%; max-width:360px; max-height:calc(88 * var(--eh)); overflow-y:auto; text-align:left;">
+    <div class="qtyEntryCard" id="adminKart" style="width:100%; max-width:360px; max-height:calc(88 * var(--eh)); overflow-y:auto; text-align:left;">
       <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:12px;">
         <div style="font-size:16px; font-weight:800;">⚙️ Yönetici Paneli</div>
         <button type="button" id="adminCloseTopBtn" aria-label="Kapat" style="width:30px; height:30px; border-radius:50%; background:var(--panel2); border:1.5px solid var(--line); color:var(--text); font-size:16px; line-height:1; padding:0; display:flex; align-items:center; justify-content:center; flex-shrink:0;">✕</button>
