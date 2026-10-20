@@ -27,6 +27,7 @@ const io = {
   yedekListe: (k) => senkron('yedekListe', { klasor: k }),
   yedekAl: (ad, k) => senkron('yedekAl', { ad, klasor: k }),
   yedekSil: (id) => senkron('yedekSil', { id }),
+  bakim: (yenile) => senkron('bakim', { yenile: !!yenile }),
   uyu: (ms) => { Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, Math.min(Number(ms) || 0, 30000)); }
 };
 // GÜVENLİK: veri veritabanından TAM yüklenmeden hiçbir istek çalışmaz (boş veriyle çalışıp

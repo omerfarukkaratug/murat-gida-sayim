@@ -345,6 +345,8 @@ function ortamOlustur(io, secenek) {
 
   const servisler = {
     SpreadsheetApp: { getActiveSpreadsheet: () => defter, getActive: () => defter, flush() {} },
+    // Yalnız kendi sunucumuzda olan ek: bekçinin günlük kontrol sonucu (Google'da bu nesne yoktur).
+    KRTSunucu: { bakim: (yenile) => (io && io.bakim ? io.bakim(yenile) : null) },
     PropertiesService: { getScriptProperties: () => props, getDocumentProperties: () => props, getUserProperties: () => props },
     CacheService: { getScriptCache: () => cache, getDocumentCache: () => cache, getUserCache: () => cache },
     LockService: { getScriptLock: () => kilit(true), getDocumentLock: () => kilit(false), getUserLock: () => kilit(false) },

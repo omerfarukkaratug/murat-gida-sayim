@@ -5,7 +5,7 @@ const fs = require('fs');
 const vm = require('vm');
 
 const SERVIS_ADLARI = ['SpreadsheetApp', 'PropertiesService', 'CacheService', 'LockService', 'Utilities', 'ContentService', 'HtmlService',
-  'UrlFetchApp', 'MailApp', 'DriveApp', 'ScriptApp', 'Session', 'Logger'];
+  'UrlFetchApp', 'MailApp', 'DriveApp', 'ScriptApp', 'Session', 'Logger', 'KRTSunucu'];
 
 function derle(kodYolu) {
   const kaynak = fs.readFileSync(kodYolu, 'utf8');

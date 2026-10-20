@@ -163,6 +163,8 @@ function doGet(e) {
     var agSube = ip ? (sbl.filter(function (b) { return b.ipler.indexOf(ip) !== -1; })[0] || {}).ad || '' : '';
     return outJson({ status: 'ok', subeler: sbl, ip: ip, agSube: agSube }, P.callback);
   }
+  if (P.action === 'sunucu_durum') return sunucuDurum(P);
+  if (P.action === 'sureler_kaydet') return surelerKaydet(P);
   if (e.parameter && e.parameter.action === 'sube_kaydet') {
     return subeKaydet(e.parameter.user, e.parameter.pass, e.parameter.data, e.parameter.callback);
   }
@@ -1865,6 +1867,38 @@ function gunlukYaz(tur, kaynak, detay, hata) {
 // Kimlik doğrulaması istemez; metin kısaltılır, sadece günlüğe yazılır.
 // ============================================================
 // ŞUBE KONUMLARI
+// ============================================================
+// SUNUCU VE SÜRELER (yönetici paneli): bekçinin günlük kontrolü (yalnız kendi sunucumuzda;
+// sunucu/bekci.js) ve yöneticinin girdiği bitiş tarihleri ('SURELER' özelliği:
+// [{ ad, tarih: 'YYYY-AA-GG', not }]). Bitişe 30 / 7 gün kala şirket e-postasına uyarı gider.
+// ============================================================
+function sunucuDurum(P) {
+  var auth = requirePermission(P.user, P.pass, 'ayarlar');
+  if (!auth.ok) return outJson({ status: 'error', message: auth.message }, P.callback);
+  var sureler = [];
+  try { sureler = JSON.parse(PropertiesService.getScriptProperties().getProperty('SURELER') || '[]'); } catch (e) { sureler = []; }
+  var durum = null, sunucu = (typeof KRTSunucu !== 'undefined');
+  if (sunucu) { try { durum = KRTSunucu.bakim(P.yenile === '1'); } catch (e) { durum = { hata: String(e && e.message || e) }; } }
+  return outJson({ status: 'ok', sunucu: sunucu, durum: durum, sureler: Array.isArray(sureler) ? sureler : [] }, P.callback);
+}
+function surelerKaydet(P) {
+  var auth = requirePermission(P.user, P.pass, 'ayarlar');
+  if (!auth.ok) return outJson({ status: 'error', message: auth.message }, P.callback);
+  var liste;
+  try { liste = JSON.parse(P.data || '[]'); } catch (e) { return outJson({ status: 'error', message: 'Liste okunamadı' }, P.callback); }
+  if (!Array.isArray(liste)) return outJson({ status: 'error', message: 'Liste okunamadı' }, P.callback);
+  var temiz = [];
+  for (var i = 0; i < liste.length && temiz.length < 30; i++) {
+    var x = liste[i] || {}, ad = String(x.ad || '').trim().substring(0, 80), tarih = String(x.tarih || '').trim();
+    if (!ad) continue;
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(tarih)) return outJson({ status: 'error', message: '"' + ad + '" için tarih geçersiz' }, P.callback);
+    temiz.push({ ad: ad, tarih: tarih, not: String(x.not || '').trim().substring(0, 200) });
+  }
+  PropertiesService.getScriptProperties().setProperty('SURELER', JSON.stringify(temiz));
+  gunlukYaz('yonetim', String(P.user || ''), 'Süre listesi kaydedildi: ' + temiz.map(function (x) { return x.ad + ' ' + x.tarih; }).join(', '), false);
+  return outJson({ status: 'ok', sureler: temiz }, P.callback);
+}
+
 // 'Subeler' sekmesi: Ad | Enlem | Boylam | Yarıçap (m). Telefon uygulamaya
 // girişte GPS konumunu alır; herhangi bir şubenin yarıçapı içindeyse fiyat ve
 // stok (yetkisi varsa) görünür, dışındaysa gizlenir. Sayım ve mal kaydı her

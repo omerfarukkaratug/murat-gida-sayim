@@ -429,7 +429,7 @@
   <header style="border:none; padding:0 0 16px; background:transparent; display:flex; align-items:flex-start; justify-content:space-between;">
     <div>
       <h1><img src="logo-header.png" alt="Murat Gıda" style="height:30px; width:auto; display:block;"></h1>
-      <div class="sub"><img src="icon.svg" alt="" style="width:15px;height:15px;vertical-align:-3px;margin-right:5px;">KRT Saha · Murat Gıda • offline • Android • build 243</div>
+      <div class="sub"><img src="icon.svg" alt="" style="width:15px;height:15px;vertical-align:-3px;margin-right:5px;">KRT Saha · Murat Gıda • offline • Android • build 244</div>
     </div>
     <button type="button" id="themeToggleBtn" title="Tema seç" style="background:var(--panel2); border:1.5px solid var(--line); color:var(--text); width:34px; height:34px; border-radius:50%; font-size:15px; padding:0; display:flex; align-items:center; justify-content:center; flex-shrink:0;">🎨</button>
   </header>
@@ -1241,6 +1241,23 @@
         <button type="button" id="adminSistemOpenBtn" style="width:100%; margin-top:8px; background:var(--panel); border:1.5px solid var(--line); color:var(--text); padding:14px; text-align:left; line-height:1.5;">
           🩺 Sistem Durumu<br><span style="font-weight:500; font-size:11px; color:var(--muted);">ERP'den, telefonlardan en son ne geldi, saat kaçta — ve tüm hatalar, canlı</span>
         </button>
+      </div>
+
+      <div id="adminSectionSunucu" class="hidden" style="border-top:1px solid var(--line); margin:14px 0 12px; padding-top:12px;">
+        <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:8px;">
+          <div style="font-weight:800; font-size:13px;">🛡️ Sunucu ve süreler</div>
+          <button type="button" id="adminSunucuYenile" style="background:transparent; border:none; color:var(--accent); font-size:12px; font-weight:700; padding:2px 4px;">↻ Şimdi kontrol et</button>
+        </div>
+        <div id="adminSunucuList"><div class="hint">⏳ Yükleniyor…</div></div>
+        <div style="font-weight:800; font-size:12.5px; margin:12px 0 6px;">📅 Takip edilen tarihler</div>
+        <div class="hint" style="margin:0 0 6px;">Kartın son kullanma tarihi, Play yıllık güncellemesi gibi. Bitişe 30 ve 7 gün kala şirket e-postasına uyarı gider.</div>
+        <div id="adminSureList"></div>
+        <div style="display:flex; gap:6px; margin-top:6px;">
+          <input type="text" id="adminSureAd" placeholder="Ne? (ör. Hetzner kartı)" style="flex:1.4; min-width:0;">
+          <input type="date" id="adminSureTarih" style="flex:1; min-width:0;">
+        </div>
+        <button type="button" id="adminSureEkle" style="width:100%; margin-top:6px; background:var(--panel); border:1.5px dashed var(--line); color:var(--text); padding:10px;">➕ Tarih ekle</button>
+        <button type="button" id="adminSureKaydet" style="width:100%; margin-top:6px; background:var(--text); color:var(--bg); padding:11px;">💾 Tarihleri Kaydet</button>
       </div>
 
       <div id="adminSectionDuzelt" class="hidden" style="border-top:1px solid var(--line); margin:14px 0 12px; padding-top:12px;">
@@ -5952,6 +5969,64 @@
     return { user: state.currentUser.name, pass: state.savedCredentials.pass };
   }
 
+  // ---------- Yönetici: Sunucu ve süreler ----------
+  var adminSureler = [];
+  var SUNUCU_RENK = { ok: ['🟢', 'var(--green)'], uyari: ['🟡', 'var(--amber)'], acil: ['🔴', 'var(--red)'], bilinmiyor: ['⚪', 'var(--muted)'] };
+  function adminSunucuCiz(veri, hata){
+    var el = document.getElementById('adminSunucuList');
+    if(hata){ el.innerHTML = '<div class="hint" style="color:var(--red);">❌ ' + escapeHtml(hata) + '</div>'; return; }
+    if(!veri.sunucu){ el.innerHTML = '<div class="hint">Sunucu kontrolleri yalnız kendi sunucumuzda çalışır.</div>'; return; }
+    var d = veri.durum || {};
+    if(d.hata){ el.innerHTML = '<div class="hint" style="color:var(--red);">❌ ' + escapeHtml(d.hata) + '</div>'; return; }
+    el.innerHTML = (d.maddeler || []).map(function(m){
+      var r = SUNUCU_RENK[m.durum] || SUNUCU_RENK.bilinmiyor;
+      return '<div style="display:flex; gap:8px; align-items:flex-start; background:var(--panel2); border-radius:10px; padding:8px 10px; margin-bottom:6px; font-size:12.5px;">' +
+        '<span>' + r[0] + '</span><div style="flex:1; min-width:0;"><b style="color:' + r[1] + ';">' + escapeHtml(m.ad) + '</b><div style="color:var(--muted);">' + escapeHtml(m.metin || '') + '</div></div></div>';
+    }).join('') + (d.zaman ? '<div class="hint" style="font-size:11px;">Son kontrol: ' + escapeHtml(new Date(d.zaman).toLocaleString('tr-TR')) + ' · uyarılar → ' + escapeHtml(d.alici || '') + '</div>' : '');
+  }
+  function adminSureCiz(){
+    var el = document.getElementById('adminSureList');
+    if(!adminSureler.length){ el.innerHTML = '<div class="hint">Henüz tarih yok.</div>'; return; }
+    el.innerHTML = adminSureler.map(function(x, i){
+      var kalan = Math.floor((new Date(x.tarih + 'T00:00:00') - new Date()) / 86400000) + 1;
+      var renk = kalan <= 7 ? 'var(--red)' : kalan <= 30 ? 'var(--amber)' : 'var(--green)';
+      return '<div style="display:flex; align-items:center; gap:8px; background:var(--panel2); border-radius:10px; padding:7px 10px; margin-bottom:5px; font-size:12.5px;">' +
+        '<div style="flex:1; min-width:0;"><b>' + escapeHtml(x.ad) + '</b><div style="color:' + renk + '; font-weight:700;">' + escapeHtml(new Date(x.tarih + 'T00:00:00').toLocaleDateString('tr-TR')) +
+        (kalan < 0 ? ' · ' + (-kalan) + ' gün geçti' : ' · ' + kalan + ' gün kaldı') + '</div></div>' +
+        '<button type="button" data-suresil="' + i + '" style="background:transparent; border:none; font-size:17px; padding:2px 4px;" title="Sil">🗑️</button></div>';
+    }).join('');
+  }
+  function adminSunucuYukle(yenile){
+    var auth = currentAuth(); if(!auth || !navigator.onLine) return;
+    if(yenile) document.getElementById('adminSunucuList').innerHTML = '<div class="hint">⏳ Kontrol ediliyor (alan adı, disk, yedek, ERP)…</div>';
+    jsonpRequestP(state.serverUrl || DEFAULT_SERVER_URL, { action: 'sunucu_durum', user: auth.user, pass: auth.pass, yenile: yenile ? '1' : '' }, function(err, data){
+      if(err || !data || data.status !== 'ok'){ adminSunucuCiz(null, err || (data && data.message) || 'bilinmeyen hata'); return; }
+      adminSunucuCiz(data); adminSureler = data.sureler || []; adminSureCiz();
+    }, 45000);
+  }
+  document.getElementById('adminSunucuYenile').addEventListener('click', function(){ adminSunucuYukle(true); });
+  document.getElementById('adminSureList').addEventListener('click', function(e){
+    var b = e.target.closest('button[data-suresil]'); if(!b) return;
+    adminSureler.splice(Number(b.getAttribute('data-suresil')), 1); adminSureCiz(); warnToast('Silindi — kalıcı olması için "Tarihleri Kaydet"e bas');
+  });
+  document.getElementById('adminSureEkle').addEventListener('click', function(){
+    var ad = document.getElementById('adminSureAd').value.trim(), t = document.getElementById('adminSureTarih').value;
+    if(!ad || !t){ warnToast('Adını ve tarihini yaz'); return; }
+    adminSureler = adminSureler.filter(function(x){ return x.ad !== ad; }); adminSureler.push({ ad: ad, tarih: t });
+    adminSureler.sort(function(a, b){ return a.tarih < b.tarih ? -1 : 1; });
+    document.getElementById('adminSureAd').value = ''; document.getElementById('adminSureTarih').value = '';
+    adminSureCiz(); successToast(ad + ' eklendi — "Tarihleri Kaydet"e bas');
+  });
+  document.getElementById('adminSureKaydet').addEventListener('click', function(){
+    var auth = currentAuth(); if(!auth || !navigator.onLine){ warnToast('İnternet yok'); return; }
+    var btn = this; btn.disabled = true; btn.textContent = '⏳ Kaydediliyor…';
+    jsonpRequestP(state.serverUrl || DEFAULT_SERVER_URL, { action: 'sureler_kaydet', user: auth.user, pass: auth.pass, data: JSON.stringify(adminSureler) }, function(err, res){
+      btn.disabled = false; btn.textContent = '💾 Tarihleri Kaydet';
+      if(err || !res || res.status !== 'ok'){ errorToast('Kaydedilemedi: ' + (err || (res && res.message) || 'bilinmeyen hata')); return; }
+      adminSureler = res.sureler || []; adminSureCiz(); successToast('Tarihler kaydedildi'); adminSunucuYukle(true);
+    }, 20000);
+  });
+
   // ---------- Yönetici: Şube Konumları ----------
   var adminSubeler = [];
   function renderAdminSubeler(){
@@ -6034,6 +6109,8 @@
     document.getElementById('adminSectionKullanici').classList.toggle('hidden', !canKullanici);
     document.getElementById('adminSectionAyarlar').classList.toggle('hidden', !canAyarlar);
     document.getElementById('adminSectionCanliDurum').classList.toggle('hidden', !canCanliDurum);
+    document.getElementById('adminSectionSunucu').classList.toggle('hidden', !canAyarlar);
+    if(canAyarlar) adminSunucuYukle(false);
     document.getElementById('adminSectionDuzelt').classList.toggle('hidden', !canDuzelt);
     document.getElementById('adminNoPerm').classList.toggle('hidden', canRapor || canTemizle || canKullanici || canAyarlar || canCanliDurum || canDuzelt);
     adminModalEl.classList.remove('hidden');

@@ -13,6 +13,7 @@ const path = require('path');
 const zlib = require('zlib');
 const { Worker, MessageChannel } = require('worker_threads');
 const { depoOlustur } = require('./depo');
+const { bekciOlustur } = require('./bekci');
 
 const KOK = __dirname;
 function ayarOku() {
@@ -52,10 +53,12 @@ function baslat(ayar) {
       case 'yedekListe': return yedekListe(v.klasor);
       case 'yedekAl': return yedekAl(v.ad, v.klasor);
       case 'yedekSil': fs.rmSync(v.id, { force: true }); return true;
+      case 'bakim': return bekci.durum(!!(v && v.yenile));
       default: throw new Error('bilinmeyen köprü işi: ' + m.tur);
     }
   }
   let rpcDepo = null;
+  const bekci = bekciOlustur({ ayar, depo, gunluk, epostaGonder: () => epostaGonder(), disIstek: (u, o) => disIstek(u, o) });
   async function disIstek(url, o) {
     const y = ayar.yerelRpc, m = y && url.startsWith(y.onEk) ? /\/rest\/v1\/rpc\/(\w+)$/.exec(url) : null;
     if (m) {
@@ -240,11 +243,12 @@ function baslat(ayar) {
       catch (e) { if (deneme === 1 || deneme % 12 === 0) gunluk('[veritabanı] bağlanılamadı, bekleniyor: ' + e.message); await new Promise((c) => setTimeout(c, 5000)); }
     }
     await isciBaslat();
+    bekci.baslat();
     saat = setInterval(() => { if (hazir) isciye({ tur: 'saat' }).then((l) => l.forEach((x) => gunluk('[zamanlı]', x.fn, x.hata ? 'HATA: ' + x.hata : x.ms + ' ms'))).catch(() => {}); epostaGonder(); }, 30000);
     return { port: sunucu.address().port };
   }
   async function kapat() {
-    kapaniyor = true; clearInterval(saat);
+    kapaniyor = true; clearInterval(saat); bekci.durdur();
     await new Promise((coz) => sunucu.close(() => coz()));
     if (isci) await isci.terminate();
     await depo.kapat(); if (rpcDepo && rpcDepo !== depo) await rpcDepo.kapat();
