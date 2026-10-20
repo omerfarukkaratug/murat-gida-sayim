@@ -68,7 +68,7 @@ function Rpc($fonksiyon, $govdeJson) {
 }
 
 # Satirlari parca parca gonderir; ILK parca o araliktaki eski kayitlari siler.
-function Parcali-Gonder($fonksiyon, $kaynak, $satirlar, $basJson, $bitJson) {
+function Parcali-Gonder($fonksiyon, $kaynak, $satirlar, $basJson, $bitJson, $silme = $true) {
     $toplam = 0
     $i = 0
     do {
@@ -76,7 +76,7 @@ function Parcali-Gonder($fonksiyon, $kaynak, $satirlar, $basJson, $bitJson) {
         $dilim = @()
         if ($satirlar.Count -gt 0) { $dilim = @($satirlar[$i..($son - 1)]) }
         $json = if ($dilim.Count -gt 0) { ConvertTo-Json -InputObject $dilim -Depth 3 -Compress } else { "[]" }
-        $temizle = if ($i -eq 0) { "true" } else { "false" }
+        $temizle = if ($i -eq 0 -and $silme) { "true" } else { "false" }
         $govde = '{"p_kaynak":"' + $kaynak + '","p_satirlar":' + $json + ',"p_bas":' + $basJson + ',"p_bit":' + $bitJson + ',"p_temizle":' + $temizle + '}'
         $r = Rpc $fonksiyon $govde
         $toplam += [int]$r.eklenen
@@ -102,6 +102,19 @@ function Veritabani-Gonder($Db, $baglanti) {
     $baglanti.ChangeDatabase($Db)
     $basSql = $bas.ToString("yyyy-MM-dd"); $bitSql = $bit.ToString("yyyy-MM-dd")
 
+    # GEC GIRILEN BELGELER: ERP'ye ESKI tarihle sonradan girilen belge kisa pencerenin (son $KisaGun gun) disinda
+    # kalip ertesi gunku TAM gonderime kadar gorunmuyordu. Son calismadaki en buyuk FIS.ID / FINANS.ID saklanir;
+    # ondan buyuk (yeni eklenen) ama tarihi pencereden eski kayitlar ayrica gonderilir (silme yok, sadece ekle/guncelle).
+    $SonIdDosya = Join-Path $TamGonderimKlasor "cari-hareket-son-id-$Db.txt"
+    $maxFis = [long](Sql-Tablo $baglanti "SELECT ISNULL(MAX(ID), 0) AS m FROM dbo.FIS").Rows[0].m
+    $maxFin = [long](Sql-Tablo $baglanti "SELECT ISNULL(MAX(ID), 0) AS m FROM dbo.FINANS").Rows[0].m
+    [long]$sonFis = -1; [long]$sonFin = -1
+    if (-not $tam -and (Test-Path $SonIdDosya)) {
+        $p = ((Get-Content $SonIdDosya -TotalCount 1) -split '\s+')
+        if ($p.Count -ge 2) { [long]::TryParse($p[0], [ref]$sonFis) | Out-Null; [long]::TryParse($p[1], [ref]$sonFin) | Out-Null }
+    }
+    $gecVar = ($sonFis -ge 0 -and $sonFin -ge 0)
+
     # Cari borclu ise BORC, alacakli ise ALACAK (ERP12 AS_CARI_HESAP_EKSTRESI ile ayni mantik).
     # Varsayilan cari (Pesin Satis / kasa) ve personel carileri (CARI_TUR = 2) alinmaz.
     $ortak = @"
@@ -112,14 +125,16 @@ LEFT JOIN dbo.FINANS_ISLEM_TURU T ON T.ID = FD.FINANS_ISLEM_TURU
 LEFT JOIN dbo.DOVIZ_AD DV ON DV.ID = FD.DOVIZ_AD
 LEFT JOIN dbo.FIS ON FIS.ID = FD.FIS
 WHERE C.CARI_TUR = 1 AND C.ID <> COALESCE((SELECT TOP 1 VARSAYILANCARI FROM dbo.FIRMASABITLERI), -1)
-  AND F.TARIH >= '$basSql' AND F.TARIH < '$bitSql'
+  AND {TARIH}
 "@
+    $tarihNormal = "F.TARIH >= '$basSql' AND F.TARIH < '$bitSql'"
     $alanlar = "FD.ID AS detay_id, C.KOD AS cari_kod, C.AD AS cari_ad, F.TARIH AS tarih, FD.VADE_TARIHI AS vade, T.AD AS tur, " +
                "COALESCE(NULLIF(F.BELGENO, ''), FIS.BELGENO, '') AS belge_no, FD.ACIKLAMA AS aciklama, FD.TUTAR AS tutar, DV.AD AS doviz, FD.FIS AS fis_id"
-    $sql = "SELECT 'B' AS taraf, $alanlar " + $ortak.Replace("{KART}", "FD.KART_BORCLU") +
-           " UNION ALL SELECT 'A' AS taraf, $alanlar " + $ortak.Replace("{KART}", "FD.KART_ALACAKLI")
-    $dt = Sql-Tablo $baglanti $sql
-
+    function Cari-Sql($tarihKosulu) {
+        $o = $ortak.Replace("{TARIH}", $tarihKosulu)
+        return "SELECT 'B' AS taraf, $alanlar " + $o.Replace("{KART}", "FD.KART_BORCLU") + " UNION ALL SELECT 'A' AS taraf, $alanlar " + $o.Replace("{KART}", "FD.KART_ALACAKLI")
+    }
+    function Cari-Satirlar($dt) {
     $satirlar = New-Object System.Collections.ArrayList
     foreach ($r in $dt.Rows) {
         $taraf = [string]$r.taraf
@@ -136,6 +151,9 @@ WHERE C.CARI_TUR = 1 AND C.ID <> COALESCE((SELECT TOP 1 VARSAYILANCARI FROM dbo.
             borc = $(if ($taraf -eq "B") { $tutar } else { 0 }); alacak = $(if ($taraf -eq "A") { $tutar } else { 0 })
         })
     }
+    return ,$satirlar
+    }
+    $satirlar = Cari-Satirlar (Sql-Tablo $baglanti (Cari-Sql $tarihNormal))
     # --- 2) Perakende: varsayilan cari (Pesin Satis), gun + hareket turu + taraf basina toplam ---
     # Sentetik satir no (eksi): -((yyyymmdd * 1000 + tur) * 10 + doviz) -> her gun/tur icin sabit, gonderimler arasi ayni kalir.
     $sqlP = @"
@@ -172,6 +190,13 @@ GROUP BY CONVERT(char(10), F.TARIH, 23), FD.FINANS_ISLEM_TURU, FD.DOVIZ_AD
 
     $n = Parcali-Gonder "cari_hareket_yukle" $Db $satirlar ('"' + (Iso $bas) + '"') ('"' + (Iso $bit) + '"')
     Yaz-Log "[$Db] Cari hareketleri: $n satir gonderildi ($nP perakende gun/tur toplami dahil)"
+    if ($gecVar -and $maxFin -gt $sonFin) {
+        $gec = Cari-Satirlar (Sql-Tablo $baglanti (Cari-Sql "F.TARIH < '$basSql' AND F.ID > $sonFin AND F.ID <= $maxFin"))
+        if ($gec.Count -gt 0) {
+            $nG = Parcali-Gonder "cari_hareket_yukle" $Db $gec ('"' + (Iso ([datetime]"2000-01-01")) + '"') ('"' + (Iso $bas) + '"') $false
+            Yaz-Log "[$Db] Gec girilen (eski tarihli) cari hareketleri: $nG satir gonderildi"
+        }
+    }
 
     # --- 3) Belge satirlari (fatura/irsaliye/fis detayi, carinin ve urunun stok hareketleri) ---
     # Stoga etki eden TUM belgeler (FIS_TURU.GIRIS = +1 / -1; Finans 18 haric): alis, satis, iade, depo, sarf, fire, sayim...
@@ -204,12 +229,12 @@ JOIN dbo.FIS_DETAY d ON d.FIS = f.ID
 LEFT JOIN dbo.CARI C ON C.ID = f.CARI
 JOIN dbo.FIS_TURU FT ON FT.ID = f.FIS_TURU
 LEFT JOIN dbo.STOK s ON s.ID = d.STOK
-WHERE f.FIS_TARIHI >= '$basSql' AND f.FIS_TARIHI < '$bitSql'
+WHERE {TARIH}
   AND (FT.GIRIS IN (1, -1) OR (ISNULL(FT.GIRIS, 0) = 0 AND C.ID IS NOT NULL)) AND f.FIS_TURU <> 18
   AND NOT (ISNULL(C.ID, 0) = COALESCE((SELECT TOP 1 VARSAYILANCARI FROM dbo.FIRMASABITLERI), -1)
            OR (C.ID IS NULL AND f.FIS_TURU IN (11, 12, 35, 36)))
 "@
-        $dtF = Sql-Tablo $baglanti $sqlF
+        function Fis-Satirlar($dtF) {
         $fs = New-Object System.Collections.ArrayList
         foreach ($r in $dtF.Rows) {
             $m = Sayi $r.miktar; $bf = $null; $tt = $null; $nf = $null
@@ -227,7 +252,17 @@ WHERE f.FIS_TARIHI >= '$basSql' AND f.FIS_TARIHI < '$bitSql'
                 miktar = $m; birim_fiyat = $bf; tutar = $tt; net_fiyat = $nf
             })
         }
+        return ,$fs
+        }
+        $fs = Fis-Satirlar (Sql-Tablo $baglanti $sqlF.Replace("{TARIH}", "f.FIS_TARIHI >= '$basSql' AND f.FIS_TARIHI < '$bitSql'"))
         $nF = Parcali-Gonder "fis_satir_yukle" $Db $fs ('"' + (Iso $bas) + '"') ('"' + (Iso $bit) + '"')
+        if ($gecVar -and $maxFis -gt $sonFis) {
+            $gecF = Fis-Satirlar (Sql-Tablo $baglanti $sqlF.Replace("{TARIH}", "f.FIS_TARIHI < '$basSql' AND f.ID > $sonFis AND f.ID <= $maxFis"))
+            if ($gecF.Count -gt 0) {
+                $nGF = Parcali-Gonder "fis_satir_yukle" $Db $gecF ('"' + (Iso ([datetime]"2000-01-01")) + '"') ('"' + (Iso $bas) + '"') $false
+                Yaz-Log "[$Db] Gec girilen (eski tarihli) belge satirlari: $nGF satir gonderildi"
+            }
+        }
         Yaz-Log "[$Db] Belge satirlari: $nF satir gonderildi (miktar: $miktar, fiyat: $fiyat, tutar: $tutarK, urun adi: $urunAd, net fiyat: $(if ($netVar) { 'var' } else { 'YOK - TOPLAM_KDV_MATRAHI/TOPLAM_KDV sutunu bulunamadi' }))"
 
         # --- 4) Perakende: urun + gun toplami (satis -, iade +). Ilk calismada tum gecmis, gunluk tam
@@ -262,6 +297,8 @@ GROUP BY s.KOD, CONVERT(char(10), f.FIS_TARIHI, 23)
     }
 
     if ($tam) { Set-Content -Path $TamGonderimDosya -Value (Get-Date -Format "yyyy-MM-dd HH:mm:ss") }
+    # Basariyla bittiyse (hata olsaydi buraya gelinmezdi) son ID'ler kaydedilir; sonraki turda bunlardan buyukler "yeni".
+    Set-Content -Path $SonIdDosya -Value "$maxFis $maxFin"
     Yaz-Log "[$Db] TAMAM"
 }
 
