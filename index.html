@@ -430,7 +430,7 @@
   <header style="border:none; padding:0 0 16px; background:transparent; display:flex; align-items:flex-start; justify-content:space-between;">
     <div>
       <h1><img src="logo-header.png" alt="Murat Gıda" style="height:30px; width:auto; display:block;"></h1>
-      <div class="sub"><img src="icon.svg" alt="" style="width:15px;height:15px;vertical-align:-3px;margin-right:5px;">KRT Saha · Murat Gıda • offline • Android • build 247</div>
+      <div class="sub"><img src="icon.svg" alt="" style="width:15px;height:15px;vertical-align:-3px;margin-right:5px;">KRT Saha · Murat Gıda • offline • Android • build 248</div>
     </div>
     <button type="button" id="themeToggleBtn" title="Tema seç" style="background:var(--panel2); border:1.5px solid var(--line); color:var(--text); width:34px; height:34px; border-radius:50%; font-size:15px; padding:0; display:flex; align-items:center; justify-content:center; flex-shrink:0;">🎨</button>
   </header>
@@ -4570,6 +4570,9 @@
     if(og){ state.oneriGun = Number(og.getAttribute('data-onerigun')) || 30; save(); cariHrkCiz(); return; }
     if(e.target.closest('button[data-onerihepsi]')){ cariOneriHepsi = !cariOneriHepsi; cariHrkCiz(); return; }
     if(e.target.closest('button[data-oneripaylas]')){ cariOneriPaylas(); return; }
+    if(e.target.closest('button[data-chtedarik]') && cariHrkSecili){
+      var cc = cariHrkSecili.cari; closeCariHrkScreen(); openTedarikScreen(); tedFirmaAc(cc.code, cc.name); return;
+    }
     var sk = e.target.closest('button[data-chsekme]');
     if(sk){ cariHrkSekme = sk.getAttribute('data-chsekme'); cariHrkAcikFis = {}; if(cariHrkSecili) cariHrkGetir(cariHrkSecili.cari); return; }
     var sat = e.target.closest('[data-fis]'); if(!sat || !cariHrkSecili || !cariHrkSecili.veri) return;
@@ -4583,7 +4586,7 @@
     var auth = currentAuth();
     if(!auth){ warnToast('Önce giriş yap'); return; }
     if(!canSeeCariHrk()){ closeCariHrkScreen(); return; }
-    var ne = cariHrkSekme === 'stok' ? 'stok' : cariHrkSekme === 'vade' ? 'vade' : (cariHrkSekme === 'oneri' && canSeeStock()) ? 'oneri' : 'hareket';
+    var ne = cariHrkSekme === 'stok' ? 'stok' : cariHrkSekme === 'vade' ? 'vade' : 'hareket';
     cariHrkSecili = { cari: cari, veri: null, hata: '', ne: ne };
     if(!cari.code){ cariHrkSecili.hata = 'Bu carinin kodu yok — ERP\'de cari kodu girilmeli'; cariHrkCiz(); return; }
     var anahtar = ne + '|' + cari.code + '|' + cariHrkGun, ob = cariHrkOnbellek[anahtar];
@@ -4637,7 +4640,7 @@
       (perakende ? '' : '<div class="hrkSekmeler" style="margin:10px 0 0; gap:6px;"><button type="button" class="hrkSekme' + (s.ne === 'hareket' ? ' on' : '') + '" data-chsekme="hesap" style="padding:9px 4px;"><b style="font-size:13px; font-family:inherit;">💳 Hesap</b></button>' +
         '<button type="button" class="hrkSekme' + (s.ne === 'vade' ? ' on' : '') + '" data-chsekme="vade" style="padding:9px 4px;"><b style="font-size:13px; font-family:inherit;">📅 Vade</b></button>' +
         '<button type="button" class="hrkSekme' + (s.ne === 'stok' ? ' on' : '') + '" data-chsekme="stok" style="padding:9px 4px;"><b style="font-size:13px; font-family:inherit;">📦 Ürünler</b></button>' +
-        (canSeeStock() ? '<button type="button" class="hrkSekme' + (s.ne === 'oneri' ? ' on' : '') + '" data-chsekme="oneri" style="padding:9px 4px;"><b style="font-size:13px; font-family:inherit;">🛒 Öneri</b></button>' : '') + '</div>');
+        (canSeeTedarik() ? '<button type="button" class="hrkSekme" data-chtedarik="1" style="padding:9px 4px;"><b style="font-size:13px; font-family:inherit;">🛒 Sipariş</b></button>' : '') + '</div>');
     if(yukleniyor){ cariHrkBodyEl.innerHTML = baslik + '<div class="hint" style="margin-top:14px;">⏳ Yükleniyor…</div>'; return; }
     if(s.hata){ cariHrkBodyEl.innerHTML = baslik + '<div class="hint" style="margin-top:14px; color:var(--red);">❌ ' + escapeHtml(s.hata) + '</div>'; return; }
     var d = s.veri || {};
@@ -5167,9 +5170,9 @@
   }
   function tedGenelGetir(){
     ted.yukleniyor = true; ted.hata = ''; tedCiz();
-    var no = ++ted.istekNo;
+    var no = ted.genelNo = (ted.genelNo || 0) + 1;
     tedIstek({ ne: 'genel' }, function(err, d){
-      if(no !== ted.istekNo) return;
+      if(no !== ted.genelNo) return;
       ted.yukleniyor = false;
       if(err){ ted.hata = err; tedCiz(); return; }
       ted.genel = d; ted.genelZaman = Date.now(); ted.hesap = null; tedCiz();
@@ -5204,23 +5207,31 @@
     document.getElementById('tedarikSekmeler').classList.toggle('hidden', !!ted.firma);
     tedarikAraEl.classList.toggle('hidden', !!ted.firma);
     if(ted.firma){ tedarikBodyEl.innerHTML = tedFirmaHtml(); return; }
-    if(ted.yukleniyor && !ted.genel){ tedarikBodyEl.innerHTML = '<div class="hint">⏳ Tedarikçiler ve ürünler hesaplanıyor…</div>'; return; }
-    if(ted.hata && !ted.genel){ tedarikBodyEl.innerHTML = '<div class="hint" style="color:var(--red);">❌ ' + escapeHtml(ted.hata) + '</div><button type="button" class="geriBtn" data-tyenile="1">🔄 Tekrar dene</button>'; return; }
+    if(ted.yukleniyor && !ted.genel && !tedarikAraEl.value.trim()){ tedarikBodyEl.innerHTML = '<div class="hint">⏳ Tedarikçiler ve ürünler hesaplanıyor…</div>'; return; }
+    if(ted.hata && !ted.genel && !tedarikAraEl.value.trim()){ tedarikBodyEl.innerHTML = '<div class="hint" style="color:var(--red);">❌ ' + escapeHtml(ted.hata) + '</div><div class="hint">Yöneticiye: 021_tedarikci_modul.sql Supabase\'de çalıştırıldı mı, sunucu güncellendi mi? Bu arada üstteki kutudan firma arayıp açabilirsin.</div><button type="button" class="geriBtn" data-tyenile="1">🔄 Tekrar dene</button>'; return; }
     tedarikBodyEl.innerHTML = ted.sekme === 'azalan' ? tedAzalanHtml() : tedFirmalarHtml();
   }
   function tedSonVeri(){ var d = ted.genel || {}; return '<div class="hint" style="margin-top:10px; font-size:11px;">Stok katalogdan, satış son ' + (d.satisGun || 60) + ' günün firmalara satış + kasa toplamından. Öneri, firmanın geliş aralığı + 3 gün yetecek kadar.' + (d.sonVeri ? ' ERP verisi: ' + escapeHtml(d.sonVeri) : '') + ' <a href="#" data-tyenile="1">🔄 Yenile</a></div>'; }
   function tedFirmalarHtml(){
     var h = tedHesap(), l = Object.keys(h.firmalar).map(function(k){ return h.firmalar[k]; }).filter(function(f){ return tedAraUygun(f.ad + ' ' + f.kod); });
     l.sort(function(a, b){ return (b.bitti * 3 + b.azalan + (b.zamani ? 2 : 0)) - (a.bitti * 3 + a.azalan + (a.zamani ? 2 : 0)) || (a.gecen === null ? 1e9 : a.gecen) - (b.gecen === null ? 1e9 : b.gecen); });
-    if(!l.length) return '<div class="hint">' + (tedarikAraEl.value.trim() ? 'Aramaya uyan firma yok.' : 'Son bir yılda alış görünmüyor (ERP belge satırları gönderilmemiş olabilir).') + '</div>';
-    return '<div class="hint" style="margin:0 0 8px;">' + l.length + ' tedarikçi · acil olan üstte. Firmaya dokun: son fatura ve sipariş önerisi.</div>' + l.map(function(f){
+    var q = tedarikAraEl.value.trim(), diger = '';
+    if(q.length >= 2){
+      var var_ = {}; l.forEach(function(f){ var_[f.kod] = 1; });
+      var ek = cariList.filter(function(c){ return c.code && !var_[c.code] && !h.firmalar[c.code] && tedAraUygun(c.name + ' ' + c.code); }).slice(0, 30);
+      if(ek.length) diger = '<div style="font-weight:800; margin:14px 0 6px;">📒 Diğer cariler</div>' + ek.map(function(c){
+        return '<div class="chSatir" data-tfirma="' + escapeHtml(c.code) + '" style="cursor:pointer;"><div class="ust"><span style="min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">' + escapeHtml(c.name) + '</span><span style="font-family:var(--mono); font-weight:600; font-size:12px;">' + escapeHtml(c.code) + '</span></div><div class="alt"><span>son bir yılda alış görünmüyor</span></div></div>';
+      }).join('');
+    }
+    if(!l.length) return (diger || '<div class="hint">' + (q ? 'Aramaya uyan firma yok.' : (ted.yukleniyor ? '⏳ Yükleniyor…' : 'Son bir yılda alış görünmüyor (ERP belge satırları gönderilmemiş olabilir).')) + '</div>');
+    return '<div class="hint" style="margin:0 0 8px;">' + l.length + ' tedarikçi · acil olan üstte. Firmaya dokun: son fatura ve sipariş önerisi. Listede olmayan firmayı üstteki kutudan ara.</div>' + l.map(function(f){
       var rozet = (f.bitti ? '<span style="color:var(--red); font-weight:800;">🔴 ' + f.bitti + ' bitti</span> ' : '') + (f.azalan ? '<span style="color:var(--amber); font-weight:800;">🟡 ' + f.azalan + ' azalıyor</span>' : '') || '<span style="color:var(--green); font-weight:700;">🟢 stok yeterli</span>';
       var gelis = 'son geliş ' + escapeHtml(f.son || '—') + (f.gecen !== null ? ' (' + (f.gecen === 0 ? 'bugün' : f.gecen + ' gün önce') + ')' : '') + (f.aralik > 0 ? ' · genelde ' + f.aralik + ' günde bir' : '');
       return '<div class="chSatir" data-tfirma="' + escapeHtml(f.kod) + '" style="cursor:pointer;"><div class="ust"><span style="min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">' + escapeHtml(f.ad) + '</span>' +
         (f.zamani ? '<span style="white-space:nowrap; color:var(--accent); font-weight:800;">⏰ gelme zamanı</span>' : '') + '</div>' +
         '<div class="alt"><span>' + rozet + '</span><span style="white-space:nowrap;">' + f.urunler.length + ' ürün</span></div>' +
         '<div class="alt"><span style="min-width:0;">' + gelis + '</span></div></div>';
-    }).join('') + tedSonVeri();
+    }).join('') + diger + tedSonVeri();
   }
   function tedAzalanHtml(){
     var h = tedHesap(), az = tedAzGun();
@@ -5261,8 +5272,8 @@
       '<div class="alt"><span style="color:' + r[2] + '; font-weight:800; white-space:nowrap;">' + r[0] + ' ' + r[1] + '</span><span style="min-width:0; text-align:right;">' + escapeHtml(bilgi) + '</span></div>' +
       '<div class="alt"><span style="min-width:0;">' + escapeHtml(gecmis) + (x.paket && x.paket.n > 1 ? ' · ' + escapeHtml(x.paket.neden) : '') + '</span></div>' + zam + '</div>';
   }
-  function tedFirmaAc(kod){
-    var h = tedHesap(), f = h.firmalar[kod] || { kod: kod, ad: tedFirmaAd(kod) };
+  function tedFirmaAc(kod, ad){
+    var h = tedHesap(), f = h.firmalar[kod] || { kod: kod, ad: tedFirmaAd(kod, ad) };
     ted.kaydir = tedarikBodyEl.scrollTop;
     ted.firma = { kod: kod, ad: f.ad, ozet: f, veri: null, hata: '' }; ted.acikFis = {}; ted.hepsi = false; ted.olu = false;
     var ob = ted.onbellek['firma|' + kod];
@@ -5287,6 +5298,8 @@
     if(F.yukleniyor) return html + '<div class="hint" style="margin-top:14px;">⏳ Yükleniyor…</div>';
     if(F.hata) return html + '<div class="hint" style="margin-top:14px; color:var(--red);">❌ ' + escapeHtml(F.hata) + '</div>';
     // Bilgi: geliş sıklığı ve bakiye (cari listesinden)
+    if(ted.genel){ var oz = tedHesap().firmalar[F.kod]; if(oz) F.ozet = oz; }
+    if(canSeeCariHrk()) html += '<div style="display:flex; gap:8px; margin:10px 0 0; flex-wrap:wrap;"><button type="button" class="geriBtn" data-tcari="hesap" style="margin:0;">💳 Hesap / ekstre</button><button type="button" class="geriBtn" data-tcari="vade" style="margin:0;">📅 Vade</button></div>';
     var c = cariList.filter(function(x){ return x.code === F.kod; })[0], bilgi = [];
     if(d.aralik > 0) bilgi.push('📆 Genelde <b>' + d.aralik + ' günde bir</b> geliyor (son bir yılda ' + d.gelis + ' kez)');
     else if(d.gelis) bilgi.push('📆 Son bir yılda ' + d.gelis + ' kez alış');
@@ -5368,6 +5381,11 @@
     if(e.target.closest('button[data-thepsi]')){ ted.hepsi = !ted.hepsi; tedCiz(); return; }
     if(e.target.closest('button[data-tolu]')){ ted.olu = !ted.olu; tedCiz(); return; }
     if(e.target.closest('button[data-tpaylas]')){ tedPaylas(); return; }
+    if((t = e.target.closest('button[data-tcari]'))){
+      var F2 = ted.firma, c2 = cariList.filter(function(x){ return x.code === F2.kod; })[0];
+      closeTedarikScreen(); openCariHrkScreen(); cariHrkSekme = t.getAttribute('data-tcari');
+      cariHrkSec({ name: F2.ad, code: F2.kod, balance: c2 ? c2.balance : '' }); return;
+    }
     if((t = e.target.closest('[data-tfis]'))){ tedFisAc(t.getAttribute('data-tfis'), t.getAttribute('data-tkaynak') || ''); return; }
     if((t = e.target.closest('[data-tfirma]'))){ tedFirmaAc(t.getAttribute('data-tfirma')); return; }
   });
