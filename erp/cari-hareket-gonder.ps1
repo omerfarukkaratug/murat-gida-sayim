@@ -200,6 +200,9 @@ GROUP BY CONVERT(char(10), F.TARIH, 23), FD.FINANS_ISLEM_TURU, FD.DOVIZ_AD
 
     # --- 3) Belge satirlari (fatura/irsaliye/fis detayi, carinin ve urunun stok hareketleri) ---
     # Stoga etki eden TUM belgeler (FIS_TURU.GIRIS = +1 / -1; Finans 18 haric): alis, satis, iade, depo, sarf, fire, sayim...
+    # FATURALANMIS IRSALIYE: irsaliye faturaya baglaninca (FIS_DETAY.FATRALANDIRILMIS_IRSALIYEMI = 1) ERP stogu
+    #   FATURADAN sayar, irsaliye satiri artik stoga etki etmez -> giris = 0 gonderilir (belge detayinda gorunur,
+    #   stok hareketinde sayilmaz). Eskiden ikisi de sayiliyor, mal iki kez girmis gorunuyordu.
     # + Cariye kesilmis, stoga etki ETMEYEN belgeler (GIRIS = 0): irsaliyeden kesilen fatura gibi. Bunlar olmadan
     #   cari ekstresinde faturanin ici "urun satiri yok" gorunuyordu. Stok hesabina girmezler (giris = 0).
     # Perakende (Pesin Satis carisinin belgeleri + carisi OLMAYAN kasa/perakende belgeleri 11/12/35/36) burada DEGIL,
@@ -221,7 +224,7 @@ GROUP BY CONVERT(char(10), F.TARIH, 23), FD.FINANS_ISLEM_TURU, FD.DOVIZ_AD
         $adIf = if ($urunAd) { "ISNULL(s.$urunAd, '')" } else { "''" }
         $netIf = if ($netVar) { "CASE WHEN d.$miktar >= 0.0005 THEN (CAST(ISNULL(d.TOPLAM_KDV_MATRAHI, 0) AS float) + CAST(ISNULL(d.TOPLAM_KDV, 0) AS float)) / CAST(d.$miktar AS float) END" } else { "CAST(NULL AS float)" }
         $sqlF = @"
-SELECT d.ID AS detay_id, f.ID AS fis_id, f.FIS_TURU AS fis_turu, ISNULL(FT.AD, '') AS tur_ad, FT.GIRIS AS giris, f.FIS_TARIHI AS tarih,
+SELECT d.ID AS detay_id, f.ID AS fis_id, f.FIS_TURU AS fis_turu, ISNULL(FT.AD, '') AS tur_ad, CASE WHEN f.FIS_TURU IN (5, 6, 7, 8, 36) AND ISNULL(d.FATRALANDIRILMIS_IRSALIYEMI, 0) = 1 THEN 0 ELSE FT.GIRIS END AS giris, f.FIS_TARIHI AS tarih,
        ISNULL(f.BELGENO, '') AS belge_no, ISNULL(C.KOD, '') AS cari_kod, ISNULL(C.AD, '') AS cari_ad, ISNULL(s.KOD, '') AS stok_kodu, ISNULL(d.BARKOD, '') AS barkod,
        $adIf AS urun_adi, CAST(d.$miktar AS float) AS miktar, $fiyatIf AS birim_fiyat, $tutarIf AS tutar, $netIf AS net_fiyat
 FROM dbo.FIS f
@@ -273,7 +276,7 @@ WHERE {TARIH}
         $tutarP = if ($tutarK) { "d.$tutarK" } elseif ($fiyat) { "CAST(d.$miktar AS float) * CAST(d.$fiyat AS float)" } else { "0" }
         $sqlP2 = @"
 SELECT ISNULL(s.KOD, '') AS stok_kodu, CONVERT(char(10), f.FIS_TARIHI, 23) AS gun,
-       SUM(CAST(d.$miktar AS float) * FT.GIRIS) AS miktar, SUM(CAST($tutarP AS float) * FT.GIRIS) AS tutar, COUNT(*) AS adet
+       SUM(CAST(d.$miktar AS float) * (CASE WHEN f.FIS_TURU IN (5, 6, 7, 8, 36) AND ISNULL(d.FATRALANDIRILMIS_IRSALIYEMI, 0) = 1 THEN 0 ELSE FT.GIRIS END)) AS miktar, SUM(CAST($tutarP AS float) * (CASE WHEN f.FIS_TURU IN (5, 6, 7, 8, 36) AND ISNULL(d.FATRALANDIRILMIS_IRSALIYEMI, 0) = 1 THEN 0 ELSE FT.GIRIS END)) AS tutar, COUNT(*) AS adet
 FROM dbo.FIS f
 JOIN dbo.FIS_DETAY d ON d.FIS = f.ID
 JOIN dbo.STOK s ON s.ID = d.STOK

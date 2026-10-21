@@ -142,6 +142,7 @@ LEFT JOIN dbo.STOK s ON s.ID = d.STOK
 LEFT JOIN dbo.CARI c ON c.ID = f.CARI
 WHERE f.FIS_TARIHI >= '$basSql' AND f.FIS_TARIHI < '$bitSql'
   AND (f.FIS_TURU IN (1, 5) OR (f.FIS_TURU IN (2, 6, 12) AND NOT ($pesin)))
+  AND NOT (f.FIS_TURU IN (5, 6) AND ISNULL(d.FATRALANDIRILMIS_IRSALIYEMI, 0) = 1)
 "@
     $dt = Sql-Tablo $baglanti $sql
     $satirlar = New-Object System.Collections.ArrayList
