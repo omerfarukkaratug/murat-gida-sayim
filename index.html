@@ -430,7 +430,7 @@
   <header style="border:none; padding:0 0 16px; background:transparent; display:flex; align-items:flex-start; justify-content:space-between;">
     <div>
       <h1><img src="logo-header.png" alt="Murat Gıda" style="height:30px; width:auto; display:block;"></h1>
-      <div class="sub"><img src="icon.svg" alt="" style="width:15px;height:15px;vertical-align:-3px;margin-right:5px;">KRT Saha · Murat Gıda • offline • Android • build 250</div>
+      <div class="sub"><img src="icon.svg" alt="" style="width:15px;height:15px;vertical-align:-3px;margin-right:5px;">KRT Saha · Murat Gıda • offline • Android • build 251</div>
     </div>
     <button type="button" id="themeToggleBtn" title="Tema seç" style="background:var(--panel2); border:1.5px solid var(--line); color:var(--text); width:34px; height:34px; border-radius:50%; font-size:15px; padding:0; display:flex; align-items:center; justify-content:center; flex-shrink:0;">🎨</button>
   </header>
@@ -5285,7 +5285,7 @@
   }
   function tedAdetDegis(kod, x, yeni){
     var t = tedTaslak(kod);
-    if(tedKilitli(t)){ warnToast('Bu sipariş ERP\'ye gönderildi — değiştirmek için önce "↩ Geri al"'); return; }
+    if(tedKilitli(t)){ warnToast('Bu sipariş "verildi" olarak işaretli — değiştirmek için önce "↩ Geri al"'); return; }
     if(!t) t = tedTaslakBaslat(kod, ted.firma && ted.firma.kod === kod ? tedFirmaListe() : []);
     var a = tedAnahtar(x);
     if(yeni > 0) t.s[a] = { b: x.barkod || '', k: x.kod || '', a: x.ad, m: yeni }; else delete t.s[a];
@@ -5343,7 +5343,7 @@
     if(F.urunAc){ var x = tedFirmaListe().filter(function(y){ return tedAnahtar(y) === F.urunAc; })[0]; F.urunAc = ''; if(x) tedUrunAc(x); }
   }
   function tedSunucuTaslak(sp){
-    var t = { id: sp.id, s: {}, durum: sp.durum, erpDurum: sp.erpDurum, erpBelgeNo: sp.erpBelgeNo, erpMesaj: sp.erpMesaj, kayitli: true, aciklama: sp.aciklama || '' };
+    var t = { id: sp.id, s: {}, durum: sp.durum, gonderim: sp.gonderim || '', erpDurum: sp.erpDurum, erpBelgeNo: sp.erpBelgeNo, erpMesaj: sp.erpMesaj, kayitli: true, aciklama: sp.aciklama || '' };
     (sp.satirlar || []).forEach(function(r){ t.s[r.stok_kodu || r.barkod] = { b: r.barkod, k: r.stok_kodu, a: r.urun_adi, m: Number(r.miktar) }; });
     return t;
   }
@@ -5388,8 +5388,7 @@
     var d = F.veri || {}, oto = tedOtoHedef(d.aralik), hedef = ted.hedef[F.kod] || oto, html = '';
     if(t && t.durum === 'gonder'){
       html += '<div class="chSatir" style="border:1.5px solid ' + (t.erpDurum === 'hata' ? 'var(--red)' : 'var(--accent)') + '; font-size:13px; line-height:1.6;">' +
-        (t.erpDurum === 'hata' ? '❌ <b>ERP\'ye aktarılamadı:</b> ' + escapeHtml(t.erpMesaj || '') + '<br>Düzeltmek için geri al, sonra tekrar gönder.'
-          : '⏳ <b>ERP\'ye gönderildi</b> — ERP bilgisayarı aktarınca belge numarası burada görünür. Değiştirmek için geri al.') +
+        '📨 <b>Sipariş verildi</b>' + (t.gonderim ? ' · ' + escapeHtml(t.gonderim) : '') + '<br>Firmaya iletildiyse böyle kalsın. Değiştirmek için geri al.' +
         '<div style="margin-top:8px;"><button type="button" class="geriBtn" data-tsip="geri" style="margin:0;">↩ Geri al (taslağa dön)</button></div></div>';
     } else {
       var secenek = [oto].concat([7, 15, 30, 45].filter(function(g){ return g !== oto; }));
@@ -5403,14 +5402,14 @@
     html += '<div class="chOzet"><div>🛒 SİPARİŞ<b>' + toplam + ' ürün</b></div><div>❌ YOK SATAN<b>' + l.filter(function(x){ return x.durum === 'bitti'; }).length + '</b></div><div>' + (t ? (t.kayitli ? '💾 KAYITLI' : '✏️ KAYDEDİLMEDİ') : '💡 ÖNERİ') + '<b>' + (t && t.erpBelgeNo ? escapeHtml(t.erpBelgeNo) : (t ? 'taslak' : 'hedef ' + hedef + ' gün')) + '</b></div></div>';
     if(!(t && t.durum === 'gonder')){
       html += '<div style="display:flex; gap:8px; margin:0 0 10px; flex-wrap:wrap;">' +
-        (toplam ? '<button type="button" class="geriBtn" data-tsip="kaydet" style="margin:0;">💾 Kaydet</button><button type="button" class="geriBtn" data-tsip="paylas" style="margin:0;">📤 Paylaş</button><button type="button" class="geriBtn" data-tsip="erp" style="margin:0; border-color:var(--accent); color:var(--accent);">🏢 ERP\'ye gönder</button>' : '') +
+        (toplam ? '<button type="button" class="geriBtn" data-tsip="kaydet" style="margin:0;">💾 Kaydet</button><button type="button" class="geriBtn" data-tsip="paylas" style="margin:0;">📤 Paylaş</button><button type="button" class="geriBtn" data-tsip="erp" style="margin:0; border-color:var(--accent); color:var(--accent);">📨 Sipariş verildi</button>' : '') +
         (t ? '<button type="button" class="geriBtn" data-tsip="sifirla" style="margin:0;">↺ Öneriye dön</button>' : '') + '</div>';
       html += '<div style="display:flex; gap:8px; margin:0 0 10px;"><input type="text" id="tedEkleAra" placeholder="➕ Ürün ekle: ad ya da barkod" autocomplete="off" style="flex:1; min-width:0;"></div><div id="tedEkleSonuc"></div>';
     } else html += '<div style="display:flex; gap:8px; margin:0 0 10px;"><button type="button" class="geriBtn" data-tsip="paylas" style="margin:0;">📤 Paylaş</button></div>';
     html += toplam ? goster.map(function(x){ return tedUrunSatir(x, F, F.kod); }).join('') + ekler.map(function(x){
       return '<div class="chSatir"><div class="ust" style="align-items:center;"><span style="min-width:0; overflow:hidden; text-overflow:ellipsis;">' + escapeHtml(x.ad) + '</span>' + tedAdetDugme(F.kod, x) + '</div><div class="alt"><span>➕ elle eklendi' + (x.barkod ? ' · ' + escapeHtml(x.barkod) : '') + '</span></div></div>';
     }).join('') : '<div class="hint">Siparişte ürün yok — ' + hedef + ' günlük stok yeterli. 👍 Ürün eklemek için yukarıdaki kutuya yaz ya da 📋 Tümü / 📉 Azalanlar sekmesinden + bas.</div>';
-    html += '<div class="hint" style="margin-top:10px; font-size:11px;">Öneri = ' + hedef + ' günlük satış − stok' + (ted.hedef[F.kod] ? '' : ' (otomatik: firmanın geliş aralığı + 3 gün)') + '. Koli içi adet tanımlıysa ona, yoksa geçmiş alışların ortak katına yuvarlanır. ERP\'ye gönderilen sipariş ERP\'de "Verilen Sipariş" (MOB VRLN-) olarak açılır; fiyatı ERP\'deki son alış fiyatıdır, stoğa ve cariye etki etmez.' + (d.sonVeri ? ' ERP verisi: ' + escapeHtml(d.sonVeri) : '') + '</div>';
+    html += '<div class="hint" style="margin-top:10px; font-size:11px;">Öneri = ' + hedef + ' günlük satış − stok' + (ted.hedef[F.kod] ? '' : ' (otomatik: firmanın geliş aralığı + 3 gün)') + '. Koli içi adet tanımlıysa ona, yoksa geçmiş alışların ortak katına yuvarlanır. Siparişler yalnız bu uygulamada saklanır, ERP\'ye yazılmaz. Firmaya iletince "📨 Sipariş verildi" ile işaretle.' + (d.sonVeri ? ' ERP verisi: ' + escapeHtml(d.sonVeri) : '') + '</div>';
     return html;
   }
   function tedGecmisHtml(d){
@@ -5419,7 +5418,7 @@
     return l.map(function(sp){
       var dur = sp.erpDurum === 'ok' ? '<span style="color:var(--green); font-weight:800;">✅ ERP: ' + escapeHtml(sp.erpBelgeNo) + '</span>'
         : sp.erpDurum === 'hata' ? '<span style="color:var(--red); font-weight:800;">❌ ERP hatası</span>'
-        : sp.durum === 'gonder' ? '<span style="color:var(--accent); font-weight:800;">⏳ ERP\'ye gidecek</span>' : '<span style="color:var(--amber); font-weight:800;">📝 Taslak</span>';
+        : sp.durum === 'gonder' ? '<span style="color:var(--accent); font-weight:800;">📨 Verildi' + (sp.gonderim ? ' ' + escapeHtml(sp.gonderim) : '') + '</span>' : '<span style="color:var(--amber); font-weight:800;">📝 Taslak</span>';
       var acik = ted.acikSip[sp.id];
       return '<div class="chSatir" data-tsipac="' + escapeHtml(sp.id) + '" style="cursor:pointer;"><div class="ust"><span>' + escapeHtml(sp.olusturma) + ' · ' + (sp.satirlar || []).length + ' ürün</span>' + dur + '</div>' +
         '<div class="alt"><span>' + escapeHtml(sp.olusturan || '') + (sp.erpZaman ? ' · aktarım ' + escapeHtml(sp.erpZaman) : '') + '</span><span>' + (acik ? '▲' : '▼') + '</span></div>' +
@@ -5488,10 +5487,6 @@
     var F = ted.firma, t = tedTaslak(F.kod);
     if(!t) t = tedTaslakBaslat(F.kod, tedFirmaListe());
     var satir = tedSipSatirlar(t);
-    if(durum === 'gonder'){
-      var barkodsuz = satir.filter(function(r){ return !r[0]; });
-      if(barkodsuz.length){ warnToast(barkodsuz.length + ' ürünün barkodu yok — ERP\'de bulunamaz, atlanır'); }
-    }
     tedIstek({ ne: 'kaydet', id: t.id, cariKod: F.kod, cariAd: F.ad, durum: durum, aciklama: t.aciklama || '', satirlar: JSON.stringify(satir) }, function(err, d){
       if(err){ warnToast('Kaydedilemedi: ' + err); if(d && d.siparis){ ted.sip[F.kod] = tedSunucuTaslak(d.siparis); tedSipSakla(); tedCiz(); } return; }
       if(durum === 'iptal'){ delete ted.sip[F.kod]; } else { ted.sip[F.kod] = tedSunucuTaslak(d.siparis); }
@@ -5562,7 +5557,7 @@
       }
       if(ne === 'erp'){
         if(Date.now() - tedErpOnay > 5000){ tedErpOnay = Date.now(); t.textContent = '⚠️ Emin misin? Tekrar bas'; return; }
-        tedErpOnay = 0; tedSipKaydet('gonder', function(){ successToast('ERP\'ye gönderildi — ERP bilgisayarı aktaracak'); }); return;
+        tedErpOnay = 0; tedSipKaydet('gonder', function(){ successToast('Sipariş verildi olarak işaretlendi'); }); return;
       }
     }
     if((t = e.target.closest('[data-tsipac]'))){ var id = t.getAttribute('data-tsipac'); if(ted.acikSip[id]) delete ted.acikSip[id]; else ted.acikSip[id] = 1; tedCiz(); return; }
