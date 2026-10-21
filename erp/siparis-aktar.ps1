@@ -1,40 +1,45 @@
 # =====================================================================
-#  Murat Gıda - Telefondaki Mal Giriş / Mal Çıkış -> ERP12 SİPARİŞ
+#  MK Saha - Telefondaki Mal Giris / Mal Cikis -> ERP12 SIPARIS
 # =====================================================================
-#  Ne yapar: Telefondan kaydedilen Mal Giriş / Mal Çıkış belgelerini
-#  (bulut veri tabanından) alır ve ERP12'ye SİPARİŞ olarak yazar:
-#    Mal Giriş  -> Verilen Sipariş (SIPARIS_TURU 1), seri "MOB VRLN-"
-#    Mal Çıkış  -> Alınan Sipariş  (SIPARIS_TURU 2), seri "MOB LNN-"
-#  Sipariş stoğa ve cariye etki etmez; ERP'de faturaya çevrilir.
+#  Ne yapar: Telefondan kaydedilen Mal Giris / Mal Cikis belgelerini
+#  (bulut veri tabanindan) alir ve ERP12'ye SIPARIS olarak yazar:
+#    Mal Giris -> Verilen Siparis (SIPARIS_TURU 1), belge no "MK SAHA G-000001"
+#    Mal Cikis -> Alinan Siparis  (SIPARIS_TURU 2), belge no "MK SAHA C-000001"
+#  Siparis STOGA ve CARIYE etki etmez. ERP'de siparis acilip faturaya /
+#  irsaliyeye cevrilir; faturayi ERP kendisi olusturur.
 #
 #  Fiyatlar:
-#    Verilen sipariş: ürünün ERP'deki SON ALIŞ fiyatı (KDV hariç).
-#    Alınan sipariş : telefondaki fiyat (katalogdaki KDV dahil satış fiyatı).
+#    Verilen siparis: urunun ERP'deki SON ALIS fiyati (KDV haric).
+#    Alinan siparis : telefondaki fiyat (katalogdaki KDV dahil satis fiyati).
 #
-#  Güvenlik:
-#  - Sadece AYARLAR'daki $Database'e yazar (otomatik seçim YOK). İlk denemeler
-#    ERP'nin KOPYASINDA yapılır (örn. ERP122025_TEST).
-#  - Her belge tek bir işlemde (transaction) yazılır: ya hepsi ya hiçbiri.
-#  - Numaralar ERP'nin kendi ortak sayacından (dbo.ID) alınır.
-#  - Aynı belge iki kez aktarılmaz (bulut kaydı + yerel liste).
-#  - Aktarıldıktan sonra telefonda değiştirilen belgeye DOKUNULMAZ, sadece
-#    uyarı yazılır (düzeltme ERP'de elle yapılır).
+#  Guvenlik:
+#  - DENEME: "siparis-aktar.ps1 DENEME" her seyi hesaplar, ERP'ye YAZMAZ
+#    (islem geri alinir), ne yazilacagini log'a yazar.
+#  - Her belge tek bir islemde (transaction) yazilir: ya hepsi ya hicbiri.
+#  - Numaralar ERP'nin kendi ortak sayacindan (dbo.ID) alinir.
+#  - Ayni belge iki kez aktarilmaz (bulut kaydi + yerel liste).
+#  - Aktarildiktan sonra telefonda degistirilen belgeye DOKUNULMAZ, sadece
+#    uyari yazilir (duzeltme ERP'de elle yapilir).
 #  - Telefonda kaydedildikten sonra $BekleDakika dakika beklenir (personel
-#    hâlâ düzeltiyor olabilir).
+#    hala duzeltiyor olabilir).
 # =====================================================================
 
 # ---------------------- AYARLAR ----------------------
+$script:Argumanlar = @($args | ForEach-Object { ([string]$_).ToUpperInvariant().TrimStart("-") })
+$Deneme           = $script:Argumanlar -contains "DENEME"
 $SqlServer        = "SERVER\ERP12"
-$Database         = "ERP122025_TEST"
+# Bos: ERP12'nin AKTIF yil veri tabani otomatik bulunur (son 7 gunde belge girilen en yeni).
+# Elle sabitlemek icin: "ERP122025"
+$Database         = ""
 $DbUrl            = "https://wjyqempcmyrmruhdpcwk.supabase.co"
 $DbAnahtarDosyasi = "C:\Scripts\db-anahtar.txt"
 $LogFile          = "C:\Scripts\siparis-aktar-log.txt"
 $AktarilanDosya   = "C:\Scripts\siparis-aktarilan.txt"
 # Bu tarihten ONCE telefonda olusturulan belgeler aktarilmaz (gecmisi doldurmasin).
-$BaslangicTarihi  = "2026-11-01"
+$BaslangicTarihi  = "2026-10-21"
 $BekleDakika      = 10
-$SeriVerilen      = "MOB VRLN-"
-$SeriAlinan       = "MOB LNN-"
+$SeriVerilen      = "MK SAHA G-"
+$SeriAlinan       = "MK SAHA C-"
 # -----------------------------------------------------
 
 try { [Net.ServicePointManager]::SecurityProtocol = [Net.ServicePointManager]::SecurityProtocol -bor [Net.SecurityProtocolType]::Tls12 } catch {}
@@ -107,7 +112,7 @@ function Belge-Yaz($baglanti, $b) {
         if (-not $adres) { $adres = 0 }
 
         # --- Lokasyon / proje: ERP'nin kendi son siparisinden (yoksa son fisten) ---
-        $lp = Tablo $tx "SELECT TOP 1 LOKASYON, PROJE FROM dbo.SIPARIS WHERE BELGENO NOT LIKE 'MOB %' ORDER BY ID DESC" $null
+        $lp = Tablo $tx "SELECT TOP 1 LOKASYON, PROJE FROM dbo.SIPARIS WHERE BELGENO NOT LIKE 'MK SAHA%' AND BELGENO NOT LIKE 'MOB %' ORDER BY ID DESC" $null
         if ($lp.Rows.Count -eq 0) { $lp = Tablo $tx "SELECT TOP 1 LOKASYON, PROJE FROM dbo.FIS ORDER BY ID DESC" $null }
         if ($lp.Rows.Count -eq 0) { throw "LOKASYON/PROJE bulunamadi" }
         $lokasyon = $lp.Rows[0].LOKASYON; $proje = $lp.Rows[0].PROJE
@@ -134,7 +139,7 @@ function Belge-Yaz($baglanti, $b) {
             $tutar = Yuvarla ($fiyat * $miktar) 4
             [void]$satirlar.Add(@{ stok = $stok; birim = $bb.Rows[0].STOK_BIRIM; kod = [string]$bb.Rows[0].KOD; barkod = [string]$r.barkod
                 kdv = $kdv; miktar = $miktar; fiyat = $fiyat; dahil = $dahil; tutar = $tutar; dahilTutar = (Yuvarla ($dahil * $miktar) 4)
-                kdvTutar = (Yuvarla ($tutar * $kdv / 100) 4); sonAlis = $sonAlis })
+                kdvTutar = (Yuvarla ($tutar * $kdv / 100) 4); sonAlis = $sonAlis; ad = [string]$r.urun_adi })
         }
         if ($satirlar.Count -eq 0) { throw "Hicbir urun ERP'de bulunamadi: $($atlanan -join ', ')" }
 
@@ -146,7 +151,7 @@ function Belge-Yaz($baglanti, $b) {
 
         # --- Aciklama (sutun uzunluguna gore) ---
         $acikMax = Deger $tx "SELECT max_length / 2 FROM sys.columns WHERE object_id = OBJECT_ID('dbo.SIPARIS') AND name = 'ACIKLAMA'" $null
-        $acik = ("Telefon: " + (@([string]$b.belge_turu, [string]$b.belge_no) | Where-Object { $_ }) -join " ") + " / $($b.personel)"
+        $acik = ("MK Saha: " + (@([string]$b.belge_turu, [string]$b.belge_no) | Where-Object { $_ }) -join " ") + " / $($b.personel)"
         if ([string]$b.sebep) { $acik += " / $($b.sebep)" }
         if ([string]$b.aciklama) { $acik += " / $($b.aciklama)" }
         if ($atlanan.Count -gt 0) { $acik += " / ERP'de olmayan: " + ($atlanan -join ", ") }
@@ -164,8 +169,8 @@ function Belge-Yaz($baglanti, $b) {
             SIPARIS_ISKONTO_ORAN = "          "; SIPARIS_ISKONTO_TOPLAM = 0; YUVARLAMA = 0; KDV_TOPLAM = (Yuvarla $kdvToplam 2); OTV_TOPLAM = 0
             TEFKIFAT_TOPLAM = 0; GENELTOPLAM = (Yuvarla $genel 2); ACIKLAMA = $acik; FIS = 0; AKTIF = $true
             SIPARIS_OZEL_KOD_1 = 0; SIPARIS_OZEL_KOD_2 = 0; SIPARIS_OZEL_KOD_3 = 0; SIPARIS_OZEL_KOD_4 = 0; SIPARIS_OZEL_KOD_5 = 0
-            GONDERIM_ADRESI = $adres; ONAYLI = $true; VADE_SECENEKLERI = 7; BELGE_YETKILISI = 0; YAZILDI = $false; EMAIL_GONDERILDI = $false
-            NAKLIYE_ODEME_TIPI = 0; SEVK_SEKLI = 0; KARSI_SIPARIS_NO = ""; ARTTIRIM = 0; DOVIZ_KUR_SECIMI = 2; FIS_ODEME_TIPI_ISKONTOLARI = 1
+            GONDERIM_ADRESI = $adres; ONAYLI = $true; VADE_SECENEKLERI = $(if ($giris) { 17 } else { 7 }); BELGE_YETKILISI = 0; YAZILDI = $false; EMAIL_GONDERILDI = $false
+            NAKLIYE_ODEME_TIPI = 0; SEVK_SEKLI = 0; KARSI_SIPARIS_NO = ""; ARTTIRIM = 0; DOVIZ_KUR_SECIMI = 2; FIS_ODEME_TIPI_ISKONTOLARI = $(if ($giris) { 0 } else { 1 })
             IHRACAT_GONDERIM_SEKLI = 0; IHRACAT_TESLIM_SEKLI = 0; FIS_ALT_TIPI = 1 }
 
         # --- Satirlar ---
@@ -181,8 +186,12 @@ function Belge-Yaz($baglanti, $b) {
                 AMBALAJ_BIRIM = $s.birim; AMBALAJ_MIKTAR = $s.miktar; AMBALAJ_CARPAN = 1; FK_STOK_TEVKIF_LESTE = 0; FK_PERSONEL = 0
                 ALT_BIRIM_MIKTARI = $s.miktar; SEVK_ADRES = 0; BUNDLE_DETAY = 0; KT_BUNDLE_FIYAT = 0; LISTE_FIYATI = 0 }
         }
-        $tx.Commit()
         $uyari = if ($atlanan.Count -gt 0) { "ERP'de bulunamayan urunler atlandi: " + ($atlanan -join ", ") } else { "" }
+        if ($Deneme) {
+            $tx.Rollback()
+            Yaz-Log "DENEME (ERP'ye YAZILMADI): $belgeNo / $($b.tip) / $($b.cari) / $($satirlar.Count) satir / toplam KDV dahil $(Yuvarla $genel 2) $uyari"
+            foreach ($s in $satirlar) { Yaz-Log ("   {0} {1} x {2} fiyat {3} (KDV dahil {4})" -f $s.barkod, $s.ad, $s.miktar, $s.fiyat, $s.dahil) }
+        } else { $tx.Commit() }
         return @{ id = $id; belge = $belgeNo; uyari = $uyari; satir = $satirlar.Count }
     } catch {
         try { $tx.Rollback() } catch {}
@@ -193,18 +202,17 @@ function Belge-Yaz($baglanti, $b) {
 # ---------------------------------------------------------------------
 $baglanti = $null
 try {
-    if (-not $Database) { Yaz-Log "HATA: AYARLAR'da `$Database bos. Once ERP'nin KOPYASINDA deneyin."; exit 1 }
     if (-not (Test-Path $DbAnahtarDosyasi)) { Yaz-Log "HATA: $DbAnahtarDosyasi yok."; exit 1 }
     $script:Anahtar = (Get-Content -Path $DbAnahtarDosyasi -TotalCount 1).Trim()
     $aktarilan = @{}
     if (Test-Path $AktarilanDosya) { Get-Content $AktarilanDosya | ForEach-Object { $p = $_.Split("`t"); if ($p[0]) { $aktarilan[$p[0]] = $_ } } }
 
     $bas = [datetime]::ParseExact($BaslangicTarihi, "yyyy-MM-dd", $Inv)
-    $is = Rpc "aktarilacak_mal" @{ p_baslangic = $bas.ToString("yyyy-MM-ddT00:00:00", $Inv) + "+03:00"; p_bekle_dk = $BekleDakika; p_limit = 50 }
+    $is = Rpc "aktarilacak_mal" @{ p_baslangic = $bas.ToString("yyyy-MM-ddT00:00:00", $Inv) + "+03:00"; p_bekle_dk = $(if ($Deneme) { 0 } else { $BekleDakika }); p_limit = 50 }
     if (-not $is -or [string]$is.status -ne "ok") { throw "Bekleyen belgeler alinamadi: $($is | ConvertTo-Json -Compress)" }
 
     foreach ($d in @($is.degisen)) {
-        if (-not $d) { continue }
+        if (-not $d -or $Deneme) { continue }
         Yaz-Log "UYARI: $($d.belge_no) ERP'ye aktarildiktan SONRA telefonda degistirildi. ERP'deki siparis degistirilmedi; elle kontrol edin."
         $b = [PSCustomObject]@{ batch_id = $d.batch_id; tip = ""; imza = "" }
         Bildir $b $null $d.belge_no "degisti" "Aktarildiktan sonra telefonda degisti; ERP'de elle kontrol edin"
@@ -213,11 +221,23 @@ try {
     $belgeler = @($is.belgeler | Where-Object { $_ })
     if ($belgeler.Count -eq 0) { Yaz-Log "Aktarilacak belge yok."; exit 0 }
 
-    $baglanti = New-Object System.Data.SqlClient.SqlConnection("Server=$SqlServer;Database=$Database;Integrated Security=SSPI;")
+    $baglanti = New-Object System.Data.SqlClient.SqlConnection("Server=$SqlServer;Database=master;Integrated Security=SSPI;")
     $baglanti.Open()
+    if (-not $Database) {
+        $cmd = $baglanti.CreateCommand(); $cmd.CommandText = "SELECT name FROM sys.databases WHERE name LIKE 'ERP12[0-9][0-9][0-9][0-9]' AND state = 0 ORDER BY name DESC"
+        $rd = $cmd.ExecuteReader(); $adaylar = @(); while ($rd.Read()) { $adaylar += [string]$rd[0] }; $rd.Close()
+        if ($adaylar.Count -eq 0) { throw "ERP12 yil veri tabani bulunamadi" }
+        foreach ($aday in $adaylar) {
+            $cmd = $baglanti.CreateCommand(); $cmd.CommandText = "SELECT COUNT(*) FROM [$aday].dbo.FIS WHERE FIS_TARIHI >= DATEADD(day, -7, GETDATE())"
+            if ([int]$cmd.ExecuteScalar() -gt 0) { $Database = $aday; break }
+        }
+        if (-not $Database) { $Database = $adaylar[0] }
+    }
+    $baglanti.ChangeDatabase($Database)
+    Yaz-Log "$(if ($Deneme) { 'DENEME - ' })ERP veri tabani: $Database, $($belgeler.Count) belge"
     $ok = 0; $hata = 0
     foreach ($b in $belgeler) {
-        if ($aktarilan.ContainsKey([string]$b.batch_id)) {
+        if (-not $Deneme -and $aktarilan.ContainsKey([string]$b.batch_id)) {
             # ERP'ye yazilmis ama buluta bildirilememis: tekrar YAZMA, sadece bildir.
             $p = $aktarilan[[string]$b.batch_id].Split("`t")
             Bildir $b ([long]$p[1]) $p[2] "ok" "Yerel listeden bildirildi"
@@ -225,6 +245,7 @@ try {
         }
         try {
             $sonuc = Belge-Yaz $baglanti $b
+            if ($Deneme) { $ok++; continue }
             Add-Content -Path $AktarilanDosya -Value ("{0}`t{1}`t{2}" -f $b.batch_id, $sonuc.id, $sonuc.belge)
             Bildir $b $sonuc.id $sonuc.belge "ok" $(if ($sonuc.uyari) { $sonuc.uyari } else { "$($sonuc.satir) satir" })
             Yaz-Log "TAMAM: $($sonuc.belge) ($($b.tip), $($b.cari), $($sonuc.satir) satir) $($sonuc.uyari)"
@@ -232,10 +253,10 @@ try {
         } catch {
             $hata++
             Yaz-Log "HATA: belge $($b.batch_id) ($($b.cari)): $($_.Exception.Message)"
-            try { Bildir $b $null "" "hata" $_.Exception.Message } catch {}
+            if (-not $Deneme) { try { Bildir $b $null "" "hata" $_.Exception.Message } catch {} }
         }
     }
-    Yaz-Log "Bitti: $ok aktarildi, $hata hata."
+    Yaz-Log "Bitti: $ok $(if ($Deneme) { 'denendi (yazilmadi)' } else { 'aktarildi' }), $hata hata."
     if ($hata -gt 0) { exit 1 }
 }
 catch {
