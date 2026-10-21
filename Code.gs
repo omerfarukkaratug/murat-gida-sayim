@@ -123,6 +123,9 @@ function doGet(e) {
   if (e.parameter && e.parameter.action === 'stok_hareket') {
     return stokHareket(e.parameter, e.parameter.callback);
   }
+  if (e.parameter && e.parameter.action === 'tedarik') {
+    return tedarik(e.parameter, e.parameter.callback);
+  }
   if (e.parameter && e.parameter.action === 'temizle') {
     return handleTemizle(e.parameter.user, e.parameter.pass, e.parameter.callback);
   }
@@ -247,7 +250,7 @@ function outJson(obj, callback) {
 // tabloyu açan biri şifreleri okuyamaz. Şifre telefonda hâlâ saklanır ve her
 // istekte sunucuya gönderilir — tam oturum sistemi veri tabanı geçişinde.
 // ============================================================
-var ALL_PERMS = ['rapor', 'temizle', 'kullanici_yonetimi', 'ayarlar', 'canli_durum', 'duzelt', 'hareket', 'cari_hareket', 'stok_hareket', 'mesai', 'mesai_yonetim', 'plasiyer', 'plasiyer_maliyet', 'plasiyer_yonetim', 'alis_fiyat', 'siparis_hazirla', 'sevkiyat'];
+var ALL_PERMS = ['rapor', 'temizle', 'kullanici_yonetimi', 'ayarlar', 'canli_durum', 'duzelt', 'hareket', 'cari_hareket', 'stok_hareket', 'mesai', 'mesai_yonetim', 'plasiyer', 'plasiyer_maliyet', 'plasiyer_yonetim', 'alis_fiyat', 'siparis_hazirla', 'sevkiyat', 'tedarik'];
 
 // ---- ŞİFRE ÖZETİ ----
 // Şifreler tabloda artık DÜZ METİN durmaz: "s256$<tuz>$<özet>" biçiminde,
@@ -3536,6 +3539,48 @@ function cariHareket(p, callback) {
     return outJson(sonuc, callback);
   } catch (err) {
     gunlukYaz('veritabani', 'cari hareketleri', 'Sorgu başarısız: ' + err, true);
+    return outJson({ status: 'error', message: 'Veri tabanına ulaşılamadı — biraz sonra tekrar dene' }, callback);
+  }
+}
+
+// ============================================================
+// 🛒 TEDARİKÇİ SİPARİŞİ: bütün tedarikçiler, azalan ürünler, firmanın son faturaları ve sipariş önerisi.
+// "tedarik" yetkisi. Yalnız okur; ERP'ye hiçbir şey yazılmaz. Alış fiyatı / fatura tutarı yalnız alisGorur.
+//   ne: 'genel' (firmalar + ürünler) · 'firma' (cariKod) · 'fis' (fisId, kaynak)
+// ============================================================
+function tedarik(p, callback) {
+  var auth = requirePermission(p.user, p.pass, 'tedarik');
+  if (!auth.ok) return outJson({ status: 'error', message: auth.message }, callback);
+  var props = PropertiesService.getScriptProperties();
+  var url = String(props.getProperty('DB_URL') || '').trim().replace(/\/+$/, '');
+  var anahtar = String(props.getProperty('DB_ANAHTAR') || '').trim();
+  if (!url || !anahtar) return outJson({ status: 'error', message: 'Veri tabanı ayarı yok (DB_URL / DB_ANAHTAR)' }, callback);
+  var ne = String(p.ne || 'genel'), fn, govde, alis = alisGorur(auth);
+  if (ne === 'fis') {
+    var fisId = parseInt(p.fisId, 10);
+    if (!(fisId > 0)) return outJson({ status: 'error', message: 'Belge seçilmedi' }, callback);
+    fn = 'fis_detay'; govde = { p_kaynak: String(p.kaynak || '').substring(0, 40), p_fis_id: fisId };
+  } else if (ne === 'firma') {
+    var kod = String(p.cariKod || '').trim().substring(0, 80);
+    if (!kod) return outJson({ status: 'error', message: 'Firma seçilmedi' }, callback);
+    fn = 'tedarikci_firma'; govde = { p_cari_kod: kod };
+  } else { fn = 'tedarikci_genel'; govde = { p_gun: 365, p_satis_gun: 60 }; }
+  try {
+    var sonuc = dbCagir({ url: url, anahtar: anahtar }, fn, govde);
+    if (!sonuc || sonuc.status !== 'ok') return outJson({ status: 'error', message: (sonuc && sonuc.message) || 'Veri tabanı cevap vermedi' }, callback);
+    if (!alis) {
+      if (fn === 'tedarikci_genel') (sonuc.firmalar || []).forEach(function (r) { r[9] = null; });
+      if (fn === 'tedarikci_firma') {
+        (sonuc.satirlar || []).forEach(function (r) { r[5] = null; });
+        (sonuc.faturalar || []).forEach(function (r) { r[6] = null; });
+        sonuc.onceki = [];
+      }
+      if (fn === 'fis_detay') { sonuc.toplam = null; (sonuc.satirlar || []).forEach(function (r) { r[4] = null; r[5] = null; }); }
+    }
+    sonuc.alis = alis;
+    return outJson(sonuc, callback);
+  } catch (err) {
+    gunlukYaz('veritabani', 'tedarikçi siparişi', 'Sorgu başarısız: ' + err, true);
     return outJson({ status: 'error', message: 'Veri tabanına ulaşılamadı — biraz sonra tekrar dene' }, callback);
   }
 }
