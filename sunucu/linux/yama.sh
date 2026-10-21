@@ -14,10 +14,12 @@ cat > /usr/local/sbin/krtsaha-pg-yedek <<'YEDEK'
 #!/bin/sh
 set -e
 D=/var/lib/krtsaha/pg; F="$D/mkerp-$(date +%Y-%m-%d_%H%M).dump"
-runuser -u postgres -- pg_dump -Fc -f "$F.tmp" mkerp && mv "$F.tmp" "$F"
+# Dosyayi root yazar (postgres kullanicisi /var/lib/krtsaha klasorune giremez); pg_dump yalniz ciktiyi uretir.
+runuser -u postgres -- pg_dump -Fc mkerp > "$F.tmp" && mv "$F.tmp" "$F"
 chgrp mk "$F" 2>/dev/null || true; chmod 640 "$F"
 find "$D" -name 'mkerp-*.dump' -mtime +30 -delete
 echo "$(date -Is) yedek tamam: $F" >> "$D/yedek-log.txt"
 YEDEK
 chmod 750 /usr/local/sbin/krtsaha-pg-yedek
+rm -f "$VERI/pg/"*.dump.tmp 2>/dev/null || true
 echo "✓ yamalar uygulandı"
