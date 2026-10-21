@@ -3564,9 +3564,31 @@ function tedarik(p, callback) {
     var kod = String(p.cariKod || '').trim().substring(0, 80);
     if (!kod) return outJson({ status: 'error', message: 'Firma seçilmedi' }, callback);
     fn = 'tedarikci_firma'; govde = { p_cari_kod: kod };
+  } else if (ne === 'urun') {
+    var stokKodu = String(p.stokKodu || '').substring(0, 60), barkod = String(p.barkod || '').substring(0, 60);
+    if (!stokKodu && !barkod) return outJson({ status: 'error', message: 'Ürün seçilmedi' }, callback);
+    fn = 'stok_hareket'; govde = { p_stok_kodu: stokKodu, p_barkod: barkod, p_gun: 365, p_limit: 120 };
+  } else if (ne === 'kaydet') {
+    // Sipariş taslağı / ERP'ye gönder / iptal. ERP'ye buradan yazılmaz (ERP bilgisayarı alır).
+    var sid = String(p.id || '').replace(/[^A-Za-z0-9_-]/g, '').substring(0, 60), skod = String(p.cariKod || '').trim().substring(0, 80);
+    var sdurum = String(p.durum || 'taslak'); if (['taslak', 'gonder', 'iptal'].indexOf(sdurum) === -1) sdurum = 'taslak';
+    var ham; try { ham = JSON.parse(String(p.satirlar || '[]')); } catch (je) { ham = null; }
+    if (!sid || !skod || !Array.isArray(ham)) return outJson({ status: 'error', message: 'Sipariş bilgisi eksik' }, callback);
+    if (ham.length > 300) return outJson({ status: 'error', message: 'Bir siparişte en fazla 300 ürün olabilir' }, callback);
+    var satirlar = [];
+    for (var i = 0; i < ham.length; i++) {
+      var h = ham[i] || [], m = Number(h[3]);
+      if (!(m > 0) || m > 1e6) continue;
+      satirlar.push({ barkod: String(h[0] || '').substring(0, 40), stok_kodu: String(h[1] || '').substring(0, 40), urun_adi: String(h[2] || '').substring(0, 80), miktar: Math.round(m * 1000) / 1000 });
+    }
+    if (sdurum === 'gonder' && !satirlar.length) return outJson({ status: 'error', message: 'Siparişte ürün yok' }, callback);
+    fn = 'tedarik_siparis_yaz';
+    govde = { p: { id: sid, cari_kod: skod, cari_ad: String(p.cariAd || '').substring(0, 150), satirlar: satirlar,
+      aciklama: String(p.aciklama || '').substring(0, 300), olusturan: String(p.user || '').substring(0, 60), durum: sdurum } };
   } else { fn = 'tedarikci_genel'; govde = { p_gun: 365, p_satis_gun: 60 }; }
   try {
     var sonuc = dbCagir({ url: url, anahtar: anahtar }, fn, govde);
+    if (fn === 'tedarik_siparis_yaz' && sonuc && sonuc.status === 'ok') gunlukYaz('tedarik', String(p.user || ''), 'Tedarikçi siparişi ' + govde.p.durum + ': ' + govde.p.cari_ad + ' (' + govde.p.satirlar.length + ' ürün)', false);
     if (!sonuc || sonuc.status !== 'ok') return outJson({ status: 'error', message: (sonuc && sonuc.message) || 'Veri tabanı cevap vermedi' }, callback);
     if (!alis) {
       if (fn === 'tedarikci_genel') (sonuc.firmalar || []).forEach(function (r) { r[9] = null; });
@@ -3575,6 +3597,7 @@ function tedarik(p, callback) {
         (sonuc.faturalar || []).forEach(function (r) { r[6] = null; });
         sonuc.onceki = [];
       }
+      if (fn === 'stok_hareket') (sonuc.satirlar || []).forEach(function (r) { r[5] = null; r[6] = null; });
       if (fn === 'fis_detay') { sonuc.toplam = null; (sonuc.satirlar || []).forEach(function (r) { r[4] = null; r[5] = null; }); }
     }
     sonuc.alis = alis;

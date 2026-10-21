@@ -430,7 +430,7 @@
   <header style="border:none; padding:0 0 16px; background:transparent; display:flex; align-items:flex-start; justify-content:space-between;">
     <div>
       <h1><img src="logo-header.png" alt="Murat Gıda" style="height:30px; width:auto; display:block;"></h1>
-      <div class="sub"><img src="icon.svg" alt="" style="width:15px;height:15px;vertical-align:-3px;margin-right:5px;">KRT Saha · Murat Gıda • offline • Android • build 248</div>
+      <div class="sub"><img src="icon.svg" alt="" style="width:15px;height:15px;vertical-align:-3px;margin-right:5px;">KRT Saha · Murat Gıda • offline • Android • build 249</div>
     </div>
     <button type="button" id="themeToggleBtn" title="Tema seç" style="background:var(--panel2); border:1.5px solid var(--line); color:var(--text); width:34px; height:34px; border-radius:50%; font-size:15px; padding:0; display:flex; align-items:center; justify-content:center; flex-shrink:0;">🎨</button>
   </header>
@@ -902,11 +902,7 @@
         <div style="font-weight:800; font-size:16px;">🛒 Tedarikçi Siparişi</div>
         <button type="button" id="tedarikCloseBtn" aria-label="Kapat" style="width:34px; height:34px; border-radius:50%; background:var(--panel2); border:1.5px solid var(--line); color:var(--text); font-size:18px; line-height:1; padding:0; display:flex; align-items:center; justify-content:center;">✕</button>
       </div>
-      <div class="hrkSekmeler" id="tedarikSekmeler" style="margin:0 0 8px; gap:6px;">
-        <button type="button" class="hrkSekme on" data-tsekme="firmalar" style="padding:9px 4px;"><b style="font-size:13.5px; font-family:inherit;">🏭 Firmalar</b></button>
-        <button type="button" class="hrkSekme" data-tsekme="azalan" style="padding:9px 4px;"><b style="font-size:13.5px; font-family:inherit;">📉 Azalanlar</b></button>
-      </div>
-      <input type="text" id="tedarikAra" placeholder="Firma ya da ürün ara" autocomplete="off" style="width:100%;">
+      <input type="text" id="tedarikAra" placeholder="🔍 Tedarikçi ara: adı ya da cari kodu" autocomplete="off" style="width:100%;">
     </div>
     <div id="tedarikBody" style="flex:1; overflow-y:auto; padding:12px 14px 24px;"><div class="hint">⏳ Yükleniyor…</div></div>
   </div>
@@ -5104,7 +5100,7 @@
       var oneri = (stok !== null && gunluk > 0 && ihtiyac > 0) ? Math.ceil(ihtiyac / pk.n - 1e-9) * pk.n : 0;
       var yeter = (stok !== null && gunluk > 0) ? Math.max(stok, 0) / gunluk : null;
       var durum = stok === null ? 'bilinmiyor' : gunluk <= 0 ? 'satisyok' : stok <= 0 ? 'bitti' : yeter < 7 ? 'az' : yeter < hedef ? 'yakin' : 'yeter';
-      return { ad: (kat && kat.name) || r[2] || r[0] || r[1], kod: r[0], barkod: r[1], sonTarih: r[3], sonMiktar: r[4], sonFiyat: r[5], kez: r[6],
+      return { ad: (kat && kat.name) || r[2] || r[0] || r[1], kod: r[0], barkod: r[1] || (k ? k.b : ''), sonTarih: r[3], sonMiktar: r[4], sonFiyat: r[5], kez: r[6],
         stok: stok, gunluk: gunluk, satis: satis, yeter: yeter, oneri: oneri, paket: pk, durum: durum };
     }).sort(function(a, b){
       var o = { bitti: 0, az: 1, yakin: 2, yeter: 3, satisyok: 4, bilinmiyor: 5 };
@@ -5140,14 +5136,17 @@
     try { navigator.clipboard.writeText(metin).then(function(){ successToast('Liste kopyalandı — WhatsApp\'a yapıştır'); }); } catch(e){ window.prompt('Kopyala:', metin); }
   }
   // ---------- 🛒 TEDARİKÇİ SİPARİŞİ (ayrı modül) ----------
-  // Firmalar: son bir yılda alış yaptığımız bütün tedarikçiler; acil olan (biten / azalan ürünü çok) en üstte.
-  // Azalanlar: bütün ürünlerden stoğu N gün (7/10/15) ya da daha az yetecek olanlar, son alındığı firmaya göre gruplu.
-  // Firma sayfası: son faturalar (dokununca satırları), geliş sıklığı, bakiye, sipariş önerisi (hedef gün otomatik:
-  // firmanın geliş aralığı + 3 gün), adet + / −, zam uyarısı, satılmayan ürünler. ERP'ye hiçbir şey yazılmaz.
+  // Akış: firmayı ara/seç → firma içinde alt menüler: 🛒 Sipariş · 📉 Azalanlar · ❌ Yok satanlar · 💤 Satılmayanlar · 📋 Tümü · 📄 Siparişler.
+  // Ürüne dokununca: stok/satış özeti, geldiği fatura, bütün hareketleri (belgeye dokununca içi açılır).
+  // Sipariş: öneriden başlar, + / − ile düzeltilir, 💾 kaydedilir, 📤 paylaşılır, 🏢 ERP'ye "Verilen Sipariş" olarak gönderilir
+  // (ERP'ye ERP bilgisayarındaki aktarım programı yazar; stoğa ve cariye etki etmez).
   var tedarikEl = document.getElementById('tedarikScreen'), tedarikBodyEl = document.getElementById('tedarikBody'), tedarikAraEl = document.getElementById('tedarikAra');
-  var ted = { genel: null, genelZaman: 0, yukleniyor: false, hata: '', sekme: 'firmalar', firma: null, gecmis: [], onbellek: {}, acikFis: {}, adet: {}, hedef: {}, hepsi: false, olu: false, istekNo: 0 };
+  var ted = { genel: null, genelZaman: 0, yukleniyor: false, hata: '', gorunum: 'ana', firma: null, onbellek: {}, acikFis: {}, hedef: {}, istekNo: 0, genelNo: 0, urun: null, fSekme: 'siparis', sip: {}, acikSip: {} };
+  var TED_SIP_ANAHTAR = 'mkTedarikSiparis';
+  try { ted.sip = JSON.parse(localStorage.getItem(TED_SIP_ANAHTAR) || '{}') || {}; } catch(e){ ted.sip = {}; }
+  function tedSipSakla(){ try { localStorage.setItem(TED_SIP_ANAHTAR, JSON.stringify(ted.sip)); } catch(e){} }
   function tedAzGun(){ return Number(state.tedAzGun) || 10; }
-  function tedGunFark(t){ var m = /^(\d\d)\.(\d\d)\.(\d{4})$/.exec(String(t || '')); if(!m) return null; return Math.floor((Date.now() - new Date(+m[3], +m[2] - 1, +m[1]).getTime()) / 86400000); }
+  function tedGunFark(t){ var m = /^(\d\d)\.(\d\d)\.(\d{4})/.exec(String(t || '')); if(!m) return null; return Math.floor((Date.now() - new Date(+m[3], +m[2] - 1, +m[1]).getTime()) / 86400000); }
   function tedOtoHedef(aralik){ var a = Number(aralik); return a > 0 ? Math.max(7, Math.min(60, Math.round(a) + 3)) : (Number(state.oneriGun) || 30); }
   function tedFirmaAd(kod, yedek){ var c = cariList.filter(function(x){ return x.code === kod; })[0]; return (c && c.name) || yedek || kod; }
   function openTedarikScreen(){
@@ -5155,22 +5154,25 @@
     tedarikEl.classList.remove('hidden'); hizliGecisCiz();
     if(!cariList.length && state.currentUser) fetchCariList();
     if(!ted.genel || Date.now() - ted.genelZaman > 300000) tedGenelGetir(); else tedCiz();
+    if(!ted.firma) setTimeout(function(){ tedarikAraEl.focus(); }, 80);
   }
   function closeTedarikScreen(){ if(tedarikEl) tedarikEl.classList.add('hidden'); }
   function tedarikGeri(){
-    if(!ted.firma) return false;
-    ted.firma = null; ted.acikFis = {}; tedCiz(); tedarikBodyEl.scrollTop = ted.kaydir || 0; return true;
+    if(ted.urun){ ted.urun = null; tedCiz(); tedarikBodyEl.scrollTop = ted.kaydirF || 0; return true; }
+    if(ted.firma){ ted.firma = null; ted.acikFis = {}; tedCiz(); tedarikBodyEl.scrollTop = ted.kaydir || 0; return true; }
+    if(ted.gorunum !== 'ana'){ ted.gorunum = 'ana'; tedCiz(); return true; }
+    return false;
   }
   function tedIstek(param, bitti, sure){
     var auth = currentAuth(); if(!auth){ bitti('Önce giriş yap'); return; }
     if(!navigator.onLine){ bitti('İnternet yok'); return; }
     jsonpRequestP(state.serverUrl || DEFAULT_SERVER_URL, Object.assign({ action: 'tedarik', user: auth.user, pass: auth.pass }, param), function(err, data){
-      if(err || !data || data.status !== 'ok') bitti(err || (data && data.message) || 'bilinmeyen hata'); else bitti(null, data);
+      if(err || !data || data.status !== 'ok') bitti(err || (data && data.message) || 'bilinmeyen hata', data); else bitti(null, data);
     }, sure || 45000);
   }
   function tedGenelGetir(){
     ted.yukleniyor = true; ted.hata = ''; tedCiz();
-    var no = ted.genelNo = (ted.genelNo || 0) + 1;
+    var no = ++ted.genelNo;
     tedIstek({ ne: 'genel' }, function(err, d){
       if(no !== ted.genelNo) return;
       ted.yukleniyor = false;
@@ -5178,11 +5180,11 @@
       ted.genel = d; ted.genelZaman = Date.now(); ted.hesap = null; tedCiz();
     });
   }
-  // Genel veriden her ürünün durumu (stok, kaç gün yeter, öneri) — hedef gün: ürünün son alındığı firmanın otomatik hedefi.
+  // Genel veriden her ürünün durumu — hedef gün: ürünün son alındığı firmanın otomatik hedefi.
   function tedHesap(){
     if(ted.hesap) return ted.hesap;
     var d = ted.genel || {}, firmalar = {}, liste = [];
-    (d.firmalar || []).forEach(function(r){ firmalar[r[0]] = { kod: r[0], ad: tedFirmaAd(r[0], r[1]), son: r[2], kez: r[3], aralik: r[4], fis: r[5], kaynak: r[6], belgeNo: r[7], tur: r[8], tutar: r[9], belgeTarih: r[10], urunler: [] }; });
+    (d.firmalar || []).forEach(function(r){ firmalar[r[0]] = { kod: r[0], ad: tedFirmaAd(r[0], r[1]), son: r[2], kez: r[3], aralik: r[4], urunler: [] }; });
     var grup = {};
     (d.urunler || []).forEach(function(r){ (grup[r[3]] = grup[r[3]] || []).push([r[0], r[1], r[2], r[4], r[5], null, null, r[6], r[7], r[8]]); });
     Object.keys(grup).forEach(function(kod){
@@ -5203,81 +5205,120 @@
   }
   function tedAraUygun(metin){ var q = normTr(tedarikAraEl.value.trim()); return !q || normTr(metin).indexOf(q) !== -1; }
   function tedCiz(){
-    Array.prototype.forEach.call(document.querySelectorAll('#tedarikSekmeler button'), function(b){ b.classList.toggle('on', b.getAttribute('data-tsekme') === ted.sekme); });
-    document.getElementById('tedarikSekmeler').classList.toggle('hidden', !!ted.firma);
-    tedarikAraEl.classList.toggle('hidden', !!ted.firma);
-    if(ted.firma){ tedarikBodyEl.innerHTML = tedFirmaHtml(); return; }
-    if(ted.yukleniyor && !ted.genel && !tedarikAraEl.value.trim()){ tedarikBodyEl.innerHTML = '<div class="hint">⏳ Tedarikçiler ve ürünler hesaplanıyor…</div>'; return; }
-    if(ted.hata && !ted.genel && !tedarikAraEl.value.trim()){ tedarikBodyEl.innerHTML = '<div class="hint" style="color:var(--red);">❌ ' + escapeHtml(ted.hata) + '</div><div class="hint">Yöneticiye: 021_tedarikci_modul.sql Supabase\'de çalıştırıldı mı, sunucu güncellendi mi? Bu arada üstteki kutudan firma arayıp açabilirsin.</div><button type="button" class="geriBtn" data-tyenile="1">🔄 Tekrar dene</button>'; return; }
-    tedarikBodyEl.innerHTML = ted.sekme === 'azalan' ? tedAzalanHtml() : tedFirmalarHtml();
+    tedarikAraEl.classList.toggle('hidden', !!ted.firma || ted.gorunum !== 'ana');
+    if(ted.firma){ tedarikBodyEl.innerHTML = ted.urun ? tedUrunDetayHtml() : tedFirmaHtml(); return; }
+    if(ted.gorunum === 'azalan'){ tedarikBodyEl.innerHTML = '<button type="button" class="geriBtn" data-tgeri="1">← Firmalar</button>' + (ted.genel ? tedAzalanHtml() : '<div class="hint">⏳ Yükleniyor…</div>'); return; }
+    tedarikBodyEl.innerHTML = tedAnaHtml();
   }
   function tedSonVeri(){ var d = ted.genel || {}; return '<div class="hint" style="margin-top:10px; font-size:11px;">Stok katalogdan, satış son ' + (d.satisGun || 60) + ' günün firmalara satış + kasa toplamından. Öneri, firmanın geliş aralığı + 3 gün yetecek kadar.' + (d.sonVeri ? ' ERP verisi: ' + escapeHtml(d.sonVeri) : '') + ' <a href="#" data-tyenile="1">🔄 Yenile</a></div>'; }
-  function tedFirmalarHtml(){
-    var h = tedHesap(), l = Object.keys(h.firmalar).map(function(k){ return h.firmalar[k]; }).filter(function(f){ return tedAraUygun(f.ad + ' ' + f.kod); });
-    l.sort(function(a, b){ return (b.bitti * 3 + b.azalan + (b.zamani ? 2 : 0)) - (a.bitti * 3 + a.azalan + (a.zamani ? 2 : 0)) || (a.gecen === null ? 1e9 : a.gecen) - (b.gecen === null ? 1e9 : b.gecen); });
-    var q = tedarikAraEl.value.trim(), diger = '';
-    if(q.length >= 2){
+  function tedFirmaKart(f){
+    var rozet = ((f.bitti ? '<span style="color:var(--red); font-weight:800;">❌ ' + f.bitti + ' yok</span> ' : '') + (f.azalan ? '<span style="color:var(--amber); font-weight:800;">🟡 ' + f.azalan + ' azalıyor</span>' : '')) || '<span style="color:var(--green); font-weight:700;">🟢 stok yeterli</span>';
+    var gelis = 'son geliş ' + escapeHtml(f.son || '—') + (f.gecen !== null ? ' (' + (f.gecen === 0 ? 'bugün' : f.gecen + ' gün önce') + ')' : '') + (f.aralik > 0 ? ' · genelde ' + f.aralik + ' günde bir' : '');
+    var tas = ted.sip[f.kod] && Object.keys(ted.sip[f.kod].s || {}).length ? ' <span style="color:var(--accent); font-weight:800;">📝 taslak</span>' : '';
+    return '<div class="chSatir" data-tfirma="' + escapeHtml(f.kod) + '" style="cursor:pointer;"><div class="ust"><span style="min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">' + escapeHtml(f.ad) + tas + '</span>' +
+      (f.zamani ? '<span style="white-space:nowrap; color:var(--accent); font-weight:800;">⏰ sırası geldi</span>' : '') + '</div>' +
+      '<div class="alt"><span>' + rozet + '</span><span style="white-space:nowrap;">' + f.urunler.length + ' ürün</span></div>' +
+      '<div class="alt"><span style="min-width:0;">' + gelis + '</span></div></div>';
+  }
+  // Ana ekran: önce firma aranır. Arama boşken sırası gelen / acil firmalar listelenir.
+  function tedAnaHtml(){
+    var q = tedarikAraEl.value.trim(), h = ted.genel ? tedHesap() : { firmalar: {}, liste: [] };
+    var html = '';
+    if(ted.hata && !ted.genel) html += '<div class="hint" style="color:var(--red);">❌ ' + escapeHtml(ted.hata) + ' <a href="#" data-tyenile="1">Tekrar dene</a></div><div class="hint">Yöneticiye: 021 ve 022 SQL dosyaları Supabase\'de çalıştırıldı mı, sunucu güncellendi mi? Firmayı yine de arayıp açabilirsin.</div>';
+    var tum = Object.keys(h.firmalar).map(function(k){ return h.firmalar[k]; });
+    if(q){
+      var l = tum.filter(function(f){ return tedAraUygun(f.ad + ' ' + f.kod); });
       var var_ = {}; l.forEach(function(f){ var_[f.kod] = 1; });
-      var ek = cariList.filter(function(c){ return c.code && !var_[c.code] && !h.firmalar[c.code] && tedAraUygun(c.name + ' ' + c.code); }).slice(0, 30);
-      if(ek.length) diger = '<div style="font-weight:800; margin:14px 0 6px;">📒 Diğer cariler</div>' + ek.map(function(c){
-        return '<div class="chSatir" data-tfirma="' + escapeHtml(c.code) + '" style="cursor:pointer;"><div class="ust"><span style="min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">' + escapeHtml(c.name) + '</span><span style="font-family:var(--mono); font-weight:600; font-size:12px;">' + escapeHtml(c.code) + '</span></div><div class="alt"><span>son bir yılda alış görünmüyor</span></div></div>';
+      var ek = cariList.filter(function(c){ return c.code && !var_[c.code] && !h.firmalar[c.code] && tedAraUygun(c.name + ' ' + c.code); }).slice(0, 40);
+      html += l.map(tedFirmaKart).join('');
+      if(ek.length) html += '<div style="font-weight:800; margin:14px 0 6px;">📒 Diğer cariler <small style="font-weight:600; color:var(--muted);">son bir yılda alış yok</small></div>' + ek.map(function(c){
+        return '<div class="chSatir" data-tfirma="' + escapeHtml(c.code) + '" data-tad="' + escapeHtml(c.name) + '" style="cursor:pointer;"><div class="ust"><span style="min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">' + escapeHtml(c.name) + '</span><span style="font-family:var(--mono); font-weight:600; font-size:12px;">' + escapeHtml(c.code) + '</span></div></div>';
       }).join('');
+      if(!l.length && !ek.length) html += '<div class="hint">"' + escapeHtml(q) + '" ile eşleşen firma yok.</div>';
+      return html;
     }
-    if(!l.length) return (diger || '<div class="hint">' + (q ? 'Aramaya uyan firma yok.' : (ted.yukleniyor ? '⏳ Yükleniyor…' : 'Son bir yılda alış görünmüyor (ERP belge satırları gönderilmemiş olabilir).')) + '</div>');
-    return '<div class="hint" style="margin:0 0 8px;">' + l.length + ' tedarikçi · acil olan üstte. Firmaya dokun: son fatura ve sipariş önerisi. Listede olmayan firmayı üstteki kutudan ara.</div>' + l.map(function(f){
-      var rozet = (f.bitti ? '<span style="color:var(--red); font-weight:800;">🔴 ' + f.bitti + ' bitti</span> ' : '') + (f.azalan ? '<span style="color:var(--amber); font-weight:800;">🟡 ' + f.azalan + ' azalıyor</span>' : '') || '<span style="color:var(--green); font-weight:700;">🟢 stok yeterli</span>';
-      var gelis = 'son geliş ' + escapeHtml(f.son || '—') + (f.gecen !== null ? ' (' + (f.gecen === 0 ? 'bugün' : f.gecen + ' gün önce') + ')' : '') + (f.aralik > 0 ? ' · genelde ' + f.aralik + ' günde bir' : '');
-      return '<div class="chSatir" data-tfirma="' + escapeHtml(f.kod) + '" style="cursor:pointer;"><div class="ust"><span style="min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">' + escapeHtml(f.ad) + '</span>' +
-        (f.zamani ? '<span style="white-space:nowrap; color:var(--accent); font-weight:800;">⏰ gelme zamanı</span>' : '') + '</div>' +
-        '<div class="alt"><span>' + rozet + '</span><span style="white-space:nowrap;">' + f.urunler.length + ' ürün</span></div>' +
-        '<div class="alt"><span style="min-width:0;">' + gelis + '</span></div></div>';
-    }).join('') + diger + tedSonVeri();
+    if(ted.yukleniyor && !ted.genel) return html + '<div class="hint">Firmayı yukarıdan ara. ⏳ Sırası gelen firmalar hesaplanıyor…</div>';
+    if(!ted.genel) return html;
+    var tasliklar = tum.filter(function(f){ return ted.sip[f.kod] && Object.keys(ted.sip[f.kod].s || {}).length; });
+    var acil = tum.filter(function(f){ return f.zamani || f.bitti || f.azalan; });
+    acil.sort(function(a, b){ return ((b.zamani ? 4 : 0) + b.bitti * 3 + b.azalan) - ((a.zamani ? 4 : 0) + a.bitti * 3 + a.azalan); });
+    var tl = h.liste.filter(function(x){ return x.durum === 'bitti' || (x.yeter !== null && x.yeter <= tedAzGun()); }).length;
+    html += '<button type="button" class="geriBtn" data-tgorunum="azalan" style="margin:0 0 10px;">📉 Bütün firmalarda azalan ve yok satan ürünler (' + tl + ')</button>';
+    if(tasliklar.length) html += '<div style="font-weight:800; margin:6px 0 6px;">📝 Taslak siparişler</div>' + tasliklar.map(tedFirmaKart).join('');
+    html += '<div style="font-weight:800; margin:10px 0 6px;">⏰ Sırası gelen / acil firmalar</div>' + (acil.length ? acil.slice(0, 40).map(tedFirmaKart).join('') : '<div class="hint">Acil firma yok. 👍</div>');
+    html += '<div class="hint" style="margin-top:6px;">Bütün tedarikçiler: ' + tum.length + ' · aramak için yukarıya yaz.</div>' + tedSonVeri();
+    return html;
   }
   function tedAzalanHtml(){
     var h = tedHesap(), az = tedAzGun();
-    var l = h.liste.filter(function(x){ return (x.durum === 'bitti' || (x.yeter !== null && x.yeter <= az)) && tedAraUygun(x.ad + ' ' + (x.barkod || '') + ' ' + (x.kod || '') + ' ' + x.firma.ad); });
-    var html = '<div class="hint" style="margin:0 0 6px;">Stoğu kaç gün ya da daha az yetecek ürünler?</div><div class="hrkSekmeler" style="margin:0 0 10px; gap:6px;">' +
-      [7, 10, 15, 30].map(function(g){ return '<button type="button" class="hrkSekme' + (g === az ? ' on' : '') + '" data-tazgun="' + g + '" style="padding:8px 4px;"><b style="font-size:13px; font-family:inherit;">' + g + ' gün</b></button>'; }).join('') + '</div>';
+    var l = h.liste.filter(function(x){ return x.durum === 'bitti' || (x.yeter !== null && x.yeter <= az); });
+    var html = '<div style="font-weight:800; font-size:16px; margin-bottom:6px;">📉 Bütün firmalarda azalanlar</div>' + tedAzGunSecici();
     if(!l.length) return html + '<div class="hint">' + az + ' günden az stoğu kalan ürün yok. 👍</div>' + tedSonVeri();
     var gruplar = {}; l.forEach(function(x){ (gruplar[x.firma.kod] = gruplar[x.firma.kod] || []).push(x); });
     var sira = Object.keys(gruplar).sort(function(a, b){
       var ba = gruplar[a].filter(function(x){ return x.durum === 'bitti'; }).length, bb = gruplar[b].filter(function(x){ return x.durum === 'bitti'; }).length;
       return (bb - ba) || (gruplar[b].length - gruplar[a].length);
     });
-    html += '<div class="chOzet"><div>🔴 BİTEN<b>' + l.filter(function(x){ return x.durum === 'bitti'; }).length + '</b></div><div>🟡 ' + az + ' GÜNDEN AZ<b>' + l.filter(function(x){ return x.durum !== 'bitti'; }).length + '</b></div><div>🏭 FİRMA<b>' + sira.length + '</b></div></div>';
+    html += '<div class="chOzet"><div>❌ YOK SATAN<b>' + l.filter(function(x){ return x.durum === 'bitti'; }).length + '</b></div><div>🟡 ' + az + ' GÜNDEN AZ<b>' + l.filter(function(x){ return x.durum !== 'bitti'; }).length + '</b></div><div>🏭 FİRMA<b>' + sira.length + '</b></div></div>';
     html += sira.map(function(kod){
       var g = gruplar[kod], f = g[0].firma;
-      return '<div data-tfirma="' + escapeHtml(kod) + '" style="cursor:pointer; display:flex; justify-content:space-between; gap:8px; align-items:center; margin:14px 0 6px; font-weight:800;"><span style="min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">🏭 ' + escapeHtml(f.ad) + '</span><span style="white-space:nowrap; color:var(--accent); font-size:13px;">' + g.length + ' ürün ›</span></div>' +
-        g.map(function(x){ return tedUrunSatir(x, false); }).join('');
+      return '<div data-tfirma="' + escapeHtml(kod) + '" style="cursor:pointer; display:flex; justify-content:space-between; gap:8px; align-items:center; margin:14px 0 6px; font-weight:800;"><span style="min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">🏭 ' + escapeHtml(f.ad) + '</span><span style="white-space:nowrap; color:var(--accent); font-size:13px;">sipariş ›</span></div>' +
+        g.map(function(x){ return tedUrunSatir(x, null, kod); }).join('');
     }).join('');
     return html + tedSonVeri();
   }
-  var TED_DURUM = { bitti: ['🔴', 'BİTTİ', 'var(--red)'], az: ['🔴', 'AZ KALDI', 'var(--red)'], yakin: ['🟡', 'AZALIYOR', 'var(--amber)'], yeter: ['🟢', 'YETERLİ', 'var(--green)'], satisyok: ['⚪', 'SATIŞ YOK', 'var(--muted)'], bilinmiyor: ['⚪', 'STOK BİLİNMİYOR', 'var(--muted)'] };
+  function tedAzGunSecici(){
+    var az = tedAzGun();
+    return '<div class="hint" style="margin:0 0 6px;">Stoğu kaç gün ya da daha az yetecekler?</div><div class="hrkSekmeler" style="margin:0 0 10px; gap:6px;">' +
+      [7, 10, 15, 30].map(function(g){ return '<button type="button" class="hrkSekme' + (g === az ? ' on' : '') + '" data-tazgun="' + g + '" style="padding:8px 4px;"><b style="font-size:13px; font-family:inherit;">' + g + ' gün</b></button>'; }).join('') + '</div>';
+  }
+  var TED_DURUM = { bitti: ['❌', 'YOK SATIYOR', 'var(--red)'], az: ['🔴', 'AZ KALDI', 'var(--red)'], yakin: ['🟡', 'AZALIYOR', 'var(--amber)'], yeter: ['🟢', 'YETERLİ', 'var(--green)'], satisyok: ['💤', 'SATIŞ YOK', 'var(--muted)'], bilinmiyor: ['⚪', 'STOK BİLİNMİYOR', 'var(--muted)'] };
   function tedAnahtar(x){ return x.kod || x.barkod || ''; }
-  function tedAdet(kod, x){ var m = ted.adet[kod] || {}, a = tedAnahtar(x); return m.hasOwnProperty(a) ? m[a] : x.oneri; }
-  // x: cariOneriHesapla satırı. duzen: firma sayfasında + / − ve fiyat bilgisi.
-  function tedUrunSatir(x, duzen, kod, onceki, alis){
-    var r = TED_DURUM[x.durum] || TED_DURUM.bilinmiyor, a = duzen ? tedAdet(kod, x) : x.oneri;
+  // ---- Sipariş taslağı: ted.sip[firma] = { id, s: { anahtar: { b, k, a, m } }, durum, erpDurum, erpBelgeNo, kayitli, aciklama } ----
+  function tedTaslak(kod){ return ted.sip[kod] || null; }
+  function tedKilitli(t){ return !!t && t.durum === 'gonder'; }
+  function tedAdet(kod, x){ var t = tedTaslak(kod); if(!t) return x.oneri; var s = t.s[tedAnahtar(x)]; return s ? s.m : 0; }
+  function tedTaslakBaslat(kod, liste){
+    var t = { id: 'TS' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6), s: {}, durum: 'taslak', kayitli: false, aciklama: '' };
+    (liste || []).forEach(function(x){ if(x.oneri > 0) t.s[tedAnahtar(x)] = { b: x.barkod || '', k: x.kod || '', a: x.ad, m: x.oneri }; });
+    ted.sip[kod] = t; return t;
+  }
+  function tedAdetDegis(kod, x, yeni){
+    var t = tedTaslak(kod);
+    if(tedKilitli(t)){ warnToast('Bu sipariş ERP\'ye gönderildi — değiştirmek için önce "↩ Geri al"'); return; }
+    if(!t) t = tedTaslakBaslat(kod, ted.firma && ted.firma.kod === kod ? tedFirmaListe() : []);
+    var a = tedAnahtar(x);
+    if(yeni > 0) t.s[a] = { b: x.barkod || '', k: x.kod || '', a: x.ad, m: yeni }; else delete t.s[a];
+    t.kayitli = false; tedSipSakla();
+  }
+  function tedAdetDugme(kod, x){
+    var a = tedAdet(kod, x), k = escapeHtml(tedAnahtar(x));
+    return '<span style="display:flex; align-items:center; gap:6px; white-space:nowrap;"><button type="button" class="tedAdetBtn" data-tadet="-" data-tk="' + k + '" data-tf="' + escapeHtml(kod) + '">−</button><b style="font-family:var(--mono); font-size:16px; min-width:34px; text-align:center; color:' + (a > 0 ? 'var(--accent)' : 'var(--muted)') + ';">' + escapeHtml(fmtQty(a)) + '</b><button type="button" class="tedAdetBtn" data-tadet="+" data-tk="' + k + '" data-tf="' + escapeHtml(kod) + '">+</button></span>';
+  }
+  // x: cariOneriHesapla satırı. Firma sayfasında + / − (sipariş adedi); satıra dokununca ürün detayı.
+  function tedUrunSatir(x, F, kod){
+    var r = TED_DURUM[x.durum] || TED_DURUM.bilinmiyor, alis = F && F.veri && F.veri.alis;
     var bilgi = (x.stok === null ? 'stok bilinmiyor' : 'stok ' + fmtQty(x.stok)) + ' · ' + (x.gunluk > 0 ? 'günde ' + fmtQty(Math.round(x.gunluk * 10) / 10) + (x.yeter !== null ? ' · ' + Math.floor(x.yeter) + ' gün yeter' : '') : 'son 60 günde satış yok');
     var gecmis = 'son alış ' + (x.sonTarih || '—') + ' · ' + fmtQty(x.sonMiktar) + (alis && x.sonFiyat !== null && x.sonFiyat !== undefined ? ' × ' + fmtMoney(x.sonFiyat) : '') + (x.kez > 1 ? ' · ' + x.kez + ' kez' : '');
-    var zam = '';
+    var zam = '', onceki = F && F.onceki ? F.onceki[tedAnahtar(x)] : null;
     if(alis && onceki && x.sonFiyat && onceki[0] > 0){
       var o = (Number(x.sonFiyat) - onceki[0]) / onceki[0] * 100;
       if(o >= 2) zam = '<div class="alt"><span style="color:var(--red); font-weight:700;">↑ %' + Math.round(o) + ' zam — önceki ' + escapeHtml(fmtMoney(onceki[0])) + ' (' + escapeHtml(onceki[1]) + ')</span></div>';
       else if(o <= -2) zam = '<div class="alt"><span style="color:var(--green); font-weight:700;">↓ %' + Math.round(-o) + ' ucuzladı — önceki ' + escapeHtml(fmtMoney(onceki[0])) + '</span></div>';
     }
-    var sag = duzen ? '<span style="display:flex; align-items:center; gap:6px; white-space:nowrap;"><button type="button" class="tedAdetBtn" data-tadet="-" data-tk="' + escapeHtml(tedAnahtar(x)) + '">−</button><b style="font-family:var(--mono); font-size:16px; min-width:34px; text-align:center; color:' + (a > 0 ? 'var(--accent)' : 'var(--muted)') + ';">' + escapeHtml(fmtQty(a)) + '</b><button type="button" class="tedAdetBtn" data-tadet="+" data-tk="' + escapeHtml(tedAnahtar(x)) + '">+</button></span>'
-      : (x.oneri > 0 ? '<span style="white-space:nowrap; font-family:var(--mono); font-weight:800; font-size:16px; color:var(--accent);">AL ' + escapeHtml(fmtQty(x.oneri)) + '</span>' : '');
-    return '<div class="chSatir"><div class="ust" style="align-items:center;"><span style="min-width:0; overflow:hidden; text-overflow:ellipsis;">' + escapeHtml(x.ad) + '</span>' + sag + '</div>' +
+    var sag = F ? tedAdetDugme(kod, x) : (x.oneri > 0 ? '<span style="white-space:nowrap; font-family:var(--mono); font-weight:800; font-size:15px; color:var(--accent);">AL ' + escapeHtml(fmtQty(x.oneri)) + '</span>' : '');
+    var tik = F ? ' data-turun="' + escapeHtml(tedAnahtar(x)) + '"' : ' data-tfirma="' + escapeHtml(kod) + '" data-turunac="' + escapeHtml(tedAnahtar(x)) + '"';
+    return '<div class="chSatir"' + tik + ' style="cursor:pointer;"><div class="ust" style="align-items:center;"><span style="min-width:0; overflow:hidden; text-overflow:ellipsis;">' + escapeHtml(x.ad) + '</span>' + sag + '</div>' +
       '<div class="alt"><span style="color:' + r[2] + '; font-weight:800; white-space:nowrap;">' + r[0] + ' ' + r[1] + '</span><span style="min-width:0; text-align:right;">' + escapeHtml(bilgi) + '</span></div>' +
       '<div class="alt"><span style="min-width:0;">' + escapeHtml(gecmis) + (x.paket && x.paket.n > 1 ? ' · ' + escapeHtml(x.paket.neden) : '') + '</span></div>' + zam + '</div>';
   }
-  function tedFirmaAc(kod, ad){
+  function tedFirmaAc(kod, ad, urunAc){
     var h = tedHesap(), f = h.firmalar[kod] || { kod: kod, ad: tedFirmaAd(kod, ad) };
-    ted.kaydir = tedarikBodyEl.scrollTop;
-    ted.firma = { kod: kod, ad: f.ad, ozet: f, veri: null, hata: '' }; ted.acikFis = {}; ted.hepsi = false; ted.olu = false;
+    ted.kaydir = tedarikBodyEl.scrollTop; tedarikAraEl.blur();
+    ted.firma = { kod: kod, ad: f.ad, ozet: f, veri: null, hata: '', urunAc: urunAc || '' }; ted.acikFis = {}; ted.urun = null; ted.acikSip = {};
+    ted.fSekme = urunAc ? 'tumu' : 'siparis';
     var ob = ted.onbellek['firma|' + kod];
-    if(ob && Date.now() - ob.zaman < 120000){ ted.firma.veri = ob.veri; tedCiz(); tedarikBodyEl.scrollTop = 0; return; }
+    if(ob && Date.now() - ob.zaman < 120000){ tedFirmaVeri(ob.veri); tedarikBodyEl.scrollTop = 0; return; }
     ted.firma.yukleniyor = true; tedCiz(); tedarikBodyEl.scrollTop = 0;
     var no = ++ted.istekNo;
     tedIstek({ ne: 'firma', cariKod: kod }, function(err, d){
@@ -5285,109 +5326,259 @@
       ted.firma.yukleniyor = false;
       if(err){ ted.firma.hata = err; tedCiz(); return; }
       ted.onbellek['firma|' + kod] = { zaman: Date.now(), veri: d };
-      ted.firma.veri = d; tedCiz();
+      tedFirmaVeri(d);
     }, 30000);
+  }
+  function tedFirmaVeri(d){
+    var F = ted.firma; F.veri = d; F.onceki = {}; F.sonFis = {};
+    (d.onceki || []).forEach(function(r){ F.onceki[r[0]] = [Number(r[1]), r[2]]; });
+    (d.sonFis || []).forEach(function(r){ F.sonFis[r[0]] = { fis: r[1], kaynak: r[2], tarih: r[3], no: r[4], tur: r[5] }; });
+    // Sunucudaki son sipariş: telefonda taslak yoksa ya da aynı siparişse onunla eşitle.
+    var son = (d.siparisler || [])[0], t = tedTaslak(F.kod);
+    if(son && (!t || t.id === son.id)){
+      if(son.erpDurum === 'ok'){ if(t){ delete ted.sip[F.kod]; tedSipSakla(); } }       // aktarıldı: yeni sipariş öneriden başlar
+      else if(!(t && !t.kayitli && son.durum === 'taslak')){ ted.sip[F.kod] = tedSunucuTaslak(son); tedSipSakla(); }  // kaydedilmemiş elle değişiklik korunur
+    }
+    tedCiz();
+    if(F.urunAc){ var x = tedFirmaListe().filter(function(y){ return tedAnahtar(y) === F.urunAc; })[0]; F.urunAc = ''; if(x) tedUrunAc(x); }
+  }
+  function tedSunucuTaslak(sp){
+    var t = { id: sp.id, s: {}, durum: sp.durum, erpDurum: sp.erpDurum, erpBelgeNo: sp.erpBelgeNo, erpMesaj: sp.erpMesaj, kayitli: true, aciklama: sp.aciklama || '' };
+    (sp.satirlar || []).forEach(function(r){ t.s[r.stok_kodu || r.barkod] = { b: r.barkod, k: r.stok_kodu, a: r.urun_adi, m: Number(r.miktar) }; });
+    return t;
   }
   function tedFirmaListe(){
     var F = ted.firma, d = F.veri || {};
     return cariOneriHesapla(d, ted.hedef[F.kod] || tedOtoHedef(d.aralik));
   }
+  var TED_FSEKME = [['siparis', '🛒 Sipariş'], ['azalan', '📉 Azalanlar'], ['yok', '❌ Yok satanlar'], ['olu', '💤 Satılmayan'], ['tumu', '📋 Tümü'], ['gecmis', '📄 Siparişler']];
   function tedFirmaHtml(){
-    var F = ted.firma, d = F.veri || {}, alis = !!d.alis;
+    var F = ted.firma, d = F.veri || {};
     var html = '<button type="button" class="geriBtn" data-tgeri="1">← Firmalar</button><div style="font-weight:800; font-size:16px; line-height:1.3;">🏭 ' + escapeHtml(F.ad) + '</div><div class="hint" style="font-family:var(--mono); margin:2px 0 0;">' + escapeHtml(F.kod) + '</div>';
     if(F.yukleniyor) return html + '<div class="hint" style="margin-top:14px;">⏳ Yükleniyor…</div>';
     if(F.hata) return html + '<div class="hint" style="margin-top:14px; color:var(--red);">❌ ' + escapeHtml(F.hata) + '</div>';
-    // Bilgi: geliş sıklığı ve bakiye (cari listesinden)
     if(ted.genel){ var oz = tedHesap().firmalar[F.kod]; if(oz) F.ozet = oz; }
-    if(canSeeCariHrk()) html += '<div style="display:flex; gap:8px; margin:10px 0 0; flex-wrap:wrap;"><button type="button" class="geriBtn" data-tcari="hesap" style="margin:0;">💳 Hesap / ekstre</button><button type="button" class="geriBtn" data-tcari="vade" style="margin:0;">📅 Vade</button></div>';
     var c = cariList.filter(function(x){ return x.code === F.kod; })[0], bilgi = [];
-    if(d.aralik > 0) bilgi.push('📆 Genelde <b>' + d.aralik + ' günde bir</b> geliyor (son bir yılda ' + d.gelis + ' kez)');
-    else if(d.gelis) bilgi.push('📆 Son bir yılda ' + d.gelis + ' kez alış');
-    if(F.ozet && F.ozet.gecen !== null && F.ozet.gecen !== undefined) bilgi.push('🚚 Son geliş ' + escapeHtml(F.ozet.son) + ' (' + (F.ozet.gecen === 0 ? 'bugün' : F.ozet.gecen + ' gün önce') + ')' + (F.ozet.zamani ? ' — <b style="color:var(--accent);">gelme zamanı</b>' : ''));
-    if(c && c.balance !== '' && c.balance !== undefined && !isNaN(Number(c.balance))){ var y = cariHrkBakiyeYazi(c.balance); bilgi.push('💳 Bakiye: <b style="color:' + y.renk + ';">' + escapeHtml(y.tutar) + '</b> ' + y.yazi); }
-    if(bilgi.length) html += '<div class="chSatir" style="margin-top:10px; line-height:1.6; font-size:13px;">' + bilgi.join('<br>') + '</div>';
-    // Son faturalar
-    var fat = d.faturalar || [];
-    if(fat.length){
-      html += '<div style="font-weight:800; margin:14px 0 6px;">📄 Son gelen belgeler</div>' + fat.map(function(r, i){
-        var fis = String(r[0]), acik = ted.acikFis[fis];
-        return '<div class="chSatir" data-tfis="' + escapeHtml(fis) + '" data-tkaynak="' + escapeHtml(r[1] || '') + '" style="cursor:pointer;' + (i === 0 ? ' border:1.5px solid var(--accent);' : '') + '"><div class="ust"><span>' + (i === 0 ? '🆕 ' : '') + escapeHtml(r[2]) + ' · ' + escapeHtml(r[3] || 'Belge') + '</span>' +
-          (alis && r[6] !== null && r[6] !== undefined ? '<span style="white-space:nowrap; font-family:var(--mono);">' + escapeHtml(fmtMoney(r[6])) + '</span>' : '') + '</div>' +
-          '<div class="alt"><span>' + (r[4] ? 'No ' + escapeHtml(r[4]) + ' · ' : '') + r[5] + ' satır</span><span>' + (acik ? '▲ kapat' : '▼ ürünler') + '</span></div></div>' + (acik ? fisDetayHtml(acik) : '');
-      }).join('');
+    if(d.aralik > 0) bilgi.push('📆 Genelde <b>' + d.aralik + ' günde bir</b> geliyor');
+    if(F.ozet && F.ozet.gecen !== null && F.ozet.gecen !== undefined) bilgi.push('🚚 Son geliş ' + escapeHtml(F.ozet.son) + ' (' + (F.ozet.gecen === 0 ? 'bugün' : F.ozet.gecen + ' gün önce') + ')' + (F.ozet.zamani ? ' — <b style="color:var(--accent);">sırası geldi</b>' : ''));
+    var sf = (d.faturalar || [])[0];
+    if(sf) bilgi.push('<span data-tfis="' + escapeHtml(String(sf[0])) + '" data-tkaynak="' + escapeHtml(sf[1] || '') + '" style="cursor:pointer;">📄 Son belge ' + escapeHtml(sf[2]) + (d.alis && sf[6] !== null ? ' · ' + escapeHtml(fmtMoney(sf[6])) : '') + ' <b style="color:var(--accent);">' + (ted.acikFis[String(sf[0])] ? '▲ kapat' : '▼ aç') + '</b></span>');
+    if(c && c.balance !== '' && c.balance !== undefined && !isNaN(Number(c.balance))){ var y = cariHrkBakiyeYazi(c.balance); bilgi.push('💳 Bakiye: <b style="color:' + y.renk + ';">' + escapeHtml(y.tutar) + '</b> ' + y.yazi + (canSeeCariHrk() ? ' · <a href="#" data-tcari="hesap">ekstre</a> · <a href="#" data-tcari="vade">vade</a>' : '')); }
+    if(bilgi.length) html += '<div class="chSatir" style="margin-top:10px; line-height:1.7; font-size:13px;">' + bilgi.join('<br>') + '</div>';
+    if(sf && ted.acikFis[String(sf[0])]) html += fisDetayHtml(ted.acikFis[String(sf[0])]);
+    var l = tedFirmaListe(), t = tedTaslak(F.kod);
+    var say = { siparis: l.filter(function(x){ return tedAdet(F.kod, x) > 0; }).length + (t ? Object.keys(t.s).filter(function(a){ return !l.some(function(x){ return tedAnahtar(x) === a; }); }).length : 0),
+      azalan: l.filter(function(x){ return x.durum !== 'bitti' && x.yeter !== null && x.yeter <= tedAzGun(); }).length,
+      yok: l.filter(function(x){ return x.durum === 'bitti'; }).length, olu: l.filter(function(x){ return x.durum === 'satisyok' && x.stok !== null && x.stok > 0; }).length,
+      tumu: l.length, gecmis: (d.siparisler || []).length };
+    html += '<div class="hrkSekmeler" style="margin:12px 0 10px; gap:6px; display:grid; grid-template-columns:1fr 1fr 1fr;">' + TED_FSEKME.map(function(s){
+      return '<button type="button" class="hrkSekme' + (ted.fSekme === s[0] ? ' on' : '') + '" data-tfsekme="' + s[0] + '" style="padding:8px 2px;"><b style="font-size:12.5px; font-family:inherit;">' + s[1] + '</b><small>' + say[s[0]] + '</small></button>';
+    }).join('') + '</div>';
+    if(!l.length && ted.fSekme !== 'gecmis' && ted.fSekme !== 'siparis') return html + '<div class="hint">Bu firmadan son bir yılda ürün alışı görünmüyor.</div>';
+    if(ted.fSekme === 'siparis') return html + tedSiparisHtml(F, l, t);
+    if(ted.fSekme === 'gecmis') return html + tedGecmisHtml(d);
+    var sec = ted.fSekme === 'azalan' ? l.filter(function(x){ return x.durum !== 'bitti' && x.yeter !== null && x.yeter <= tedAzGun(); })
+      : ted.fSekme === 'yok' ? l.filter(function(x){ return x.durum === 'bitti'; })
+      : ted.fSekme === 'olu' ? l.filter(function(x){ return x.durum === 'satisyok' && x.stok !== null && x.stok > 0; }) : l;
+    var ust = ted.fSekme === 'azalan' ? tedAzGunSecici() : ted.fSekme === 'olu' ? '<div class="hint">Stokta var ama son 60 günde hiç satılmamış — sipariş verme, iade düşün.</div>'
+      : ted.fSekme === 'yok' ? '<div class="hint">Stoğu bitmiş, satışı olan ürünler.</div>' : '<div class="hint">Bu firmadan son bir yılda alınan bütün ürünler. + ile siparişe ekle, ürüne dokun: detay ve hareketler.</div>';
+    return html + ust + (sec.length ? sec.map(function(x){ return tedUrunSatir(x, F, F.kod); }).join('') : '<div class="hint">Bu listede ürün yok. 👍</div>');
+  }
+  function tedSiparisHtml(F, l, t){
+    var d = F.veri || {}, oto = tedOtoHedef(d.aralik), hedef = ted.hedef[F.kod] || oto, html = '';
+    if(t && t.durum === 'gonder'){
+      html += '<div class="chSatir" style="border:1.5px solid ' + (t.erpDurum === 'hata' ? 'var(--red)' : 'var(--accent)') + '; font-size:13px; line-height:1.6;">' +
+        (t.erpDurum === 'hata' ? '❌ <b>ERP\'ye aktarılamadı:</b> ' + escapeHtml(t.erpMesaj || '') + '<br>Düzeltmek için geri al, sonra tekrar gönder.'
+          : '⏳ <b>ERP\'ye gönderildi</b> — ERP bilgisayarı aktarınca belge numarası burada görünür. Değiştirmek için geri al.') +
+        '<div style="margin-top:8px;"><button type="button" class="geriBtn" data-tsip="geri" style="margin:0;">↩ Geri al (taslağa dön)</button></div></div>';
+    } else {
+      var secenek = [oto].concat([7, 15, 30, 45].filter(function(g){ return g !== oto; }));
+      html += '<div class="hint" style="margin:0 0 6px;">Kaç günlük stok olsun?' + (t ? ' (taslak elle düzenlendi — öneriyi yeniden hesaplatmak için "↺ Öneriye dön")' : '') + '</div><div class="hrkSekmeler" style="margin:0 0 10px; gap:6px; flex-wrap:wrap;">' +
+        secenek.map(function(g, i){ return '<button type="button" class="hrkSekme' + (g === hedef ? ' on' : '') + '" data-thedef="' + (i === 0 ? 0 : g) + '" style="padding:8px 4px;"><b style="font-size:13px; font-family:inherit;">' + (i === 0 ? '⚙️ ' : '') + g + ' gün</b>' + (i === 0 ? '<small>otomatik</small>' : '') + '</button>'; }).join('') + '</div>';
     }
-    // Öneri
-    var l = tedFirmaListe(), oto = tedOtoHedef(d.aralik), hedef = ted.hedef[F.kod] || oto;
-    if(!l.length) return html + '<div class="hint" style="margin-top:14px;">Bu firmadan son bir yılda ürün alışı görünmüyor.</div>';
-    var onceki = {}; (d.onceki || []).forEach(function(r){ onceki[r[0]] = [Number(r[1]), r[2]]; });
-    var secenek = [oto].concat([7, 15, 30, 45].filter(function(g){ return g !== oto; }));
-    html += '<div style="font-weight:800; margin:16px 0 6px;">🛒 Sipariş önerisi</div><div class="hint" style="margin:0 0 6px;">Kaç günlük stok olsun?</div><div class="hrkSekmeler" style="margin:0 0 10px; gap:6px; flex-wrap:wrap;">' +
-      secenek.map(function(g, i){ return '<button type="button" class="hrkSekme' + (g === hedef ? ' on' : '') + '" data-thedef="' + (i === 0 ? 0 : g) + '" style="padding:8px 4px;"><b style="font-size:13px; font-family:inherit;">' + (i === 0 ? '⚙️ ' : '') + g + ' gün</b>' + (i === 0 ? '<small>otomatik</small>' : '') + '</button>'; }).join('') + '</div>';
-    var alinacak = l.filter(function(x){ return tedAdet(F.kod, x) > 0; });
-    var olu = l.filter(function(x){ return x.durum === 'satisyok' && x.stok !== null && x.stok > 0; });
-    var goster = ted.hepsi ? l : l.filter(function(x){ return x.oneri > 0 || tedAdet(F.kod, x) > 0; });
-    html += '<div class="chOzet"><div>🛒 ALINACAK<b>' + alinacak.length + ' ürün</b></div><div>🔴 BİTEN<b>' + l.filter(function(x){ return x.durum === 'bitti'; }).length + '</b></div><div>📦 TOPLAM<b>' + l.length + ' ürün</b></div></div>' +
-      '<div style="display:flex; gap:8px; margin:0 0 10px; flex-wrap:wrap;">' + (alinacak.length ? '<button type="button" class="geriBtn" data-tpaylas="1" style="margin:0;">📤 Siparişi paylaş</button>' : '') +
-      '<button type="button" class="geriBtn" data-thepsi="1" style="margin:0;">' + (ted.hepsi ? '🛒 Sadece alınacaklar' : '📋 Tüm ürünler') + '</button>' +
-      (ted.adet[F.kod] && Object.keys(ted.adet[F.kod]).length ? '<button type="button" class="geriBtn" data-tsifirla="1" style="margin:0;">↺ Öneriye dön</button>' : '') + '</div>';
-    html += goster.length ? goster.map(function(x){ return tedUrunSatir(x, true, F.kod, onceki[tedAnahtar(x)], alis); }).join('') : '<div class="hint">Bu firmadan alınması gereken ürün yok — ' + hedef + ' günlük stok yeterli. 👍 Elle eklemek için "📋 Tüm ürünler".</div>';
-    if(olu.length){
-      html += '<button type="button" class="geriBtn" data-tolu="1" style="margin:14px 0 6px;">' + (ted.olu ? '▲' : '▼') + ' 💤 Satılmayan ürünler (' + olu.length + ') — 60 gündür satış yok, stokta var</button>';
-      if(ted.olu) html += olu.map(function(x){ return '<div class="chSatir"><div class="ust"><span style="min-width:0; overflow:hidden; text-overflow:ellipsis;">' + escapeHtml(x.ad) + '</span><span style="white-space:nowrap;">stok ' + escapeHtml(fmtQty(x.stok)) + '</span></div><div class="alt"><span>son alış ' + escapeHtml(x.sonTarih || '—') + ' · ' + escapeHtml(fmtQty(x.sonMiktar)) + '</span><span style="color:var(--amber); font-weight:700;">alma / iade düşün</span></div></div>'; }).join('');
-    }
-    html += '<div class="hint" style="margin-top:10px; font-size:11px;">Öneri = ' + hedef + ' günlük satış − stok' + (ted.hedef[F.kod] ? '' : ' (otomatik: firmanın geliş aralığı + 3 gün)') + '. Koli içi adet tanımlıysa ona, yoksa geçmiş alışların ortak katına yuvarlanır. + / − ile adedi değiştirebilirsin.' + (d.sonVeri ? ' ERP verisi: ' + escapeHtml(d.sonVeri) : '') + '</div>';
+    var goster = l.filter(function(x){ return tedAdet(F.kod, x) > 0; });
+    // Listede olmayan (eskiden alınmış ya da katalogdan eklenmiş) taslak satırları
+    var ekler = t ? Object.keys(t.s).filter(function(a){ return !l.some(function(x){ return tedAnahtar(x) === a; }); }).map(function(a){ var s = t.s[a]; return { ad: s.a, kod: s.k, barkod: s.b, oneri: 0, durum: 'bilinmiyor', stok: null, gunluk: 0, yeter: null, sonTarih: '', sonMiktar: '', kez: 0, ek: true }; }) : [];
+    var toplam = goster.length + ekler.length;
+    html += '<div class="chOzet"><div>🛒 SİPARİŞ<b>' + toplam + ' ürün</b></div><div>❌ YOK SATAN<b>' + l.filter(function(x){ return x.durum === 'bitti'; }).length + '</b></div><div>' + (t ? (t.kayitli ? '💾 KAYITLI' : '✏️ KAYDEDİLMEDİ') : '💡 ÖNERİ') + '<b>' + (t && t.erpBelgeNo ? escapeHtml(t.erpBelgeNo) : (t ? 'taslak' : 'hedef ' + hedef + ' gün')) + '</b></div></div>';
+    if(!(t && t.durum === 'gonder')){
+      html += '<div style="display:flex; gap:8px; margin:0 0 10px; flex-wrap:wrap;">' +
+        (toplam ? '<button type="button" class="geriBtn" data-tsip="kaydet" style="margin:0;">💾 Kaydet</button><button type="button" class="geriBtn" data-tsip="paylas" style="margin:0;">📤 Paylaş</button><button type="button" class="geriBtn" data-tsip="erp" style="margin:0; border-color:var(--accent); color:var(--accent);">🏢 ERP\'ye gönder</button>' : '') +
+        (t ? '<button type="button" class="geriBtn" data-tsip="sifirla" style="margin:0;">↺ Öneriye dön</button>' : '') + '</div>';
+      html += '<div style="display:flex; gap:8px; margin:0 0 10px;"><input type="text" id="tedEkleAra" placeholder="➕ Ürün ekle: ad ya da barkod" autocomplete="off" style="flex:1; min-width:0;"></div><div id="tedEkleSonuc"></div>';
+    } else html += '<div style="display:flex; gap:8px; margin:0 0 10px;"><button type="button" class="geriBtn" data-tsip="paylas" style="margin:0;">📤 Paylaş</button></div>';
+    html += toplam ? goster.map(function(x){ return tedUrunSatir(x, F, F.kod); }).join('') + ekler.map(function(x){
+      return '<div class="chSatir"><div class="ust" style="align-items:center;"><span style="min-width:0; overflow:hidden; text-overflow:ellipsis;">' + escapeHtml(x.ad) + '</span>' + tedAdetDugme(F.kod, x) + '</div><div class="alt"><span>➕ elle eklendi' + (x.barkod ? ' · ' + escapeHtml(x.barkod) : '') + '</span></div></div>';
+    }).join('') : '<div class="hint">Siparişte ürün yok — ' + hedef + ' günlük stok yeterli. 👍 Ürün eklemek için yukarıdaki kutuya yaz ya da 📋 Tümü / 📉 Azalanlar sekmesinden + bas.</div>';
+    html += '<div class="hint" style="margin-top:10px; font-size:11px;">Öneri = ' + hedef + ' günlük satış − stok' + (ted.hedef[F.kod] ? '' : ' (otomatik: firmanın geliş aralığı + 3 gün)') + '. Koli içi adet tanımlıysa ona, yoksa geçmiş alışların ortak katına yuvarlanır. ERP\'ye gönderilen sipariş ERP\'de "Verilen Sipariş" (MOB VRLN-) olarak açılır; fiyatı ERP\'deki son alış fiyatıdır, stoğa ve cariye etki etmez.' + (d.sonVeri ? ' ERP verisi: ' + escapeHtml(d.sonVeri) : '') + '</div>';
     return html;
   }
-  function tedPaylas(){
+  function tedGecmisHtml(d){
+    var l = d.siparisler || [];
+    if(!l.length) return '<div class="hint">Bu firmaya henüz uygulamadan sipariş kaydedilmedi.</div>';
+    return l.map(function(sp){
+      var dur = sp.erpDurum === 'ok' ? '<span style="color:var(--green); font-weight:800;">✅ ERP: ' + escapeHtml(sp.erpBelgeNo) + '</span>'
+        : sp.erpDurum === 'hata' ? '<span style="color:var(--red); font-weight:800;">❌ ERP hatası</span>'
+        : sp.durum === 'gonder' ? '<span style="color:var(--accent); font-weight:800;">⏳ ERP\'ye gidecek</span>' : '<span style="color:var(--amber); font-weight:800;">📝 Taslak</span>';
+      var acik = ted.acikSip[sp.id];
+      return '<div class="chSatir" data-tsipac="' + escapeHtml(sp.id) + '" style="cursor:pointer;"><div class="ust"><span>' + escapeHtml(sp.olusturma) + ' · ' + (sp.satirlar || []).length + ' ürün</span>' + dur + '</div>' +
+        '<div class="alt"><span>' + escapeHtml(sp.olusturan || '') + (sp.erpZaman ? ' · aktarım ' + escapeHtml(sp.erpZaman) : '') + '</span><span>' + (acik ? '▲' : '▼') + '</span></div>' +
+        (acik ? '<div class="chFis">' + (sp.satirlar || []).map(function(r){ return '<div class="chFisSatir"><span style="min-width:0;">' + escapeHtml(r.urun_adi || r.barkod) + '</span><b>' + escapeHtml(fmtQty(r.miktar)) + '</b></div>'; }).join('') + (sp.erpMesaj ? '<div style="margin-top:6px; color:var(--muted);">' + escapeHtml(sp.erpMesaj) + '</div>' : '') + '</div>' : '') + '</div>';
+    }).join('');
+  }
+  // ---- Ürün detayı: özet, geldiği fatura, hareketler ----
+  function tedUrunAc(x){
+    ted.kaydirF = tedarikBodyEl.scrollTop;
+    ted.urun = { x: x, hareket: null, hata: '', yukleniyor: true, acikFis: {} };
+    tedCiz(); tedarikBodyEl.scrollTop = 0;
+    var u = ted.urun, ob = ted.onbellek['urun|' + tedAnahtar(x)];
+    if(ob && Date.now() - ob.zaman < 120000){ u.yukleniyor = false; u.hareket = ob.veri; tedCiz(); return; }
+    tedIstek({ ne: 'urun', stokKodu: x.kod || '', barkod: x.barkod || '' }, function(err, d){
+      if(ted.urun !== u) return;
+      u.yukleniyor = false;
+      if(err){ u.hata = err; tedCiz(); return; }
+      ted.onbellek['urun|' + tedAnahtar(x)] = { zaman: Date.now(), veri: d };
+      u.hareket = d; tedCiz();
+    }, 30000);
+  }
+  function tedUrunDetayHtml(){
+    var F = ted.firma, U = ted.urun, x = U.x, alis = F.veri && F.veri.alis, r = TED_DURUM[x.durum] || TED_DURUM.bilinmiyor;
+    var html = '<button type="button" class="geriBtn" data-tgeri="1">← ' + escapeHtml(F.ad) + '</button>' +
+      '<div class="ust" style="display:flex; justify-content:space-between; gap:10px; align-items:center;"><div style="font-weight:800; font-size:16px; line-height:1.3; min-width:0;">' + escapeHtml(x.ad) + '</div>' + tedAdetDugme(F.kod, x) + '</div>' +
+      '<div class="hint" style="font-family:var(--mono); margin:2px 0 0;">' + escapeHtml([x.barkod, x.kod].filter(Boolean).join(' · ')) + '</div>';
+    html += '<div class="chOzet" style="margin-top:10px;"><div>📦 STOK<b>' + (x.stok === null ? '?' : escapeHtml(fmtQty(x.stok))) + '</b></div><div>📈 GÜNLÜK<b>' + (x.gunluk > 0 ? escapeHtml(fmtQty(Math.round(x.gunluk * 10) / 10)) : '0') + '</b></div><div>⏳ YETER<b>' + (x.yeter !== null ? Math.floor(x.yeter) + ' gün' : '—') + '</b></div></div>';
+    html += '<div class="chSatir" style="font-size:13px; line-height:1.7;"><span style="color:' + r[2] + '; font-weight:800;">' + r[0] + ' ' + r[1] + '</span>' +
+      (x.satis !== undefined ? '<br>Son 60 günde ' + escapeHtml(fmtQty(x.satis)) + ' satıldı' : '') +
+      (x.sonTarih ? '<br>Bu firmadan son alış ' + escapeHtml(x.sonTarih) + ' · ' + escapeHtml(fmtQty(x.sonMiktar)) + (alis && x.sonFiyat !== null && x.sonFiyat !== undefined ? ' × ' + escapeHtml(fmtMoney(x.sonFiyat)) : '') + (x.kez > 1 ? ' · son bir yılda ' + x.kez + ' kez' : '') : '') +
+      (x.oneri > 0 ? '<br>Öneri: <b style="color:var(--accent);">' + escapeHtml(fmtQty(x.oneri)) + '</b>' + (x.paket && x.paket.n > 1 ? ' (' + escapeHtml(x.paket.neden) + ')' : '') : '') + '</div>';
+    var sf = F.sonFis && F.sonFis[tedAnahtar(x)];
+    if(sf){
+      var sfAcik = U.acikFis[String(sf.fis)];
+      html += '<div class="chSatir" data-tufis="' + escapeHtml(String(sf.fis)) + '" data-tkaynak="' + escapeHtml(sf.kaynak || '') + '" style="cursor:pointer; border:1.5px solid var(--accent);"><div class="ust"><span>📄 Geldiği belge: ' + escapeHtml(sf.tarih) + ' · ' + escapeHtml(sf.tur || '') + '</span><span>' + (sfAcik ? '▲' : '▼') + '</span></div><div class="alt"><span>' + (sf.no ? 'No ' + escapeHtml(sf.no) : '') + '</span></div></div>' + (sfAcik ? fisDetayHtml(sfAcik) : '');
+    }
+    if(canSeeHareket() && (x.barkod || x.kod)) html += '<button type="button" class="geriBtn" data-turunhrk="1" style="margin:0 0 6px;">🔁 Ürün Hareketleri ekranında aç</button>';
+    html += '<div style="font-weight:800; margin:14px 0 6px;">🔁 Hareketler (son 1 yıl)</div>';
+    if(U.yukleniyor) return html + '<div class="hint">⏳ Yükleniyor…</div>';
+    if(U.hata) return html + '<div class="hint" style="color:var(--red);">❌ ' + escapeHtml(U.hata) + '</div>';
+    var h = U.hareket || {}, sat = h.satirlar || [];
+    html += '<div class="chOzet"><div>📥 GİRİŞ<b>' + escapeHtml(fmtQty(h.giris || 0)) + '</b></div><div>📤 ÇIKIŞ<b>' + escapeHtml(fmtQty(h.cikis || 0)) + '</b></div><div>🛒 KASA<b>' + escapeHtml(fmtQty(h.perakende || 0)) + '</b></div></div>';
+    html += sat.length ? sat.map(function(r){
+      var m = Number(r[4]) || 0, fis = r[7] ? String(r[7]) : '', acik = fis && U.acikFis[fis];
+      return '<div class="chSatir"' + (fis ? ' data-tufis="' + escapeHtml(fis) + '" data-tkaynak="' + escapeHtml(r[8] || '') + '" style="cursor:pointer;"' : '') + '><div class="ust"><span style="min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">' + escapeHtml(r[0]) + ' · ' + escapeHtml(r[1] || '') + '</span>' +
+        '<span class="' + (m >= 0 ? 'alacak' : 'borc') + '">' + (m >= 0 ? '+' : '−') + escapeHtml(fmtQty(Math.abs(m))) + '</span></div>' +
+        '<div class="alt"><span style="min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">' + escapeHtml(r[3] || '') + (r[2] ? ' · ' + escapeHtml(r[2]) : '') + '</span>' + (alis && r[5] !== null && r[5] !== undefined ? '<span style="white-space:nowrap;">' + escapeHtml(fmtMoney(r[5])) + '</span>' : '') + '</div></div>' + (acik ? fisDetayHtml(acik) : '');
+    }).join('') : '<div class="hint">Son bir yılda hareket yok.</div>';
+    return html;
+  }
+  function tedFisGetir(fis, kaynak, hedef){
+    if(hedef[fis]){ delete hedef[fis]; tedCiz(); return; }
+    var ob = ted.onbellek['fis|' + kaynak + '|' + fis];
+    if(ob){ hedef[fis] = { veri: ob.veri }; tedCiz(); return; }
+    hedef[fis] = { yukleniyor: true }; tedCiz();
+    tedIstek({ ne: 'fis', fisId: fis, kaynak: kaynak }, function(err, d){
+      if(!hedef[fis]) return;
+      if(err){ hedef[fis] = { hata: err }; tedCiz(); return; }
+      ted.onbellek['fis|' + kaynak + '|' + fis] = { zaman: Date.now(), veri: d };
+      hedef[fis] = { veri: d }; tedCiz();
+    }, 30000);
+  }
+  // ---- Sipariş: kaydet / ERP'ye gönder / geri al / paylaş ----
+  function tedSipSatirlar(t){ return Object.keys(t.s).map(function(a){ var s = t.s[a]; return [s.b || '', s.k || '', String(s.a || '').substring(0, 60), s.m]; }).filter(function(r){ return r[3] > 0; }); }
+  function tedSipKaydet(durum, bitti){
+    var F = ted.firma, t = tedTaslak(F.kod);
+    if(!t) t = tedTaslakBaslat(F.kod, tedFirmaListe());
+    var satir = tedSipSatirlar(t);
+    if(durum === 'gonder'){
+      var barkodsuz = satir.filter(function(r){ return !r[0]; });
+      if(barkodsuz.length){ warnToast(barkodsuz.length + ' ürünün barkodu yok — ERP\'de bulunamaz, atlanır'); }
+    }
+    tedIstek({ ne: 'kaydet', id: t.id, cariKod: F.kod, cariAd: F.ad, durum: durum, aciklama: t.aciklama || '', satirlar: JSON.stringify(satir) }, function(err, d){
+      if(err){ warnToast('Kaydedilemedi: ' + err); if(d && d.siparis){ ted.sip[F.kod] = tedSunucuTaslak(d.siparis); tedSipSakla(); tedCiz(); } return; }
+      if(durum === 'iptal'){ delete ted.sip[F.kod]; } else { ted.sip[F.kod] = tedSunucuTaslak(d.siparis); }
+      tedSipSakla();
+      delete ted.onbellek['firma|' + F.kod];
+      var sl = (F.veri.siparisler || []).filter(function(x){ return x.id !== t.id; });
+      if(durum !== 'iptal') sl.unshift(d.siparis);
+      F.veri.siparisler = sl;
+      tedCiz(); if(bitti) bitti();
+    }, 30000);
+  }
+  function tedSipPaylas(){
     var F = ted.firma; if(!F) return;
-    var l = tedFirmaListe().filter(function(x){ return tedAdet(F.kod, x) > 0; }); if(!l.length) return;
+    var t = tedTaslak(F.kod), l;
+    if(t) l = Object.keys(t.s).map(function(a){ return { ad: t.s[a].a, barkod: t.s[a].b, m: t.s[a].m }; }).filter(function(x){ return x.m > 0; });
+    else l = tedFirmaListe().filter(function(x){ return x.oneri > 0; }).map(function(x){ return { ad: x.ad, barkod: x.barkod, m: x.oneri }; });
+    if(!l.length) return;
     var metin = 'Murat Gıda sipariş — ' + F.ad + '\n' + new Date().toLocaleDateString('tr-TR') + '\n\n' +
-      l.map(function(x, i){ return (i + 1) + ') ' + x.ad + (x.barkod ? ' (' + x.barkod + ')' : '') + ': ' + fmtQty(tedAdet(F.kod, x)) + ' adet'; }).join('\n');
+      l.map(function(x, i){ return (i + 1) + ') ' + x.ad + (x.barkod ? ' (' + x.barkod + ')' : '') + ': ' + fmtQty(x.m) + ' adet'; }).join('\n');
     if(navigator.share){ navigator.share({ text: metin }).catch(function(){}); return; }
     try { navigator.clipboard.writeText(metin).then(function(){ successToast('Sipariş kopyalandı — WhatsApp\'a yapıştır'); }); } catch(e){ window.prompt('Kopyala:', metin); }
   }
-  function tedFisAc(fis, kaynak){
-    if(ted.acikFis[fis]){ delete ted.acikFis[fis]; tedCiz(); return; }
-    var ob = ted.onbellek['fis|' + kaynak + '|' + fis];
-    if(ob){ ted.acikFis[fis] = { veri: ob.veri }; tedCiz(); return; }
-    ted.acikFis[fis] = { yukleniyor: true }; tedCiz();
-    tedIstek({ ne: 'fis', fisId: fis, kaynak: kaynak }, function(err, d){
-      if(!ted.acikFis[fis]) return;
-      if(err){ ted.acikFis[fis] = { hata: err }; tedCiz(); return; }
-      ted.onbellek['fis|' + kaynak + '|' + fis] = { zaman: Date.now(), veri: d };
-      ted.acikFis[fis] = { veri: d }; tedCiz();
-    }, 30000);
+  var tedErpOnay = 0;
+  function tedEkleAra(){
+    var el = document.getElementById('tedEkleAra'), out = document.getElementById('tedEkleSonuc'); if(!el || !out) return;
+    var q = normTr(el.value.trim()); if(q.length < 2){ out.innerHTML = ''; return; }
+    var sonuc = [];
+    catalogMap.forEach(function(v, b){ if(sonuc.length >= 12) return; if(normTr(v.name + ' ' + b + ' ' + (v.stockCode || '')).indexOf(q) !== -1) sonuc.push({ b: b, v: v }); });
+    out.innerHTML = sonuc.length ? sonuc.map(function(s){ return '<div class="chSatir" data-tekle="' + escapeHtml(s.b) + '" style="cursor:pointer;"><div class="ust"><span style="min-width:0; overflow:hidden; text-overflow:ellipsis;">' + escapeHtml(s.v.name) + '</span><span style="color:var(--accent); font-weight:800;">＋ ekle</span></div><div class="alt"><span>' + escapeHtml(s.b) + (s.v.oldStock !== '' && s.v.oldStock !== undefined ? ' · stok ' + escapeHtml(fmtQty(s.v.oldStock)) : '') + '</span></div></div>'; }).join('') : '<div class="hint">Katalogda bulunamadı.</div>';
   }
   document.getElementById('menuTedarikBtn').addEventListener('click', openTedarikScreen);
   document.getElementById('tedarikCloseBtn').addEventListener('click', closeTedarikScreen);
-  document.getElementById('tedarikSekmeler').addEventListener('click', function(e){
-    var b = e.target.closest('button[data-tsekme]'); if(!b) return;
-    ted.sekme = b.getAttribute('data-tsekme'); tedCiz(); tedarikBodyEl.scrollTop = 0;
-  });
   var tedAraZaman = null;
   tedarikAraEl.addEventListener('input', function(){ clearTimeout(tedAraZaman); tedAraZaman = setTimeout(tedCiz, 150); });
+  var tedEkleZaman = null;
+  tedarikBodyEl.addEventListener('input', function(e){ if(e.target.id === 'tedEkleAra'){ clearTimeout(tedEkleZaman); tedEkleZaman = setTimeout(tedEkleAra, 150); } });
   tedarikBodyEl.addEventListener('click', function(e){
     var t;
     if(e.target.closest('[data-tyenile]')){ e.preventDefault(); ted.onbellek = {}; tedGenelGetir(); return; }
     if(e.target.closest('button[data-tgeri]')){ tedarikGeri(); return; }
+    if((t = e.target.closest('button[data-tgorunum]'))){ ted.gorunum = t.getAttribute('data-tgorunum'); tedCiz(); tedarikBodyEl.scrollTop = 0; return; }
     if((t = e.target.closest('button[data-tazgun]'))){ state.tedAzGun = Number(t.getAttribute('data-tazgun')) || 10; save(); ted.hesap = null; tedCiz(); return; }
+    if((t = e.target.closest('button[data-tfsekme]'))){ ted.fSekme = t.getAttribute('data-tfsekme'); tedCiz(); return; }
     if((t = e.target.closest('button[data-thedef]'))){ var g = Number(t.getAttribute('data-thedef')); if(g) ted.hedef[ted.firma.kod] = g; else delete ted.hedef[ted.firma.kod]; ted.hesap = null; tedCiz(); return; }
     if((t = e.target.closest('button[data-tadet]'))){
-      var F = ted.firma, k = t.getAttribute('data-tk'), x = tedFirmaListe().filter(function(y){ return tedAnahtar(y) === k; })[0]; if(!x) return;
-      var n = (x.paket && x.paket.n) || 1, simdi = tedAdet(F.kod, x), yeni = Math.max(0, simdi + (t.getAttribute('data-tadet') === '+' ? n : -n));
-      (ted.adet[F.kod] = ted.adet[F.kod] || {})[k] = yeni; tedCiz(); return;
+      var F = ted.firma, kod = t.getAttribute('data-tf'), k = t.getAttribute('data-tk');
+      var x = ted.urun && tedAnahtar(ted.urun.x) === k ? ted.urun.x : tedFirmaListe().filter(function(y){ return tedAnahtar(y) === k; })[0];
+      if(!x){ var ts = tedTaslak(kod); if(ts && ts.s[k]) x = { ad: ts.s[k].a, kod: ts.s[k].k, barkod: ts.s[k].b, oneri: 0, paket: { n: 1 } }; }
+      if(!x) return;
+      var n = (x.paket && x.paket.n) || 1, simdi = tedAdet(kod, x);
+      tedAdetDegis(kod, x, Math.max(0, simdi + (t.getAttribute('data-tadet') === '+' ? (simdi === 0 && x.oneri > 0 ? x.oneri : n) : -n))); tedCiz(); return;
     }
-    if(e.target.closest('button[data-tsifirla]')){ delete ted.adet[ted.firma.kod]; tedCiz(); return; }
-    if(e.target.closest('button[data-thepsi]')){ ted.hepsi = !ted.hepsi; tedCiz(); return; }
-    if(e.target.closest('button[data-tolu]')){ ted.olu = !ted.olu; tedCiz(); return; }
-    if(e.target.closest('button[data-tpaylas]')){ tedPaylas(); return; }
-    if((t = e.target.closest('button[data-tcari]'))){
-      var F2 = ted.firma, c2 = cariList.filter(function(x){ return x.code === F2.kod; })[0];
+    if((t = e.target.closest('[data-tekle]'))){
+      var b = t.getAttribute('data-tekle'), v = catalogMap.get(b) || {}, F2 = ted.firma;
+      var xx = tedFirmaListe().filter(function(y){ return y.barkod === b || (v.stockCode && y.kod === v.stockCode); })[0] || { ad: v.name || b, kod: v.stockCode || '', barkod: b, oneri: 0 };
+      var c = Number(v.carpan) > 1 ? Number(v.carpan) : 1;
+      tedAdetDegis(F2.kod, xx, tedAdet(F2.kod, xx) + c); successToast(xx.ad + ' eklendi'); tedCiz(); return;
+    }
+    if((t = e.target.closest('button[data-tsip]'))){
+      var ne = t.getAttribute('data-tsip'), F3 = ted.firma;
+      if(ne === 'paylas'){ tedSipPaylas(); return; }
+      if(ne === 'kaydet'){ tedSipKaydet('taslak', function(){ successToast('Sipariş kaydedildi'); }); return; }
+      if(ne === 'geri'){ tedSipKaydet('taslak', function(){ successToast('Taslağa döndü — düzenleyebilirsin'); }); return; }
+      if(ne === 'sifirla'){
+        var ta = tedTaslak(F3.kod);
+        if(ta && ta.kayitli){ tedSipKaydet('iptal', function(){ successToast('Taslak silindi, öneriye dönüldü'); }); return; }
+        delete ted.sip[F3.kod]; tedSipSakla(); tedCiz(); return;
+      }
+      if(ne === 'erp'){
+        if(Date.now() - tedErpOnay > 5000){ tedErpOnay = Date.now(); t.textContent = '⚠️ Emin misin? Tekrar bas'; return; }
+        tedErpOnay = 0; tedSipKaydet('gonder', function(){ successToast('ERP\'ye gönderildi — ERP bilgisayarı aktaracak'); }); return;
+      }
+    }
+    if((t = e.target.closest('[data-tsipac]'))){ var id = t.getAttribute('data-tsipac'); if(ted.acikSip[id]) delete ted.acikSip[id]; else ted.acikSip[id] = 1; tedCiz(); return; }
+    if((t = e.target.closest('[data-tcari]'))){
+      e.preventDefault();
+      var F4 = ted.firma, c2 = cariList.filter(function(x){ return x.code === F4.kod; })[0];
       closeTedarikScreen(); openCariHrkScreen(); cariHrkSekme = t.getAttribute('data-tcari');
-      cariHrkSec({ name: F2.ad, code: F2.kod, balance: c2 ? c2.balance : '' }); return;
+      cariHrkSec({ name: F4.ad, code: F4.kod, balance: c2 ? c2.balance : '' }); return;
     }
-    if((t = e.target.closest('[data-tfis]'))){ tedFisAc(t.getAttribute('data-tfis'), t.getAttribute('data-tkaynak') || ''); return; }
-    if((t = e.target.closest('[data-tfirma]'))){ tedFirmaAc(t.getAttribute('data-tfirma')); return; }
+    if(e.target.closest('button[data-turunhrk]') && ted.urun){
+      var ux = ted.urun.x; closeTedarikScreen(); openHareketScreen(); hareketAra(ux.barkod || ux.kod); return;
+    }
+    if((t = e.target.closest('[data-tufis]')) && ted.urun){ tedFisGetir(t.getAttribute('data-tufis'), t.getAttribute('data-tkaynak') || '', ted.urun.acikFis); return; }
+    if((t = e.target.closest('[data-tfis]'))){ tedFisGetir(t.getAttribute('data-tfis'), t.getAttribute('data-tkaynak') || '', ted.acikFis); return; }
+    if((t = e.target.closest('[data-turun]')) && ted.firma){ var uk = t.getAttribute('data-turun'), ux2 = tedFirmaListe().filter(function(y){ return tedAnahtar(y) === uk; })[0]; if(ux2) tedUrunAc(ux2); return; }
+    if((t = e.target.closest('[data-tfirma]'))){ tedFirmaAc(t.getAttribute('data-tfirma'), t.getAttribute('data-tad') || '', t.getAttribute('data-turunac') || ''); return; }
   });
   function cariHrkStokHtml(d){
     var satir = d.satirlar || [];
