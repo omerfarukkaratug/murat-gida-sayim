@@ -127,7 +127,8 @@ function Belge-Yaz($baglanti, $b) {
             $bb = Tablo $tx "SELECT TOP 1 bb.STOK, bb.STOK_BIRIM, s.KOD, ISNULL(v.$kdvKolon, 0) AS KDV FROM dbo.STOK_BARKOD_BIRIM bb JOIN dbo.STOK s ON s.ID = bb.STOK LEFT JOIN dbo.STOK_VERGI v ON v.ID = s.STOK_VERGI WHERE bb.BARKOD = @b" @{ "@b" = [string]$r.barkod }
             if ($bb.Rows.Count -eq 0) { [void]$atlanan.Add("$($r.barkod) $($r.urun_adi)"); continue }
             $stok = $bb.Rows[0].STOK; $kdv = [decimal]$bb.Rows[0].KDV; $miktar = [decimal]$r.miktar
-            $sonAlis = Deger $tx "SELECT TOP 1 d.FIYAT FROM dbo.FIS_DETAY d JOIN dbo.FIS f ON f.ID = d.FIS WHERE d.STOK = @s AND f.FIS_TURU IN (1, 5) AND d.FIYAT > 0 ORDER BY f.FIS_TARIHI DESC, d.ID DESC" @{ "@s" = $stok }
+            # Son alis: AYNI BIRIMDE (adet / koli karismasin), bedelsiz olmayan, fiyati olan en yeni alis satiri.
+            $sonAlis = Deger $tx "SELECT TOP 1 d.FIYAT FROM dbo.FIS_DETAY d JOIN dbo.FIS f ON f.ID = d.FIS WHERE d.STOK = @s AND d.STOK_BIRIM = @u AND f.FIS_TURU IN (1, 5) AND f.AKTIF = 1 AND d.FIYAT > 0 AND d.MIKTAR_FIS > 0 ORDER BY f.FIS_TARIHI DESC, d.ID DESC" @{ "@s" = $stok; "@u" = $bb.Rows[0].STOK_BIRIM }
             if ($sonAlis -eq $null) { $sonAlis = [decimal]0 } else { $sonAlis = [decimal]$sonAlis }
             if ($giris) {
                 $fiyat = $sonAlis
