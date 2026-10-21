@@ -61,6 +61,11 @@ function doGet(e) {
     if (!etiketYetki(k.auth)) return etiketRed(k.auth, P.callback);
     return etiketGrupGetir(P.callback);
   }
+  if (P.action === 'etiket_cesit_ad') {
+    k = kapi('etiket çeşit adı kaydı'); if (!k.ok) return kimlikRed(k, P.callback);
+    if (!etiketYetki(k.auth, 'etiket_duzenle')) return etiketRed(k.auth, P.callback);
+    return etiketCesitAdKaydet(P, P.user, P.callback);
+  }
   if (P.action === 'etiket_bilgi') {
     k = kapi('etiket bilgisi okuma'); if (!k.ok) return kimlikRed(k, P.callback);
     if (!etiketYetki(k.auth)) return etiketRed(k.auth, P.callback);
@@ -636,7 +641,30 @@ function etiketBilgiOku() {
 function etiketBilgiGetir(callback) {
   var m = etiketBilgiOku(), bilgi = {};
   Object.keys(m).forEach(function (b) { bilgi[b] = m[b].slice(0, 5); });
-  return outJson({ status: 'ok', bilgi: bilgi }, callback);
+  return outJson({ status: 'ok', bilgi: bilgi, cesitAd: etiketCesitAdOku() }, callback);
+}
+// ---- ÇEŞİT ADLARI (aynı ürün, farklı isim) ----
+// Dökme ürünlerde aynı barkod farklı isimlerle satılır (ör. bulgur: pilavlık, köftelik). Yönetici / "etiket_duzenle"
+// yetkilisi bir ürüne çeşit adları tanımlar; herkes o adlarla ayrı etiket basabilir (fiyat ve barkod yine katalogdan).
+var ETIKET_CESIT_AD_OZELLIK = 'ETIKET_CESIT_AD';
+function etiketCesitAdOku() {
+  try { var v = JSON.parse(PropertiesService.getScriptProperties().getProperty(ETIKET_CESIT_AD_OZELLIK) || '{}'); return (v && typeof v === 'object') ? v : {}; } catch (e) { return {}; }
+}
+function etiketCesitAdKaydet(p, gonderen, callback) {
+  var b = String(p.b || '').trim();
+  if (!b || b.length > 40) return outJson({ status: 'error', message: 'Barkod eksik' }, callback);
+  var adlar; try { adlar = JSON.parse(String(p.adlar || '[]')); } catch (e) { adlar = null; }
+  if (!Array.isArray(adlar)) return outJson({ status: 'error', message: 'Liste hatalı' }, callback);
+  var gorulen = {}, temiz = [];
+  adlar.forEach(function (a) { a = String(a || '').replace(/\s+/g, ' ').trim().substring(0, 80); var k = a.toLocaleUpperCase('tr-TR'); if (a && !gorulen[k] && temiz.length < 20) { gorulen[k] = 1; temiz.push(a); } });
+  var lock = LockService.getScriptLock(); try { lock.waitLock(10000); } catch (e) { return outJson({ status: 'error', message: 'Sunucu yoğun, tekrar dene' }, callback); }
+  try {
+    var m = etiketCesitAdOku();
+    if (temiz.length) m[b] = temiz; else delete m[b];
+    PropertiesService.getScriptProperties().setProperty(ETIKET_CESIT_AD_OZELLIK, JSON.stringify(m));
+  } finally { lock.releaseLock(); }
+  gunlukYaz('etiket_ad', String(gonderen || ''), 'Çeşit adları (' + b + '): ' + temiz.join(' · ').substring(0, 300), false);
+  return outJson({ status: 'ok', b: b, adlar: temiz }, callback);
 }
 function etiketBilgiKaydet(urunler, gonderen) {
   if (!Array.isArray(urunler) || !urunler.length) return jsonCikti({ status: 'error', message: 'Boş liste' });
@@ -864,7 +892,7 @@ function baskiIsEkle(data, gonderen, auth) {
   if (!etiketYetki(auth, 'etiket_yazici') && (yz.gizli || (yz.bicimler.length && yz.bicimler.indexOf(bicimAd) === -1))) return red('Bu yazıcıya gönderme yetkin yok');
   // FİYAT / STOK KODU / BARKOD yalnızca katalogdan: her ürün katalogla karşılaştırılır.
   var kat = etiketKatalogHarita(), para2 = function (n) { return (Math.round(n * 100) / 100).toFixed(2).replace('.', ','); };
-  var adDegisen = [];
+  var adDegisen = [], cesitAd = etiketCesitAdOku();
   for (var u = 0; u < data.liste.length; u++) {
     var x = data.liste[u] || {}, f = cleanNum(x.fiyat), ad = String(x.ad || '').substring(0, 120);
     if (typeof f !== 'number' || !(f > 0)) return red('Fiyatı olmayan ürün basılamaz: ' + ad);
@@ -884,7 +912,8 @@ function baskiIsEkle(data, gonderen, auth) {
     if (!k) return red('Katalogda olmayan ürün: ' + b + ' (' + ad + ')');
     if (typeof k.fiyat !== 'number' || Math.abs(k.fiyat - f) > 0.005) return red('Fiyat katalogla uyuşmuyor: ' + k.ad + ' (etikette ' + para2(f) + ', katalogda ' + (typeof k.fiyat === 'number' ? para2(k.fiyat) : 'yok') + ') — kataloğu yenileyip tekrar gönder');
     x.kod = k.kod;                                   // stok kodu her zaman katalogdaki
-    if (ad.trim() !== k.ad.trim()) {
+    var cesitMi = (cesitAd[b] || []).some(function (c) { return String(c).trim() === ad.trim(); });   // tanımlı çeşit adı: herkes basabilir
+    if (ad.trim() !== k.ad.trim() && !cesitMi) {
       if (!etiketYetki(auth, 'etiket_duzenle')) x.ad = k.ad;          // yetkisi yoksa katalogdaki ad basılır
       else adDegisen.push('"' + k.ad + '" → "' + ad + '" (' + b + ')');
     }

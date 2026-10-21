@@ -705,7 +705,7 @@
   function yt(ad){ return YONETICI || (kullanici.permissions || []).indexOf(ad) !== -1; }
   var ALAN_YETKI = { ad: 'etiket_duzenle', yer: 'etiket_duzenle', mik: 'etiket_duzenle', birim: 'etiket_duzenle', koli: 'etiket_duzenle', bfKip: 'etiket_duzenle', tarih: 'etiket_duzenle', sktTur: 'etiket_duzenle', sktTarih: 'etiket_duzenle',
     baslik: 'etiket_duzenle', ozel: 'etiket_duzenle', indirim: 'etiket_indirim', bitis: 'etiket_indirim', onceki: '#yonetici' };
-  var IS_YETKI = { tr: 'etiket_duzenle', yerOner: 'etiket_duzenle', grup: 'etiket_cesit', grupGenis: 'etiket_cesit', grupEkle: 'etiket_cesit', grupKayitli: 'etiket_cesit', dagit: 'etiket_cesit', gcikar: 'etiket_cesit', indirimYaz: 'etiket_indirim' };
+  var IS_YETKI = { cesitYeni: 'etiket_duzenle', cesitSil: 'etiket_duzenle', cesitKaydet: 'etiket_duzenle', tr: 'etiket_duzenle', yerOner: 'etiket_duzenle', grup: 'etiket_cesit', grupGenis: 'etiket_cesit', grupEkle: 'etiket_cesit', grupKayitli: 'etiket_cesit', dagit: 'etiket_cesit', gcikar: 'etiket_cesit', indirimYaz: 'etiket_indirim' };
   function yetkiVar(kural){ return !kural || (kural === '#yonetici' ? YONETICI : yt(kural)); }
   // Üretim yeri: "etiket_duzenle" her ürünü değiştirir. "etiket_yer" (yalnızca ülke girme) BOŞ gelen üretim yerini
   // doldurur; yazım hatasını düzeltebilsin diye o ürün listede kaldıkça açık kalır. Dolu gelen (ERP / önceden girilmiş)
@@ -721,6 +721,7 @@
   // ---------- Kayıtlı durum ----------
   var durum = (IS_NO ? null : oku(ETIKET_ANAHTAR)) || {};
   if(!durum.urun) durum.urun = {};          // barkod -> { yer, mik, birim } (bir kez girilen bilgi hatırlanır)
+  if(!durum.cesitAd) durum.cesitAd = {};    // barkod -> [çeşit adları] (aynı ürün, farklı isim; sunucudan, bütün cihazlar ortak)
   if(!Array.isArray(durum.liste)) durum.liste = [];
   // ---------- Ürün bazında biçim (build 140) ----------
   // Her ürünün kendi biçimi vardır (Zebra etiket ya da bir afiş boyu). Yazdırma biçime göre gruplanır;
@@ -1652,8 +1653,9 @@
         '<div class="urunAlt"><div class="adetKutu"><button type="button" data-is="azalt">−</button><span>' + esc(u.adet) + '</span><button type="button" data-is="artir">+</button></div>' +
           '<span class="ipucu" style="flex:1;">etiket</span>' +
           '<button type="button" data-is="ac" style="padding:8px 12px; font-size:13px;">' + (ac ? '▲ Kapat' : '✏️ Düzenle') + '</button></div>' +
+        (!ac && cesitler(u).length ? '<button type="button" data-is="ac" class="kisaBtn" style="margin-top:6px;">🌾 ' + cesitler(u).length + ' çeşit adı var — farklı isimle etiket ekle</button>' : '') +
         '<div class="detay' + (ac ? '' : ' gizli') + '">' +
-        '<label>Etikette yazacak ürün adı</label><input data-al="ad" value="' + esc(u.ad) + '">' +
+        '<label>Etikette yazacak ürün adı</label><input data-al="ad" value="' + esc(u.ad) + '">' + cesitHtml(u) +
         '<div class="satir"><div style="flex:1.5;"><label>Üretim yeri (zorunlu)' + (u.erpYer && u.yer === u.erpYer ? ' · ERP\'den' : (u.barkodYer && u.yer === 'Türkiye' ? ' · barkoddan' : '')) + '</label><input data-al="yer" class="' + (String(u.yer || '').trim() ? '' : 'eksik') + '" list="ulkeler" value="' + esc(u.yer) + '" placeholder="ülke seç ya da yaz"></div>' + yerDugme(u) + '</div>' + ulkeSecHtml(u) +
         (u.barkodYer && u.yer === 'Türkiye' ? '<div class="ipucu" style="margin-top:4px;">"Türkiye" barkoddan (868/869) yazıldı. Ürün ithalse ambalajdaki ülkeyi yaz.</div>' : '') +
         '<div class="satir"><div><label>Net miktar</label><input data-al="mik" type="text" inputmode="decimal" value="' + esc(String(u.mik).replace('.', ',')) + '"></div>' +
@@ -1706,6 +1708,43 @@
     l.forEach(function(u){ u.bicim = f; });
     kaydet(); listeCiz(); ciz(); toast(l.length + ' ürün ' + ad + ' yapıldı');
   });
+  // ---------- Çeşit adları: aynı ürün (aynı barkod, aynı fiyat) farklı isimle ayrı etiket ----------
+  // Dökme ürünlerde bir barkod birkaç isimle satılır (bulgur: pilavlık / köftelik). Adlar sunucuda ortak tutulur;
+  // "etiket_duzenle" yetkilisi ekler/siler, herkes o adlarla etiket basabilir. Fiyat ve barkod katalogdan gelir.
+  function cesitler(u){ return (u && !u.elle && !u.grup && u.barkod && durum.cesitAd[String(u.barkod)]) || []; }
+  function cesitHtml(u){
+    if(!u || u.elle || u.grup || !u.barkod) return '';
+    var l = cesitler(u), duzen = yetkiVar('etiket_duzenle'), anaAd = u.katalogAd || '';
+    var adlar = (anaAd ? [anaAd] : []).concat(l).filter(function(a){ return a !== u.ad; });
+    var listede = {}; durum.liste.forEach(function(x){ if(x.barkod === u.barkod && !x.grup) listede[x.ad] = true; });
+    var kayitliDegil = duzen && u.ad && u.ad !== anaAd && l.indexOf(u.ad) === -1;
+    if(!l.length && !duzen) return '';
+    return '<div style="margin-top:10px; padding:10px; border:1.5px dashed var(--line); border-radius:12px;"><div style="font-weight:800; font-size:13px;">🌾 Çeşit adları <span class="ipucu" style="font-weight:600;">— aynı ürün, farklı isimle ayrı etiket (fiyat aynı)</span></div>' +
+      (adlar.length ? '<div style="display:flex; flex-wrap:wrap; gap:6px; margin-top:8px;">' + adlar.map(function(a){
+        var cesit = l.indexOf(a) !== -1;
+        return '<span style="display:inline-flex; align-items:center; gap:2px;"><button type="button" data-is="cesitEkle" data-ad="' + esc(a) + '" style="padding:6px 10px; font-size:12.5px;"' + (listede[a] ? ' disabled' : '') + '>' + (listede[a] ? '✓ ' : '＋ ') + esc(a) + '</button>' +
+          (cesit && duzen ? '<button type="button" data-is="cesitSil" data-ad="' + esc(a) + '" title="Çeşit adını sil" style="padding:4px 6px; font-size:12px; border:none; background:transparent; color:var(--red);">✕</button>' : '') + '</span>';
+      }).join('') + '</div>' : '') +
+      '<div style="display:flex; gap:6px; flex-wrap:wrap; margin-top:8px;">' +
+        (duzen ? '<button type="button" data-is="cesitYeni" class="kisaBtn">➕ Yeni çeşit adı</button>' : '') +
+        (kayitliDegil ? '<button type="button" data-is="cesitKaydet" class="kisaBtn">💾 "' + esc(u.ad) + '" adını çeşit olarak kaydet</button>' : '') + '</div></div>';
+  }
+  function cesitKopya(u, ad){
+    ad = String(ad || '').trim(); if(!ad) return;
+    if(durum.liste.some(function(x){ return x.barkod === u.barkod && !x.grup && x.ad === ad; })){ toast('"' + ad + '" zaten listede', 'uyari'); return; }
+    var k = JSON.parse(JSON.stringify(u));
+    k.id = kimlikNo(); k.ad = ad; k.basildi = ''; k.adet = 1; k.boylar = null; k.boyEtiket = '';
+    var i = durum.liste.indexOf(u); durum.liste.splice(i + 1, 0, k);
+    kaydet(); listeCiz(); ciz(); toast('Eklendi: ' + ad);
+  }
+  function cesitKaydet(u, adlar, bitti){
+    if(!navigator.onLine){ toast('İnternet yok — çeşit adı kaydedilemedi', 'hata'); return; }
+    sunucuSor({ action: 'etiket_cesit_ad', b: String(u.barkod), adlar: JSON.stringify(adlar) }, function(hata, veri){
+      if(hata || !veri || veri.status !== 'ok'){ toast('Kaydedilemedi: ' + (hata || (veri && veri.message) || 'bilinmeyen hata'), 'hata'); return; }
+      if(veri.adlar.length) durum.cesitAd[veri.b] = veri.adlar; else delete durum.cesitAd[veri.b];
+      kaydet(); if(bitti) bitti();
+    });
+  }
   function urunBul(el){ var k = el.closest('.urun'); if(!k) return null; var id = k.getAttribute('data-id'); return durum.liste.filter(function(u){ return u.id === id; })[0] || null; }
   // ---------- Ortak etiket bilgisi (bütün cihazlar) ----------
   // Girilen üretim yeri / net miktar / koli adedi sunucuya yazılır; açılışta sunucudaki bilgiler alınır.
@@ -1729,6 +1768,7 @@
     if(!navigator.onLine) return;
     sunucuSor({ action: 'etiket_bilgi' }, function(hata, veri){
       if(hata || !veri || veri.status !== 'ok' || !veri.bilgi) return;
+      if(veri.cesitAd && typeof veri.cesitAd === 'object'){ durum.cesitAd = veri.cesitAd; setTimeout(listeCiz, 0); }
       var bekleyen = durum.gonderilecek || {};
       Object.keys(veri.bilgi).forEach(function(b){
         if(bekleyen[b]) return;                      // bu cihazda henüz gönderilmemiş değişiklik var: o geçerli
@@ -2069,6 +2109,16 @@
       if(uy.length < 2){ toast('Gruptaki diğer ürünlerin fiyatı artık farklı — bu ürün tek etikette kalıyor', 'uyari'); return; }
       u.grup = uy; u.ad = uy.length === kg.uyeler.length ? kg.ad : grupAdiOner(uy);
       toast(uy.length + ' çeşit tek etikette' + (uy.length < kg.uyeler.length ? ' (' + (kg.uyeler.length - uy.length) + ' ürünün fiyatı değiştiği için dışarıda kaldı)' : ''));
+    }
+    else if(di0 === 'cesitEkle'){ cesitKopya(u, b.getAttribute('data-ad')); return; }
+    else if(di0 === 'cesitYeni'){
+      var yeni = (window.prompt('Çeşit adı (etikete aynen yazılır, ör. PİLAVLIK BULGUR):', '') || '').replace(/\s+/g, ' ').trim(); if(!yeni) return;
+      cesitKaydet(u, cesitler(u).concat([yeni]), function(){ cesitKopya(u, yeni); }); return;
+    }
+    else if(di0 === 'cesitKaydet'){ cesitKaydet(u, cesitler(u).concat([u.ad]), function(){ toast('"' + u.ad + '" çeşit adı olarak kaydedildi'); listeCiz(); }); return; }
+    else if(di0 === 'cesitSil'){
+      var silAd = b.getAttribute('data-ad'); if(!window.confirm('"' + silAd + '" çeşit adı silinsin mi? (Listedeki etiketler kalır)')) return;
+      cesitKaydet(u, cesitler(u).filter(function(x){ return x !== silAd; }), function(){ toast('Çeşit adı silindi'); listeCiz(); }); return;
     }
     else if(b.getAttribute('data-is') === 'dagit'){ u.grup = null; u.gKod = ''; u.ayrildi = true; u.ad = u.katalogAd || u.ad; }
     kaydet(); listeCiz(); ciz();
