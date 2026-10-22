@@ -40,7 +40,7 @@ $AktarilanDosya   = "C:\Scripts\siparis-aktarilan.txt"
 $EksikKartDosya   = "C:\Scripts\acilacak-stok-kartlari.txt"
 $HataDosya        = "C:\Scripts\siparis-aktar-hata.txt"
 # STOK KARTI OLMAYAN URUN: ERP'deki sablon karttan (MK SAHA SABLON, barkod MKSABLON / 99999001) kopyalanarak
-# gecici kart acilir (KDV, grup, birim sablondaki gibi; fiyat 0; stok kodu MKS-000001...). Muhasebe sonra duzenler.
+# gecici kart acilir (KDV, grup, birim sablondaki gibi; fiyat 0; stok kodu MKS-000000001...). Muhasebe sonra duzenler.
 # Terazi barkodu (13 haneli 27/28/29 ile baslayan ya da 7 ve daha kisa) ve barkodsuz urune kart ACILMAZ.
 $KartAc           = $true
 $KartSeri         = "MKS-"
@@ -133,10 +133,11 @@ function Kart-Ac($tx, $r, $b) {
     if (-not $sabBirim -or -not $sabBarkod) { throw "Sablon stok kartinin birimi / barkodu eksik" }
     $sabFiyat = @((Tablo $tx "SELECT ID FROM dbo.STOK_STOK_BIRIM_FIYAT WHERE STOK_STOK_BIRIM = @u ORDER BY ID" @{ "@u" = $sabBirim }).Rows | ForEach-Object { $_.ID })
     $kodPc = Deger $tx "SELECT KOD_PC FROM dbo.SEQUNCES WHERE ID = @s" @{ "@s" = $sab }
-    # Stok kodu: kendi serimiz (MKS-000001...), kilitli
-    $son = Deger $tx "SELECT MAX(KOD) FROM dbo.STOK WITH (UPDLOCK, HOLDLOCK) WHERE KOD LIKE @p" @{ "@p" = "$KartSeri%" }
-    $no = 1; if ($son) { $no = [int]([string]$son).Substring($KartSeri.Length) + 1 }
-    $kod = $KartSeri + $no.ToString("000000")
+    # Stok kodu: kendi serimiz (MKS-000000001...), kilitli
+    # 9 haneli (MKS-000000001). Yalniz bu uzunluktaki kodlar sayilir (yazi siralamasi karismasin).
+    $son = Deger $tx "SELECT MAX(KOD) FROM dbo.STOK WITH (UPDLOCK, HOLDLOCK) WHERE KOD LIKE @p AND LEN(KOD) = @n" @{ "@p" = "$KartSeri%"; "@n" = ($KartSeri.Length + 9) }
+    $no = 1; if ($son) { $no = [long]([string]$son).Substring($KartSeri.Length) + 1 }
+    $kod = $KartSeri + $no.ToString("000000000")
     $ad = ([string]$r.urun_adi).Trim()
     if (-not $ad -or $ad -match '^\s*.simsiz') { $ad = "MK SAHA YENI URUN $bar" }
     $ad = Kisalt $ad 100
