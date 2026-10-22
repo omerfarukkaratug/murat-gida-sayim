@@ -431,7 +431,7 @@
   <header style="border:none; padding:0 0 16px; background:transparent; display:flex; align-items:flex-start; justify-content:space-between;">
     <div>
       <h1><img src="logo-header.png" alt="Murat Gıda" style="height:30px; width:auto; display:block;"></h1>
-      <div class="sub"><img src="icon.svg" alt="" style="width:15px;height:15px;vertical-align:-3px;margin-right:5px;">KRT Saha · Murat Gıda • offline • Android • build 254</div>
+      <div class="sub"><img src="icon.svg" alt="" style="width:15px;height:15px;vertical-align:-3px;margin-right:5px;">KRT Saha · Murat Gıda • offline • Android • build 255</div>
     </div>
     <button type="button" id="themeToggleBtn" title="Tema seç" style="background:var(--panel2); border:1.5px solid var(--line); color:var(--text); width:34px; height:34px; border-radius:50%; font-size:15px; padding:0; display:flex; align-items:center; justify-content:center; flex-shrink:0;">🎨</button>
   </header>
@@ -503,12 +503,15 @@
       </div>
     </div>
 
+    <div class="hint" style="text-align:center; margin:0;">Ürün listesi ERP'den otomatik gelir, elle bir şey yüklemene gerek yok.</div>
+    <!-- Eski elle liste yükleme (Dosya / Yapıştır) kaldırıldı: yanlış dosya seçilirse telefondaki
+         katalog bozuluyordu. Öğeler kodun geri kalanı çalışsın diye gizli duruyor. -->
+    <div class="hidden" aria-hidden="true">
     <div class="tabSwitch" role="tablist">
       <button type="button" class="tabBtn active" data-tab="file">📄 Dosya</button>
       <button type="button" class="tabBtn" data-tab="paste">✏️ Yapıştır</button>
     </div>
 
-    <div class="hint" style="text-align:center; margin-bottom:10px;">Katalog artık otomatik güncelleniyor — ERP'den değişiklik geldiğinde bu telefon kendiliğinden alır, elle çekmene gerek yok.</div>
 
     <div class="tabPanel" data-panel="file">
       <label class="filebtn" id="fileDropZone">
@@ -534,6 +537,7 @@
     </details>
 
     <div id="catalogSyncStatus" style="font-size:11.5px; color:var(--muted); font-family:var(--mono); margin-top:12px; text-align:center;"></div>
+    </div>
   </div>
 
   <button class="btn-main" id="startBtn">Sayıma Başla</button>
