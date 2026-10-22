@@ -130,7 +130,7 @@ function Belge-Yaz($baglanti, $b) {
         foreach ($r in @($b.satirlar)) {
             $bb = Tablo $tx "SELECT TOP 1 bb.STOK, bb.STOK_BIRIM, s.KOD, ISNULL(v.$kdvKolon, 0) AS KDV FROM dbo.STOK_BARKOD_BIRIM bb JOIN dbo.STOK s ON s.ID = bb.STOK LEFT JOIN dbo.STOK_VERGI v ON v.ID = s.STOK_VERGI WHERE bb.BARKOD = @b" @{ "@b" = [string]$r.barkod }
             if ($bb.Rows.Count -eq 0) {
-                [void]$atlanan.Add("$($r.barkod) $($r.urun_adi)")
+                [void]$atlanan.Add("$($r.barkod) $($r.urun_adi) x $($r.miktar)")
                 $script:EksikKart["$($r.barkod)"] = ("{0}`t{1}`t{2} x {3}`t{4} ({5})" -f $r.barkod, $r.urun_adi, $b.tip, $r.miktar, $b.cari, $b.belge_turu)
                 continue
             }
@@ -150,8 +150,9 @@ function Belge-Yaz($baglanti, $b) {
                 kdv = $kdv; miktar = $miktar; fiyat = $fiyat; dahil = $dahil; tutar = $tutar; dahilTutar = (Yuvarla ($dahil * $miktar) 4)
                 kdvTutar = (Yuvarla ($tutar * $kdv / 100) 4); sonAlis = $sonAlis; ad = [string]$r.urun_adi })
         }
-        # Stok karti olmayan urun varsa belge YAZILMAZ: eksik siparis gozden kacar. Kart acilinca tekrar denenir.
-        if ($atlanan.Count -gt 0) { throw "ERP'de stok karti yok, kart acilinca aktarilacak: $($atlanan -join ', ')" }
+        # Stok karti olmayan urun ERP'de STOK ACILMAZ: siparisin ACIKLAMASINA barkod + ad + adet yazilir (KARTSIZ: ...),
+        # liste acilacak-stok-kartlari.txt dosyasina da yazilir. Hic karti olan urun yoksa belge bekler.
+        if ($satirlar.Count -eq 0) { throw "Belgedeki urunlerin hicbirinin ERP'de stok karti yok: $($atlanan -join ', ')" }
 
         # --- Belge numarasi: kendi serimizin en buyugu + 1 (kilitli) ---
         $son = Deger $tx "SELECT MAX(BELGENO) FROM dbo.SIPARIS WITH (UPDLOCK, HOLDLOCK) WHERE BELGENO LIKE @p" @{ "@p" = "$seri%" }
@@ -161,10 +162,10 @@ function Belge-Yaz($baglanti, $b) {
 
         # --- Aciklama (sutun uzunluguna gore) ---
         $acikMax = Deger $tx "SELECT max_length / 2 FROM sys.columns WHERE object_id = OBJECT_ID('dbo.SIPARIS') AND name = 'ACIKLAMA'" $null
-        $acik = ("MK Saha: " + (@([string]$b.belge_turu, [string]$b.belge_no) | Where-Object { $_ }) -join " ") + " / $($b.personel)"
+        $kartsiz = if ($atlanan.Count -gt 0) { "KARTSIZ: " + ($atlanan -join "; ") + " / " } else { "" }
+        $acik = $kartsiz + ("MK Saha: " + (@([string]$b.belge_turu, [string]$b.belge_no) | Where-Object { $_ }) -join " ") + " / $($b.personel)"
         if ([string]$b.sebep) { $acik += " / $($b.sebep)" }
         if ([string]$b.aciklama) { $acik += " / $($b.aciklama)" }
-        if ($atlanan.Count -gt 0) { $acik += " / ERP'de olmayan: " + ($atlanan -join ", ") }
         if ($acikMax -and [int]$acikMax -gt 0) { $acik = Kisalt $acik ([int]$acikMax) }
 
         # --- Baslik ---
@@ -196,7 +197,7 @@ function Belge-Yaz($baglanti, $b) {
                 AMBALAJ_BIRIM = $s.birim; AMBALAJ_MIKTAR = $s.miktar; AMBALAJ_CARPAN = 1; FK_STOK_TEVKIF_LESTE = 0; FK_PERSONEL = 0
                 ALT_BIRIM_MIKTARI = $s.miktar; SEVK_ADRES = 0; BUNDLE_DETAY = 0; KT_BUNDLE_FIYAT = 0; LISTE_FIYATI = 0 }
         }
-        $uyari = if ($atlanan.Count -gt 0) { "ERP'de bulunamayan urunler atlandi: " + ($atlanan -join ", ") } else { "" }
+        $uyari = if ($atlanan.Count -gt 0) { "Stok karti olmayan urunler aciklamaya yazildi: " + ($atlanan -join ", ") } else { "" }
         if ($Deneme) {
             $tx.Rollback()
             Yaz-Log "DENEME (ERP'ye YAZILMADI): $belgeNo / $($b.tip) / $($b.cari) / $($satirlar.Count) satir / toplam KDV dahil $(Yuvarla $genel 2) $uyari"
@@ -275,9 +276,9 @@ try {
     }
     try {
         if ($script:EksikKart.Count -gt 0) {
-            $baslik = "ERP'de STOK KARTI ACILACAK URUNLER ($(Get-Date -Format 'yyyy-MM-dd HH:mm')). Kart ayni BARKODLA acilinca belge kendiliginden aktarilir.`r`nBarkod`tUrun`tHareket`tCari (belge)"
+            $baslik = "ERP'de STOK KARTI OLMAYAN URUNLER ($(Get-Date -Format 'yyyy-MM-dd HH:mm')). Siparisin aciklamasinda "KARTSIZ:" ile yaziyor; faturaya cevirirken kart acip satiri elle ekleyin.`r`nBarkod`tUrun`tHareket`tCari (belge)"
             [System.IO.File]::WriteAllText($EksikKartDosya, $baslik + "`r`n" + (($script:EksikKart.Values | Sort-Object) -join "`r`n") + "`r`n", [System.Text.Encoding]::UTF8)
-            Yaz-Log "UYARI: $($script:EksikKart.Count) urunun ERP'de stok karti yok; bu urunlerin oldugu belgeler bekliyor. Liste: $EksikKartDosya"
+            Yaz-Log "UYARI: $($script:EksikKart.Count) urunun ERP'de stok karti yok; siparis aciklamasina KARTSIZ olarak yazildi. Liste: $EksikKartDosya"
         } elseif (Test-Path $EksikKartDosya) { Remove-Item $EksikKartDosya -ErrorAction SilentlyContinue }
         if (-not $Deneme) { [System.IO.File]::WriteAllText($HataDosya, (($script:SonHata.Keys | ForEach-Object { "$_`t$($script:SonHata[$_])" }) -join "`r`n"), [System.Text.Encoding]::UTF8) }
     } catch {}
