@@ -5,7 +5,7 @@
 #  Sonuc: C:\Scripts\kesif-stok-sablon.txt  (bu dosyayi Claude'a gonder)
 # =====================================================================
 $SqlServer = "SERVER\ERP12"
-$Barkod    = "2999999999990"
+$Barkod    = "MKSABLON"   # ERP harf kabul etmezse karti 99999001 barkoduyla acin; o da aranir
 $Cikti     = "C:\Scripts\kesif-stok-sablon.txt"
 Import-Module SqlServer -ErrorAction SilentlyContinue
 $sb = New-Object System.Text.StringBuilder
@@ -18,8 +18,8 @@ foreach ($d in $dbler) { $n = @(Sor ([string]$d.name) "SELECT COUNT(*) AS n FROM
 if (-not $db) { $db = [string]$dbler[0].name }
 Yaz "KESIF-STOK-SABLON $(Get-Date -Format 'yyyy-MM-dd HH:mm')  veri tabani: $db  barkod: $Barkod"
 
-$bb = @(Sor $db "SELECT TOP 1 * FROM dbo.STOK_BARKOD_BIRIM WHERE BARKOD = '$Barkod'")
-if ($bb.Count -eq 0) { Yaz "BU BARKODLA STOK KARTI BULUNAMADI. ERP'de once sablon karti acin (barkod $Barkod)."; [System.IO.File]::WriteAllText($Cikti, $sb.ToString(), [System.Text.Encoding]::UTF8); Read-Host "Enter"; exit 1 }
+$bb = @(Sor $db "SELECT TOP 1 * FROM dbo.STOK_BARKOD_BIRIM WHERE BARKOD IN ('$Barkod', '99999001') ORDER BY CASE WHEN BARKOD = '$Barkod' THEN 0 ELSE 1 END")
+if ($bb.Count -eq 0) { Yaz "BU BARKODLA STOK KARTI BULUNAMADI. ERP'de once sablon karti acin (barkod $Barkod ya da 99999001)."; [System.IO.File]::WriteAllText($Cikti, $sb.ToString(), [System.Text.Encoding]::UTF8); Read-Host "Enter"; exit 1 }
 $stokId = [long]$bb[0].STOK
 Yaz "STOK ID: $stokId"
 
