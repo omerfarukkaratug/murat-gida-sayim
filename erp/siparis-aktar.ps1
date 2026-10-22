@@ -47,7 +47,7 @@ $KartSeri         = "MKS-"
 $AcilanKartDosya  = "C:\Scripts\acilan-stok-kartlari.txt"
 # Bu tarihten ONCE telefonda olusturulan belgeler aktarilmaz (gecmisi doldurmasin).
 $BaslangicTarihi  = "2026-10-21"
-$BekleDakika      = 2
+$BekleDakika      = 0   # telefon belgeyi tek seferde kaydeder; beklemeye gerek yok
 $SeriVerilen      = "MK SAHA G-"
 $SeriAlinan       = "MK SAHA C-"
 # AKTARIM TURU: "IRSALIYE" = telefondaki irsaliye turu ERP'ye AYNI TURDE irsaliye olarak yazilir (stogu etkiler):
@@ -454,17 +454,14 @@ function Belge-Yaz($baglanti, $b) {
 }
 
 # ---------------------------------------------------------------------
-$baglanti = $null
-try {
-    if (-not (Test-Path $DbAnahtarDosyasi)) { Yaz-Log "HATA: $DbAnahtarDosyasi yok."; exit 1 }
-    $script:Anahtar = (Get-Content -Path $DbAnahtarDosyasi -TotalCount 1).Trim()
+
+# Bir tur: buluttan bekleyen belgeleri al, ERP'ye yaz.
+function Tur-Calis {
+
     $aktarilan = @{}
+    if (Test-Path $AktarilanDosya) { Get-Content $AktarilanDosya | ForEach-Object { $p = $_.Split("`t"); if ($p[0]) { $aktarilan[$p[0]] = $_ } } }
     $script:EksikKart = @{}
     $script:AcilanKart = New-Object System.Collections.ArrayList
-    $script:SonHata = @{}
-    if (Test-Path $HataDosya) { Get-Content $HataDosya -Encoding UTF8 | ForEach-Object { $p = $_.Split("`t", 2); if ($p[0] -and $p.Count -eq 2) { $script:SonHata[$p[0]] = $p[1] } } }
-    if (Test-Path $AktarilanDosya) { Get-Content $AktarilanDosya | ForEach-Object { $p = $_.Split("`t"); if ($p[0]) { $aktarilan[$p[0]] = $_ } } }
-
     $bas = [datetime]::ParseExact($BaslangicTarihi, "yyyy-MM-dd", $Inv)
     $is = Rpc "aktarilacak_mal" @{ p_baslangic = $bas.ToString("yyyy-MM-ddT00:00:00", $Inv) + "+03:00"; p_bekle_dk = $(if ($Deneme) { 0 } else { $BekleDakika }); p_limit = 50 }
     if (-not $is -or [string]$is.status -ne "ok") { throw "Bekleyen belgeler alinamadi: $($is | ConvertTo-Json -Compress)" }
@@ -477,10 +474,11 @@ try {
     }
 
     $belgeler = @($is.belgeler | Where-Object { $_ })
-    if ($belgeler.Count -eq 0) { Write-Host "Aktarilacak belge yok."; exit 0 }   # dakikada bir calisir: log'a yazilmaz
+    if ($belgeler.Count -eq 0) { Write-Host "Aktarilacak belge yok."; return }   # sik calisir: log'a yazilmaz
 
-    $baglanti = New-Object System.Data.SqlClient.SqlConnection("Server=$SqlServer;Database=master;Integrated Security=SSPI;")
-    $baglanti.Open()
+    if ($script:baglanti -eq $null) {
+    $script:baglanti = New-Object System.Data.SqlClient.SqlConnection("Server=$SqlServer;Database=master;Integrated Security=SSPI;")
+    $script:baglanti.Open()
     if (-not $Database) {
         $cmd = $baglanti.CreateCommand(); $cmd.CommandText = "SELECT name FROM sys.databases WHERE name LIKE 'ERP12[0-9][0-9][0-9][0-9]' AND state = 0 ORDER BY name DESC"
         $rd = $cmd.ExecuteReader(); $adaylar = @(); while ($rd.Read()) { $adaylar += [string]$rd[0] }; $rd.Close()
@@ -491,11 +489,12 @@ try {
         }
         if (-not $Database) { $Database = $adaylar[0] }
     }
-    $baglanti.ChangeDatabase($Database)
+    $script:baglanti.ChangeDatabase($Database)
+    $script:Database = $Database
     # Onceki surumle yazilan MK SAHA siparislerinin eksik sayac (SEQUNCES) kayitlari bir kez tamamlanir.
     if (-not $Deneme) {
         try {
-            $otx = $baglanti.BeginTransaction()
+            $otx = $script:baglanti.BeginTransaction()
             $pc = Deger $otx "SELECT TOP 1 KOD_PC FROM dbo.SEQUNCES WHERE TABLO = 'SIPARIS' ORDER BY ID DESC" $null
             if ($pc -ne $null) {
                 $n1 = (Sql $otx "INSERT INTO dbo.SEQUNCES (ID, TABLO, KOD_PC) SELECT s.ID, 'SIPARIS', @p FROM dbo.SIPARIS s WHERE s.BELGENO LIKE 'MK SAHA%' AND NOT EXISTS (SELECT 1 FROM dbo.SEQUNCES q WHERE q.ID = s.ID)" @{ "@p" = $pc }).ExecuteNonQuery()
@@ -505,8 +504,11 @@ try {
             $otx.Commit()
         } catch { try { $otx.Rollback() } catch {}; Yaz-Log "UYARI: sayac tamamlama yapilamadi: $($_.Exception.Message)" }
     }
-    Yaz-Log "$(if ($Deneme) { 'DENEME - ' })ERP veri tabani: $Database, $($belgeler.Count) belge"
-    $ok = 0; $hata = 0
+    }
+    $baglanti = $script:baglanti; $Database = $script:Database
+    $script:TurLog = New-Object System.Collections.ArrayList
+    [void]$script:TurLog.Add("$(if ($Deneme) { 'DENEME - ' })ERP veri tabani: $Database, $($belgeler.Count) belge")
+    $ok = 0; $hata = 0; $yeniHata = 0
     foreach ($b in $belgeler) {
         if (-not $Deneme -and $aktarilan.ContainsKey([string]$b.batch_id)) {
             # ERP'ye yazilmis ama buluta bildirilememis: tekrar YAZMA, sadece bildir.
@@ -519,16 +521,18 @@ try {
             if ($Deneme) { $ok++; continue }
             Add-Content -Path $AktarilanDosya -Value ("{0}`t{1}`t{2}" -f $b.batch_id, $sonuc.id, $sonuc.belge)
             Bildir $b $sonuc.id $sonuc.belge "ok" $(if ($sonuc.uyari) { $sonuc.uyari } else { "$($sonuc.satir) satir" })
+            if ($script:TurLog.Count) { $script:TurLog | ForEach-Object { Yaz-Log $_ }; $script:TurLog.Clear() }
             Yaz-Log "TAMAM: $($sonuc.belge) ($($b.tip), $($b.cari), $($sonuc.satir) satir) $($sonuc.uyari)"
             $ok++
         } catch {
             $hata++
-            Yaz-Log "HATA: belge $($b.batch_id) ($($b.cari)): $($_.Exception.Message)"
-            # Ayni hata her calismada tekrar bildirilmez (gunluk dolmasin).
+            # Ayni hata her calismada tekrar yazilmaz / bildirilmez (gunluk dolmasin).
             $mesaj = [string]$_.Exception.Message
-            if (-not $Deneme -and $script:SonHata[[string]$b.batch_id] -ne $mesaj) {
-                try { Bildir $b $null "" "hata" $mesaj; $script:SonHata[[string]$b.batch_id] = $mesaj } catch {}
-            }
+            if ($Deneme -or $script:SonHata[[string]$b.batch_id] -ne $mesaj) {
+                $yeniHata++
+                Yaz-Log "HATA: belge $($b.batch_id) ($($b.cari)): $mesaj"
+                if (-not $Deneme) { try { Bildir $b $null "" "hata" $mesaj; $script:SonHata[[string]$b.batch_id] = $mesaj } catch {} }
+            } else { Write-Host "Bekliyor (ayni hata): $($b.cari)" }
         }
     }
     try {
@@ -537,20 +541,41 @@ try {
             [System.IO.File]::AppendAllText($AcilanKartDosya, (($script:AcilanKart) -join "`r`n") + "`r`n", [System.Text.Encoding]::UTF8)
             Yaz-Log "$($script:AcilanKart.Count) yeni stok karti acildi. Liste: $AcilanKartDosya"
         }
-        if ($script:EksikKart.Count -gt 0) {
+        if ($script:EksikKart.Count -gt 0 -and ($ok + $yeniHata -gt 0)) {
             $baslik = "ERP'de STOK KARTI OLMAYAN URUNLER ($(Get-Date -Format 'yyyy-MM-dd HH:mm')). Siparisin aciklamasinda 'KARTI OLMAYAN URUNLER' basliginda yaziyor; faturaya cevirirken kart acip satiri elle ekleyin.`r`nBarkod`tUrun`tHareket`tCari (belge)"
             [System.IO.File]::WriteAllText($EksikKartDosya, $baslik + "`r`n" + (($script:EksikKart.Values | Sort-Object) -join "`r`n") + "`r`n", [System.Text.Encoding]::UTF8)
             Yaz-Log "UYARI: $($script:EksikKart.Count) urunun ERP'de stok karti yok ve acilamadi (terazi / kisa / barkodsuz); $(if ($AktarimTuru -eq 'IRSALIYE') { 'bu urunlerin oldugu belgeler bekliyor' } else { 'siparis aciklamasina yazildi' }). Liste: $EksikKartDosya"
-        } elseif (Test-Path $EksikKartDosya) { Remove-Item $EksikKartDosya -ErrorAction SilentlyContinue }
+        } elseif ($script:EksikKart.Count -eq 0 -and (Test-Path $EksikKartDosya)) { Remove-Item $EksikKartDosya -ErrorAction SilentlyContinue }
         if (-not $Deneme) { [System.IO.File]::WriteAllText($HataDosya, (($script:SonHata.Keys | ForEach-Object { "$_`t$($script:SonHata[$_])" }) -join "`r`n"), [System.Text.Encoding]::UTF8) }
     } catch {}
-    Yaz-Log "Bitti: $ok $(if ($Deneme) { 'denendi (yazilmadi)' } else { 'aktarildi' }), $hata hata."
-    if ($hata -gt 0) { exit 1 }
+    if ($ok + $yeniHata -gt 0 -or $Deneme) {
+        if ($script:TurLog.Count) { $script:TurLog | ForEach-Object { Yaz-Log $_ }; $script:TurLog.Clear() }
+        Yaz-Log "Bitti: $ok $(if ($Deneme) { 'denendi (yazilmadi)' } else { 'aktarildi' }), $hata hata$(if ($hata -gt $yeniHata) { " ($($hata - $yeniHata) belge onceki hatayla bekliyor)" })."
+    } else { Write-Host "Yeni bir sey yok ($hata belge bekliyor)." }
+}
+
+$script:baglanti = $null
+try {
+    if (-not (Test-Path $DbAnahtarDosyasi)) { Yaz-Log "HATA: $DbAnahtarDosyasi yok."; exit 1 }
+    $script:Anahtar = (Get-Content -Path $DbAnahtarDosyasi -TotalCount 1).Trim()
+    $aktarilan = @{}
+    $script:EksikKart = @{}
+    $script:AcilanKart = New-Object System.Collections.ArrayList
+    $script:SonHata = @{}
+    if (Test-Path $HataDosya) { Get-Content $HataDosya -Encoding UTF8 | ForEach-Object { $p = $_.Split("`t", 2); if ($p[0] -and $p.Count -eq 2) { $script:SonHata[$p[0]] = $p[1] } } }
+    
+    # DONGU: gorev dakikada bir baslatir; program o dakika icinde 10 saniyede bir bakar (telefondan ~30 sn'de ERP'ye).
+    $tekrar = if ($script:Argumanlar -contains "DONGU") { 5 } else { 1 }
+    for ($tk = 0; $tk -lt $tekrar; $tk++) {
+        if ($tk -gt 0) { Start-Sleep -Seconds 10 }
+        Tur-Calis
+    }
 }
 catch {
     Yaz-Log "HATA: $($_.Exception.Message)"
     exit 1
 }
 finally {
-    if ($baglanti -ne $null) { $baglanti.Close() }
+    if ($script:baglanti -ne $null) { $script:baglanti.Close() }
 }
+

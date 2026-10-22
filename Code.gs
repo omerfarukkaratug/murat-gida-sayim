@@ -2146,6 +2146,7 @@ function doPostIsle(e) {
     if (data.type === 'mal_hareket') {
       var mOut = saveMalHareket(data);
       dbKuyrugaEkle('mal', data);
+      DB_HEMEN = true;   // mal kaydı ERP'ye irsaliye olarak gidecek: veri tabanına BEKLEMEDEN yazılsın
       var mr = {};
       try { mr = JSON.parse(mOut.getContent()); } catch (pe) { /* özet olmadan da günlüğe yaz */ }
       gunlukYaz('mal', 'telefon: ' + (data.personel || '?'),
@@ -3392,11 +3393,13 @@ function dbKuyrukGonder(sureMs) {
 
 // Telefon isteğinden SONRA (kilit bırakıldıktan sonra) çağrılır: son
 // gönderimin üzerinden 1 dakika geçtiyse kuyruğu en fazla 10 sn gönderir.
+var DB_HEMEN = false;   // bu istekte acil (mal) kayıt kuyruğa girdi mi
 function dbGerekirseGonder() {
+  var hemen = DB_HEMEN; DB_HEMEN = false;
   try {
     if (!dbAyar()) return;
     var son = Number(PropertiesService.getScriptProperties().getProperty('DB_SON_GONDERIM_MS') || 0);
-    if (Date.now() - son < DB_GONDERIM_ARALIK_MS) return;
+    if (!hemen && Date.now() - son < DB_GONDERIM_ARALIK_MS) return;
     dbKuyrukGonder(10000);
   } catch (e) { /* gölge kopya asıl cevabı asla bozmaz */ }
 }
