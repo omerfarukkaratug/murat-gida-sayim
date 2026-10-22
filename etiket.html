@@ -625,6 +625,7 @@
 <div id="baski"></div>
 
 <script src="bt-yazici.js?v=239"></script>
+<script src="barkod-teyit.js?v=256"></script>
 <script>
 (function(){
   'use strict';
@@ -1301,7 +1302,7 @@
   });
 
   // ---------- Kamera (telefonun kendi okuyucusu; iPhone'da ZBar) ----------
-  var akis = null, okuyucu = null, taraZ = null, bdYukleniyor = null, sonKod = '', sonKodZaman = 0, yazilimMotor = false;
+  var akis = null, okuyucu = null, taraZ = null, bdYukleniyor = null, sonKod = '', sonKodZaman = 0, yazilimMotor = false, etiketTeyit = null;
   // iPhone (ZBar yazılım motoru): tam kare yerine sırayla üç kesit okunur — ortadaki geniş alan, görünen alanın
   // tamamı ve ortadaki dar şerit BÜYÜTÜLEREK (küçük / ince çizgili barkodlar). Biri okumazsa diğeri okur.
   var kesitSira = 0, kesitTuval = null, kesitCtx = null;
@@ -1469,10 +1470,16 @@
   function tara(){
     if(!okuyucu || !akis) return;
     var v = $('video');
-    var sonra = function(){ taraZ = setTimeout(tara, yazilimMotor ? 90 : 180); };
+    var sonra = function(){ taraZ = setTimeout(tara, 90); };
     if(v.readyState < 2) return sonra();
     var kaynak = v; if(yazilimMotor){ try { kaynak = kesitKare(v); } catch(e){ kaynak = v; } }
     okuyucu.detect(kaynak).then(function(k){
+      // Teyit (barkod-teyit.js): sağlama + art arda 2-3 kare aynı + ortadaki barkod. Yüklenemediyse eski davranış.
+      if(window.MKBarkod){
+        if(!etiketTeyit) etiketTeyit = window.MKBarkod.teyitci({ bilinen: function(x){ return !!katalogHarita[x]; } });
+        var tk = etiketTeyit.kare(k, kaynak.videoWidth || kaynak.width, kaynak.videoHeight || kaynak.height);
+        k = tk ? [{ rawValue: tk }] : [];
+      }
       if(k && k.length && k[0].rawValue){
         var kod = String(k[0].rawValue).trim();
         if(dogrulaKip){ dogrulaOku(kod); taraZ = setTimeout(tara, 350); return; }

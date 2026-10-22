@@ -431,7 +431,7 @@
   <header style="border:none; padding:0 0 16px; background:transparent; display:flex; align-items:flex-start; justify-content:space-between;">
     <div>
       <h1><img src="logo-header.png" alt="Murat Gıda" style="height:30px; width:auto; display:block;"></h1>
-      <div class="sub"><img src="icon.svg" alt="" style="width:15px;height:15px;vertical-align:-3px;margin-right:5px;">KRT Saha · Murat Gıda • offline • Android • build 255</div>
+      <div class="sub"><img src="icon.svg" alt="" style="width:15px;height:15px;vertical-align:-3px;margin-right:5px;">KRT Saha · Murat Gıda • offline • Android • build 256</div>
     </div>
     <button type="button" id="themeToggleBtn" title="Tema seç" style="background:var(--panel2); border:1.5px solid var(--line); color:var(--text); width:34px; height:34px; border-radius:50%; font-size:15px; padding:0; display:flex; align-items:center; justify-content:center; flex-shrink:0;">🎨</button>
   </header>
@@ -1357,6 +1357,7 @@
 </div>
 <div id="toast"></div>
 
+<script src="barkod-teyit.js?v=256"></script>
 <script>
 (function(){
   "use strict";
@@ -3787,7 +3788,7 @@
     });
     return zxingLoadPromise;
   }
-  var BARCODE_FORMATS = ['ean_13','ean_8','upc_a','upc_e','code_128','code_39','codabar','itf','qr_code'];
+  var BARCODE_FORMATS = ['ean_13','ean_8','upc_a','upc_e','code_128','code_39','itf','qr_code'];   // codabar çıkarıldı: gıdada yok, yanlış okuma kaynağı
   // iPhone kamerayı varsayılan olarak DÜŞÜK çözünürlükte (640×480) açar; barkod
   // çizgileri seçilemez. iPhone'da yüksek çözünürlük istenir (Android'e dokunulmadı:
   // orada yerleşik okuyucu zaten iyi çalışıyor).
@@ -3816,6 +3817,13 @@
     var stopped = false;
     var lastCode = null, lastTime = 0;
     var zxingReader = null;
+    // Teyit (barkod-teyit.js): sağlama + aynı barkod art arda 2-3 karede + ortadaki barkod.
+    var teyit = window.MKBarkod ? window.MKBarkod.teyitci({ bilinen: function(k){ return typeof catalogMap !== 'undefined' && catalogMap && catalogMap.has(k); } }) : null;
+    function kareSonuc(liste, W, H){
+      if(!liste || stopped) return;
+      if(teyit){ var k = teyit.kare(liste, W, H); if(k) emit(k); return; }
+      if(liste.length) emit(liste[0].rawValue);   // teyit dosyası yüklenemediyse eski davranış
+    }
     function emit(val){
       var t = Date.now();
       if(val !== lastCode || (t - lastTime) > 1500){
@@ -3866,7 +3874,7 @@
         var kaynak = videoEl;
         try { if(bdYedekMotor) kaynak = kirpilmisKare(); } catch(e){ kaynak = videoEl; }
         detector.detect(kaynak).then(function(codes){
-          if(codes.length && !stopped) emit(codes[0].rawValue);
+          kareSonuc(codes, kaynak.videoWidth || kaynak.width, kaynak.videoHeight || kaynak.height);
         }).catch(function(){}).then(function(){ mesgul = false; });
       }
       requestAnimationFrame(function(){ nativeLoop(detector); });
@@ -3882,13 +3890,14 @@
         var hints = new Map();
         hints.set(ZXing.DecodeHintType.POSSIBLE_FORMATS, [
           ZXing.BarcodeFormat.EAN_13, ZXing.BarcodeFormat.EAN_8, ZXing.BarcodeFormat.UPC_A, ZXing.BarcodeFormat.UPC_E,
-          ZXing.BarcodeFormat.CODE_128, ZXing.BarcodeFormat.CODE_39, ZXing.BarcodeFormat.CODABAR, ZXing.BarcodeFormat.ITF,
+          ZXing.BarcodeFormat.CODE_128, ZXing.BarcodeFormat.CODE_39, ZXing.BarcodeFormat.ITF,
           ZXing.BarcodeFormat.QR_CODE
         ]);
         zxingReader = new ZXing.BrowserMultiFormatReader(hints);
         zxingReader.decodeFromStream(stream, videoEl, function(result){
           if(!result || stopped) return;
-          emit(result.getText());
+          var bicim = ''; try { bicim = ZXing.BarcodeFormat[result.getBarcodeFormat()] || ''; } catch(e){}
+          kareSonuc([{ rawValue: result.getText(), format: bicim }], 0, 0);
         });
       }).catch(function(){
         if(!stopped) onFail();

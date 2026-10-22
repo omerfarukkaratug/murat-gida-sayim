@@ -279,6 +279,7 @@
   <div id="toast" class="gizli"></div>
 
 <script src="bt-yazici.js?v=239"></script>
+<script src="barkod-teyit.js?v=256"></script>
 <script>
 (function(){
   'use strict';
@@ -938,7 +939,7 @@
       });
     }).catch(function(err){ kameraKapat(); toast(err && err.name === 'NotAllowedError' ? 'Kamera izni verilmedi — barkodu yaz' : 'Kamera açılamadı — barkodu yaz', 'uyari'); });
   }
-  var tuval = document.createElement('canvas');
+  var tuval = document.createElement('canvas'), kamTeyit = null;
   function tara(){
     if(!akis || !okuyucu) return;
     var v = $('video');
@@ -947,12 +948,18 @@
       tuval.width = Math.round(v.videoWidth * k); tuval.height = Math.round(v.videoHeight * k);
       tuval.getContext('2d').drawImage(v, 0, 0, tuval.width, tuval.height);
       okuyucu.detect(tuval).then(function(l){
+        // Teyit (barkod-teyit.js): sağlama + art arda 2-3 kare aynı + ortadaki barkod. Yüklenemediyse eski davranış.
+        if(window.MKBarkod){
+          if(!kamTeyit) kamTeyit = window.MKBarkod.teyitci({ bilinen: function(x){ return !!katalogBarkod[x]; } });
+          var tk = kamTeyit.kare(l, tuval.width, tuval.height);
+          l = tk ? [{ rawValue: tk }] : [];
+        }
         for(var i = 0; i < (l || []).length; i++){
           var kod = String(l[i].rawValue || '').trim(); if(!kod) continue;
           if(kod === sonOkunan && Date.now() - sonOkunanZ < 1500) break; // aynı barkod 1,5 sn içinde tekrar sayılmaz
           sonOkunan = kod; sonOkunanZ = Date.now(); okutuldu(kod); break;
         }
-      }).catch(function(){}).then(function(){ taraZ = setTimeout(tara, 160); });
+      }).catch(function(){}).then(function(){ taraZ = setTimeout(tara, 80); });
       return;
     }
     taraZ = setTimeout(tara, 200);
