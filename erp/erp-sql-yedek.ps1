@@ -19,7 +19,7 @@
 $SqlServer        = "SERVER\ERP12"
 $VeriTabaniDesen  = "ERP12%"              # yedeklenecek veri tabanlari (LIKE deseni)
 # Birinci kopya SQL Server'in kendi yedek klasorunde durur (SQL'in yazma izni orada var).
-$IkinciKlasor     = ""                     # IKINCI kopya: ornek "E:\ERP-Yedek" (2. disk / USB) ya da Google Drive klasoru. Bos: yok
+$IkinciKlasor     = "E:\KRT-ERP-Yedek"     # IKINCI kopya: E: diski (eski yedek programi da E:\GUNLUK YEDEKLER kullaniyor). Bos: yok
 $Sakla            = 7                      # her klasorde kac gunluk yedek kalsin
 $DbUrl            = "https://wjyqempcmyrmruhdpcwk.supabase.co"
 $DbAnahtarDosyasi = "C:\Scripts\db-anahtar.txt"
@@ -73,7 +73,10 @@ try {
     $sqlKlasor = [string](Sorgu "DECLARE @d nvarchar(4000); EXEC master.dbo.xp_instance_regread N'HKEY_LOCAL_MACHINE', N'Software\Microsoft\MSSQLServer\MSSQLServer', N'BackupDirectory', @d OUTPUT; SELECT ISNULL(@d, '') AS D").Rows[0].D
     if (-not $sqlKlasor) { throw "SQL Server'in yedek klasoru okunamadi" }
     Yaz-Log "SQL Server yedek klasoru: $sqlKlasor"
-    if ($IkinciKlasor -and -not (Test-Path $IkinciKlasor)) { New-Item -ItemType Directory -Path $IkinciKlasor -Force | Out-Null }
+    if ($IkinciKlasor -and -not (Test-Path $IkinciKlasor)) {
+        try { New-Item -ItemType Directory -Path $IkinciKlasor -Force -ErrorAction Stop | Out-Null }
+        catch { Yaz-Log "UYARI: ikinci klasor acilamadi ($IkinciKlasor): $($_.Exception.Message) - yedek tek kopya kalacak"; $IkinciKlasor = "" }
+    }
     $bos = (Get-PSDrive -Name $sqlKlasor.Substring(0, 1)).Free / 1MB
     if ($bos -lt $toplamMb * 1.2) { throw ("Diskte yer yok: {0:N0} MB bos, yaklasik {1:N0} MB gerekli ({2})" -f $bos, $toplamMb, $sqlKlasor) }
 
