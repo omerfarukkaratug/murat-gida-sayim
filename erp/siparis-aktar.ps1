@@ -227,12 +227,12 @@ function Irsaliye-Yaz($baglanti, $b) {
             $var = [int](Deger $tx "SELECT COUNT(*) FROM dbo.FIS WHERE CARI = @c AND BELGENO = @n AND AKTIF = 1 AND FIS_TURU IN ($turler)" @{ "@c" = $cari; "@n" = $belgeNo })
             if ($var -gt 0) { throw "ERP'de bu cariye $belgeNo numarali belge ZATEN VAR (Excel ile alinmis olabilir). Mal iki kez girmesin diye aktarilmadi." }
         } else {
-            # Belge no girilmediyse: kaydin tarih-saat-dakikasi (MKS202610221634). Ayni dakikada ikinci belge: -2, -3...
+            # Belge no girilmediyse: kaydin tarih-saat-dakikasi (MKS202610221634). Ayni dakikada ikinci belge: sonuna 2, 3... (tire yok)
             # Muhasebe gercek numarayi ERP'de duzeltir.
             $kayitZamani = [DateTimeOffset]::Parse([string]$b.tarih, $Inv).LocalDateTime
             $temel = "MKS" + $kayitZamani.ToString("yyyyMMddHHmm", $Inv)
             $belgeNo = $temel; $ek = 2
-            while ([int](Deger $tx "SELECT COUNT(*) FROM dbo.FIS WITH (UPDLOCK, HOLDLOCK) WHERE BELGENO = @n" @{ "@n" = $belgeNo }) -gt 0) { $belgeNo = "$temel-$ek"; $ek++ }
+            while ([int](Deger $tx "SELECT COUNT(*) FROM dbo.FIS WITH (UPDLOCK, HOLDLOCK) WHERE BELGENO = @n" @{ "@n" = $belgeNo }) -gt 0) { $belgeNo = "$temel$ek"; $ek++ }
         }
 
         $kdvKolon = Deger $tx "SELECT TOP 1 name FROM sys.columns WHERE object_id = OBJECT_ID('dbo.STOK_VERGI') AND name IN ('KDV_TOPTAN','KDV_PAREKENDE') ORDER BY CASE name WHEN 'KDV_TOPTAN' THEN 0 ELSE 1 END" $null
