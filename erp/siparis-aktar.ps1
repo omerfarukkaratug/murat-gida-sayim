@@ -256,8 +256,33 @@ function Irsaliye-Yaz($baglanti, $b) {
             # Bu birimde alis yoksa: stok kartindaki son alis fiyati (ERP'nin kendi tuttugu), o da yoksa 0.
             if ($sonAlis -eq $null -or [decimal]$sonAlis -le 0) { $sonAlis = Deger $tx "SELECT SON_ALIS_FIYAT FROM dbo.STOK WHERE ID = @s AND SON_ALIS_FIYAT > 0" @{ "@s" = $stok } }
             if ($sonAlis -eq $null) { $sonAlis = [decimal]0 } else { $sonAlis = [decimal]$sonAlis }
+            $satirAcik = ""
             if ($tur -eq 5 -or $tur -eq 7) {
                 $fiyat = $sonAlis; $dahil = Yuvarla ($fiyat * (1 + $kdv / 100)) 4
+            } elseif ($tur -eq 6) {
+                # SATIS: bu cariye EN SON verdigimiz fiyat esas (net, KDV haric).
+                #  - O satistan SONRA urun farkli alis fiyatiyla geldiyse: normal urun fiyati (telefondaki katalog fiyati) yazilir,
+                #    satir aciklamasina "Kontrol T.E.F. ........ <fiyat>" yazilir: son satistaki kar orani yeni alisa uygulanmis hali.
+                #  - Bu cariye daha once satis yoksa: normal urun fiyati.
+                $normalDahil = if ($r.fiyat -ne $null -and [decimal]$r.fiyat -gt 0) { [decimal]$r.fiyat } else { [decimal]0 }
+                $ss = Tablo $tx "SELECT TOP 1 f.FIS_TARIHI AS T, CAST(d.TOPLAM_KDV_MATRAHI AS decimal(18,6)) / NULLIF(d.MIKTAR_FIS, 0) AS NET FROM dbo.FIS_DETAY d JOIN dbo.FIS f ON f.ID = d.FIS WHERE f.CARI = @c AND d.STOK = @s AND d.STOK_BIRIM = @u AND f.FIS_TURU IN (2, 6) AND f.AKTIF = 1 AND d.MIKTAR_FIS > 0 AND d.FIYAT > 0 ORDER BY f.FIS_TARIHI DESC, d.ID DESC" @{ "@c" = $cari; "@s" = $stok; "@u" = $birim }
+                $fiyat = $null
+                if ($ss.Rows.Count -gt 0 -and $ss.Rows[0].NET -isnot [DBNull] -and [decimal]$ss.Rows[0].NET -gt 0) {
+                    $sonSatis = [decimal]$ss.Rows[0].NET; $satisT = $ss.Rows[0].T
+                    $alisSql = "SELECT TOP 1 CAST(d.TOPLAM_KDV_MATRAHI AS decimal(18,6)) / NULLIF(d.MIKTAR_FIS, 0) AS NET FROM dbo.FIS_DETAY d JOIN dbo.FIS f ON f.ID = d.FIS WHERE d.STOK = @s AND d.STOK_BIRIM = @u AND f.FIS_TURU IN (1, 5) AND f.AKTIF = 1 AND d.MIKTAR_FIS > 0 AND d.FIYAT > 0 AND f.FIS_TARIHI {0} @t ORDER BY f.FIS_TARIHI DESC, d.ID DESC"
+                    $aOnce = Deger $tx ($alisSql -f "<=") @{ "@s" = $stok; "@u" = $birim; "@t" = $satisT }
+                    $aSonra = Deger $tx ($alisSql -f ">") @{ "@s" = $stok; "@u" = $birim; "@t" = $satisT }
+                    if ($aSonra -ne $null -and $aOnce -ne $null -and [decimal]$aOnce -gt 0 -and [Math]::Abs([decimal]$aSonra - [decimal]$aOnce) -gt 0.005) {
+                        # Alis fiyati degisti: normal fiyat + aciklamada kontrol fiyati
+                        $oran = $sonSatis / [decimal]$aOnce
+                        $tef = Yuvarla ([decimal]$aSonra * $oran) 2
+                        $satirAcik = "Kontrol T.E.F. ........ " + $tef.ToString("0.00", [Globalization.CultureInfo]::GetCultureInfo("tr-TR"))
+                    } else {
+                        $fiyat = Yuvarla $sonSatis 4
+                    }
+                }
+                if ($fiyat -eq $null) { $dahil = $normalDahil; $fiyat = Yuvarla ($dahil / (1 + $kdv / 100)) 4 }
+                else { $dahil = Yuvarla ($fiyat * (1 + $kdv / 100)) 4 }
             } else {
                 $dahil = if ($r.fiyat -ne $null -and [decimal]$r.fiyat -gt 0) { [decimal]$r.fiyat } else { [decimal]0 }
                 $fiyat = Yuvarla ($dahil / (1 + $kdv / 100)) 4
@@ -265,7 +290,7 @@ function Irsaliye-Yaz($baglanti, $b) {
             $tutar = Yuvarla ($fiyat * $miktar) 4
             [void]$satirlar.Add(@{ stok = $stok; birim = $birim; kod = [string]$bb.Rows[0].KOD; barkod = [string]$bb.Rows[0].BARKOD; ad = [string]$r.urun_adi
                 kdv = $kdv; miktar = $miktar; fiyat = $fiyat; dahil = $dahil; tutar = $tutar; dahilTutar = (Yuvarla ($dahil * $miktar) 4)
-                kdvTutar = (Yuvarla ($tutar * $kdv / 100) 4); sonAlis = $sonAlis })
+                kdvTutar = (Yuvarla ($tutar * $kdv / 100) 4); sonAlis = $sonAlis; acik = $satirAcik })
         }
         # Irsaliye stogu degistirir: ERP'de karsiligi olmayan urun varsa belge YAZILMAZ (eksik irsaliye olmasin), bekler.
         if ($kartsiz.Count -gt 0) { throw "ERP'de stok karti yok / acilamadi (terazi ya da barkodsuz): $($kartsiz -join ', '). Kart acilinca aktarilir." }
@@ -292,9 +317,13 @@ function Irsaliye-Yaz($baglanti, $b) {
             ODEMEMNIN_YAPILDIGI_TARIH = $gun; GONDERIM_TARIHI = $gun; SEVK_NEDENI = 0; ASIL_SATICI_CARISI = 0; HAREKET_TARIHI = $simdi; SATIR_STOPAJ_TOPLAM = 0
             ALIS_BELGE_TARIHI = $gun; ALIS_BELGE_TARIHI_2 = $gun; ALIS_BELGE_TARIHI_3 = $gun; ALIS_BELGE_TARIHI_4 = $gun; ALIS_BELGE_TARIHI_5 = $gun; E_FATURA_TIPI = 0 }
         Sayac $tx $id "FIS" 0
+        $acikKolon = [int](Deger $tx "SELECT COUNT(*) FROM sys.columns WHERE object_id = OBJECT_ID('dbo.FIS_DETAY') AND name = 'ACIKLAMA'" $null) -gt 0
+        $acikMaxD = if ($acikKolon) { Deger $tx "SELECT CHARACTER_MAXIMUM_LENGTH FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_NAME = 'FIS_DETAY' AND COLUMN_NAME = 'ACIKLAMA'" $null } else { $null }
+        $detKolon = if ($acikKolon) { $FISD_KOLON + @("ACIKLAMA") } else { $FISD_KOLON }
         foreach ($s in $satirlar) {
             $did = [long](Deger $tx "SELECT NEXT VALUE FOR dbo.ID" $null)
-            Ekle $tx "FIS_DETAY" $FISD_KOLON @{ ID = $did; FIS = $id; LOKASYON = $lokasyon; STOK = $s.stok; STOK_CINSI = 1; STOK_BIRIM = $s.birim; BARKOD = $s.barkod
+            $acikDeger = if ($s.acik) { if ($acikMaxD -and [int]$acikMaxD -gt 0) { Kisalt $s.acik ([int]$acikMaxD) } else { $s.acik } } else { $null }
+            Ekle $tx "FIS_DETAY" $detKolon @{ ACIKLAMA = $acikDeger; ID = $did; FIS = $id; LOKASYON = $lokasyon; STOK = $s.stok; STOK_CINSI = 1; STOK_BIRIM = $s.birim; BARKOD = $s.barkod
                 DOVIZ_AD = 1; CARPAN = 1; KAB = 0; MIKTAR_FIS = $s.miktar; MIKTAR_BEDELSIZ = 0
                 MIKTAR_GIRIS = $(if ($giris) { $s.miktar } else { [decimal]0 }); MIKTAR_CIKIS = $(if ($giris) { [decimal]0 } else { $s.miktar })
                 ANLASMA_FIYAT = 0; FIYAT = $s.fiyat; DAHIL_FIYAT = $s.dahil; TUTAR = $s.tutar; DAHIL_TUTAR = $s.dahilTutar; ISKONTO_HESAP = 0
@@ -313,7 +342,7 @@ function Irsaliye-Yaz($baglanti, $b) {
         if ($Deneme) {
             $tx.Rollback()
             Yaz-Log "DENEME (ERP'ye YAZILMADI): IRSALIYE tur $tur / $belgeNo / $($b.cari) / $($satirlar.Count) satir / toplam KDV dahil $(Yuvarla $genel 2)"
-            foreach ($s in $satirlar) { Yaz-Log ("   {0} {1} x {2} {3} fiyat {4} (KDV dahil {5})" -f $s.barkod, $s.ad, $s.miktar, $(if ($giris) { 'GIRIS' } else { 'CIKIS' }), $s.fiyat, $s.dahil) }
+            foreach ($s in $satirlar) { Yaz-Log ("   {0} {1} x {2} {3} fiyat {4} (KDV dahil {5}) {6}" -f $s.barkod, $s.ad, $s.miktar, $(if ($giris) { 'GIRIS' } else { 'CIKIS' }), $s.fiyat, $s.dahil, $s.acik) }
         } else { $tx.Commit() }
         return @{ id = $id; belge = $belgeNo; uyari = ""; satir = $satirlar.Count }
     } catch {
