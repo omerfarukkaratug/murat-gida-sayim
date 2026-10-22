@@ -257,8 +257,14 @@ function Irsaliye-Yaz($baglanti, $b) {
             if ($sonAlis -eq $null -or [decimal]$sonAlis -le 0) { $sonAlis = Deger $tx "SELECT SON_ALIS_FIYAT FROM dbo.STOK WHERE ID = @s AND SON_ALIS_FIYAT > 0" @{ "@s" = $stok } }
             if ($sonAlis -eq $null) { $sonAlis = [decimal]0 } else { $sonAlis = [decimal]$sonAlis }
             $satirAcik = ""
-            if ($tur -eq 5 -or $tur -eq 7) {
+            if ($tur -eq 5) {
                 $fiyat = $sonAlis; $dahil = Yuvarla ($fiyat * (1 + $kdv / 100)) 4
+            } elseif ($tur -eq 7) {
+                # ALISTAN IADE: bu tedarikciden EN SON gelen fiyat (net, iskontolar dusulmus, KDV haric).
+                # Bu tedarikciden hic alis yoksa genel son alis fiyati.
+                $sonGelen = Deger $tx "SELECT TOP 1 CAST(d.TOPLAM_KDV_MATRAHI AS decimal(18,6)) / NULLIF(d.MIKTAR_FIS, 0) FROM dbo.FIS_DETAY d JOIN dbo.FIS f ON f.ID = d.FIS WHERE f.CARI = @c AND d.STOK = @s AND d.STOK_BIRIM = @u AND f.FIS_TURU IN (1, 5) AND f.AKTIF = 1 AND d.MIKTAR_FIS > 0 AND d.FIYAT > 0 ORDER BY f.FIS_TARIHI DESC, d.ID DESC" @{ "@c" = $cari; "@s" = $stok; "@u" = $birim }
+                $fiyat = if ($sonGelen -ne $null -and [decimal]$sonGelen -gt 0) { Yuvarla ([decimal]$sonGelen) 4 } else { $sonAlis }
+                $dahil = Yuvarla ($fiyat * (1 + $kdv / 100)) 4
             } elseif ($tur -eq 6) {
                 # SATIS: bu cariye EN SON verdigimiz fiyat esas (net, KDV haric).
                 #  - O satistan SONRA urun farkli alis fiyatiyla geldiyse: normal urun fiyati (telefondaki katalog fiyati) yazilir,
