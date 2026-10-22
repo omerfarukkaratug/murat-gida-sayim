@@ -35,6 +35,10 @@ $DbUrl            = "https://wjyqempcmyrmruhdpcwk.supabase.co"
 $DbAnahtarDosyasi = "C:\Scripts\db-anahtar.txt"
 $LogFile          = "C:\Scripts\siparis-aktar-log.txt"
 $AktarilanDosya   = "C:\Scripts\siparis-aktarilan.txt"
+# ERP'de stok karti olmayan urunler: belge BEKLER (eksik siparis yazilmaz), liste bu dosyaya yazilir.
+# Kart ERP'de ayni barkodla acilinca bir sonraki calismada belge kendiliginden aktarilir.
+$EksikKartDosya   = "C:\Scripts\acilacak-stok-kartlari.txt"
+$HataDosya        = "C:\Scripts\siparis-aktar-hata.txt"
 # Bu tarihten ONCE telefonda olusturulan belgeler aktarilmaz (gecmisi doldurmasin).
 $BaslangicTarihi  = "2026-10-21"
 $BekleDakika      = 10
@@ -125,7 +129,11 @@ function Belge-Yaz($baglanti, $b) {
         $atlanan = New-Object System.Collections.ArrayList
         foreach ($r in @($b.satirlar)) {
             $bb = Tablo $tx "SELECT TOP 1 bb.STOK, bb.STOK_BIRIM, s.KOD, ISNULL(v.$kdvKolon, 0) AS KDV FROM dbo.STOK_BARKOD_BIRIM bb JOIN dbo.STOK s ON s.ID = bb.STOK LEFT JOIN dbo.STOK_VERGI v ON v.ID = s.STOK_VERGI WHERE bb.BARKOD = @b" @{ "@b" = [string]$r.barkod }
-            if ($bb.Rows.Count -eq 0) { [void]$atlanan.Add("$($r.barkod) $($r.urun_adi)"); continue }
+            if ($bb.Rows.Count -eq 0) {
+                [void]$atlanan.Add("$($r.barkod) $($r.urun_adi)")
+                $script:EksikKart["$($r.barkod)"] = ("{0}`t{1}`t{2} x {3}`t{4} ({5})" -f $r.barkod, $r.urun_adi, $b.tip, $r.miktar, $b.cari, $b.belge_turu)
+                continue
+            }
             $stok = $bb.Rows[0].STOK; $kdv = [decimal]$bb.Rows[0].KDV; $miktar = [decimal]$r.miktar
             # Son alis: AYNI BIRIMDE (adet / koli karismasin), bedelsiz olmayan, fiyati olan en yeni alis satiri.
             $sonAlis = Deger $tx "SELECT TOP 1 d.FIYAT FROM dbo.FIS_DETAY d JOIN dbo.FIS f ON f.ID = d.FIS WHERE d.STOK = @s AND d.STOK_BIRIM = @u AND f.FIS_TURU IN (1, 5) AND f.AKTIF = 1 AND d.FIYAT > 0 AND d.MIKTAR_FIS > 0 ORDER BY f.FIS_TARIHI DESC, d.ID DESC" @{ "@s" = $stok; "@u" = $bb.Rows[0].STOK_BIRIM }
@@ -142,7 +150,8 @@ function Belge-Yaz($baglanti, $b) {
                 kdv = $kdv; miktar = $miktar; fiyat = $fiyat; dahil = $dahil; tutar = $tutar; dahilTutar = (Yuvarla ($dahil * $miktar) 4)
                 kdvTutar = (Yuvarla ($tutar * $kdv / 100) 4); sonAlis = $sonAlis; ad = [string]$r.urun_adi })
         }
-        if ($satirlar.Count -eq 0) { throw "Hicbir urun ERP'de bulunamadi: $($atlanan -join ', ')" }
+        # Stok karti olmayan urun varsa belge YAZILMAZ: eksik siparis gozden kacar. Kart acilinca tekrar denenir.
+        if ($atlanan.Count -gt 0) { throw "ERP'de stok karti yok, kart acilinca aktarilacak: $($atlanan -join ', ')" }
 
         # --- Belge numarasi: kendi serimizin en buyugu + 1 (kilitli) ---
         $son = Deger $tx "SELECT MAX(BELGENO) FROM dbo.SIPARIS WITH (UPDLOCK, HOLDLOCK) WHERE BELGENO LIKE @p" @{ "@p" = "$seri%" }
@@ -206,6 +215,9 @@ try {
     if (-not (Test-Path $DbAnahtarDosyasi)) { Yaz-Log "HATA: $DbAnahtarDosyasi yok."; exit 1 }
     $script:Anahtar = (Get-Content -Path $DbAnahtarDosyasi -TotalCount 1).Trim()
     $aktarilan = @{}
+    $script:EksikKart = @{}
+    $script:SonHata = @{}
+    if (Test-Path $HataDosya) { Get-Content $HataDosya -Encoding UTF8 | ForEach-Object { $p = $_.Split("`t", 2); if ($p[0] -and $p.Count -eq 2) { $script:SonHata[$p[0]] = $p[1] } } }
     if (Test-Path $AktarilanDosya) { Get-Content $AktarilanDosya | ForEach-Object { $p = $_.Split("`t"); if ($p[0]) { $aktarilan[$p[0]] = $_ } } }
 
     $bas = [datetime]::ParseExact($BaslangicTarihi, "yyyy-MM-dd", $Inv)
@@ -254,9 +266,21 @@ try {
         } catch {
             $hata++
             Yaz-Log "HATA: belge $($b.batch_id) ($($b.cari)): $($_.Exception.Message)"
-            if (-not $Deneme) { try { Bildir $b $null "" "hata" $_.Exception.Message } catch {} }
+            # Ayni hata her calismada tekrar bildirilmez (gunluk dolmasin).
+            $mesaj = [string]$_.Exception.Message
+            if (-not $Deneme -and $script:SonHata[[string]$b.batch_id] -ne $mesaj) {
+                try { Bildir $b $null "" "hata" $mesaj; $script:SonHata[[string]$b.batch_id] = $mesaj } catch {}
+            }
         }
     }
+    try {
+        if ($script:EksikKart.Count -gt 0) {
+            $baslik = "ERP'de STOK KARTI ACILACAK URUNLER ($(Get-Date -Format 'yyyy-MM-dd HH:mm')). Kart ayni BARKODLA acilinca belge kendiliginden aktarilir.`r`nBarkod`tUrun`tHareket`tCari (belge)"
+            [System.IO.File]::WriteAllText($EksikKartDosya, $baslik + "`r`n" + (($script:EksikKart.Values | Sort-Object) -join "`r`n") + "`r`n", [System.Text.Encoding]::UTF8)
+            Yaz-Log "UYARI: $($script:EksikKart.Count) urunun ERP'de stok karti yok; bu urunlerin oldugu belgeler bekliyor. Liste: $EksikKartDosya"
+        } elseif (Test-Path $EksikKartDosya) { Remove-Item $EksikKartDosya -ErrorAction SilentlyContinue }
+        if (-not $Deneme) { [System.IO.File]::WriteAllText($HataDosya, (($script:SonHata.Keys | ForEach-Object { "$_`t$($script:SonHata[$_])" }) -join "`r`n"), [System.Text.Encoding]::UTF8) }
+    } catch {}
     Yaz-Log "Bitti: $ok $(if ($Deneme) { 'denendi (yazilmadi)' } else { 'aktarildi' }), $hata hata."
     if ($hata -gt 0) { exit 1 }
 }
