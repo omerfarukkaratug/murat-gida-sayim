@@ -19,8 +19,10 @@
 $SqlServer        = "SERVER\ERP12"
 $VeriTabaniDesen  = "ERP12%"              # yedeklenecek veri tabanlari (LIKE deseni)
 # Birinci kopya SQL Server'in kendi yedek klasorunde durur (SQL'in yazma izni orada var).
-$IkinciKlasor     = "E:\KRT-ERP-Yedek"     # IKINCI kopya: E: diski (eski yedek programi da E:\GUNLUK YEDEKLER kullaniyor). Bos: yok
-$Sakla            = 7                      # her klasorde kac gunluk yedek kalsin
+$IkinciKlasor     = ""                     # IKINCI kopya: baska bilgisayar / ag klasoru (ornek "\\192.168.1.10\DataBase\KRT-ERP-Yedek"). Bos: yok
+$Sakla            = 7                      # ikinci klasorde kac gunluk yedek kalsin
+$SaklaYerel       = 2                      # C: diskinde (SQL yedek klasoru) kac yedek kalsin - C: dar, fazla tutulmaz
+$MinBosMb         = 4096                   # yedekten SONRA C: diskinde en az bu kadar (MB) bos kalmali; kalmayacaksa yedek alinmaz, uyari verilir
 $DbUrl            = "https://wjyqempcmyrmruhdpcwk.supabase.co"
 $DbAnahtarDosyasi = "C:\Scripts\db-anahtar.txt"
 $LogFile          = "C:\Scripts\erp-sql-yedek-log.txt"
@@ -77,8 +79,12 @@ try {
         try { New-Item -ItemType Directory -Path $IkinciKlasor -Force -ErrorAction Stop | Out-Null }
         catch { Yaz-Log "UYARI: ikinci klasor acilamadi ($IkinciKlasor): $($_.Exception.Message) - yedek tek kopya kalacak"; $IkinciKlasor = "" }
     }
+    # Once eski KRT yedekleri silinir (en yeni $SaklaYerel - 1 tanesi kalir), sonra yer kontrol edilir.
+    Get-ChildItem -Path $sqlKlasor -Filter "KRT_*.bak" -ErrorAction SilentlyContinue | Sort-Object LastWriteTime -Descending | Select-Object -Skip ([Math]::Max(0, $SaklaYerel - 1)) |
+        ForEach-Object { Remove-Item $_.FullName -Force -ErrorAction SilentlyContinue; Yaz-Log "Eski yedek silindi: $($_.Name)" }
     $bos = (Get-PSDrive -Name $sqlKlasor.Substring(0, 1)).Free / 1MB
-    if ($bos -lt $toplamMb * 1.2) { throw ("Diskte yer yok: {0:N0} MB bos, yaklasik {1:N0} MB gerekli ({2})" -f $bos, $toplamMb, $sqlKlasor) }
+    $tahmin = [int]($toplamMb * 0.3)   # sikistirilmis yedek ~%15-20; pay birakilir
+    if ($bos - $tahmin -lt $MinBosMb) { throw ("Diskte yer az: {0:N0} MB bos; yedek (~{1:N0} MB) alinirsa {2:N0} MB'tan az kalir. Yedek ALINMADI - C: diskinde yer acin." -f $bos, $tahmin, $MinBosMb) }
 
     $damga = Get-Date -Format "yyyyMMdd_HHmm"
     $alinan = @(); $hatalar = @()
@@ -107,8 +113,8 @@ try {
         Get-ChildItem -Path $k -Filter "KRT_*.bak" -ErrorAction SilentlyContinue | Where-Object { $_.LastWriteTime -lt (Get-Date).AddDays(-$Sakla) } |
             ForEach-Object { Remove-Item $_.FullName -Force -ErrorAction SilentlyContinue; Yaz-Log "Eski yedek silindi: $($_.FullName)" }
     }
-    # SQL klasorundeki kopyalar da $Sakla gunden eski olunca silinir (kopyalari zaten disarida).
-    Get-ChildItem -Path $sqlKlasor -Filter "KRT_*.bak" -ErrorAction SilentlyContinue | Where-Object { $_.LastWriteTime -lt (Get-Date).AddDays(-$Sakla) } |
+    # SQL klasorunde yalniz en yeni $SaklaYerel yedek kalir (C: diski dar).
+    Get-ChildItem -Path $sqlKlasor -Filter "KRT_*.bak" -ErrorAction SilentlyContinue | Sort-Object LastWriteTime -Descending | Select-Object -Skip $SaklaYerel |
         ForEach-Object { Remove-Item $_.FullName -Force -ErrorAction SilentlyContinue }
 
     $ozet = "$($alinan.Count)/$($dblar.Rows.Count) veri tabani yedeklendi ($toplamMb MB)" + $(if ($IkinciKlasor) { ", 2 kopya" } else { ", tek kopya (ikinci klasor ayarlanmadi)" })
