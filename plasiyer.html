@@ -348,6 +348,7 @@
         <button type="button" data-k="once">⭐ Sık aldıkları</button>
         <button type="button" data-k="ozel">🏷️ Özel fiyatlı</button>
         <button type="button" data-k="menu" id="menuAcBtn">🍲 Düğün / Mevlüt</button>
+        <button type="button" data-k="liste" id="listeAcBtn">📷 Listeden</button>
       </div>
       </div>
       <div class="sonuclar" id="urunSonuc"></div>
@@ -444,6 +445,26 @@
           <button type="button" class="ana" id="mnEkle" style="padding:14px; font-size:16px;">Sepete ekle</button>
         </div>
       </div>
+    </div>
+  </div>
+
+  <!-- ===== 📷 LİSTEDEN SİPARİŞ: fotoğraf / ekran görüntüsü / yapıştırılan metin ===== -->
+  <div id="listePerde" class="perde gizli">
+    <div class="pencere" style="max-height:94vh;">
+      <h3><span>📷 Listeden sipariş</span><button type="button" class="kapat" data-kapat="listePerde">✕</button></h3>
+      <div class="ipucu">Müşterinin gönderdiği listeyi okur: WhatsApp ekran görüntüsü, yazılı kâğıt fotoğrafı ya da kopyalanan mesaj. Okuma telefonun içinde yapılır, ücretsizdir; satırlar müşterinin daha önce aldığı ürünlerle eşleştirilir. Ekledikten sonra sepette kontrol et.</div>
+      <div class="satirlar" style="margin-top:10px;">
+        <button type="button" class="ana" id="loFotoBtn">📷 Fotoğraf seç</button>
+        <button type="button" id="loMetinBtn">📋 Metin yapıştır</button>
+      </div>
+      <input type="file" id="loDosya" accept="image/*" class="gizli">
+      <div id="loMetinAlan" class="gizli" style="margin-top:10px;">
+        <textarea id="loMetin" rows="6" placeholder="Her satıra bir ürün, örneğin:&#10;2 koli ayran&#10;5 kg baldo pirinç&#10;Toz şeker 10"></textarea>
+        <button type="button" class="ana tam" id="loMetinOku" style="margin-top:8px;">Oku ve eşleştir</button>
+      </div>
+      <div id="loDurum" class="ipucu" style="margin-top:10px;"></div>
+      <div id="loSonuc"></div>
+      <button type="button" class="ana tam gizli" id="loEkle" style="margin-top:12px; padding:14px; font-size:16px;">🧺 Seçilenleri sepete ekle</button>
     </div>
   </div>
 
@@ -858,6 +879,192 @@
   $('mpArac').addEventListener('click', function(){ perdeKapat('musteriPerde'); belgeAc('arac', seciliMusteri); });
   $('mpTahsilat').addEventListener('click', function(){ perdeKapat('musteriPerde'); tahsilatAc(seciliMusteri); });
 
+  // ---------- 📷 Listeden sipariş: fotoğraf / ekran görüntüsü / metin → ürün eşleştirme ----------
+  // Okuma (OCR) telefonda Tesseract ile yapılır: ücretsiz, anahtar gerekmez, fotoğraf hiçbir yere gönderilmez.
+  // Okuma motoru ilk kullanımda bir kez iner (~5 MB), sonra telefonda saklanır. El yazısında başarı düşüktür;
+  // her satır kontrol için listelenir, emin olunmayanlar işaretsiz gelir.
+  var LO = { satirlar: [], indeks: null, koli: null };
+  var LO_TESS = 'https://cdn.jsdelivr.net/npm/tesseract.js@5.1.1/dist/tesseract.min.js';
+  var loTessSoz = null;
+  function loTessYukle(){
+    if(window.Tesseract) return Promise.resolve(window.Tesseract);
+    if(loTessSoz) return loTessSoz;
+    loTessSoz = new Promise(function(ok, red){
+      var sc = document.createElement('script'); sc.src = LO_TESS; sc.async = true;
+      sc.onload = function(){ window.Tesseract ? ok(window.Tesseract) : red(new Error('Okuma motoru yüklenemedi')); };
+      sc.onerror = function(){ loTessSoz = null; red(new Error('Okuma motoru indirilemedi — internet gerekli (ilk kullanımda)')); };
+      document.head.appendChild(sc);
+    });
+    return loTessSoz;
+  }
+  function listeAc(){ if(!B) return; perdeAc('listePerde'); loCiz(); }
+  $('loFotoBtn').addEventListener('click', function(){ $('loDosya').value = ''; $('loDosya').click(); });
+  $('loMetinBtn').addEventListener('click', function(){ $('loMetinAlan').classList.toggle('gizli'); if(!$('loMetinAlan').classList.contains('gizli')) $('loMetin').focus(); });
+  $('loMetinOku').addEventListener('click', function(){ var t = $('loMetin').value; if(!t.trim()){ toast('Önce metni yapıştır', 'uyari'); return; } loIsle(t); });
+  $('loDosya').addEventListener('change', function(){
+    var f = this.files && this.files[0]; if(!f) return;
+    $('loDurum').textContent = '⏳ Resim hazırlanıyor…'; $('loFotoBtn').disabled = true;
+    var bitti = function(){ $('loFotoBtn').disabled = false; };
+    loResimHazirla(f).then(function(tuval){
+      $('loDurum').textContent = '⏳ Okuma motoru hazırlanıyor… (ilk seferde biraz sürer)';
+      return loTessYukle().then(function(T){
+        return T.recognize(tuval, 'tur', { logger: function(m){
+          if(m && m.status === 'recognizing text') $('loDurum').textContent = '⏳ Okunuyor… %' + Math.round((m.progress || 0) * 100);
+          else if(m && m.status) $('loDurum').textContent = '⏳ ' + (/load|init/i.test(m.status) ? 'Okuma motoru hazırlanıyor… ' : '') + Math.round((m.progress || 0) * 100) + '%';
+        } });
+      });
+    }).then(function(sonuc){
+      bitti(); var metin = (sonuc && sonuc.data && sonuc.data.text) || '';
+      if(!metin.trim()){ $('loDurum').textContent = '❌ Resimde yazı bulunamadı — daha net bir fotoğraf dene ya da metni yapıştır.'; return; }
+      $('loMetin').value = metin; loIsle(metin);
+    }).catch(function(e){ bitti(); $('loDurum').textContent = '❌ ' + ((e && e.message) || e); });
+  });
+  // Okumayı kolaylaştırır: büyük resmi küçültür, griye çevirir, kontrastı açar.
+  function loResimHazirla(f){
+    return new Promise(function(ok, red){
+      var img = new Image(), url = URL.createObjectURL(f);
+      img.onload = function(){
+        var o = Math.min(1, 2200 / Math.max(img.width, img.height)), w = Math.round(img.width * o), h = Math.round(img.height * o);
+        if(Math.max(w, h) < 1000){ var b = 1000 / Math.max(w, h); w = Math.round(w * b); h = Math.round(h * b); }
+        var c = document.createElement('canvas'); c.width = w; c.height = h; var x = c.getContext('2d', { willReadFrequently: true });
+        x.drawImage(img, 0, 0, w, h); URL.revokeObjectURL(url);
+        try {
+          var d = x.getImageData(0, 0, w, h), p = d.data, min = 255, max = 0, i, g;
+          for(i = 0; i < p.length; i += 4){ g = 0.299 * p[i] + 0.587 * p[i + 1] + 0.114 * p[i + 2]; p[i] = g; if(g < min) min = g; if(g > max) max = g; }
+          var ar = Math.max(1, max - min);
+          for(i = 0; i < p.length; i += 4){ g = (p[i] - min) * 255 / ar; p[i] = p[i + 1] = p[i + 2] = g; }
+          x.putImageData(d, 0, 0);
+        } catch(e){}
+        ok(c);
+      };
+      img.onerror = function(){ URL.revokeObjectURL(url); red(new Error('Resim açılamadı')); };
+      img.src = url;
+    });
+  }
+  // ---- Satırı çöz: miktar + birim + ürün yazısı ----
+  var LO_BIRIM = { koli:'koli', kl:'koli', kol:'koli', kasa:'koli', paket:'paket', pk:'paket', pkt:'paket', adet:'adet', ad:'adet', tane:'adet', tn:'adet', kg:'kg', kilo:'kg', kilogram:'kg', cuval:'çuval', cuv:'çuval', cv:'çuval', bidon:'adet', sise:'adet', kutu:'adet' };
+  var LO_BOYUT = /^(gr|g|gram|ml|cl|lt|l|litre|cc|mm|cm|lu|li|lü|lık|lik|luk|lük)$/;
+  function loSatirCoz(ham){
+    var s = String(ham || '').replace(/[|_~`"“”'’]+/g, ' ').replace(/^[\s•·*▪►✓✔\-–—>]+/, '').replace(/^\d{1,2}\s*[.)]\s+(?=\S)/, '').replace(/\s+/g, ' ').trim();
+    if(!s || !/[a-zçğıöşüA-ZÇĞİÖŞÜ]{2,}/.test(s)) return null;
+    var t = norm(s).replace(/(^|\s)[x×*]\s*(\d)/g, '$1$2').replace(/(\d)\s*[x×*](?=\s|$)/g, '$1').replace(/(\d),(\d)/g, '$1.$2');
+    var p = t.split(' ').filter(Boolean), aday = [];
+    for(var i = 0; i < p.length; i++){
+      var m = /^(\d+(?:\.\d+)?)([a-zçğıöşü]*)$/.exec(p[i]); if(!m) continue;
+      var bw = m[2] || (p[i + 1] && (LO_BIRIM[p[i + 1]] || LO_BOYUT.test(p[i + 1])) ? p[i + 1] : '');
+      var tuket = !m[2] && bw ? 1 : 0;
+      aday.push({ i: i, n: tuket, v: Number(m[1]), birim: LO_BIRIM[bw] || '', boyut: !!bw && !LO_BIRIM[bw], bas: i === 0, son: i + tuket === p.length - 1 });
+    }
+    // Miktar seçimi: sayma birimli (koli/adet/paket/çuval) > satır sonundaki çıplak sayı > baştaki çıplak sayı > kg.
+    var sec = aday.filter(function(a){ return a.birim && a.birim !== 'kg'; })[0]
+      || aday.filter(function(a){ return !a.birim && !a.boyut && a.son && a.i > 0; })[0]
+      || aday.filter(function(a){ return !a.birim && !a.boyut && a.bas; })[0]
+      || aday.filter(function(a){ return a.birim === 'kg'; })[0] || null;
+    var miktar = sec ? sec.v : null, birim = sec ? sec.birim : '', kalan = [];
+    for(var k = 0; k < p.length; k++){
+      if(sec && k >= sec.i && k <= sec.i + sec.n) continue;
+      if(/^[x×*]$/.test(p[k]) || LO_BIRIM[p[k]] === 'adet') continue;
+      kalan.push(p[k]);
+    }
+    var sorgu = kalan.join(' ').replace(/\s+/g, ' ').trim();
+    if(!sorgu) return null;
+    return { ham: s, sorgu: sorgu, m: miktar && miktar > 0 && miktar < 100000 ? miktar : 1, birim: birim };
+  }
+  // ---- Eşleştirme: katalog + müşterinin daha önce aldıkları (öne çıkar) ----
+  function loIndeksKur(){
+    LO.indeks = {}; LO.koli = {};
+    katalog.forEach(function(u){ if(!u.t) u.t = u.n.split(' ').filter(Boolean); u.t.forEach(function(w){ if(w.length < 2) return; var k = w.slice(0, 3); (LO.indeks[k] = LO.indeks[k] || []).push(u); }); });
+    Object.keys(katalogBarkod).forEach(function(b){ var u = katalogBarkod[b]; if(u.c > 1 && u.k && !LO.koli[u.k]) LO.koli[u.k] = u.c; });
+  }
+  function loIkili(a){ var r = {}; for(var i = 0; i < a.length - 1; i++){ var g = a.substr(i, 2); r[g] = (r[g] || 0) + 1; } return r; }
+  function loDice(a, b){
+    if(a.length < 2 || b.length < 2) return a === b ? 1 : 0;
+    var x = loIkili(a), y = loIkili(b), ort = 0, top = a.length + b.length - 2;
+    for(var g in x) if(y[g]) ort += Math.min(x[g], y[g]);
+    return 2 * ort / top;
+  }
+  function loTokSkor(q, w){
+    if(q === w) return 1;
+    var qs = /^\d/.test(q), ws = /^\d/.test(w);
+    if(qs || ws) return parseFloat(q) === parseFloat(w) ? 0.9 : 0;
+    if(q.length >= 3 && w.indexOf(q) === 0) return 0.92;
+    if(w.length >= 3 && q.indexOf(w) === 0) return 0.85;
+    var d = loDice(q, w); return d >= 0.55 ? d * 0.9 : 0;
+  }
+  function loEslestir(sorgu){
+    if(!LO.indeks) loIndeksKur();
+    var qt = sorgu.split(' ').filter(function(w){ return w.length >= 2 || /^\d/.test(w); });
+    if(!qt.length) return [];
+    var once = (D.sonFiyat[B.cariKod] || {}).m || {}, aday = new Map();
+    qt.forEach(function(q){ if(/^\d/.test(q)) return; [q.slice(0, 3), q.slice(0, 2)].forEach(function(k, i){ if(i === 1 && q.length > 3) return; (LO.indeks[k] || []).forEach(function(u){ aday.set(u.b, u); }); }); });
+    Object.keys(once).forEach(function(k){ var u = katalogKod[k] || katalogBarkod[k] || (once[k].b && katalogBarkod[once[k].b]); if(u && u.c === 1) aday.set(u.b, u); });
+    var sonuc = [];
+    aday.forEach(function(u){
+      if(!u.t) u.t = u.n.split(' ').filter(Boolean);
+      var top = 0, eslesen = 0;
+      qt.forEach(function(q){ var en = 0; u.t.forEach(function(w){ var x = loTokSkor(q, w); if(x > en) en = x; }); top += en; });
+      u.t.forEach(function(w){ if(qt.some(function(q){ return loTokSkor(q, w) >= 0.8; })) eslesen++; });
+      var skor = 0.82 * (top / qt.length) + 0.18 * (eslesen / Math.max(1, u.t.length));
+      var o = once[u.k] || once[u.b];
+      if(o) skor += 0.08 + Math.min(0.07, (o.kez || 1) * 0.01);
+      if(skor >= 0.4) sonuc.push({ u: u, s: Math.min(1, skor), once: !!o });
+    });
+    sonuc.sort(function(a, b){ return b.s - a.s; });
+    return sonuc.slice(0, 4);
+  }
+  function loIsle(metin){
+    if(!katalog.length){ $('loDurum').textContent = '❌ Ürün listesi telefona inmemiş — önce ana uygulamada katalog güncellensin.'; return; }
+    var satirlar = String(metin).split(/\r?\n|;/).map(loSatirCoz).filter(Boolean).slice(0, 80);
+    LO.satirlar = satirlar.map(function(x){
+      var a = loEslestir(x.sorgu), ilk = a[0];
+      x.adaylar = a; x.sec = ilk && ilk.s >= 0.5 ? 0 : -1; x.isaret = !!(ilk && ilk.s >= 0.72);
+      return x;
+    });
+    var bulunan = LO.satirlar.filter(function(x){ return x.sec >= 0; }).length;
+    $('loDurum').textContent = LO.satirlar.length ? '✅ ' + LO.satirlar.length + ' satır okundu, ' + bulunan + ' tanesi eşleşti. Kontrol et: işaretliler sepete eklenir.' : '❌ Ürün satırı bulunamadı.';
+    loCiz();
+  }
+  function loMiktar(x){ var u = x.sec >= 0 && x.adaylar[x.sec] ? x.adaylar[x.sec].u : null, c = u && x.birim === 'koli' ? (LO.koli && LO.koli[u.k]) || 0 : 0; return { m: c ? x.m * c : x.m, c: c }; }
+  function loCiz(){
+    var l = LO.satirlar;
+    $('loSonuc').innerHTML = l.map(function(x, i){
+      var a = x.adaylar[x.sec], dusuk = a && a.s < 0.72, mk = loMiktar(x);
+      return '<div style="border:1.5px solid ' + (x.sec < 0 ? 'var(--red)' : dusuk ? 'var(--amber)' : 'var(--line)') + '; border-radius:12px; padding:8px 10px; margin-top:8px;">' +
+        '<div style="display:flex; gap:8px; align-items:center;"><input type="checkbox" data-loisaret="' + i + '"' + (x.isaret && x.sec >= 0 ? ' checked' : '') + (x.sec < 0 ? ' disabled' : '') + ' style="width:22px; height:22px; flex:none;">' +
+        '<div style="flex:1; min-width:0; font-size:12px; color:var(--muted);">📝 ' + esc(x.ham) + '</div></div>' +
+        '<select data-losec="' + i + '" style="margin-top:6px; font-size:14px; padding:8px;">' +
+          x.adaylar.map(function(c, j){ return '<option value="' + j + '"' + (j === x.sec ? ' selected' : '') + '>' + (c.once ? '⭐ ' : '') + esc(c.u.a) + ' (%' + Math.round(c.s * 100) + ')</option>'; }).join('') +
+          '<option value="-1"' + (x.sec < 0 ? ' selected' : '') + '>— eşleşme yok / atla —</option></select>' +
+        '<div style="display:flex; gap:8px; align-items:center; margin-top:6px;"><input data-lom="' + i + '" inputmode="decimal" value="' + esc(String(x.m).replace('.', ',')) + '" style="width:90px; flex:none; text-align:center; font-family:var(--mono); font-weight:800; padding:8px;">' +
+        '<span style="font-size:13px; color:var(--muted); flex:1;">' + (x.birim ? esc(x.birim) : 'adet') + (mk.c ? ' = <b>' + esc(String(mk.m).replace('.', ',')) + ' adet</b> (koli ' + mk.c + ')' : x.birim === 'koli' ? ' <span class="uyari">(koli içi bilinmiyor — adet olarak eklenir)</span>' : '') + '</span>' +
+        '<button type="button" class="kucuk" data-loara="' + i + '" style="flex:none;">🔎 Ara</button></div>' +
+        (x.sec < 0 ? '<div class="hata" style="font-size:12px; margin-top:4px;">Eşleşen ürün bulunamadı — 🔎 Ara ile elle seç</div>' : dusuk ? '<div class="uyari" style="font-size:12px; margin-top:4px;">Emin değilim — kontrol edip işaretle</div>' : '') + '</div>';
+    }).join('');
+    var n = l.filter(function(x){ return x.isaret && x.sec >= 0; }).length;
+    $('loEkle').classList.toggle('gizli', !l.length); $('loEkle').textContent = '🧺 Seçilenleri sepete ekle (' + n + ')'; $('loEkle').disabled = !n;
+  }
+  $('loSonuc').addEventListener('change', function(e){
+    var t = e.target, i;
+    if(t.hasAttribute('data-loisaret')){ i = +t.getAttribute('data-loisaret'); LO.satirlar[i].isaret = t.checked; loCiz(); return; }
+    if(t.hasAttribute('data-losec')){ i = +t.getAttribute('data-losec'); var x = LO.satirlar[i]; x.sec = +t.value; x.isaret = x.sec >= 0; loCiz(); return; }
+    if(t.hasAttribute('data-lom')){ i = +t.getAttribute('data-lom'); var m = Number(String(t.value).replace(',', '.')); if(m > 0) LO.satirlar[i].m = m; loCiz(); }
+  });
+  $('loSonuc').addEventListener('click', function(e){
+    var b = e.target.closest('[data-loara]'); if(!b) return;
+    var x = LO.satirlar[+b.getAttribute('data-loara')];
+    perdeKapat('listePerde'); $('urunAra').value = x.sorgu; urunAraCiz(); $('urunAra').focus();
+    toast('Listeden seç; sonra 📷 Listeden ile kalan satırlara dön', 'bilgi');
+  });
+  $('loEkle').addEventListener('click', function(){
+    var n = 0;
+    LO.satirlar.forEach(function(x){ if(!x.isaret || x.sec < 0) return; var a = x.adaylar[x.sec]; if(!a) return; kalemEkle(a.u, loMiktar(x).m, true); n++; });
+    if(!n) return;
+    LO.satirlar = LO.satirlar.filter(function(x){ return !(x.isaret && x.sec >= 0); });
+    kaydetD(); kalemCiz(); urunAraCiz(); loCiz();
+    if(!LO.satirlar.length){ perdeKapat('listePerde'); $('loDurum').textContent = ''; }
+    toast(n + ' ürün sepete eklendi — sepette kontrol et', 'iyi');
+  });
+
   // ---------- Müşteriye son satış fiyatları (ERP) ----------
   function sonFiyatCek(kod, cb){
     var c = D.sonFiyat[kod];
@@ -975,6 +1182,7 @@
   $('urunKaynak').addEventListener('click', function(e){
     var b = e.target.closest('button'); if(!b) return;
     if(b.getAttribute('data-k') === 'menu'){ menuAc(); return; }
+    if(b.getAttribute('data-k') === 'liste'){ listeAc(); return; }
     urunKaynak = b.getAttribute('data-k');
     this.querySelectorAll('button').forEach(function(x){ x.classList.toggle('on', x === b); });
     urunAraCiz();
