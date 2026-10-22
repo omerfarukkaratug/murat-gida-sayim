@@ -412,6 +412,7 @@
   /* Mal Giriş / Mal Çıkış */
   .segRow{display:flex; background:var(--panel2); border-radius:12px; padding:4px; gap:4px;}
   .segBtn{flex:1; background:transparent; color:var(--muted); font-size:13px; font-weight:800; padding:12px 4px; border-radius:9px;}
+  #malHareketBelgeSeg .segBtn{font-size:12px; line-height:1.25; padding:9px 4px;}
   .segBtn.active{background:var(--panel); color:var(--text); box-shadow:var(--sh-sm);}
   .selectBox{width:100%; background:var(--panel2); border:1.5px solid transparent; border-radius:var(--r-sm); padding:12px 13px; font-size:15px; color:var(--text); font-family:var(--sans);}
   .cariResults{margin-top:6px; background:var(--panel); border:1.5px solid var(--line); border-radius:var(--r-sm); max-height:calc(40 * var(--eh)); overflow-y:auto; box-shadow:var(--sh-md);}
@@ -430,7 +431,7 @@
   <header style="border:none; padding:0 0 16px; background:transparent; display:flex; align-items:flex-start; justify-content:space-between;">
     <div>
       <h1><img src="logo-header.png" alt="Murat Gıda" style="height:30px; width:auto; display:block;"></h1>
-      <div class="sub"><img src="icon.svg" alt="" style="width:15px;height:15px;vertical-align:-3px;margin-right:5px;">KRT Saha · Murat Gıda • offline • Android • build 251</div>
+      <div class="sub"><img src="icon.svg" alt="" style="width:15px;height:15px;vertical-align:-3px;margin-right:5px;">KRT Saha · Murat Gıda • offline • Android • build 252</div>
     </div>
     <button type="button" id="themeToggleBtn" title="Tema seç" style="background:var(--panel2); border:1.5px solid var(--line); color:var(--text); width:34px; height:34px; border-radius:50%; font-size:15px; padding:0; display:flex; align-items:center; justify-content:center; flex-shrink:0;">🎨</button>
   </header>
@@ -4174,7 +4175,8 @@
   // • Yarım kalan kayıt telefonda TASLAK olarak saklanır; uygulama kapansa da kaybolmaz.
   // • Kayıt sunucuya yazılınca telefon sunucudan ONAY ister (mal_kontrol) — onay gelmeden
   //   "kaydedildi" denmez, taslak silinmez. Tekrar gönderim çift kayıt oluşturmaz (Kayıt ID).
-  var MAL_BELGE = { giris: ['Alış İrsaliyesi', 'Alış Fişi'], cikis: ['Satış İrsaliyesi', 'Satış Fişi'] };
+  // İrsaliye türleri ERP12'ye doğrudan aynı türde irsaliye olarak aktarılır (ERP bilgisayarındaki siparis-aktar.ps1).
+  var MAL_BELGE = { giris: ['Alış İrsaliyesi', 'Satıştan İade İrsaliyesi', 'Alış Fişi'], cikis: ['Satış İrsaliyesi', 'Alıştan İade İrsaliyesi', 'Satış Fişi'] };
   var MAL_SEBEPLER = ['Satış', 'Tedarikçiye iade', 'Fire / zayi', 'Şubeler arası transfer', 'Sayım farkı / düzeltme', 'Diğer'];
 
   var malScreenEl = document.getElementById('malHareketScreen');
@@ -5875,6 +5877,11 @@
     var btn = e.target.closest('.segBtn');
     if(!btn) return;
     malBelge = btn.getAttribute('data-belge');
+    // Çıkış sebebi belge türünden: alıştan iade = tedarikçiye iade, satış irsaliyesi = satış.
+    if(malTip === 'cikis'){
+      if(malBelge === 'Alıştan İade İrsaliyesi') malSebepSelectEl.value = 'Tedarikçiye iade';
+      else if(malBelge === 'Satış İrsaliyesi' && (!malSebepSelectEl.value || malSebepSelectEl.value === 'Tedarikçiye iade')) malSebepSelectEl.value = 'Satış';
+    }
     renderBelgeSeg();
   });
 
