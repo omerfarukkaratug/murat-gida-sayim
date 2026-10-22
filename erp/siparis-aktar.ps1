@@ -39,6 +39,12 @@ $AktarilanDosya   = "C:\Scripts\siparis-aktarilan.txt"
 # Kart ERP'de ayni barkodla acilinca bir sonraki calismada belge kendiliginden aktarilir.
 $EksikKartDosya   = "C:\Scripts\acilacak-stok-kartlari.txt"
 $HataDosya        = "C:\Scripts\siparis-aktar-hata.txt"
+# STOK KARTI OLMAYAN URUN: ERP'deki sablon karttan (MK SAHA SABLON, barkod MKSABLON / 99999001) kopyalanarak
+# gecici kart acilir (KDV, grup, birim sablondaki gibi; fiyat 0; stok kodu MKS-000001...). Muhasebe sonra duzenler.
+# Terazi barkodu (13 haneli 27/28/29 ile baslayan ya da 7 ve daha kisa) ve barkodsuz urune kart ACILMAZ.
+$KartAc           = $true
+$KartSeri         = "MKS-"
+$AcilanKartDosya  = "C:\Scripts\acilan-stok-kartlari.txt"
 # Bu tarihten ONCE telefonda olusturulan belgeler aktarilmaz (gecmisi doldurmasin).
 $BaslangicTarihi  = "2026-10-21"
 $BekleDakika      = 10
@@ -100,6 +106,63 @@ function Ekle($tx, $tablo, $kolonlar, $deger) {
     [void](Sql $tx $sql $p).ExecuteNonQuery()
 }
 
+# Sablon satirini kopyalar: tablonun tum sutunlari sablondan, $ust'teki sutunlar verilen degerle.
+function Kopyala($tx, $tablo, $kaynakId, $ust) {
+    $kol = @((Tablo $tx "SELECT c.name FROM sys.columns c JOIN sys.types y ON y.user_type_id = c.user_type_id WHERE c.object_id = OBJECT_ID('dbo.$tablo') AND c.is_computed = 0 AND c.is_identity = 0 AND y.name NOT IN ('timestamp','rowversion') ORDER BY c.column_id" $null).Rows | ForEach-Object { [string]$_.name })
+    $p = @{ "@kaynak" = $kaynakId }; $sec = @()
+    foreach ($k in $kol) { if ($ust.ContainsKey($k)) { $p["@u_$k"] = $ust[$k]; $sec += "@u_$k" } else { $sec += "[$k]" } }
+    $sql = "INSERT INTO dbo.[$tablo] (" + (($kol | ForEach-Object { "[$_]" }) -join ", ") + ") SELECT " + ($sec -join ", ") + " FROM dbo.[$tablo] WHERE ID = @kaynak"
+    $n = (Sql $tx $sql $p).ExecuteNonQuery()
+    if ($n -ne 1) { throw "$tablo kopyalanamadi (sablon satiri $kaynakId)" }
+}
+# ERP'nin her yeni kayit icin tuttugu sayac kaydi (hangi tablo, hangi bilgisayar).
+function Sayac($tx, $id, $tablo, $kodPc) {
+    if ($kodPc -eq $null) { return }
+    [void](Sql $tx "IF NOT EXISTS (SELECT 1 FROM dbo.SEQUNCES WHERE ID = @i) INSERT INTO dbo.SEQUNCES (ID, TABLO, KOD_PC) VALUES (@i, @t, @p)" @{ "@i" = $id; "@t" = $tablo; "@p" = $kodPc }).ExecuteNonQuery()
+}
+function Terazi($bar) { return ($bar.Length -le 7) -or ($bar.Length -eq 13 -and @("27","28","29") -contains $bar.Substring(0, 2)) }
+# Stok karti olmayan urune sablondan gecici kart acar. Doner: yeni STOK ID ya da $null (acilamazsa).
+function Kart-Ac($tx, $r, $b) {
+    if (-not $KartAc) { return $null }
+    $bar = ([string]$r.barkod).Trim()
+    if (-not $bar -or $bar.Length -gt 20 -or (Terazi $bar)) { return $null }
+    $sab = Deger $tx "SELECT TOP 1 STOK FROM dbo.STOK_BARKOD_BIRIM WHERE BARKOD IN ('MKSABLON', '99999001') ORDER BY CASE WHEN BARKOD = 'MKSABLON' THEN 0 ELSE 1 END" $null
+    if (-not $sab) { throw "Sablon stok karti bulunamadi: ERP'de 'MK SAHA SABLON' kartini barkod MKSABLON (ya da 99999001) ile acin" }
+    $sabBirim = Deger $tx "SELECT TOP 1 ID FROM dbo.STOK_STOK_BIRIM WHERE STOK = @s ORDER BY VARSAYILAN DESC, ID" @{ "@s" = $sab }
+    $sabBarkod = Deger $tx "SELECT TOP 1 ID FROM dbo.STOK_BARKOD WHERE STOK_STOK_BIRIM = @u ORDER BY ID" @{ "@u" = $sabBirim }
+    if (-not $sabBirim -or -not $sabBarkod) { throw "Sablon stok kartinin birimi / barkodu eksik" }
+    $sabFiyat = @((Tablo $tx "SELECT ID FROM dbo.STOK_STOK_BIRIM_FIYAT WHERE STOK_STOK_BIRIM = @u ORDER BY ID" @{ "@u" = $sabBirim }).Rows | ForEach-Object { $_.ID })
+    $kodPc = Deger $tx "SELECT KOD_PC FROM dbo.SEQUNCES WHERE ID = @s" @{ "@s" = $sab }
+    # Stok kodu: kendi serimiz (MKS-000001...), kilitli
+    $son = Deger $tx "SELECT MAX(KOD) FROM dbo.STOK WITH (UPDLOCK, HOLDLOCK) WHERE KOD LIKE @p" @{ "@p" = "$KartSeri%" }
+    $no = 1; if ($son) { $no = [int]([string]$son).Substring($KartSeri.Length) + 1 }
+    $kod = $KartSeri + $no.ToString("000000")
+    $ad = ([string]$r.urun_adi).Trim()
+    if (-not $ad -or $ad -match '^\s*.simsiz') { $ad = "MK SAHA YENI URUN $bar" }
+    $ad = Kisalt $ad 100
+    $sira = $null
+    if ([int](Deger $tx "SELECT COUNT(*) FROM sys.sequences WHERE name = 'SATIR_NO'" $null) -gt 0) { $sira = [long](Deger $tx "SELECT NEXT VALUE FOR dbo.SATIR_NO" $null) }
+    else { $sira = [long](Deger $tx "SELECT ISNULL(MAX(SIRA), 0) + 1 FROM dbo.STOK" $null) }
+    $sid = [long](Deger $tx "SELECT NEXT VALUE FOR dbo.ID" $null)
+    Kopyala $tx "STOK" $sab @{ ID = $sid; KOD = $kod; AD = $ad; SIRA = $sira }
+    Sayac $tx $sid "STOK" $kodPc
+    $uid = [long](Deger $tx "SELECT NEXT VALUE FOR dbo.ID" $null)
+    Kopyala $tx "STOK_STOK_BIRIM" $sabBirim @{ ID = $uid; STOK = $sid }
+    Sayac $tx $uid "STOK_STOK_BIRIM" $kodPc
+    foreach ($f in $sabFiyat) {
+        $fid = [long](Deger $tx "SELECT NEXT VALUE FOR dbo.ID" $null)
+        Kopyala $tx "STOK_STOK_BIRIM_FIYAT" $f @{ ID = $fid; STOK_STOK_BIRIM = $uid; FIYAT = [decimal]0 }
+        Sayac $tx $fid "STOK_STOK_BIRIM_FIYAT" $kodPc
+    }
+    $bid = [long](Deger $tx "SELECT NEXT VALUE FOR dbo.ID" $null)
+    $bsira = [int](Deger $tx "SELECT ISNULL(MAX(unboundSIRA), 0) + 1 FROM dbo.STOK_BARKOD WITH (UPDLOCK, HOLDLOCK)" $null)
+    Kopyala $tx "STOK_BARKOD" $sabBarkod @{ ID = $bid; STOK_STOK_BIRIM = $uid; BARKOD = $bar; unboundSIRA = $bsira }
+    Sayac $tx $bid "STOK_BARKOD" $kodPc
+    [void]$script:AcilanKart.Add(("{0}`t{1}`t{2}`t{3}`t{4} x {5}`t{6} ({7})" -f (Get-Date -Format "yyyy-MM-dd HH:mm"), $kod, $bar, $ad, $b.tip, $r.miktar, $b.cari, $b.belge_turu))
+    Yaz-Log "$(if ($Deneme) { 'DENEME: acilacakti' } else { 'YENI STOK KARTI' }): $kod / $bar / $ad (sablondan, fiyat 0)"
+    return $sid
+}
+
 # Bir telefon belgesini ERP'ye yaz. Doner: @{ id; belge; uyari }
 function Belge-Yaz($baglanti, $b) {
     $giris = ([string]$b.tip).StartsWith("G")
@@ -128,7 +191,9 @@ function Belge-Yaz($baglanti, $b) {
         $satirlar = New-Object System.Collections.ArrayList
         $atlanan = New-Object System.Collections.ArrayList
         foreach ($r in @($b.satirlar)) {
-            $bb = Tablo $tx "SELECT TOP 1 bb.STOK, bb.STOK_BIRIM, s.KOD, ISNULL(v.$kdvKolon, 0) AS KDV FROM dbo.STOK_BARKOD_BIRIM bb JOIN dbo.STOK s ON s.ID = bb.STOK LEFT JOIN dbo.STOK_VERGI v ON v.ID = s.STOK_VERGI WHERE bb.BARKOD = @b" @{ "@b" = [string]$r.barkod }
+            $bbSql = "SELECT TOP 1 bb.STOK, bb.STOK_BIRIM, s.KOD, ISNULL(v.$kdvKolon, 0) AS KDV FROM dbo.STOK_BARKOD_BIRIM bb JOIN dbo.STOK s ON s.ID = bb.STOK LEFT JOIN dbo.STOK_VERGI v ON v.ID = s.STOK_VERGI WHERE bb.BARKOD = @b"
+            $bb = Tablo $tx $bbSql @{ "@b" = [string]$r.barkod }
+            if ($bb.Rows.Count -eq 0 -and (Kart-Ac $tx $r $b)) { $bb = Tablo $tx $bbSql @{ "@b" = ([string]$r.barkod).Trim() } }
             if ($bb.Rows.Count -eq 0) {
                 # Aciklamada okunakli satir: "1) 8690123456789 - URUN ADI - 12 adet" (barkod yoksa yazilmaz)
                 $mikYazi = ([decimal]$r.miktar).ToString("0.###", $Inv)
@@ -153,7 +218,7 @@ function Belge-Yaz($baglanti, $b) {
                 kdv = $kdv; miktar = $miktar; fiyat = $fiyat; dahil = $dahil; tutar = $tutar; dahilTutar = (Yuvarla ($dahil * $miktar) 4)
                 kdvTutar = (Yuvarla ($tutar * $kdv / 100) 4); sonAlis = $sonAlis; ad = [string]$r.urun_adi })
         }
-        # Stok karti olmayan urun ERP'de STOK ACILMAZ: siparisin ACIKLAMASINA barkod + ad + adet yazilir (KARTI OLMAYAN URUNLER: ...),
+        # Stok karti olmayan urune once sablondan kart acilir (Kart-Ac). Acilamayanlar (terazi / barkodsuz) ACIKLAMAYA yazilir (KARTI OLMAYAN URUNLER: ...),
         # liste acilacak-stok-kartlari.txt dosyasina da yazilir. Hic karti olan urun yoksa belge bekler.
         if ($satirlar.Count -eq 0) { throw "Belgedeki urunlerin hicbirinin ERP'de stok karti yok: $($atlanan -join ', ')" }
 
@@ -192,6 +257,7 @@ function Belge-Yaz($baglanti, $b) {
         $satirToplam = ($satirlar | ForEach-Object { $_.tutar } | Measure-Object -Sum).Sum
         $kdvToplam = ($satirlar | ForEach-Object { $_.kdvTutar } | Measure-Object -Sum).Sum
         $genel = ($satirlar | ForEach-Object { $_.dahilTutar } | Measure-Object -Sum).Sum
+        $sipPc = Deger $tx "SELECT TOP 1 KOD_PC FROM dbo.SEQUNCES WHERE TABLO = 'SIPARIS' ORDER BY ID DESC" $null
         Ekle $tx "SIPARIS" $SIP_KOLON @{ ID = $id; SIPARIS_TURU = $tur; LOKASYON = $lokasyon; CARI = $cari; CARI_ADRES = $adres; PROJE = $proje
             BELGENO = $belgeNo; SIPARIS_TARIHI = $tarih; TERMIN_TARIHI = $tarih.Date.AddDays(1); ISLEM_TARIHI = (Get-Date); VADE_TARIHI = $tarih.Date
             DOVIZ_AD = 1; DOVIZ_KUR = 1; CARI_PERSONEL = 0; SATIR_TOPLAM = (Yuvarla $satirToplam 2); SATIR_ISKONTO_TOPLAM = 0
@@ -201,6 +267,7 @@ function Belge-Yaz($baglanti, $b) {
             GONDERIM_ADRESI = $adres; ONAYLI = $true; VADE_SECENEKLERI = $(if ($giris) { 17 } else { 7 }); BELGE_YETKILISI = 0; YAZILDI = $false; EMAIL_GONDERILDI = $false
             NAKLIYE_ODEME_TIPI = 0; SEVK_SEKLI = 0; KARSI_SIPARIS_NO = ""; ARTTIRIM = 0; DOVIZ_KUR_SECIMI = 2; FIS_ODEME_TIPI_ISKONTOLARI = $(if ($giris) { 0 } else { 1 })
             IHRACAT_GONDERIM_SEKLI = 0; IHRACAT_TESLIM_SEKLI = 0; FIS_ALT_TIPI = 1 }
+        Sayac $tx $id "SIPARIS" $sipPc
 
         # --- Satirlar ---
         foreach ($s in $satirlar) {
@@ -214,6 +281,7 @@ function Belge-Yaz($baglanti, $b) {
                 HESAPLANAN_FIYAT = $s.fiyat; YEREL_FIYAT = $s.fiyat; ACIKLAMA = ""; KOD = $s.kod; ONERILEN_FIYAT = 0; JOKER = ""
                 AMBALAJ_BIRIM = $s.birim; AMBALAJ_MIKTAR = $s.miktar; AMBALAJ_CARPAN = 1; FK_STOK_TEVKIF_LESTE = 0; FK_PERSONEL = 0
                 ALT_BIRIM_MIKTARI = $s.miktar; SEVK_ADRES = 0; BUNDLE_DETAY = 0; KT_BUNDLE_FIYAT = 0; LISTE_FIYATI = 0 }
+            Sayac $tx $did "SIPARIS_DETAY" $sipPc
         }
         $uyari = if ($atlanan.Count -gt 0) { "Stok karti olmayan urunler aciklamaya yazildi: " + ($atlanan -join ", ") } else { "" }
         if ($Deneme) {
@@ -235,6 +303,7 @@ try {
     $script:Anahtar = (Get-Content -Path $DbAnahtarDosyasi -TotalCount 1).Trim()
     $aktarilan = @{}
     $script:EksikKart = @{}
+    $script:AcilanKart = New-Object System.Collections.ArrayList
     $script:SonHata = @{}
     if (Test-Path $HataDosya) { Get-Content $HataDosya -Encoding UTF8 | ForEach-Object { $p = $_.Split("`t", 2); if ($p[0] -and $p.Count -eq 2) { $script:SonHata[$p[0]] = $p[1] } } }
     if (Test-Path $AktarilanDosya) { Get-Content $AktarilanDosya | ForEach-Object { $p = $_.Split("`t"); if ($p[0]) { $aktarilan[$p[0]] = $_ } } }
@@ -266,6 +335,19 @@ try {
         if (-not $Database) { $Database = $adaylar[0] }
     }
     $baglanti.ChangeDatabase($Database)
+    # Onceki surumle yazilan MK SAHA siparislerinin eksik sayac (SEQUNCES) kayitlari bir kez tamamlanir.
+    if (-not $Deneme) {
+        try {
+            $otx = $baglanti.BeginTransaction()
+            $pc = Deger $otx "SELECT TOP 1 KOD_PC FROM dbo.SEQUNCES WHERE TABLO = 'SIPARIS' ORDER BY ID DESC" $null
+            if ($pc -ne $null) {
+                $n1 = (Sql $otx "INSERT INTO dbo.SEQUNCES (ID, TABLO, KOD_PC) SELECT s.ID, 'SIPARIS', @p FROM dbo.SIPARIS s WHERE s.BELGENO LIKE 'MK SAHA%' AND NOT EXISTS (SELECT 1 FROM dbo.SEQUNCES q WHERE q.ID = s.ID)" @{ "@p" = $pc }).ExecuteNonQuery()
+                $n2 = (Sql $otx "INSERT INTO dbo.SEQUNCES (ID, TABLO, KOD_PC) SELECT d.ID, 'SIPARIS_DETAY', @p FROM dbo.SIPARIS_DETAY d JOIN dbo.SIPARIS s ON s.ID = d.SIPARIS WHERE s.BELGENO LIKE 'MK SAHA%' AND NOT EXISTS (SELECT 1 FROM dbo.SEQUNCES q WHERE q.ID = d.ID)" @{ "@p" = $pc }).ExecuteNonQuery()
+                if ($n1 + $n2 -gt 0) { Yaz-Log "Onceki MK SAHA siparisleri icin $($n1 + $n2) sayac kaydi tamamlandi" }
+            }
+            $otx.Commit()
+        } catch { try { $otx.Rollback() } catch {}; Yaz-Log "UYARI: sayac tamamlama yapilamadi: $($_.Exception.Message)" }
+    }
     Yaz-Log "$(if ($Deneme) { 'DENEME - ' })ERP veri tabani: $Database, $($belgeler.Count) belge"
     $ok = 0; $hata = 0
     foreach ($b in $belgeler) {
@@ -293,6 +375,11 @@ try {
         }
     }
     try {
+        if (-not $Deneme -and $script:AcilanKart.Count -gt 0) {
+            if (-not (Test-Path $AcilanKartDosya)) { [System.IO.File]::WriteAllText($AcilanKartDosya, "MK SAHA'NIN ACTIGI GECICI STOK KARTLARI - muhasebe KDV / grup / ad / fiyati duzenlesin`r`nTarih`tStok kodu`tBarkod`tAd`tHareket`tCari (belge)`r`n", [System.Text.Encoding]::UTF8) }
+            [System.IO.File]::AppendAllText($AcilanKartDosya, (($script:AcilanKart) -join "`r`n") + "`r`n", [System.Text.Encoding]::UTF8)
+            Yaz-Log "$($script:AcilanKart.Count) yeni stok karti acildi. Liste: $AcilanKartDosya"
+        }
         if ($script:EksikKart.Count -gt 0) {
             $baslik = "ERP'de STOK KARTI OLMAYAN URUNLER ($(Get-Date -Format 'yyyy-MM-dd HH:mm')). Siparisin aciklamasinda 'KARTI OLMAYAN URUNLER' basliginda yaziyor; faturaya cevirirken kart acip satiri elle ekleyin.`r`nBarkod`tUrun`tHareket`tCari (belge)"
             [System.IO.File]::WriteAllText($EksikKartDosya, $baslik + "`r`n" + (($script:EksikKart.Values | Sort-Object) -join "`r`n") + "`r`n", [System.Text.Encoding]::UTF8)
