@@ -30,6 +30,9 @@ $AppsScriptUrl = "https://script.google.com/macros/s/AKfycbwH0hVGDXIQhdSxg2neDBN
 $AnaKlasor     = ""
 $GirisDosyasi  = "C:\Scripts\mal-indir-giris.txt"
 $LogFile       = "C:\Scripts\mal-indir-log.txt"
+# IRSALIYELER Excel'e INMEZ: siparis-aktar.ps1 onlari ERP'ye dogrudan irsaliye olarak yazar (iki kez girmesin).
+# Excel'e inenler: Alis Fisi, Satis Fisi ve sebebi Satis olmayan cikislar (fire, transfer, sayim farki...).
+$IrsaliyeleriAtla = $true
 # --------------------------------------------------------------------------------
 
 try { [Net.ServicePointManager]::SecurityProtocol = [Net.ServicePointManager]::SecurityProtocol -bor [Net.SecurityProtocolType]::Tls12 } catch {}
@@ -98,6 +101,13 @@ try {
         $tamamlanan = @()
         foreach ($b in $kayitlar) {
             try {
+                $bt = [string]$b.belgeTuru; $sb = [string]$b.sebep
+                $erpye = ($bt -match 'rsaliye') -and -not ($bt -match '^Sat' -and $bt -notmatch 'ade' -and $sb -and $sb -notmatch '^Sat')
+                if ($IrsaliyeleriAtla -and $erpye) {
+                    $tamamlanan += [string]$b.batchId
+                    Yaz-Log ("ATLANDI (ERP'ye irsaliye olarak otomatik gidiyor): " + $b.ad)
+                    continue
+                }
                 if (-not $b.xlsx) { Yaz-Log ("ATLANDI: " + $b.ad + " - sunucu Excel dosyasi gondermedi (Code.gs build 174 dagitildi mi?)"); continue }
                 $klasorAdi = if ($b.klasor) { Temiz-Ad $b.klasor } elseif ($b.hareket -match '^[CcÇç]') { "Mal Cikis" } else { "Mal Alis" }
                 $klasor = Join-Path $AnaKlasor $klasorAdi

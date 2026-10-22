@@ -47,7 +47,7 @@ $KartSeri         = "MKS-"
 $AcilanKartDosya  = "C:\Scripts\acilan-stok-kartlari.txt"
 # Bu tarihten ONCE telefonda olusturulan belgeler aktarilmaz (gecmisi doldurmasin).
 $BaslangicTarihi  = "2026-10-21"
-$BekleDakika      = 10
+$BekleDakika      = 2
 $SeriVerilen      = "MK SAHA G-"
 $SeriAlinan       = "MK SAHA C-"
 # AKTARIM TURU: "IRSALIYE" = telefondaki irsaliye turu ERP'ye AYNI TURDE irsaliye olarak yazilir (stogu etkiler):
@@ -477,7 +477,7 @@ try {
     }
 
     $belgeler = @($is.belgeler | Where-Object { $_ })
-    if ($belgeler.Count -eq 0) { Yaz-Log "Aktarilacak belge yok."; exit 0 }
+    if ($belgeler.Count -eq 0) { Write-Host "Aktarilacak belge yok."; exit 0 }   # dakikada bir calisir: log'a yazilmaz
 
     $baglanti = New-Object System.Data.SqlClient.SqlConnection("Server=$SqlServer;Database=master;Integrated Security=SSPI;")
     $baglanti.Open()
