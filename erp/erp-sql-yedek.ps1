@@ -35,7 +35,7 @@ function Bildir($durum, $mesaj) {
         $anahtar = (Get-Content -Path $DbAnahtarDosyasi -TotalCount 1).Trim()
         $govde = @{ p_ad = "erp_sql_yedek"; p_mesaj = ($durum + ": " + $mesaj); p_baslangic = $null } | ConvertTo-Json -Compress
         [void](Invoke-RestMethod -Uri "$DbUrl/rest/v1/rpc/erp_nabiz_yaz" -Method Post -Body ([Text.Encoding]::UTF8.GetBytes($govde)) `
-            -ContentType "application/json; charset=utf-8" -Headers @{ apikey = $anahtar } -TimeoutSec 60)
+            -ContentType "application/json; charset=utf-8" -Headers @{ apikey = $anahtar } -TimeoutSec 60 -UserAgent "MK-Sayim/1.0")
     } catch { Yaz-Log "Not: KRT Saha'ya bildirilemedi ($($_.Exception.Message))" }
 }
 
