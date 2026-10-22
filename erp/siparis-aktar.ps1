@@ -130,7 +130,10 @@ function Belge-Yaz($baglanti, $b) {
         foreach ($r in @($b.satirlar)) {
             $bb = Tablo $tx "SELECT TOP 1 bb.STOK, bb.STOK_BIRIM, s.KOD, ISNULL(v.$kdvKolon, 0) AS KDV FROM dbo.STOK_BARKOD_BIRIM bb JOIN dbo.STOK s ON s.ID = bb.STOK LEFT JOIN dbo.STOK_VERGI v ON v.ID = s.STOK_VERGI WHERE bb.BARKOD = @b" @{ "@b" = [string]$r.barkod }
             if ($bb.Rows.Count -eq 0) {
-                [void]$atlanan.Add("$($r.barkod) $($r.urun_adi) x $($r.miktar)")
+                # Aciklamada okunakli satir: "1) 8690123456789 - URUN ADI - 12 adet" (barkod yoksa yazilmaz)
+                $mikYazi = ([decimal]$r.miktar).ToString("0.###", $Inv)
+                $parca = @(); if ([string]$r.barkod) { $parca += [string]$r.barkod }; $parca += ([string]$r.urun_adi).Trim(); $parca += "$mikYazi adet"
+                [void]$atlanan.Add("$($atlanan.Count + 1)) " + ($parca -join " - "))
                 $script:EksikKart["$($r.barkod)"] = ("{0}`t{1}`t{2} x {3}`t{4} ({5})" -f $r.barkod, $r.urun_adi, $b.tip, $r.miktar, $b.cari, $b.belge_turu)
                 continue
             }
@@ -150,7 +153,7 @@ function Belge-Yaz($baglanti, $b) {
                 kdv = $kdv; miktar = $miktar; fiyat = $fiyat; dahil = $dahil; tutar = $tutar; dahilTutar = (Yuvarla ($dahil * $miktar) 4)
                 kdvTutar = (Yuvarla ($tutar * $kdv / 100) 4); sonAlis = $sonAlis; ad = [string]$r.urun_adi })
         }
-        # Stok karti olmayan urun ERP'de STOK ACILMAZ: siparisin ACIKLAMASINA barkod + ad + adet yazilir (KARTSIZ: ...),
+        # Stok karti olmayan urun ERP'de STOK ACILMAZ: siparisin ACIKLAMASINA barkod + ad + adet yazilir (KARTI OLMAYAN URUNLER: ...),
         # liste acilacak-stok-kartlari.txt dosyasina da yazilir. Hic karti olan urun yoksa belge bekler.
         if ($satirlar.Count -eq 0) { throw "Belgedeki urunlerin hicbirinin ERP'de stok karti yok: $($atlanan -join ', ')" }
 
@@ -162,7 +165,7 @@ function Belge-Yaz($baglanti, $b) {
 
         # --- Aciklama (sutun uzunluguna gore) ---
         $acikMax = Deger $tx "SELECT max_length / 2 FROM sys.columns WHERE object_id = OBJECT_ID('dbo.SIPARIS') AND name = 'ACIKLAMA'" $null
-        $kartsiz = if ($atlanan.Count -gt 0) { "KARTSIZ: " + ($atlanan -join "; ") + " / " } else { "" }
+        $kartsiz = if ($atlanan.Count -gt 0) { "KARTI OLMAYAN URUNLER: " + ($atlanan -join "  ") + "  //  " } else { "" }
         $acik = $kartsiz + ("MK Saha: " + (@([string]$b.belge_turu, [string]$b.belge_no) | Where-Object { $_ }) -join " ") + " / $($b.personel)"
         if ([string]$b.sebep) { $acik += " / $($b.sebep)" }
         if ([string]$b.aciklama) { $acik += " / $($b.aciklama)" }
@@ -276,9 +279,9 @@ try {
     }
     try {
         if ($script:EksikKart.Count -gt 0) {
-            $baslik = "ERP'de STOK KARTI OLMAYAN URUNLER ($(Get-Date -Format 'yyyy-MM-dd HH:mm')). Siparisin aciklamasinda "KARTSIZ:" ile yaziyor; faturaya cevirirken kart acip satiri elle ekleyin.`r`nBarkod`tUrun`tHareket`tCari (belge)"
+            $baslik = "ERP'de STOK KARTI OLMAYAN URUNLER ($(Get-Date -Format 'yyyy-MM-dd HH:mm')). Siparisin aciklamasinda 'KARTI OLMAYAN URUNLER' basliginda yaziyor; faturaya cevirirken kart acip satiri elle ekleyin.`r`nBarkod`tUrun`tHareket`tCari (belge)"
             [System.IO.File]::WriteAllText($EksikKartDosya, $baslik + "`r`n" + (($script:EksikKart.Values | Sort-Object) -join "`r`n") + "`r`n", [System.Text.Encoding]::UTF8)
-            Yaz-Log "UYARI: $($script:EksikKart.Count) urunun ERP'de stok karti yok; siparis aciklamasina KARTSIZ olarak yazildi. Liste: $EksikKartDosya"
+            Yaz-Log "UYARI: $($script:EksikKart.Count) urunun ERP'de stok karti yok; siparis aciklamasina yazildi. Liste: $EksikKartDosya"
         } elseif (Test-Path $EksikKartDosya) { Remove-Item $EksikKartDosya -ErrorAction SilentlyContinue }
         if (-not $Deneme) { [System.IO.File]::WriteAllText($HataDosya, (($script:SonHata.Keys | ForEach-Object { "$_`t$($script:SonHata[$_])" }) -join "`r`n"), [System.Text.Encoding]::UTF8) }
     } catch {}
