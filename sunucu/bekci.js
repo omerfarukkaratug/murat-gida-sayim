@@ -9,6 +9,7 @@
 // =====================================================================
 const fs = require('fs');
 const path = require('path');
+const zlib = require('zlib');
 
 const GUN = 86400000;
 function gunFarki(t) { return Math.ceil((new Date(t).getTime() - Date.now()) / GUN); }
@@ -103,11 +104,104 @@ function bekciOlustur({ ayar, depo, gunluk, epostaGonder, disIstek }) {
     } catch (e) { return { ad: 'ERP verisi', durum: 'acil', metin: 'Veri tabanına ulaşılamadı: ' + e.message }; }
   }
 
+  // ---- ERP veri tabanı (Supabase) fonksiyonu çağır ----
+  async function dbRpc(fn, govde) {
+    const url = String((await ozellik('DB_URL')) || '').trim().replace(/\/+$/, ''), anahtar = String((await ozellik('DB_ANAHTAR')) || '').trim();
+    if (!url || !anahtar) throw new Error('Veri tabanı ayarı yok');
+    const c = await disIstek(url + '/rest/v1/rpc/' + fn, { method: 'POST', headers: { 'Content-Type': 'application/json', apikey: anahtar }, body: JSON.stringify(govde || {}) });
+    if (c.hata || c.kod >= 400) throw new Error(c.hata || ('HTTP ' + c.kod + ' ' + String(c.govde || '').slice(0, 160)));
+    const j = JSON.parse(c.govde || 'null');
+    if (!j || j.status !== 'ok') throw new Error((j && j.message) || 'boş cevap');
+    return j;
+  }
+
+  // ---- Telefondan ERP'ye giden irsaliyeler: program çalışıyor mu, bekleyen / hatalı / değişen belge var mı ----
+  // r: [batch, belge türü, cari, personel, ilk, durum, ERP belge no, mesaj, son değişiklikten dakika, satır, tip]
+  let erpSon = null;
+  async function erpAktarimOku() {
+    try { erpSon = { zaman: Date.now(), veri: await dbRpc('erp_aktarim_durum', { p_gun: 3 }) }; }
+    catch (e) { erpSon = { zaman: Date.now(), hata: e.message }; }
+    return erpSon;
+  }
+  function erpSorunlar(v) {
+    const l = (v && v.belgeler) || [], n = v && v.nabiz, s = [];
+    const bekleyen = l.filter((r) => r[5] === 'bekliyor'), gec = bekleyen.filter((r) => Number(r[8]) >= 20);
+    const saat = Number(new Date().toLocaleTimeString('en-GB', { timeZone: 'Europe/Istanbul', hour: '2-digit', hour12: false }));
+    if (n && Number(n.dk) > 15 && bekleyen.length && saat >= 7 && saat < 22) s.push({ anahtar: 'nabiz:' + new Date().toISOString().slice(0, 13), durum: 'acil', metin: 'ERP aktarım programı ' + n.dk + ' dakikadır çalışmıyor, ' + bekleyen.length + ' belge bekliyor. ERP bilgisayarı açık mı, "MK Saha ERP Aktarim" görevi çalışıyor mu?' });
+    else if (!n && bekleyen.length) s.push({ anahtar: 'nabiz:yok:' + new Date().toISOString().slice(0, 10), durum: 'uyari', metin: 'ERP aktarım programından hiç haber yok (siparis-aktar.ps1 yeni sürümü kurulu mu?), ' + bekleyen.length + ' belge bekliyor.' });
+    else if (gec.length) s.push({ anahtar: 'gec:' + gec.map((r) => r[0]).join(',').slice(0, 200), durum: 'uyari', metin: gec.length + ' belge 20 dakikadan uzun süredir ERP\'ye gitmedi: ' + gec.slice(0, 5).map((r) => r[1] + ' / ' + r[2]).join('; ') });
+    l.filter((r) => r[5] === 'hata').forEach((r) => s.push({ anahtar: 'hata:' + r[0] + ':' + String(r[7]).slice(0, 80), durum: 'acil', metin: 'ERP\'ye YAZILAMADI — ' + r[1] + ' / ' + r[2] + ' (' + r[3] + ', ' + r[4] + '): ' + r[7] }));
+    l.filter((r) => r[5] === 'degisti' || r[5] === 'degisti_bildirildi').forEach((r) => s.push({ anahtar: 'degisti:' + r[0], durum: 'uyari', metin: 'ERP\'ye gittikten SONRA telefonda değiştirildi — ' + r[6] + ' (' + r[1] + ' / ' + r[2] + '). ERP\'deki belgeyi elle düzeltin.' }));
+    return s;
+  }
+  function erpMadde() {
+    if (!erpSon) return { ad: 'ERP\'ye irsaliye aktarımı', durum: 'bilinmiyor', metin: 'Henüz bakılmadı' };
+    if (erpSon.hata) return { ad: 'ERP\'ye irsaliye aktarımı', durum: /does not exist|404|bulunamad/i.test(erpSon.hata) ? 'bilinmiyor' : 'uyari', metin: 'Durum okunamadı: ' + erpSon.hata + ' (026 SQL çalıştırıldı mı?)' };
+    const v = erpSon.veri, o = v.ozet || {}, sorun = erpSorunlar(v), n = v.nabiz;
+    const durum = sorun.some((x) => x.durum === 'acil') ? 'acil' : sorun.length ? 'uyari' : 'ok';
+    return { ad: 'ERP\'ye irsaliye aktarımı', durum,
+      metin: (sorun.length ? sorun.map((x) => x.metin).join(' · ') + ' — ' : '') + 'Son 3 gün: ' + (o.ok || 0) + ' aktarıldı, ' + (o.bekliyor || 0) + ' bekliyor, ' + (o.hata || 0) + ' hata' +
+        (n ? ' · program son ' + n.dk + ' dk önce çalıştı' : ' · programdan haber yok') };
+  }
+  // ERP bilgisayarındaki SQL yedeği (erp-sql-yedek.ps1 her gece "OK: ..." ya da "HATA: ..." bildirir).
+  function erpSqlYedekMadde() {
+    const ad = 'ERP12 SQL yedeği (ERP bilgisayarı)';
+    const y = erpSon && erpSon.veri && erpSon.veri.nabizlar && erpSon.veri.nabizlar.erp_sql_yedek;
+    if (!y) return { ad, durum: 'uyari', metin: 'ERP bilgisayarından yedek bilgisi hiç gelmedi — erp-sql-yedek.ps1 kurulu mu? (ERP-YEDEK-GOREV.bat)' };
+    const saat = Number(y.dk) / 60, hata = /^HATA/.test(String(y.mesaj));
+    return { ad, durum: hata ? 'acil' : saat > 50 ? 'acil' : saat > 30 ? 'uyari' : 'ok', metin: 'Son çalışma ' + saatMetni(Number(y.dk) * 60000) + ' önce — ' + y.mesaj };
+  }
+  // Anlık uyarı: yeni bir hata / değişiklik / durma görülünce HEMEN e-posta (her konu bir kez).
+  async function erpAnlik() {
+    await erpAktarimOku();
+    if (!erpSon.veri || !ayar.smtp) return;
+    const sorun = erpSorunlar(erpSon.veri);
+    if (!sorun.length) return;
+    let gonderilen = [];
+    try { gonderilen = JSON.parse((await kayitOku('erp_uyari')) || '[]'); } catch (e) { gonderilen = []; }
+    const yeni = sorun.filter((x) => gonderilen.indexOf(x.anahtar) === -1);
+    if (!yeni.length) return;
+    const acil = yeni.some((x) => x.durum === 'acil');
+    await depo.epostaEkle({ alici, konu: (acil ? '🔴 ' : '🟡 ') + 'KRT Saha → ERP: ' + yeni.length + ' konu',
+      metin: 'Merhaba,\n\nTelefondan ERP\'ye giden irsaliyelerde şunlar görüldü:\n\n' + yeni.map((x) => (x.durum === 'acil' ? '🔴 ' : '🟡 ') + x.metin).join('\n\n') +
+        '\n\nTelefonda: Mal Giriş → 🧾 İrsaliyeler → "Uygulamadan gidenler" bölümünde her belgenin durumu görünür.\nAynı konu için tekrar e-posta gelmez.\n\nKRT Saha' });
+    await kayitYaz('erp_uyari', JSON.stringify(gonderilen.concat(yeni.map((x) => x.anahtar)).slice(-400)));
+    gunluk('[bekçi] ERP aktarım uyarısı kuyruğa alındı →', alici, '(' + yeni.length + ' konu)');
+    if (epostaGonder) setImmediate(epostaGonder);
+  }
+
+  // ---- Yalnız ERP veri tabanında duran uygulama verisi (tedarikçi siparişleri, notlar, aktarım kayıtları): her gece yedek ----
+  async function uygulamaYedekAl() {
+    const bugun = new Date().toLocaleDateString('sv-SE', { timeZone: 'Europe/Istanbul' });
+    const saat = Number(new Date().toLocaleTimeString('en-GB', { timeZone: 'Europe/Istanbul', hour: '2-digit', hour12: false }));
+    if (saat < 3 || (await kayitOku('uygulama_yedek')) === bugun) return;
+    try {
+      const j = await dbRpc('uygulama_yedek', {});
+      if (!fs.existsSync(pgYedek)) fs.mkdirSync(pgYedek, { recursive: true });
+      const f = path.join(pgYedek, 'uygulama-' + bugun + '.json.gz');
+      fs.writeFileSync(f + '.tmp', zlib.gzipSync(Buffer.from(JSON.stringify(j))));
+      fs.renameSync(f + '.tmp', f);
+      fs.readdirSync(pgYedek).filter((x) => /^uygulama-\d{4}-\d\d-\d\d\.json\.gz$/.test(x)).sort().reverse().slice(30).forEach((x) => { try { fs.unlinkSync(path.join(pgYedek, x)); } catch (e) {} });
+      await kayitYaz('uygulama_yedek', bugun);
+      gunluk('[bekçi] uygulama verisi yedeklendi →', f);
+    } catch (e) { gunluk('[bekçi] uygulama yedeği alınamadı:', e.message); }
+  }
+  function uygulamaYedekMadde() {
+    try {
+      const d = fs.existsSync(pgYedek) ? fs.readdirSync(pgYedek).filter((x) => /^uygulama-.*\.json\.gz$/.test(x)).map((x) => ({ x, st: fs.statSync(path.join(pgYedek, x)) })).sort((a, b) => b.st.mtimeMs - a.st.mtimeMs) : [];
+      if (!d.length) return { ad: 'Uygulama verisi yedeği (tedarikçi siparişleri, notlar)', durum: 'bilinmiyor', metin: 'Henüz yedek yok (gece 03:00\'ten sonra alınır)' };
+      const yas = Date.now() - d[0].st.mtimeMs;
+      return { ad: 'Uygulama verisi yedeği (tedarikçi siparişleri, notlar)', durum: yas > 50 * 3600000 ? 'acil' : yas > 30 * 3600000 ? 'uyari' : 'ok', metin: 'Son yedek ' + saatMetni(yas) + ' önce (' + d.length + ' gün saklı)' };
+    } catch (e) { return { ad: 'Uygulama verisi yedeği', durum: 'bilinmiyor', metin: e.message }; }
+  }
+
   async function kontrol() {
     if (calisiyor) return son;
     calisiyor = true;
     try {
-      const maddeler = [await alanAdiKontrol(), ...(await surelerKontrol()), diskKontrol(), yedekKontrol(), await erpKontrol()];
+      await uygulamaYedekAl();
+      if (!erpSon || Date.now() - erpSon.zaman > 5 * 60000) await erpAktarimOku();
+      const maddeler = [await alanAdiKontrol(), ...(await surelerKontrol()), diskKontrol(), yedekKontrol(), uygulamaYedekMadde(), await erpKontrol(), erpMadde(), erpSqlYedekMadde()];
       son = { zaman: new Date().toISOString(), alici, maddeler };
       await epostaGerekirse();
       return son;
@@ -130,10 +224,14 @@ function bekciOlustur({ ayar, depo, gunluk, epostaGonder, disIstek }) {
     if (epostaGonder) setImmediate(epostaGonder);
   }
 
-  let saat = null;
+  let saat = null, erpSaat = null;
   return {
-    baslat() { setTimeout(() => kontrol(), 60000); saat = setInterval(() => kontrol(), 3600000); },
-    durdur() { if (saat) clearInterval(saat); },
+    baslat() {
+      setTimeout(() => kontrol(), 60000); saat = setInterval(() => kontrol(), 3600000);
+      // ERP aktarımı 5 dakikada bir izlenir; yeni sorun görülünce hemen e-posta.
+      erpSaat = setInterval(() => { erpAnlik().catch((e) => gunluk('[bekçi] ERP izleme hatası', e.message)); }, 5 * 60000);
+    },
+    durdur() { if (saat) clearInterval(saat); if (erpSaat) clearInterval(erpSaat); },
     async durum(yenile) { if (yenile || !son) await kontrol(); return son; }
   };
 }

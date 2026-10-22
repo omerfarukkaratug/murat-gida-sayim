@@ -131,6 +131,9 @@ function doGet(e) {
   if (e.parameter && e.parameter.action === 'tedarik') {
     return tedarik(e.parameter, e.parameter.callback);
   }
+  if (e.parameter && e.parameter.action === 'erp_durum') {
+    return erpDurum(e.parameter, e.parameter.callback);
+  }
   if (e.parameter && e.parameter.action === 'temizle') {
     return handleTemizle(e.parameter.user, e.parameter.pass, e.parameter.callback);
   }
@@ -3617,9 +3620,20 @@ function tedarik(p, callback) {
     fn = 'tedarik_siparis_yaz';
     govde = { p: { id: sid, cari_kod: skod, cari_ad: String(p.cariAd || '').substring(0, 150), satirlar: satirlar,
       aciklama: String(p.aciklama || '').substring(0, 300), olusturan: String(p.user || '').substring(0, 60), durum: sdurum } };
+  } else if (ne === 'not') {
+    // Firma notu (anahtar boş) ya da ürün notu. Boş metin = notu sil.
+    var nkod = String(p.cariKod || '').trim().substring(0, 80);
+    if (!nkod) return outJson({ status: 'error', message: 'Firma seçilmedi' }, callback);
+    fn = 'tedarik_not_yaz';
+    govde = { p: { cari_kod: nkod, anahtar: String(p.anahtar || '').substring(0, 60), metin: String(p.metin || '').substring(0, 500), yazan: String(p.user || '').substring(0, 60) } };
   } else { fn = 'tedarikci_genel'; govde = { p_gun: 365, p_satis_gun: 60 }; }
   try {
     var sonuc = dbCagir({ url: url, anahtar: anahtar }, fn, govde);
+    // Firma sayfası: diğer tedarikçilerdeki fiyatlar + notlar (026 SQL yoksa sessizce yok sayılır).
+    if (fn === 'tedarikci_firma' && sonuc && sonuc.status === 'ok') {
+      try { var ek = dbCagir({ url: url, anahtar: anahtar }, 'tedarik_ek', { p_cari_kod: govde.p_cari_kod }); if (ek && ek.status === 'ok') sonuc.ek = ek; } catch (ee) { /* 026 yok */ }
+    }
+    if (fn === 'tedarik_not_yaz' && sonuc && sonuc.status === 'ok') gunlukYaz('tedarik', String(p.user || ''), 'Tedarikçi notu: ' + govde.p.cari_kod + (govde.p.anahtar ? ' / ' + govde.p.anahtar : '') + (govde.p.metin ? '' : ' (silindi)'), false);
     if (fn === 'tedarik_siparis_yaz' && sonuc && sonuc.status === 'ok') gunlukYaz('tedarik', String(p.user || ''), 'Tedarikçi siparişi ' + govde.p.durum + ': ' + govde.p.cari_ad + ' (' + govde.p.satirlar.length + ' ürün)', false);
     if (!sonuc || sonuc.status !== 'ok') return outJson({ status: 'error', message: (sonuc && sonuc.message) || 'Veri tabanı cevap vermedi' }, callback);
     if (!alis) {
@@ -3628,6 +3642,7 @@ function tedarik(p, callback) {
         (sonuc.satirlar || []).forEach(function (r) { r[5] = null; });
         (sonuc.faturalar || []).forEach(function (r) { r[6] = null; });
         sonuc.onceki = [];
+        if (sonuc.ek) sonuc.ek.fiyatlar = {};   // diğer firmaların fiyatları da alış fiyatıdır
       }
       if (fn === 'stok_hareket') (sonuc.satirlar || []).forEach(function (r) { r[5] = null; r[6] = null; });
       if (fn === 'fis_detay') { sonuc.toplam = null; (sonuc.satirlar || []).forEach(function (r) { r[4] = null; r[5] = null; }); }
@@ -3636,6 +3651,42 @@ function tedarik(p, callback) {
     return outJson(sonuc, callback);
   } catch (err) {
     gunlukYaz('veritabani', 'tedarikçi siparişi', 'Sorgu başarısız: ' + err, true);
+    return outJson({ status: 'error', message: 'Veri tabanına ulaşılamadı — biraz sonra tekrar dene' }, callback);
+  }
+}
+
+// ============================================================
+// 🧾 İRSALİYELER: telefondan giden irsaliyelerin ERP'ye aktarım durumu ve ERP'deki irsaliyeler.
+// "hareket" (Mal Giriş/Çıkış) yetkisi. Yalnız okur. Tutar / birim fiyat yalnız alisGorur.
+//   ne: 'aktarim' · 'liste' (gun, ara) · 'fis' (fisId, kaynak)
+// ============================================================
+function erpDurum(p, callback) {
+  var auth = requirePermission(p.user, p.pass, 'hareket');
+  if (!auth.ok) return outJson({ status: 'error', message: auth.message }, callback);
+  var props = PropertiesService.getScriptProperties();
+  var url = String(props.getProperty('DB_URL') || '').trim().replace(/\/+$/, '');
+  var anahtar = String(props.getProperty('DB_ANAHTAR') || '').trim();
+  if (!url || !anahtar) return outJson({ status: 'error', message: 'Veri tabanı ayarı yok (DB_URL / DB_ANAHTAR)' }, callback);
+  var ne = String(p.ne || 'aktarim'), fn, govde, alis = alisGorur(auth);
+  if (ne === 'fis') {
+    var fisId = parseInt(p.fisId, 10);
+    if (!(fisId > 0)) return outJson({ status: 'error', message: 'Belge seçilmedi' }, callback);
+    fn = 'fis_detay'; govde = { p_kaynak: String(p.kaynak || '').substring(0, 40), p_fis_id: fisId };
+  } else if (ne === 'liste') {
+    var gun = parseInt(p.gun, 10); if (!(gun > 0)) gun = 30;
+    fn = 'erp_irsaliyeler'; govde = { p_gun: Math.min(gun, 400), p_ara: String(p.ara || '').trim().substring(0, 60) };
+  } else { fn = 'erp_aktarim_durum'; govde = { p_gun: 7 }; }
+  try {
+    var sonuc = dbCagir({ url: url, anahtar: anahtar }, fn, govde);
+    if (!sonuc || sonuc.status !== 'ok') return outJson({ status: 'error', message: (sonuc && sonuc.message) || 'Veri tabanı cevap vermedi — 026 SQL çalıştırıldı mı?' }, callback);
+    if (!alis) {
+      if (fn === 'erp_irsaliyeler') (sonuc.irsaliyeler || []).forEach(function (r) { r[9] = null; });
+      if (fn === 'fis_detay') { sonuc.toplam = null; (sonuc.satirlar || []).forEach(function (r) { r[4] = null; r[5] = null; }); }
+    }
+    sonuc.alis = alis;
+    return outJson(sonuc, callback);
+  } catch (err) {
+    gunlukYaz('veritabani', 'irsaliyeler', 'Sorgu başarısız: ' + err, true);
     return outJson({ status: 'error', message: 'Veri tabanına ulaşılamadı — biraz sonra tekrar dene' }, callback);
   }
 }

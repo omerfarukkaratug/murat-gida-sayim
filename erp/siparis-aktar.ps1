@@ -281,8 +281,8 @@ function Irsaliye-Yaz($baglanti, $b) {
                     if ($aSonra -ne $null -and $aOnce -ne $null -and [decimal]$aOnce -gt 0 -and [Math]::Abs([decimal]$aSonra - [decimal]$aOnce) -gt 0.005) {
                         # Alis fiyati degisti: normal fiyat + aciklamada kontrol fiyati
                         $oran = $sonSatis / [decimal]$aOnce
-                        $tef = Yuvarla ([decimal]$aSonra * $oran) 2
-                        $satirAcik = "Kontrol T.E.F. ........ " + $tef.ToString("0.00", [Globalization.CultureInfo]::GetCultureInfo("tr-TR"))
+                        $tef = Yuvarla ([decimal]$aSonra * $oran * (1 + $kdv / 100)) 2
+                        $satirAcik = "Kontrol T.E.F. ........ " + $tef.ToString("0.00", [Globalization.CultureInfo]::GetCultureInfo("tr-TR")) + " (KDV dahil)"
                     } else {
                         $fiyat = Yuvarla $sonSatis 4
                     }
@@ -290,8 +290,14 @@ function Irsaliye-Yaz($baglanti, $b) {
                 if ($fiyat -eq $null) { $dahil = $normalDahil; $fiyat = Yuvarla ($dahil / (1 + $kdv / 100)) 4 }
                 else { $dahil = Yuvarla ($fiyat * (1 + $kdv / 100)) 4 }
             } else {
-                $dahil = if ($r.fiyat -ne $null -and [decimal]$r.fiyat -gt 0) { [decimal]$r.fiyat } else { [decimal]0 }
-                $fiyat = Yuvarla ($dahil / (1 + $kdv / 100)) 4
+                # SATISTAN IADE (tur 8): bu cariye EN SON satilan fiyat (net, KDV haric). Hic satis yoksa telefondaki fiyat.
+                $sonSat = Deger $tx "SELECT TOP 1 CAST(d.TOPLAM_KDV_MATRAHI AS decimal(18,6)) / NULLIF(d.MIKTAR_FIS, 0) FROM dbo.FIS_DETAY d JOIN dbo.FIS f ON f.ID = d.FIS WHERE f.CARI = @c AND d.STOK = @s AND d.STOK_BIRIM = @u AND f.FIS_TURU IN (2, 6) AND f.AKTIF = 1 AND d.MIKTAR_FIS > 0 AND d.FIYAT > 0 ORDER BY f.FIS_TARIHI DESC, d.ID DESC" @{ "@c" = $cari; "@s" = $stok; "@u" = $birim }
+                if ($sonSat -ne $null -and $sonSat -isnot [DBNull] -and [decimal]$sonSat -gt 0) {
+                    $fiyat = Yuvarla ([decimal]$sonSat) 4; $dahil = Yuvarla ($fiyat * (1 + $kdv / 100)) 4
+                } else {
+                    $dahil = if ($r.fiyat -ne $null -and [decimal]$r.fiyat -gt 0) { [decimal]$r.fiyat } else { [decimal]0 }
+                    $fiyat = Yuvarla ($dahil / (1 + $kdv / 100)) 4
+                }
             }
             $tutar = Yuvarla ($fiyat * $miktar) 4
             [void]$satirlar.Add(@{ stok = $stok; birim = $birim; kod = [string]$bb.Rows[0].KOD; barkod = [string]$bb.Rows[0].BARKOD; ad = [string]$r.urun_adi
@@ -606,6 +612,13 @@ try {
     for ($tk = 0; $tk -lt $tekrar; $tk++) {
         if ($tk -gt 0) { Start-Sleep -Seconds 10 }
         Tur-Calis
+        # Nabiz: bekci ve telefon "ERP aktarim programi calisiyor mu" bunu okur (026 SQL yoksa sessizce gecilir).
+        if ($tk -eq 0 -and -not $Deneme) {
+            try {
+                $nbas = [datetime]::ParseExact($BaslangicTarihi, "yyyy-MM-dd", $Inv).ToString("yyyy-MM-ddT00:00:00", $Inv) + "+03:00"
+                [void](Rpc "erp_nabiz_yaz" @{ p_ad = "mal_aktarim"; p_mesaj = ("{0} / {1}" -f $Database, $env:COMPUTERNAME); p_baslangic = $nbas })
+            } catch {}
+        }
     }
 }
 catch {
