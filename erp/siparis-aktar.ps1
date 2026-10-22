@@ -164,12 +164,27 @@ function Belge-Yaz($baglanti, $b) {
         $belgeNo = $seri + $no.ToString("000000")
 
         # --- Aciklama (sutun uzunluguna gore) ---
-        $acikMax = Deger $tx "SELECT max_length / 2 FROM sys.columns WHERE object_id = OBJECT_ID('dbo.SIPARIS') AND name = 'ACIKLAMA'" $null
-        $kartsiz = if ($atlanan.Count -gt 0) { "KARTI OLMAYAN URUNLER: " + ($atlanan -join "  ") + "  //  " } else { "" }
-        $acik = $kartsiz + ("MK Saha: " + (@([string]$b.belge_turu, [string]$b.belge_no) | Where-Object { $_ }) -join " ") + " / $($b.personel)"
-        if ([string]$b.sebep) { $acik += " / $($b.sebep)" }
-        if ([string]$b.aciklama) { $acik += " / $($b.aciklama)" }
-        if ($acikMax -and [int]$acikMax -gt 0) { $acik = Kisalt $acik ([int]$acikMax) }
+        # Sutunun KARAKTER uzunlugu (nvarchar/varchar fark etmez); -1 = sinirsiz.
+        $acikMax = Deger $tx "SELECT CHARACTER_MAXIMUM_LENGTH FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_NAME = 'SIPARIS' AND COLUMN_NAME = 'ACIKLAMA'" $null
+        $sinir = if ($acikMax -and [int]$acikMax -gt 0) { [int]$acikMax } else { 100000 }
+        $mk = ("MK Saha: " + (@([string]$b.belge_turu, [string]$b.belge_no) | Where-Object { $_ }) -join " ") + " / $($b.personel)"
+        if ([string]$b.sebep) { $mk += " / $($b.sebep)" }
+        if ([string]$b.aciklama) { $mk += " / $($b.aciklama)" }
+        if ($atlanan.Count -gt 0) {
+            # Her urun ayri satirda (muhasebe karistirmasin). Sigmayanlar icin "+N urun daha" yazilir;
+            # tam liste ERP bilgisayarinda acilacak-stok-kartlari.txt dosyasinda.
+            $acik = "KARTI OLMAYAN URUNLER:"; $yazilan = 0
+            for ($k = 0; $k -lt $atlanan.Count; $k++) {
+                $kalan = $atlanan.Count - $k - 1
+                $ek = "`r`n" + $atlanan[$k]
+                $sonEk = if ($kalan -gt 0) { "`r`n+$kalan urun daha (liste: acilacak-stok-kartlari.txt)" } else { "" }
+                if (($acik + $ek + $sonEk).Length -gt $sinir -and $yazilan -gt 0) { break }
+                $acik += $ek; $yazilan++
+            }
+            if ($yazilan -lt $atlanan.Count) { $acik += "`r`n+$($atlanan.Count - $yazilan) urun daha (liste: acilacak-stok-kartlari.txt)" }
+            if (($acik + "`r`n" + $mk).Length -le $sinir) { $acik += "`r`n" + $mk }
+        } else { $acik = $mk }
+        $acik = Kisalt $acik $sinir
 
         # --- Baslik ---
         $id = [long](Deger $tx "SELECT NEXT VALUE FOR dbo.ID" $null)
