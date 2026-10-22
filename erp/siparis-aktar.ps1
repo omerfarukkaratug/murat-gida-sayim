@@ -251,6 +251,8 @@ function Irsaliye-Yaz($baglanti, $b) {
             }
             $stok = $bb.Rows[0].STOK; $birim = $bb.Rows[0].STOK_BIRIM; $kdv = [decimal]$bb.Rows[0].KDV; $miktar = [decimal]$r.miktar
             $sonAlis = Deger $tx "SELECT TOP 1 d.FIYAT FROM dbo.FIS_DETAY d JOIN dbo.FIS f ON f.ID = d.FIS WHERE d.STOK = @s AND d.STOK_BIRIM = @u AND f.FIS_TURU IN (1, 5) AND f.AKTIF = 1 AND d.FIYAT > 0 AND d.MIKTAR_FIS > 0 ORDER BY f.FIS_TARIHI DESC, d.ID DESC" @{ "@s" = $stok; "@u" = $birim }
+            # Bu birimde alis yoksa: stok kartindaki son alis fiyati (ERP'nin kendi tuttugu), o da yoksa 0.
+            if ($sonAlis -eq $null -or [decimal]$sonAlis -le 0) { $sonAlis = Deger $tx "SELECT SON_ALIS_FIYAT FROM dbo.STOK WHERE ID = @s AND SON_ALIS_FIYAT > 0" @{ "@s" = $stok } }
             if ($sonAlis -eq $null) { $sonAlis = [decimal]0 } else { $sonAlis = [decimal]$sonAlis }
             if ($tur -eq 5 -or $tur -eq 7) {
                 $fiyat = $sonAlis; $dahil = Yuvarla ($fiyat * (1 + $kdv / 100)) 4
@@ -538,7 +540,7 @@ try {
         if ($script:EksikKart.Count -gt 0) {
             $baslik = "ERP'de STOK KARTI OLMAYAN URUNLER ($(Get-Date -Format 'yyyy-MM-dd HH:mm')). Siparisin aciklamasinda 'KARTI OLMAYAN URUNLER' basliginda yaziyor; faturaya cevirirken kart acip satiri elle ekleyin.`r`nBarkod`tUrun`tHareket`tCari (belge)"
             [System.IO.File]::WriteAllText($EksikKartDosya, $baslik + "`r`n" + (($script:EksikKart.Values | Sort-Object) -join "`r`n") + "`r`n", [System.Text.Encoding]::UTF8)
-            Yaz-Log "UYARI: $($script:EksikKart.Count) urunun ERP'de stok karti yok; siparis aciklamasina yazildi. Liste: $EksikKartDosya"
+            Yaz-Log "UYARI: $($script:EksikKart.Count) urunun ERP'de stok karti yok ve acilamadi (terazi / kisa / barkodsuz); $(if ($AktarimTuru -eq 'IRSALIYE') { 'bu urunlerin oldugu belgeler bekliyor' } else { 'siparis aciklamasina yazildi' }). Liste: $EksikKartDosya"
         } elseif (Test-Path $EksikKartDosya) { Remove-Item $EksikKartDosya -ErrorAction SilentlyContinue }
         if (-not $Deneme) { [System.IO.File]::WriteAllText($HataDosya, (($script:SonHata.Keys | ForEach-Object { "$_`t$($script:SonHata[$_])" }) -join "`r`n"), [System.Text.Encoding]::UTF8) }
     } catch {}
