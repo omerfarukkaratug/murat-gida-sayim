@@ -431,7 +431,7 @@
   <header style="border:none; padding:0 0 16px; background:transparent; display:flex; align-items:flex-start; justify-content:space-between;">
     <div>
       <h1><img src="logo-header.png" alt="Murat Gıda" style="height:30px; width:auto; display:block;"></h1>
-      <div class="sub"><img src="icon.svg" alt="" style="width:15px;height:15px;vertical-align:-3px;margin-right:5px;">KRT Saha · Murat Gıda • offline • Android • build 252</div>
+      <div class="sub"><img src="icon.svg" alt="" style="width:15px;height:15px;vertical-align:-3px;margin-right:5px;">KRT Saha · Murat Gıda • offline • Android • build 253</div>
     </div>
     <button type="button" id="themeToggleBtn" title="Tema seç" style="background:var(--panel2); border:1.5px solid var(--line); color:var(--text); width:34px; height:34px; border-radius:50%; font-size:15px; padding:0; display:flex; align-items:center; justify-content:center; flex-shrink:0;">🎨</button>
   </header>
@@ -5865,7 +5865,28 @@
   });
   document.getElementById('malHareketMeta').addEventListener('click', function(e){
     if(e.target.closest && e.target.closest('#malIadeMetaBtn') && malIadeFisler.length) malIadeGoster();
+    if(e.target.closest && e.target.closest('#malBelgeDuzenleBtn')) malBelgeDuzenle();
   });
+  // Okutma sırasında belge bilgilerine (tür, cari, belge no, sebep) geri dönüp düzeltme.
+  // Okutulan ürünler ve kayıt kimliği aynen kalır; düğmeye basınca listeye geri dönülür.
+  function malStartYazi(){
+    document.getElementById('malHareketStartBtn').textContent = malItems.length ? '✓ Belge bilgilerini kaydet, okutmaya dön' : 'Ürün Okutmaya Başla';
+  }
+  function malBelgeDuzenle(){
+    if(malSaving) return;
+    stopQuickScan();
+    malStopCamera();
+    document.getElementById('malHareketQtyModal').classList.add('hidden');
+    malCariInputEl.value = malCari ? malCari.name : '';
+    malFaturaInputEl.value = malFatura || '';
+    malSebepSelectEl.value = malSebep || '';
+    malCariResultsEl.classList.add('hidden');
+    renderBelgeSeg();
+    showPickedCari();
+    malStartYazi();
+    document.getElementById('malHareketScan').classList.add('hidden');
+    document.getElementById('malHareketSetup').classList.remove('hidden');
+  }
 
   // ---- Belge türü seçimi ----
   function renderBelgeSeg(){
@@ -5940,6 +5961,7 @@
     malCariInputEl.value = ''; malFaturaInputEl.value = ''; malSebepSelectEl.value = '';
     malCariPickedEl.classList.add('hidden');
     renderBelgeSeg();
+    malStartYazi();
     document.getElementById('malHareketSetup').classList.remove('hidden');
     document.getElementById('malHareketScan').classList.add('hidden');
     malScreenEl.classList.remove('hidden');
@@ -5954,8 +5976,7 @@
   }
   document.getElementById('malHareketCloseTopBtn').addEventListener('click', function(){
     if(malSaving) return;
-    var scanning = !document.getElementById('malHareketScan').classList.contains('hidden');
-    if(scanning && malItems.length > 0) toast('Taslak saklandı (' + malItems.length + ' ürün) — menüden tekrar açınca devam edersin', 'warn', 3200);
+    if(malItems.length > 0) toast('Taslak saklandı (' + malItems.length + ' ürün) — menüden tekrar açınca devam edersin', 'warn', 3200);
     closeMalHareketScreen();
   });
 
@@ -6116,7 +6137,8 @@
       }
     }
     document.getElementById('malHareketMeta').innerHTML =
-      '<div style="font-weight:800; font-size:13px;">' + escapeHtml(malBelge) + (malFatura ? ' · No ' + escapeHtml(malFatura) : '') + '</div>' +
+      '<div style="display:flex; align-items:flex-start; justify-content:space-between; gap:8px;"><div style="font-weight:800; font-size:13px; min-width:0;">' + escapeHtml(malBelge) + (malFatura ? ' · No ' + escapeHtml(malFatura) : '') + '</div>' +
+      '<button type="button" id="malBelgeDuzenleBtn" style="flex-shrink:0; padding:5px 10px; font-size:12px; font-weight:800; border-radius:9px; background:var(--panel); border:1.5px solid var(--line); color:var(--text);">✏️ Düzenle</button></div>' +
       '<div style="color:var(--muted);">' + escapeHtml(malCari ? malCari.name : '') + (malCari && malCari.code ? ' · ' + escapeHtml(malCari.code) : '') + '</div>' +
       (malSebep ? '<div style="color:var(--muted);">Sebep: ' + escapeHtml(malSebep) + '</div>' : '') +
       '<div style="font-family:var(--mono); color:var(--muted);"><b style="color:var(--text);">' + malKalemSayisi() + ' kalem</b> · ' + malItems.length + ' satır · toplam ' + fmtQty(toplam) + '</div>' + fiyatHtml +
