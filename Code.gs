@@ -134,6 +134,9 @@ function doGet(e) {
   if (e.parameter && e.parameter.action === 'erp_durum') {
     return erpDurum(e.parameter, e.parameter.callback);
   }
+  if (e.parameter && e.parameter.action === 'mal_cari_fiyat') {
+    return malCariFiyat(e.parameter, e.parameter.callback);
+  }
   if (e.parameter && e.parameter.action === 'temizle') {
     return handleTemizle(e.parameter.user, e.parameter.pass, e.parameter.callback);
   }
@@ -1214,7 +1217,10 @@ function saveMalHareket(data) {
 
   // Mal GİRİŞ: telefon son alış fiyatını bilmiyorsa (alış fiyatı yetkisi yok) fiyat boş gelir;
   // ERP aktarımı fiyatsız kalmasın diye sunucu katalogdaki son alıştan (KDV hariç) doldurur.
-  if (hareket === 'Giriş' && (data.rows || []).some(function (r) { return r.fiyat === '' || r.fiyat === null || r.fiyat === undefined; })) {
+  // Satıştan iade (girişte) satış fiyatıdır, son alışla doldurulmaz; alıştan iade (çıkışta) alış fiyatıdır, doldurulur.
+  var belgeAd = String(data.belgeTuru || ''), iadeMi = /ade/i.test(belgeAd);
+  var alisTuru = hareket === 'Giriş' ? !iadeMi : (iadeMi && /^al/i.test(belgeAd));
+  if (alisTuru && (data.rows || []).some(function (r) { return r.fiyat === '' || r.fiyat === null || r.fiyat === undefined; })) {
     var alisHarita = malSonAlisHarita();
     (data.rows || []).forEach(function (r) {
       if ((r.fiyat === '' || r.fiyat === null || r.fiyat === undefined) && alisHarita[String(r.barkod || '')]) r.fiyat = alisHarita[String(r.barkod)];
@@ -3688,6 +3694,26 @@ function erpDurum(p, callback) {
   } catch (err) {
     gunlukYaz('veritabani', 'irsaliyeler', 'Sorgu başarısız: ' + err, true);
     return outJson({ status: 'error', message: 'Veri tabanına ulaşılamadı — biraz sonra tekrar dene' }, callback);
+  }
+}
+
+// Mal Giriş "Satıştan İade": bu carinin her ürünü EN SON hangi fiyattan aldığı (net, KDV dahil).
+// "hareket" yetkisi + fiyat görme yetkisi. Yalnız satış fiyatı gider (maliyet/oran gitmez).
+// r: [stok kodu, barkod, son net satış fiyatı (KDV dahil)]
+function malCariFiyat(p, callback) {
+  var auth = requirePermission(p.user, p.pass, 'hareket');
+  if (!auth.ok) return outJson({ status: 'error', message: auth.message }, callback);
+  if (!fiyatGorur(auth)) return outJson({ status: 'ok', satirlar: [], fiyatYok: true }, callback);
+  var cariKod = String(p.cariKod || '').trim().substring(0, 80);
+  if (!cariKod) return outJson({ status: 'ok', satirlar: [] }, callback);
+  var ayar = dbAyar(); if (!ayar) return outJson({ status: 'ok', satirlar: [], dbYok: true }, callback);
+  try {
+    var r = dbCagir(ayar, 'plasiyer_son_fiyat', { p_cari_kod: cariKod, p_gun: 730 });
+    if (!r || r.status !== 'ok') throw new Error((r && r.message) || 'cevap yok');
+    return outJson({ status: 'ok', satirlar: (r.satirlar || []).map(function (x) { return [String(x[0] || ''), String(x[1] || ''), Number(x[2]) || 0]; }).filter(function (x) { return x[2] > 0; }) }, callback);
+  } catch (err) {
+    gunlukYaz('veritabani', 'mal cari fiyat', 'Sorgu başarısız: ' + err, true);
+    return outJson({ status: 'error', message: 'Carinin son fiyatları alınamadı' }, callback);
   }
 }
 

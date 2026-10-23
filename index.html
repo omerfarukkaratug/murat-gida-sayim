@@ -431,7 +431,7 @@
   <header style="border:none; padding:0 0 16px; background:transparent; display:flex; align-items:flex-start; justify-content:space-between;">
     <div>
       <h1><img src="logo-header.png" alt="Murat Gıda" style="height:30px; width:auto; display:block;"></h1>
-      <div class="sub"><img src="icon.svg" alt="" style="width:15px;height:15px;vertical-align:-3px;margin-right:5px;">KRT Saha · Murat Gıda • offline • Android • build 258</div>
+      <div class="sub"><img src="icon.svg" alt="" style="width:15px;height:15px;vertical-align:-3px;margin-right:5px;">KRT Saha · Murat Gıda • offline • Android • build 259</div>
     </div>
     <button type="button" id="themeToggleBtn" title="Tema seç" style="background:var(--panel2); border:1.5px solid var(--line); color:var(--text); width:34px; height:34px; border-radius:50%; font-size:15px; padding:0; display:flex; align-items:center; justify-content:center; flex-shrink:0;">🎨</button>
   </header>
@@ -6178,6 +6178,7 @@
       malSebepSelectEl.value = malSebep;
       malScreenEl.classList.remove('hidden');
       enterMalScan();
+      malCariFiyatGetir();
       toast('Yarım kalan kayıt açıldı (' + malItems.length + ' ürün)', 'warn', 3000);
       return;
     }
@@ -6285,6 +6286,7 @@
       malSebep = malTip === 'cikis' ? malSebepSelectEl.value : '';
       enterMalScan();
       saveMalDraft();
+      malYenidenFiyatla(); malCariFiyatGetir();
     };
     // Mal GİRİŞ: bu carinin bekleyen alıştan iade irsaliyesi varsa ÖNCE uyarı gösterilir.
     // "Tamam" dedikten sonra düğmeye yeniden basılınca okutma başlar.
@@ -6338,7 +6340,54 @@
     return Number(n).toLocaleString('tr-TR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + ' ₺';
   }
   // Mal girişteki fiyatlar ALIŞ fiyatıdır: fiyat yetkisine ek olarak alış fiyatı yetkisi ister.
-  function malFiyatGorur(){ return canSeePrice() && (malTip !== 'giris' || canSeeAlis()); }
+  // ---- Belge türüne göre fiyat ----
+  //  Alış irsaliyesi: son alış (KDV hariç) · Alıştan iade (çıkış): son NET alış, iskontolar düşülmüş (KDV hariç)
+  //  Satıştan iade (giriş): bu carinin o ürünü EN SON aldığı fiyat (KDV hariç; yoksa raf fiyatı) · Satış: raf fiyatı (KDV dahil)
+  //  İadeler satış sayılmaz: alıştan iade alış fiyatıyla, KDV hariç ara toplam + KDV olarak gösterilir.
+  function malIadeAlis(){ return malTip === 'cikis' && /ade/i.test(malBelge || '') && /^al/i.test(malBelge || ''); }
+  function malIadeSatis(){ return malTip === 'giris' && /ade/i.test(malBelge || ''); }
+  function malKdvHaric(){ return malTip === 'giris' || malIadeAlis(); }
+  function malAlisFiyatli(){ return (malTip === 'giris' && !malIadeSatis()) || malIadeAlis(); }
+  function malFiyatGorur(){ return canSeePrice() && (!malAlisFiyatli() || canSeeAlis()); }
+  var malCariFiyatlar = { kod: '', m: null, yukleniyor: false };
+  function malCariKod(){ return malCari && malCari.code ? String(malCari.code) : ''; }
+  function malFiyatBul(barkod, entry){
+    entry = entry || catalogMap.get(barkod) || {};
+    var kdv = Number(entry.kdv) || 0;
+    var haric = function(x){ x = Number(x); return x > 0 ? Math.round(x / (1 + kdv / 100) * 10000) / 10000 : ''; };
+    if(malIadeAlis()){ if(!canSeeAlis()) return ''; return entry.an ? haric(entry.an) : (entry.af || ''); }
+    if(malIadeSatis()){
+      var m = malCariFiyatlar.kod && malCariFiyatlar.kod === malCariKod() ? malCariFiyatlar.m : null;
+      var son = m && ((entry.stockCode && m[entry.stockCode]) || m[barkod]);
+      return son ? haric(son) : (entry.price ? haric(entry.price) : '');
+    }
+    if(malTip === 'giris') return entry.af && canSeeAlis() ? entry.af : '';
+    return entry.price === undefined ? '' : entry.price;
+  }
+  // Belge türü / cari değişince (✏️ Düzenle) okutulmuş kalemlerin fiyatı yeniden hesaplanır.
+  function malYenidenFiyatla(){
+    var degisti = false;
+    malItems.forEach(function(it){
+      if(!catalogMap.get(it.barkod)) return;
+      var f = malFiyatBul(it.barkod);
+      if(String(f) !== String(it.fiyat === undefined ? '' : it.fiyat)){ it.fiyat = f; malBump(it); degisti = true; }
+    });
+    if(degisti){ saveMalDraft(); renderMalList(); }
+  }
+  // Satıştan iade: carinin son aldığı fiyatlar sunucudan bir kez çekilir (internet yoksa raf fiyatı kalır).
+  function malCariFiyatGetir(){
+    var kod = malCariKod();
+    if(!malIadeSatis() || !kod || malCariFiyatlar.kod === kod || malCariFiyatlar.yukleniyor) return;
+    var auth = currentAuth(); if(!auth || !navigator.onLine) return;
+    malCariFiyatlar.yukleniyor = true;
+    jsonpRequestP(state.serverUrl || DEFAULT_SERVER_URL, { action: 'mal_cari_fiyat', user: auth.user, pass: auth.pass, cariKod: kod }, function(err, d){
+      malCariFiyatlar.yukleniyor = false;
+      if(err || !d || d.status !== 'ok') return;
+      var m = {}; (d.satirlar || []).forEach(function(x){ if(x[0]) m[x[0]] = x[2]; if(x[1]) m[x[1]] = x[2]; });
+      malCariFiyatlar = { kod: kod, m: m, yukleniyor: false };
+      if(malCariKod() === kod && malIadeSatis()) malYenidenFiyatla();
+    }, 30000);
+  }
   function malFiyat(it){ return (it.fiyat === '' || it.fiyat === null || it.fiyat === undefined || isNaN(Number(it.fiyat))) ? null : Number(it.fiyat); }
   function renderMalMeta(){
     var toplam = malItems.reduce(function(sum, it){ return sum + it.miktar; }, 0);
@@ -6352,8 +6401,8 @@
         if(isNaN(k)) kdvsiz++; else kdvTutar += f * it.miktar * k / 100;
       });
       var uyariHtml = (fiyatsiz ? ' <span style="color:var(--amber); font-size:11px; font-weight:700;">(' + fiyatsiz + ' satırda fiyat yok)</span>' : '');
-      if(malTip === 'giris'){
-        // Mal girişte fiyatlar KDV HARİÇ son alış fiyatıdır: fatura gibi ara toplam + KDV = genel toplam.
+      if(malKdvHaric()){
+        // Mal girişte (ve alıştan iadede) fiyatlar KDV HARİÇ son alış fiyatıdır: fatura gibi ara toplam + KDV = genel toplam.
         fiyatHtml = '<div style="font-family:var(--mono); font-size:12.5px; margin-top:2px; color:var(--muted);">Ara toplam (KDV hariç): <b style="color:var(--text);">' + fmtPara(tutar) + '</b> · KDV: <b style="color:var(--text);">' + fmtPara(kdvTutar) + '</b>' +
           (kdvsiz ? ' <span style="color:var(--amber); font-size:11px; font-weight:700;">(' + kdvsiz + ' satırda KDV oranı yok)</span>' : '') + '</div>' +
           '<div style="font-family:var(--mono); font-weight:800; font-size:15px;">Genel toplam (KDV dâhil): ' + fmtPara(tutar + kdvTutar) + uyariHtml + '</div>';
@@ -6548,7 +6597,7 @@
       kdv: entry.kdv === undefined ? '' : entry.kdv,
       // Mal GİRİŞ: en son alış fiyatı (ERP, KDV hariç; hiç alınmamışsa boş). Mal ÇIKIŞ: satış fiyatı.
       // Alış fiyatı yetkisi yoksa telefonda alış fiyatı yoktur; boş gider, sunucu son alıştan doldurur.
-      fiyat: malTip === 'giris' ? (entry.af && canSeeAlis() ? entry.af : '') : (entry.price === undefined ? '' : entry.price),
+      fiyat: malFiyatBul(malPendingBarcode, entry),
       tarih: t.date, saat: t.time, v: 1
     });
     if(!malCommit(onceki, 'Bu okutma (' + name + ')')) return;
