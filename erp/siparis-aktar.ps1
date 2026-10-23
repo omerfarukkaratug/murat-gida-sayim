@@ -258,7 +258,14 @@ function Irsaliye-Yaz($baglanti, $b) {
             if ($sonAlis -eq $null) { $sonAlis = [decimal]0 } else { $sonAlis = [decimal]$sonAlis }
             $satirAcik = ""
             if ($tur -eq 5) {
-                $fiyat = $sonAlis; $dahil = Yuvarla ($fiyat * (1 + $kdv / 100)) 4
+                # ALIS IRSALIYESI: son alisin NET fiyati (iskontolar dusulmus, KDV haric). Once bu tedarikciden,
+                # yoksa herhangi bir tedarikciden; hic yoksa brut son alis.
+                $netSql = "SELECT TOP 1 CAST(d.TOPLAM_KDV_MATRAHI AS decimal(18,6)) / NULLIF(d.MIKTAR_FIS, 0) FROM dbo.FIS_DETAY d JOIN dbo.FIS f ON f.ID = d.FIS WHERE {0} d.STOK = @s AND d.STOK_BIRIM = @u AND f.FIS_TURU IN (1, 5) AND f.AKTIF = 1 AND d.MIKTAR_FIS > 0 AND d.FIYAT > 0 ORDER BY f.FIS_TARIHI DESC, d.ID DESC"
+                $net = $null
+                if ($cari) { $net = Deger $tx ($netSql -f "f.CARI = @c AND") @{ "@c" = $cari; "@s" = $stok; "@u" = $birim } }
+                if ($net -eq $null -or [decimal]$net -le 0) { $net = Deger $tx ($netSql -f "") @{ "@s" = $stok; "@u" = $birim } }
+                $fiyat = if ($net -ne $null -and [decimal]$net -gt 0) { Yuvarla ([decimal]$net) 4 } else { $sonAlis }
+                $dahil = Yuvarla ($fiyat * (1 + $kdv / 100)) 4
             } elseif ($tur -eq 7) {
                 # ALISTAN IADE: bu tedarikciden EN SON gelen fiyat (net, iskontolar dusulmus, KDV haric).
                 # Bu tedarikciden hic alis yoksa genel son alis fiyati.

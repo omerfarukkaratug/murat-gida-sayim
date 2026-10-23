@@ -431,7 +431,7 @@
   <header style="border:none; padding:0 0 16px; background:transparent; display:flex; align-items:flex-start; justify-content:space-between;">
     <div>
       <h1><img src="logo-header.png" alt="Murat Gıda" style="height:30px; width:auto; display:block;"></h1>
-      <div class="sub"><img src="icon.svg" alt="" style="width:15px;height:15px;vertical-align:-3px;margin-right:5px;">KRT Saha · Murat Gıda • offline • Android • build 259</div>
+      <div class="sub"><img src="icon.svg" alt="" style="width:15px;height:15px;vertical-align:-3px;margin-right:5px;">KRT Saha · Murat Gıda • offline • Android • build 260</div>
     </div>
     <button type="button" id="themeToggleBtn" title="Tema seç" style="background:var(--panel2); border:1.5px solid var(--line); color:var(--text); width:34px; height:34px; border-radius:50%; font-size:15px; padding:0; display:flex; align-items:center; justify-content:center; flex-shrink:0;">🎨</button>
   </header>
@@ -6341,7 +6341,7 @@
   }
   // Mal girişteki fiyatlar ALIŞ fiyatıdır: fiyat yetkisine ek olarak alış fiyatı yetkisi ister.
   // ---- Belge türüne göre fiyat ----
-  //  Alış irsaliyesi: son alış (KDV hariç) · Alıştan iade (çıkış): son NET alış, iskontolar düşülmüş (KDV hariç)
+  //  Alış irsaliyesi: son NET alış, iskontolar düşülmüş (KDV hariç) · Alıştan iade (çıkış): son NET alış, iskontolar düşülmüş (KDV hariç)
   //  Satıştan iade (giriş): bu carinin o ürünü EN SON aldığı fiyat (KDV hariç; yoksa raf fiyatı) · Satış: raf fiyatı (KDV dahil)
   //  İadeler satış sayılmaz: alıştan iade alış fiyatıyla, KDV hariç ara toplam + KDV olarak gösterilir.
   function malIadeAlis(){ return malTip === 'cikis' && /ade/i.test(malBelge || '') && /^al/i.test(malBelge || ''); }
@@ -6361,7 +6361,7 @@
       var son = m && ((entry.stockCode && m[entry.stockCode]) || m[barkod]);
       return son ? haric(son) : (entry.price ? haric(entry.price) : '');
     }
-    if(malTip === 'giris') return entry.af && canSeeAlis() ? entry.af : '';
+    if(malTip === 'giris'){ if(!canSeeAlis()) return ''; return entry.an ? haric(entry.an) : (entry.af || ''); }   // alış irsaliyesi: NET son alış
     return entry.price === undefined ? '' : entry.price;
   }
   // Belge türü / cari değişince (✏️ Düzenle) okutulmuş kalemlerin fiyatı yeniden hesaplanır.

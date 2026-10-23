@@ -1280,10 +1280,15 @@ function saveMalHareket(data) {
 
 // Katalog: barkod -> son alış (KDV hariç, > 0).
 function malSonAlisHarita() {
+  // Önce son NET alış (iskontolu, KDV dahil → KDV hariçe çevrilir), yoksa son alış (KDV hariç).
   var m = {}, sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName('Katalog');
   if (!sheet || sheet.getLastRow() < 2 || sheet.getLastColumn() < 13) return m;
-  sheet.getRange(2, 2, sheet.getLastRow() - 1, 12).getValues().forEach(function (r) {
-    if (r[0] && typeof r[11] === 'number' && r[11] > 0) m[String(r[0])] = r[11];
+  var gen = Math.min(13, sheet.getLastColumn() - 1);
+  sheet.getRange(2, 2, sheet.getLastRow() - 1, gen).getValues().forEach(function (r) {
+    if (!r[0]) return;
+    var kdv = Number(r[4]) || 0, net = gen >= 13 ? r[12] : null;
+    if (typeof net === 'number' && net > 0) m[String(r[0])] = Math.round(net / (1 + kdv / 100) * 10000) / 10000;
+    else if (typeof r[11] === 'number' && r[11] > 0) m[String(r[0])] = r[11];
   });
   return m;
 }
