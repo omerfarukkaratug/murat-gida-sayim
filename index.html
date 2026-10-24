@@ -431,7 +431,7 @@
   <header style="border:none; padding:0 0 16px; background:transparent; display:flex; align-items:flex-start; justify-content:space-between;">
     <div>
       <h1><img src="logo-header.png" alt="Murat Gıda" style="height:30px; width:auto; display:block;"></h1>
-      <div class="sub"><img src="icon.svg" alt="" style="width:15px;height:15px;vertical-align:-3px;margin-right:5px;">KRT Saha · Murat Gıda • offline • Android • build 260</div>
+      <div class="sub"><img src="icon.svg" alt="" style="width:15px;height:15px;vertical-align:-3px;margin-right:5px;">KRT Saha · Murat Gıda • offline • Android • build 261</div>
     </div>
     <button type="button" id="themeToggleBtn" title="Tema seç" style="background:var(--panel2); border:1.5px solid var(--line); color:var(--text); width:34px; height:34px; border-radius:50%; font-size:15px; padding:0; display:flex; align-items:center; justify-content:center; flex-shrink:0;">🎨</button>
   </header>
@@ -4712,7 +4712,7 @@
   // 🧾 İRSALİYELER: telefondan ERP'ye giden irsaliyelerin durumu ve ERP'deki irsaliyeler.
   // Fiyatsız irsaliye dökümü (PDF): Mal Çıkış ekranından ve ERP irsaliyesinin detayından.
   // ============================================================
-  var irs = { sekme: 'giden', aktarim: null, aktarimHata: '', liste: null, listeHata: '', ara: '', gun: 30, filtre: '', acik: {}, no: 0 };
+  var irs = { acikB: {}, sekme: 'giden', aktarim: null, aktarimHata: '', liste: null, listeHata: '', ara: '', gun: 30, filtre: '', acik: {}, no: 0 };
   var irsEl = document.getElementById('irsScreen'), irsBodyEl = document.getElementById('irsBody');
   function irsIstek(param, bitti){
     var auth = currentAuth(); if(!auth){ bitti('Önce giriş yap'); return; }
@@ -4752,13 +4752,34 @@
     if(!l.length) return html + '<div class="hint">Son 7 günde telefondan ERP\'ye giden irsaliye yok.</div>';
     html += l.map(function(r){
       var dd = IRS_DURUM[r[5]] || ['•', r[5], 'var(--muted)'], gec = r[5] === 'bekliyor' && Number(r[8]) >= 20;
-      return '<div class="chSatir"' + (r[6] && r[5] !== 'bekliyor' ? ' data-irsara="' + escapeHtml(r[6]) + '" style="cursor:pointer;"' : '') + '><div class="ust"><span style="min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">' + dd[0] + ' ' + escapeHtml(r[1]) + ' · ' + escapeHtml(r[2] || '') + '</span>' +
+      var ab = irs.acikB[r[0]];
+      return '<div class="chSatir" data-irsbelge="' + escapeHtml(r[0]) + '" style="cursor:pointer;"><div class="ust"><span style="min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">' + dd[0] + ' ' + escapeHtml(r[1]) + ' · ' + escapeHtml(r[2] || '') + '</span>' +
         '<span style="color:' + dd[2] + '; white-space:nowrap; font-size:12px;">' + dd[1] + '</span></div>' +
         '<div class="alt"><span>' + escapeHtml(r[3] || '') + ' · ' + escapeHtml(r[4]) + ' · ' + escapeHtml(String(r[9])) + ' satır</span><span style="font-family:var(--mono); white-space:nowrap;">' + escapeHtml(r[6] || '') + '</span></div>' +
         (r[5] === 'hata' || r[5].indexOf('degisti') === 0 ? '<div style="color:var(--red); font-size:12px; margin-top:4px;">' + escapeHtml(r[5] === 'hata' ? r[7] : 'Telefonda değiştirildi; ERP\'deki belge ESKİ hâliyle duruyor — muhasebe ERP\'de elle düzeltmeli.') + '</div>' : '') +
-        (gec ? '<div style="color:var(--amber); font-size:12px; margin-top:4px;">' + irsSure(r[8]) + ' bekliyor — ERP bilgisayarı kapalı olabilir</div>' : '') + '</div>';
+        (gec ? '<div style="color:var(--amber); font-size:12px; margin-top:4px;">' + irsSure(r[8]) + ' bekliyor — ERP bilgisayarı kapalı olabilir</div>' : '') +
+        (ab ? irsBelgeHtml(ab, r) : '') + '</div>';
     }).join('');
-    return html + '<div class="hint" style="margin-top:8px;">Sorun olursa yöneticiye e-posta da gider. ERP\'deki belgeye dokun: içeriğini aç.</div>';
+    return html + '<div class="hint" style="margin-top:8px;">Belgeye dokun: içeriğini aç. ERP\'ye geçen (✅) belge buradan yazdırılır. Sorun olursa yöneticiye e-posta da gider.</div>';
+  }
+  // Telefondan kaydedilmiş belgenin içeriği (kaydedildiği sırayla) + ERP'deyse yazdır düğmesi.
+  function irsBelgeHtml(a, r){
+    if(a.yukleniyor) return '<div class="chFis">⏳ Belge yükleniyor…</div>';
+    if(a.hata) return '<div class="chFis" style="color:var(--red);">❌ ' + escapeHtml(a.hata) + '</div>';
+    var d = a.veri || {};
+    return '<div class="chFis">' + (d.satirlar || []).map(function(x){
+        return '<div class="chFisSatir"><span style="min-width:0;">' + escapeHtml(x[1] || x[0]) + '<small>' + escapeHtml(x[0]) + '</small></span><b>' + escapeHtml(fmtQty(x[3])) + ' ' + escapeHtml(x[4] || '') + '</b></div>';
+      }).join('') + (d.aciklama ? '<div style="margin-top:6px; color:var(--muted);">📝 ' + escapeHtml(d.aciklama) + '</div>' : '') + '</div>' +
+      (r[5] === 'ok' ? '<div style="display:flex; gap:8px; margin-top:8px; flex-wrap:wrap;"><button type="button" class="geriBtn" data-irsbyazdir="' + escapeHtml(r[0]) + '" style="margin:0; border-color:var(--accent); color:var(--accent);">🖨️ Yazdır (PDF, fiyatsız)</button>' +
+        '<button type="button" class="geriBtn" data-irsara="' + escapeHtml(r[6]) + '" style="margin:0;">🧾 ERP\'deki hâlini aç</button></div>'
+        : '<div class="hint" style="margin:6px 0 0;">Yazdırma, belge ERP\'ye geçince açılır.</div>');
+  }
+  function irsTarih(t){ var m = /^(\d{4})-(\d\d)-(\d\d)/.exec(String(t || '')); return m ? m[3] + '.' + m[2] + '.' + m[1] : String(t || ''); }
+  function irsBelgeYazdir(bid){
+    var a = irs.acikB[bid], d = a && a.veri; if(!d) return;
+    var r = ((irs.aktarim || {}).belgeler || []).filter(function(x){ return x[0] === bid; })[0] || [];
+    irsaliyePdf({ tur: d.belgeTuru || r[1], belgeNo: r[6] || d.belgeNo, tarih: irsTarih(d.tarih), cari: d.cari || r[2], cariKod: d.cariKodu, hazirlayan: d.personel || r[3], aciklama: d.aciklama,
+      satirlar: (d.satirlar || []).map(function(x){ return { barkod: x[0], ad: x[1], kod: x[2], miktar: x[3], birim: x[4] }; }) });
   }
   var IRS_TUR = [['', 'Tümü'], ['f', 'Faturalanmamış'], ['5', 'Alış'], ['6', 'Satış'], ['7', 'Alıştan iade'], ['8', 'Satıştan iade']];
   function irsErpHtml(){
@@ -4786,13 +4807,22 @@
     if(odak){ var a = document.getElementById('irsAra'); if(a){ a.focus(); try { a.setSelectionRange(imlec, imlec); } catch(e){} } }
   }
   irsEl.addEventListener('click', function(e){
-    var t = e.target.closest && e.target.closest('[data-irssekme],[data-irsfiltre],[data-irsfis],[data-irsyazdir],[data-irsara],#irsKapat');
+    var t = e.target.closest && e.target.closest('[data-irssekme],[data-irsfiltre],[data-irsfis],[data-irsyazdir],[data-irsara],[data-irsbyazdir],[data-irsbelge],#irsKapat');
     if(!t) return;
     if(t.id === 'irsKapat'){ irsKapat(); return; }
     if(t.hasAttribute('data-irssekme')){ irs.sekme = t.getAttribute('data-irssekme'); irsSekmeCiz(); if(irs.sekme === 'giden') irsAktarimGetir(); else if(!irs.liste) irsListeGetir(); else irsCiz(); return; }
     if(t.hasAttribute('data-irsfiltre')){ irs.filtre = t.getAttribute('data-irsfiltre'); irsCiz(); return; }
     if(t.hasAttribute('data-irsara')){ irs.sekme = 'erp'; irs.ara = t.getAttribute('data-irsara'); irsSekmeCiz(); irsListeGetir(); return; }
     if(t.hasAttribute('data-irsyazdir')){ irsErpYazdir(t.getAttribute('data-irsyazdir')); return; }
+    if(t.hasAttribute('data-irsbyazdir')){ irsBelgeYazdir(t.getAttribute('data-irsbyazdir')); return; }
+    if(t.hasAttribute('data-irsbelge')){
+      if(e.target.closest('.chFis')) return;
+      var bid = t.getAttribute('data-irsbelge');
+      if(irs.acikB[bid]){ delete irs.acikB[bid]; irsCiz(); return; }
+      irs.acikB[bid] = { yukleniyor: true }; irsCiz();
+      irsIstek({ ne: 'belge', batchId: bid }, function(err, d){ irs.acikB[bid] = err ? { hata: err } : { veri: d }; irsCiz(); });
+      return;
+    }
     if(t.hasAttribute('data-irsfis')){
       if(e.target.closest('.chFis')) return;
       var k = t.getAttribute('data-irsfis');
@@ -4826,18 +4856,17 @@
         satirlar: satirlar, toplam: ['', '', '', 'TOPLAM: ' + satirlar.length + ' kalem', fmtQty(top), ''],
         notlar: ['Fiyat bilgisi içermez. Resmî e-irsaliye yerine geçmez; teslimat kontrolü içindir.'],
         imza: ['Teslim Eden', 'Teslim Alan'] }] };
-    try { dosyaPaylas(pdfOlustur(m), m.dosya + '.pdf', baslik); } catch(e){ errorToast('PDF hazırlanamadı: ' + (e && e.message || e)); }
+    m.reklam = true;
+    var bitir = function(){ try { dosyaPaylas(pdfOlustur(m), m.dosya + '.pdf', baslik); } catch(e){ errorToast('PDF hazırlanamadı: ' + (e && e.message || e)); } };
+    // QR kütüphanesi bir kez iner (sonra telefonda saklanır); inemezse belge QR'sız hazırlanır.
+    var bitti = false, son = function(){ if(!bitti){ bitti = true; bitir(); } };
+    qrLibYukle().then(son, son); setTimeout(son, 2500);
   }
   function irsErpYazdir(k){
     var a = irs.acik[k], d = a && a.veri; if(!d) return;
     var r = ((irs.liste || {}).irsaliyeler || []).filter(function(x){ return x[1] + ':' + x[0] === k; })[0] || [];
     irsaliyePdf({ tur: d.tur || r[4], belgeNo: d.belgeNo || r[5], tarih: d.tarih || r[2], cari: d.cari || r[7], cariKod: r[6],
       satirlar: (d.satirlar || []).map(function(x){ var c = catalogMap.get(String(x[1])) || {}; return { barkod: x[1], kod: x[0], ad: x[2] || c.name || '', miktar: x[3], birim: unitFor(String(x[1])) }; }) });
-  }
-  function malIrsaliyeYazdir(){
-    if(!malItems.length){ warnToast('Önce ürün okut'); return; }
-    irsaliyePdf({ tur: malBelge, belgeNo: malFatura, cari: malCari ? malCari.name : '', cariKod: malCari ? malCari.code : '', hazirlayan: state.personnel || (state.currentUser && state.currentUser.name) || '',
-      aciklama: String(malAciklama || '').trim(), satirlar: malItems.map(function(it){ return { barkod: it.barkod, kod: it.stokKodu, ad: it.ad, miktar: it.miktar, birim: it.birim }; }) });
   }
 
   // ---- Ekstreyi paylaş: Excel (.xlsx) ya da yazdırmaya hazır PDF; ikisi de aynı düzende, telefonun paylaş menüsüyle ----
@@ -4968,6 +4997,21 @@
   var FIRMA_UNVAN = 'Murat Pastane Bakliyat Ltd. Şti.';
   var MK_ERP_IMZA = 'KRT Saha ile hazırlanmıştır.';
   var FIRMA_LOGO = new Image(); FIRMA_LOGO.src = 'logo-header.png';
+  // Belgelerin altındaki KRT Saha tanıtım bandı (logo + kısa yazı + krtsaha.com QR kodu).
+  var KRT_LOGO = new Image(); KRT_LOGO.src = 'icon-192.png';
+  var KRT_QR_URL = 'https://krtsaha.com';
+  var qrLibSoz = null;
+  function qrLibYukle(){
+    if(window.qrcode) return Promise.resolve(window.qrcode);
+    if(qrLibSoz) return qrLibSoz;
+    qrLibSoz = new Promise(function(ok, red){
+      var sc = document.createElement('script'); sc.src = 'https://cdn.jsdelivr.net/npm/qrcode-generator@1.4.4/qrcode.js';
+      sc.onload = function(){ window.qrcode ? ok(window.qrcode) : red(new Error('qr')); };
+      sc.onerror = function(){ qrLibSoz = null; red(new Error('qr')); };
+      document.head.appendChild(sc);
+    });
+    return qrLibSoz;
+  }
   var FIRMA_LOGO_PNG = null;
   function firmaLogoHazir(){ return FIRMA_LOGO.complete && FIRMA_LOGO.naturalWidth > 0; }
   // Excel'e konacak küçük PNG (en çok 300 px genişlik); g/y: Excel'deki görünen boyut (px)
@@ -5073,7 +5117,7 @@
   }
   // ---- PDF: model A4 sayfalara çizilir (tuval), her sayfa JPEG olarak PDF'e konur. Türkçe harfler sorunsuz. ----
   function pdfOlustur(m){
-    var W = 1240, H = 1754, KN = 64, IW = W - 2 * KN, SH = 30, sayfalar = [], cv, cx, y, no = 0;
+    var W = 1240, H = 1754, KN = 64, IW = W - 2 * KN, SH = 30, sayfalar = [], cv, cx, y, no = 0, REKLAM_H = m.reklam ? 104 : 0;
     var bugun = new Date().toLocaleDateString('tr-TR');
     var para = function(v, isaretli){ var n = Number(v) || 0; return (isaretli && n < -0.004 ? '−' : '') + fmtMoney(Math.abs(n)); };
     function yeniSayfa(){
@@ -5133,7 +5177,7 @@
       ustBaslik(false);
       b.bilgi.forEach(function(x){ yazi(x[0], KN, y, 17, true); yazi(typeof x[1] === 'number' ? para(x[1]) : x[1], KN + 190, y, 17, false, '#000', 'left', IW - 200); y += 28; });
       y += 14; tabloBaslik();
-      var altSinir = H - KN - 40;
+      var altSinir = H - KN - 40 - REKLAM_H;
       b.satirlar.forEach(function(r){
         if(y + SH > altSinir){ yeniSayfa(); ustBaslik(true); tabloBaslik(); }
         satirCiz(r, false);
@@ -5162,9 +5206,28 @@
         y += 160;
       }
     });
-    // sayfa numaraları
+    // sayfa numaraları (+ KRT Saha tanıtım bandı)
+    var qrMod = null;
+    if(m.reklam && window.qrcode){ try { var q = window.qrcode(0, 'M'); q.addData(KRT_QR_URL); q.make(); qrMod = q; } catch(e){ qrMod = null; } }
     sayfalar.forEach(function(c, i){
       cx = c.getContext('2d'); cx.textBaseline = 'middle';
+      if(m.reklam){
+        var by = H - KN - 24 - REKLAM_H + 8, bh = REKLAM_H - 8, bx = KN;
+        cx.fillStyle = '#F2F8F4'; cx.fillRect(bx, by, IW, bh); cx.fillStyle = '#16A34A'; cx.fillRect(bx, by, 6, bh);
+        var lx = bx + 22;
+        if(KRT_LOGO.complete && KRT_LOGO.naturalWidth > 0){ cx.drawImage(KRT_LOGO, lx, by + (bh - 64) / 2, 64, 64); lx += 80; }
+        var qs = 0;
+        if(qrMod){
+          var n = qrMod.getModuleCount(), hc = Math.floor((bh - 12) / n); qs = hc * n;
+          var qx = bx + IW - qs - 14, qy = by + (bh - qs) / 2;
+          cx.fillStyle = '#fff'; cx.fillRect(qx - 4, qy - 4, qs + 8, qs + 8); cx.fillStyle = '#000';
+          for(var rr = 0; rr < n; rr++) for(var cc = 0; cc < n; cc++) if(qrMod.isDark(rr, cc)) cx.fillRect(qx + cc * hc, qy + rr * hc, hc, hc);
+        }
+        var maxW = IW - (lx - bx) - (qs ? qs + 40 : 20);
+        yazi('KRT Saha', lx, by + 26, 22, true, '#0B3D2E', 'left', maxW);
+        yazi('Bu belge KRT Saha ile hazırlandı — sayım, mal kabul, irsaliye, sipariş ve etiket tek mobil uygulamada.', lx, by + 54, 15, false, '#333', 'left', maxW);
+        yazi('İşletmeniz için: krtsaha.com', lx, by + 78, 15, true, '#16A34A', 'left', maxW);
+      }
       yazi('Sayfa ' + (i + 1) + ' / ' + sayfalar.length, W - KN, H - KN + 10, 14, false, '#666', 'right');
       yazi(FIRMA_UNVAN + ' · ' + m.baslik, KN, H - KN + 10, 14, false, '#666', 'left', IW - 200);
     });
@@ -6090,7 +6153,6 @@
   document.getElementById('malHareketMeta').addEventListener('click', function(e){
     if(e.target.closest && e.target.closest('#malIadeMetaBtn') && malIadeFisler.length) malIadeGoster();
     if(e.target.closest && e.target.closest('#malBelgeDuzenleBtn')) malBelgeDuzenle();
-    if(e.target.closest && e.target.closest('#malYazdirBtn')) malIrsaliyeYazdir();
   });
   // Okutma sırasında belge bilgilerine (tür, cari, belge no, sebep) geri dönüp düzeltme.
   // Okutulan ürünler ve kayıt kimliği aynen kalır; düğmeye basınca listeye geri dönülür.
@@ -6412,7 +6474,7 @@
     }
     document.getElementById('malHareketMeta').innerHTML =
       '<div style="display:flex; align-items:flex-start; justify-content:space-between; gap:8px;"><div style="font-weight:800; font-size:13px; min-width:0;">' + escapeHtml(malBelge) + (malFatura ? ' · No ' + escapeHtml(malFatura) : '') + '</div>' +
-      '<span style="display:flex; gap:6px; flex-shrink:0;">' + (malTip === 'cikis' ? '<button type="button" id="malYazdirBtn" style="padding:5px 10px; font-size:12px; font-weight:800; border-radius:9px; background:var(--panel); border:1.5px solid var(--line); color:var(--text);">🖨️ Fiyatsız</button>' : '') +
+      '<span style="display:flex; gap:6px; flex-shrink:0;">' +
       '<button type="button" id="malBelgeDuzenleBtn" style="padding:5px 10px; font-size:12px; font-weight:800; border-radius:9px; background:var(--panel); border:1.5px solid var(--line); color:var(--text);">✏️ Düzenle</button></span></div>' +
       '<div style="color:var(--muted);">' + escapeHtml(malCari ? malCari.name : '') + (malCari && malCari.code ? ' · ' + escapeHtml(malCari.code) : '') + '</div>' +
       (malSebep ? '<div style="color:var(--muted);">Sebep: ' + escapeHtml(malSebep) + '</div>' : '') +

@@ -3679,6 +3679,24 @@ function erpDurum(p, callback) {
   var anahtar = String(props.getProperty('DB_ANAHTAR') || '').trim();
   if (!url || !anahtar) return outJson({ status: 'error', message: 'Veri tabanı ayarı yok (DB_URL / DB_ANAHTAR)' }, callback);
   var ne = String(p.ne || 'aktarim'), fn, govde, alis = alisGorur(auth);
+  if (ne === 'belge') {
+    // Telefondan kaydedilmiş belgenin içeriği (yazdırmak için; fiyatsız). Satırlar okutulma sırasıyla.
+    var bid = String(p.batchId || '').substring(0, 80);
+    if (!bid) return outJson({ status: 'error', message: 'Belge seçilmedi' }, callback);
+    var msh = SpreadsheetApp.getActiveSpreadsheet().getSheetByName('MalHareket');
+    var bas = null, bsat = [];
+    if (msh && msh.getLastRow() >= 2) {
+      msh.getRange(2, 1, msh.getLastRow() - 1, MAL_COL.ACIKLAMA).getValues().forEach(function (r) {
+        if (String(r[MAL_COL.BATCH - 1]) !== bid) return;
+        if (!bas) bas = { tarih: String(r[0] || ''), saat: String(r[1] || ''), tip: String(r[2] || ''), cari: String(r[3] || ''), belgeNo: String(r[4] || ''),
+          personel: String(r[5] || ''), belgeTuru: String(r[12] || ''), cariKodu: String(r[13] || ''), aciklama: String(r[MAL_COL.ACIKLAMA - 1] || '') };
+        bsat.push([String(r[6] || ''), String(r[7] || ''), String(r[8] || ''), Number(r[9]) || 0, String(r[10] || '')]);
+      });
+    }
+    if (!bas) return outJson({ status: 'error', message: 'Belge bulunamadı' }, callback);
+    bas.status = 'ok'; bas.satirlar = bsat;
+    return outJson(bas, callback);
+  }
   if (ne === 'fis') {
     var fisId = parseInt(p.fisId, 10);
     if (!(fisId > 0)) return outJson({ status: 'error', message: 'Belge seçilmedi' }, callback);
