@@ -240,12 +240,19 @@ function Irsaliye-Yaz($baglanti, $b) {
         $kartsiz = New-Object System.Collections.ArrayList
         foreach ($r in @($b.satirlar)) {
             if (-not $r) { continue }
-            $bbSql = "SELECT TOP 1 bb.STOK, bb.STOK_BIRIM, s.KOD, ISNULL(v.$kdvKolon, 0) AS KDV, bb.BARKOD FROM dbo.STOK_BARKOD_BIRIM bb JOIN dbo.STOK s ON s.ID = bb.STOK LEFT JOIN dbo.STOK_VERGI v ON v.ID = s.STOK_VERGI WHERE bb.BARKOD = @b"
-            $bar = ([string]$r.barkod).Trim()
-            $bb = Tablo $tx $bbSql @{ "@b" = $bar }
+            # Ayni barkod birden fazla urunde olabilir (ozellikle 1-2 haneli kisa / PLU barkodlar): telefondaki stok koduyla
+            # eslesen urun once secilir; aktif barkod ve varsayilan birim one alinir.
+            $bar = ([string]$r.barkod).Trim(); $sk = ([string]$r.stok_kodu).Trim()
+            $bbSql = "SELECT TOP 1 bb.STOK, bb.STOK_BIRIM, s.KOD, ISNULL(v.$kdvKolon, 0) AS KDV, bb.BARKOD FROM dbo.STOK_BARKOD_BIRIM bb JOIN dbo.STOK s ON s.ID = bb.STOK LEFT JOIN dbo.STOK_VERGI v ON v.ID = s.STOK_VERGI LEFT JOIN dbo.STOK_BARKOD sb ON sb.STOK_STOK_BIRIM = bb.STOK_STOK_BIRIM AND sb.BARKOD = bb.BARKOD WHERE bb.BARKOD = @b ORDER BY CASE WHEN s.KOD = @k THEN 0 ELSE 1 END, CASE WHEN ISNULL(sb.AKTIF, 1) = 1 THEN 0 ELSE 1 END, CASE WHEN ISNULL(bb.VARSAYILAN, 0) = 1 THEN 0 ELSE 1 END, bb.STOK DESC"
+            $bb = Tablo $tx $bbSql @{ "@b" = $bar; "@k" = $sk }
+            # Barkod ERP'de bulunamazsa telefondaki STOK KODUYLA aranir (varsayilan birim, o yoksa ilk birim).
+            if ($bb.Rows.Count -eq 0 -and $sk) {
+                $kodSql = "SELECT TOP 1 ssb.STOK, ssb.STOK_BIRIM, s.KOD, ISNULL(v.$kdvKolon, 0) AS KDV, ISNULL((SELECT TOP 1 b2.BARKOD FROM dbo.STOK_BARKOD b2 WHERE b2.STOK_STOK_BIRIM = ssb.ID ORDER BY b2.ID), @b) AS BARKOD FROM dbo.STOK s JOIN dbo.STOK_STOK_BIRIM ssb ON ssb.STOK = s.ID LEFT JOIN dbo.STOK_VERGI v ON v.ID = s.STOK_VERGI WHERE s.KOD = @k ORDER BY CASE WHEN ISNULL(ssb.VARSAYILAN, 0) = 1 THEN 0 ELSE 1 END, ISNULL(ssb.CARPAN, 1), ssb.ID"
+                $bb = Tablo $tx $kodSql @{ "@b" = $bar; "@k" = $sk }
+            }
             # Terazi etiketi (13 hane, 26-29 ile baslar): ERP'deki urun barkodu ilk 7 hanedir.
-            if ($bb.Rows.Count -eq 0 -and $bar.Length -eq 13 -and @("24","26","27","28","29") -contains $bar.Substring(0, 2)) { $bb = Tablo $tx $bbSql @{ "@b" = $bar.Substring(0, 7) } }
-            if ($bb.Rows.Count -eq 0 -and (Kart-Ac $tx $r $b)) { $bb = Tablo $tx $bbSql @{ "@b" = $bar } }
+            if ($bb.Rows.Count -eq 0 -and $bar.Length -eq 13 -and @("24","26","27","28","29") -contains $bar.Substring(0, 2)) { $bb = Tablo $tx $bbSql @{ "@b" = $bar.Substring(0, 7); "@k" = $sk } }
+            if ($bb.Rows.Count -eq 0 -and (Kart-Ac $tx $r $b)) { $bb = Tablo $tx $bbSql @{ "@b" = $bar; "@k" = $sk } }
             if ($bb.Rows.Count -eq 0) {
                 [void]$kartsiz.Add("$bar $($r.urun_adi)")
                 $script:EksikKart["$bar"] = ("{0}`t{1}`t{2} x {3}`t{4} ({5})" -f $bar, $r.urun_adi, $b.tip, $r.miktar, $b.cari, $b.belge_turu)

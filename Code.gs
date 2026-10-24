@@ -1483,7 +1483,10 @@ function sendMalMail(batch) {
       (batch.aciklama ? ('Açıklama: ' + batch.aciklama + '\n') : '') +
       'Kalem sayısı: ' + batch.kalemSayisi + ' · Toplam miktar: ' + trSayi(batch.toplamMiktar) + '\n' +
       'Kaydeden: ' + batch.personel + ' · ' + batch.tarih + ' ' + batch.saat + '\n\n' +
-      'Ürün listesi ekte Excel dosyası olarak bulunuyor (ERP12 mal aktarım şablonu).',
+      (/rsaliye/i.test(String(batch.belgeTuru || '')) && !(/^sat/i.test(String(batch.belgeTuru || '')) && !/ade/i.test(String(batch.belgeTuru || '')) && batch.sebep && batch.sebep !== 'Satış')
+        ? '⚠️ BU BELGE ERP\'YE OTOMATİK İRSALİYE OLARAK AKTARILIYOR. Ekteki Excel\'i ERP\'ye İÇE AKTARMAYIN — mal iki kez girer.\n' +
+          'Excel yalnız kontrol içindir. Aktarım durumu: uygulamada Mal Giriş → 🧾 İrsaliyeler.'
+        : 'Ürün listesi ekte Excel dosyası olarak bulunuyor (ERP12 mal aktarım şablonu).'),
     attachments: [blob]
   });
   return true;
