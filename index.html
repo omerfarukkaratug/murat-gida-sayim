@@ -431,7 +431,7 @@
   <header style="border:none; padding:0 0 16px; background:transparent; display:flex; align-items:flex-start; justify-content:space-between;">
     <div>
       <h1><img src="logo-header.png" alt="Murat Gıda" style="height:30px; width:auto; display:block;"></h1>
-      <div class="sub"><img src="icon.svg" alt="" style="width:15px;height:15px;vertical-align:-3px;margin-right:5px;">KRT Saha · Murat Gıda • offline • Android • build 261</div>
+      <div class="sub"><img src="icon.svg" alt="" style="width:15px;height:15px;vertical-align:-3px;margin-right:5px;">KRT Saha · Murat Gıda • offline • Android • build 262</div>
     </div>
     <button type="button" id="themeToggleBtn" title="Tema seç" style="background:var(--panel2); border:1.5px solid var(--line); color:var(--text); width:34px; height:34px; border-radius:50%; font-size:15px; padding:0; display:flex; align-items:center; justify-content:center; flex-shrink:0;">🎨</button>
   </header>
@@ -4781,7 +4781,7 @@
     irsaliyePdf({ tur: d.belgeTuru || r[1], belgeNo: r[6] || d.belgeNo, tarih: irsTarih(d.tarih), cari: d.cari || r[2], cariKod: d.cariKodu, hazirlayan: d.personel || r[3], aciklama: d.aciklama,
       satirlar: (d.satirlar || []).map(function(x){ return { barkod: x[0], ad: x[1], kod: x[2], miktar: x[3], birim: x[4] }; }) });
   }
-  var IRS_TUR = [['', 'Tümü'], ['f', 'Faturalanmamış'], ['5', 'Alış'], ['6', 'Satış'], ['7', 'Alıştan iade'], ['8', 'Satıştan iade']];
+  var IRS_TUR = [['', 'Tümü'], ['5', 'Alış'], ['6', 'Satış'], ['7', 'Alıştan iade'], ['8', 'Satıştan iade']];   // faturalanmış irsaliyeler listelenmez (028)
   function irsErpHtml(){
     var html = '<div style="display:flex; gap:8px; margin-bottom:8px;"><input type="text" id="irsAra" placeholder="🔍 Belge no ya da cari" value="' + escapeHtml(irs.ara) + '" autocomplete="off" style="flex:1; min-width:0;">' +
       '<select id="irsGun" class="selectBox" style="width:auto;">' + [7, 30, 90, 365].map(function(g){ return '<option value="' + g + '"' + (g === irs.gun ? ' selected' : '') + '>' + g + ' gün</option>'; }).join('') + '</select></div>' +
