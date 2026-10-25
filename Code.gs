@@ -140,6 +140,9 @@ function doGet(e) {
   if (e.parameter && e.parameter.action === 'yonetici_ozet') {
     return yoneticiOzet(e.parameter, e.parameter.callback);
   }
+  if (e.parameter && e.parameter.action === 'mal_siparis') {
+    return malSiparis(e.parameter, e.parameter.callback);
+  }
   if (e.parameter && e.parameter.action === 'mal_cari_fiyat') {
     return malCariFiyat(e.parameter, e.parameter.callback);
   }
@@ -1274,9 +1277,14 @@ function saveMalHareket(data) {
   }
 
   // Mail: sadece bu çağrıda YENİ satır yazıldıysa gider — tekrar gönderimde ikinci mail çıkmaz.
+  // Siparişle karşılaştırma (telefonda "Siparişle karşılaştır"): fark satırları TeslimatFark sekmesine, mail metnine.
+  var teslimFark = null;
+  if (hareket === 'Giriş' && data.siparisFark) {
+    try { teslimFark = teslimatFarkYaz(data, batchId); } catch (tfErr) { gunlukYaz('mal', String(data.personel || ''), 'Teslimat farkı yazılamadı: ' + tfErr, true); }
+  }
   var mailGitti = false;
   if (rows.length > 0) {
-    try { mailGitti = sendMalMail(malBatchFromRows(rows)); } catch (mailErr) { /* mail gitmese de kayıt güvende */ }
+    try { mailGitti = sendMalMail(malBatchFromRows(rows), teslimFark); } catch (mailErr) { /* mail gitmese de kayıt güvende */ }
   }
 
   return ContentService
@@ -1471,7 +1479,66 @@ function malXlsxBlob(batch) {
 // kaydedilirse (MAL_EMAIL script property'si) o adres bunun yerine geçer.
 var VARSAYILAN_MAL_EMAIL = 'muratgida_avm@hotmail.com';
 
-function sendMalMail(batch) {
+// ============================================================
+// 📦 TESLİMAT FARKI: tedarikçiye verilen sipariş ile gelen mal (bu belge + önceden gelen) arasındaki fark.
+// Telefon kaydederken gönderir; burada temizlenip 'TeslimatFark' sekmesine yazılır (aynı belge ikinci kez yazılmaz).
+// data.siparisFark = { id, gonderim, satirlar: [[barkod, stok kodu, ad, sipariş, önceden gelen, bu belge]] }
+// Dönüş: { siparisId, eksik: [[ad, fark]], fazla: [[ad, fark]], yok: [[ad, miktar]] } (fark yoksa listeler boş)
+// ============================================================
+var TESLIM_BASLIK = ['Tarih', 'Saat', 'Personel', 'Cari', 'Cari Kodu', 'Belge No', 'Sipariş No', 'Sipariş Tarihi', 'Barkod', 'Stok Kodu', 'Ürün', 'Sipariş', 'Önceden Gelen', 'Bu Belge', 'Fark', 'Durum', 'Kayıt'];
+function teslimatFarkYaz(data, batchId) {
+  var sf = data.siparisFark || {}, sat = Array.isArray(sf.satirlar) ? sf.satirlar.slice(0, 400) : [];
+  var sonuc = { siparisId: String(sf.id || '').substring(0, 60), eksik: [], fazla: [], yok: [] };
+  var tarih = Utilities.formatDate(new Date(), 'Europe/Istanbul', 'dd.MM.yyyy'), saat = Utilities.formatDate(new Date(), 'Europe/Istanbul', 'HH:mm');
+  var yaz = [];
+  sat.forEach(function (h) {
+    h = h || [];
+    var sip = Number(h[3]) || 0, once = Number(h[4]) || 0, bu = Number(h[5]) || 0;
+    if (!(sip >= 0 && sip < 1e7 && once >= 0 && once < 1e7 && bu >= 0 && bu < 1e7)) return;
+    var fark = Math.round((once + bu - sip) * 1000) / 1000, ad = String(h[2] || h[0] || '').substring(0, 100);
+    if (Math.abs(fark) < 1e-9) return;
+    var durum = sip <= 0 ? 'Siparişte yok' : fark < 0 ? 'Eksik' : 'Fazla';
+    if (sip <= 0) sonuc.yok.push([ad, bu]); else if (fark < 0) sonuc.eksik.push([ad, fark]); else sonuc.fazla.push([ad, fark]);
+    yaz.push([tarih, saat, String(data.personel || '').substring(0, 60), String(data.cari || '').substring(0, 150), String(data.cariKodu || '').substring(0, 80),
+      String(data.faturaNo || '').substring(0, 60), sonuc.siparisId, String(sf.gonderim || '').substring(0, 20), String(h[0] || '').substring(0, 40), String(h[1] || '').substring(0, 40),
+      ad, sip, once, bu, fark, durum, batchId]);
+  });
+  var ss = SpreadsheetApp.getActiveSpreadsheet(), sh = ss.getSheetByName('TeslimatFark');
+  if (!sh) { sh = ss.insertSheet('TeslimatFark'); sh.getRange(1, 1, 1, TESLIM_BASLIK.length).setValues([TESLIM_BASLIK]); sh.setFrozenRows(1); }
+  if (sh.getLastRow() >= 2) {
+    var zaten = sh.getRange(2, TESLIM_BASLIK.length, sh.getLastRow() - 1, 1).getValues().some(function (r) { return String(r[0]) === batchId; });
+    if (zaten) return sonuc;   // bu belge zaten yazılmış (tekrar gönderim)
+  }
+  if (yaz.length) {
+    var ilk = sh.getLastRow() + 1;
+    [9, 10].forEach(function (c) { sh.getRange(ilk, c, yaz.length, 1).setNumberFormat('@'); });
+    sh.getRange(ilk, 1, yaz.length, TESLIM_BASLIK.length).setValues(yaz);
+    gunlukYaz('mal', String(data.personel || ''), 'Teslimat farkı: ' + String(data.cari || '') + ' — ' + sonuc.eksik.length + ' eksik, ' + sonuc.fazla.length + ' fazla, ' + sonuc.yok.length + ' siparişte yok', false);
+  }
+  return sonuc;
+}
+// Son N günün teslimat farkları (yönetici özeti için): [[tarih, cari, ürün, fark, durum], …]
+function teslimatFarklari(gun) {
+  var sh = SpreadsheetApp.getActiveSpreadsheet().getSheetByName('TeslimatFark');
+  if (!sh || sh.getLastRow() < 2) return [];
+  var sinir = Date.now() - (gun || 2) * 86400000, l = [];
+  sh.getRange(2, 1, sh.getLastRow() - 1, TESLIM_BASLIK.length).getValues().forEach(function (r) {
+    var t = String(r[0] instanceof Date ? Utilities.formatDate(r[0], 'Europe/Istanbul', 'dd.MM.yyyy') : r[0]).split('.');
+    var d = t.length === 3 ? new Date(Number(t[2]), Number(t[1]) - 1, Number(t[0]), 23, 59).getTime() : 0;
+    if (d >= sinir) l.push([String(r[0]), String(r[3]), String(r[10]), Number(r[14]) || 0, String(r[15])]);
+  });
+  return l;
+}
+function teslimFarkMetni(tf) {
+  if (!tf || !(tf.eksik.length + tf.fazla.length + tf.yok.length)) return tf ? '✅ Siparişle karşılaştırıldı: gelen mal sipariş ile AYNI.\n\n' : '';
+  var m = '📦 SİPARİŞLE KARŞILAŞTIRMA (sipariş ' + tf.siparisId + '):\n';
+  if (tf.eksik.length) m += '  🔻 EKSİK GELEN (' + tf.eksik.length + '):\n' + tf.eksik.slice(0, 40).map(function (x) { return '     ' + x[0] + ': ' + trSayi(-x[1]) + ' eksik'; }).join('\n') + '\n';
+  if (tf.fazla.length) m += '  🔺 FAZLA GELEN (' + tf.fazla.length + '):\n' + tf.fazla.slice(0, 40).map(function (x) { return '     ' + x[0] + ': ' + trSayi(x[1]) + ' fazla'; }).join('\n') + '\n';
+  if (tf.yok.length) m += '  ➕ SİPARİŞTE OLMAYAN (' + tf.yok.length + '):\n' + tf.yok.slice(0, 40).map(function (x) { return '     ' + x[0] + ': ' + trSayi(x[1]); }).join('\n') + '\n';
+  return m + '\n';
+}
+
+function sendMalMail(batch, teslimFark) {
   // Property hiç ayarlanmamışsa (null) sabit varsayılan adrese gider. Panelden
   // bilerek boş bırakılıp kaydedilmişse (boş metin, null değil) mail kapatılmış
   // demektir — o zaman gitmez.
@@ -1481,7 +1548,7 @@ function sendMalMail(batch) {
   var blob = malXlsxBlob(batch);
   MailApp.sendEmail({
     to: to,
-    subject: batch.ad + ' (Mal ' + batch.hareket + ')',
+    subject: batch.ad + ' (Mal ' + batch.hareket + ')' + (teslimFark && (teslimFark.eksik.length || teslimFark.fazla.length) ? ' ⚠️ siparişten farklı' : ''),
     body: 'Mal ' + batch.hareket.toLowerCase() + ' kaydı tamamlandı.\n\n' +
       'Belge: ' + batch.belgeTuru + (batch.belgeNo ? (' · No ' + batch.belgeNo) : '') + '\n' +
       'Cari: ' + batch.cari + (batch.cariKodu ? (' (' + batch.cariKodu + ')') : '') + '\n' +
@@ -1489,6 +1556,7 @@ function sendMalMail(batch) {
       (batch.aciklama ? ('Açıklama: ' + batch.aciklama + '\n') : '') +
       'Kalem sayısı: ' + batch.kalemSayisi + ' · Toplam miktar: ' + trSayi(batch.toplamMiktar) + '\n' +
       'Kaydeden: ' + batch.personel + ' · ' + batch.tarih + ' ' + batch.saat + '\n\n' +
+      teslimFarkMetni(teslimFark) +
       (/rsaliye/i.test(String(batch.belgeTuru || '')) && !(/^sat/i.test(String(batch.belgeTuru || '')) && !/ade/i.test(String(batch.belgeTuru || '')) && batch.sebep && batch.sebep !== 'Satış')
         ? '⚠️ BU BELGE ERP\'YE OTOMATİK İRSALİYE OLARAK AKTARILIYOR. Ekteki Excel\'i ERP\'ye İÇE AKTARMAYIN — mal iki kez girer.\n' +
           'Excel yalnız kontrol içindir. Aktarım durumu: uygulamada Mal Giriş → 🧾 İrsaliyeler.'
@@ -3652,6 +3720,7 @@ function tedarik(p, callback) {
     // Firma sayfası: diğer tedarikçilerdeki fiyatlar + notlar (026 SQL yoksa sessizce yok sayılır).
     if (fn === 'tedarikci_firma' && sonuc && sonuc.status === 'ok') {
       try { var ek = dbCagir({ url: url, anahtar: anahtar }, 'tedarik_ek', { p_cari_kod: govde.p_cari_kod }); if (ek && ek.status === 'ok') sonuc.ek = ek; } catch (ee) { /* 026 yok */ }
+      try { var ac = dbCagir({ url: url, anahtar: anahtar }, 'tedarik_acik_siparis', { p_cari_kod: govde.p_cari_kod, p_carpan: koliCarpanHarita() }); if (ac && ac.status === 'ok') sonuc.acik = ac; } catch (ea) { /* 030 yok */ }
     }
     if (fn === 'tedarik_not_yaz' && sonuc && sonuc.status === 'ok') gunlukYaz('tedarik', String(p.user || ''), 'Tedarikçi notu: ' + govde.p.cari_kod + (govde.p.anahtar ? ' / ' + govde.p.anahtar : '') + (govde.p.metin ? '' : ' (silindi)'), false);
     if (fn === 'tedarik_siparis_yaz' && sonuc && sonuc.status === 'ok') gunlukYaz('tedarik', String(p.user || ''), 'Tedarikçi siparişi ' + govde.p.durum + ': ' + govde.p.cari_ad + ' (' + govde.p.satirlar.length + ' ürün)', false);
@@ -3749,6 +3818,13 @@ function miniKayitlar(gunSayisi) {
   if (n < 2) return [];
   var sinir = Utilities.formatDate(new Date(Date.now() - gunSayisi * 86400000), 'Europe/Istanbul', 'yyyy-MM-dd');
   return sh.getRange(2, 1, n - 1, MINI_BASLIK.length).getValues().filter(function (r) { return String(r[0]) >= sinir; });
+}
+// Katalog: koli (çok adetli) barkod → koli içi adet. Telefondan koliyle girilen mal adede çevrilsin diye.
+function koliCarpanHarita() {
+  var sh = SpreadsheetApp.getActiveSpreadsheet().getSheetByName('Katalog'), m = {};
+  if (!sh || sh.getLastRow() < 2) return m;
+  sh.getRange(2, 2, sh.getLastRow() - 1, 6).getValues().forEach(function (r) { var c = Number(r[5]); if (r[0] && c > 1) m[String(r[0]).trim()] = c; });
+  return m;
 }
 function miniKatalog() {
   var sh = SpreadsheetApp.getActiveSpreadsheet().getSheetByName('Katalog'), m = {};
@@ -3891,7 +3967,14 @@ function yoneticiOzet(p, callback) {
     var eksi = Object.keys(kat).filter(function (bk) { return !kat[bk].koli && kat[bk].stok < 0; });
     if (eksi.length) maddeler.push(['uyari', eksi.length + ' ürün eksi stokta', 'ERP\'de stok eksiye düşmüş: giriş unutulmuş ya da yanlış barkodla satılmış olabilir. Mini sayım listesine öncelikle girer.', 'mini']);
   } catch (e3) { maddeler.push(['uyari', 'Sayım verisi okunamadı', String(e3).substring(0, 120), '']); }
-  // 4) Sunucu bekçisi (alan adı, disk, yedek, ERP verisi)
+  // 4) Tedarikçiden eksik / fazla gelen mal (son 2 gün, Mal Giriş'te siparişle karşılaştırılanlar)
+  try {
+    var tf = teslimatFarklari(2), firma = {};
+    tf.forEach(function (r) { if (r[4] === 'Eksik' || r[4] === 'Fazla') { var f = firma[r[1]] = firma[r[1]] || { e: 0, z: 0, ornek: [] }; if (r[4] === 'Eksik') f.e++; else f.z++; if (f.ornek.length < 3) f.ornek.push(r[2] + ' (' + (r[3] > 0 ? '+' : '') + trSayi(r[3]) + ')'); } });
+    Object.keys(firma).forEach(function (ad) { var f = firma[ad];
+      maddeler.push(['uyari', ad + ': siparişten farklı mal geldi', (f.e ? f.e + ' üründe eksik' : '') + (f.e && f.z ? ', ' : '') + (f.z ? f.z + ' üründe fazla' : '') + '. ' + f.ornek.join(', ') + ' — firmaya bildir / faturayı kontrol et.', '']); });
+  } catch (e5) { /* sekme yok */ }
+  // 5) Sunucu bekçisi (alan adı, disk, yedek, ERP verisi)
   if (typeof KRTSunucu !== 'undefined') {
     try {
       var b = KRTSunucu.bakim(false);
@@ -3901,6 +3984,25 @@ function yoneticiOzet(p, callback) {
   var sira = { acil: 0, uyari: 1, bilgi: 2 };
   maddeler.sort(function (a, b) { return sira[a[0]] - sira[b[0]]; });
   return outJson({ status: 'ok', zaman: simdiMetin(), maddeler: maddeler }, callback);
+}
+
+// Mal Giriş (alış): bu firmaya verilmiş, malı henüz tam gelmemiş siparişler — gelen malı siparişle karşılaştırmak için.
+// Giriş yeter; yalnız miktar gider (fiyat yok).
+function malSiparis(p, callback) {
+  var auth = kimlikOnbellek(p.user, p.pass);
+  if (!auth.ok) return outJson({ status: 'error', kimlik: true, message: 'Giriş gerekli' }, callback);
+  var cariKod = String(p.cariKod || '').trim().substring(0, 80);
+  if (!cariKod) return outJson({ status: 'ok', siparisler: [] }, callback);
+  var ayar = dbAyar(); if (!ayar) return outJson({ status: 'ok', siparisler: [], dbYok: true }, callback);
+  try {
+    var r = dbCagir(ayar, 'tedarik_acik_siparis', { p_cari_kod: cariKod, p_carpan: koliCarpanHarita() });
+    if (!r || r.status !== 'ok') throw new Error((r && r.message) || 'cevap yok');
+    return outJson({ status: 'ok', siparisler: r.siparisler || [] }, callback);
+  } catch (err) {
+    if (/tedarik_acik_siparis/.test(String(err))) return outJson({ status: 'ok', siparisler: [], sqlYok: true }, callback);
+    gunlukYaz('veritabani', 'mal sipariş', 'Sorgu başarısız: ' + err, true);
+    return outJson({ status: 'error', message: 'Açık siparişler alınamadı' }, callback);
+  }
 }
 
 // Mal Giriş "Satıştan İade": bu carinin her ürünü EN SON hangi fiyattan aldığı (net, KDV dahil).

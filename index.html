@@ -431,7 +431,7 @@
   <header style="border:none; padding:0 0 16px; background:transparent; display:flex; align-items:flex-start; justify-content:space-between;">
     <div>
       <h1><img src="logo-header.png" alt="Murat Gıda" style="height:30px; width:auto; display:block;"></h1>
-      <div class="sub"><img src="icon.svg" alt="" style="width:15px;height:15px;vertical-align:-3px;margin-right:5px;">KRT Saha · Murat Gıda • offline • Android • build 263</div>
+      <div class="sub"><img src="icon.svg" alt="" style="width:15px;height:15px;vertical-align:-3px;margin-right:5px;">KRT Saha · Murat Gıda • offline • Android • build 264</div>
     </div>
     <button type="button" id="themeToggleBtn" title="Tema seç" style="background:var(--panel2); border:1.5px solid var(--line); color:var(--text); width:34px; height:34px; border-radius:50%; font-size:15px; padding:0; display:flex; align-items:center; justify-content:center; flex-shrink:0;">🎨</button>
   </header>
@@ -5495,17 +5495,20 @@
   }
   function cariOneriHesapla(d, hedefGun){
     var hedef = Number(hedefGun) || Number(state.oneriGun) || 30, satisGun = Number(d.satisGun) || 60, harita = oneriStokHaritasi();
+    // Açık sipariş (030 SQL): verilmiş ama gelmemiş mal öneriden düşülür; firmanın teslim süresi kadar da ek stok gerekir.
+    var yoldaM = (d.acik && d.acik.yolda) || {}, teslim = Math.min(14, Math.max(0, Math.round(Number(d.acik && d.acik.teslim) || 0)));
     return (d.satirlar || []).map(function(r){
       var k = r[0] ? harita[r[0]] : null, kat = k ? k.v : (catalogMap.get(String(r[1])) || null);
       var stokVar = !!kat && kat.oldStock !== '' && kat.oldStock !== undefined && !isNaN(Number(kat.oldStock));
       var stok = stokVar ? Number(kat.oldStock) : null;
       var satis = (Number(r[8]) || 0) + (Number(r[9]) || 0), gunluk = Math.max(0, satis / satisGun);
-      var pk = oneriPaket(r[7], kat && kat.carpan), ihtiyac = gunluk * hedef - (stok === null ? 0 : Math.max(stok, 0));
+      var yolda = Number((r[0] && yoldaM[r[0]]) || (r[1] && yoldaM[r[1]]) || 0) || 0;
+      var pk = oneriPaket(r[7], kat && kat.carpan), ihtiyac = gunluk * (hedef + teslim) - (stok === null ? 0 : Math.max(stok, 0)) - yolda;
       var oneri = (stok !== null && gunluk > 0 && ihtiyac > 0) ? Math.ceil(ihtiyac / pk.n - 1e-9) * pk.n : 0;
       var yeter = (stok !== null && gunluk > 0) ? Math.max(stok, 0) / gunluk : null;
       var durum = stok === null ? 'bilinmiyor' : gunluk <= 0 ? 'satisyok' : stok <= 0 ? 'bitti' : yeter < 7 ? 'az' : yeter < hedef ? 'yakin' : 'yeter';
       return { ad: (kat && kat.name) || r[2] || r[0] || r[1], kod: r[0], barkod: r[1] || (k ? k.b : ''), sonTarih: r[3], sonMiktar: r[4], sonFiyat: r[5], kez: r[6],
-        stok: stok, gunluk: gunluk, satis: satis, yeter: yeter, oneri: oneri, paket: pk, durum: durum };
+        stok: stok, gunluk: gunluk, satis: satis, yeter: yeter, oneri: oneri, paket: pk, durum: durum, yolda: yolda };
     }).sort(function(a, b){
       var o = { bitti: 0, az: 1, yakin: 2, yeter: 3, satisyok: 4, bilinmiyor: 5 };
       return (o[a.durum] - o[b.durum]) || ((a.yeter === null ? 1e9 : a.yeter) - (b.yeter === null ? 1e9 : b.yeter)) || (b.gunluk - a.gunluk);
@@ -5704,6 +5707,7 @@
   function tedEk(F){ return (F && F.veri && F.veri.ek) || { fiyatlar: {}, notlar: {}, urunNot: {} }; }
   function tedKarsilastirHtml(x, F){
     var ek = tedEk(F), l = (ek.fiyatlar || {})[tedAnahtar(x)], html = '';
+    if(x.yolda > 0) html += '<div class="alt"><span style="color:var(--accent); font-weight:700;">📨 Yolda ' + escapeHtml(fmtQty(x.yolda)) + ' — sipariş verildi, henüz gelmedi (öneriden düşüldü)</span></div>';
     if(F.veri && F.veri.alis && l && l.length){
       var ucuz = l[0], benim = Number(x.sonFiyat);
       if(benim > 0 && Number(ucuz[2]) < benim * 0.99){
@@ -5805,6 +5809,8 @@
     if(ted.genel){ var oz = tedHesap().firmalar[F.kod]; if(oz) F.ozet = oz; }
     var c = cariList.filter(function(x){ return x.code === F.kod; })[0], bilgi = [];
     if(d.aralik > 0) bilgi.push('📆 Genelde <b>' + d.aralik + ' günde bir</b> geliyor');
+    if(d.acik && d.acik.teslim !== null && d.acik.teslim !== undefined && Number(d.acik.teslimSayi) > 0) bilgi.push('⏱ Sipariş verince ortalama <b>' + (Number(d.acik.teslim) < 1 ? 'aynı gün' : fmtQty(d.acik.teslim) + ' günde') + '</b> geliyor (' + d.acik.teslimSayi + ' siparişten) — öneri bunu hesaba katar');
+    if(d.acik && (d.acik.siparisler || []).length){ var yk = Object.keys(d.acik.yolda || {}).length; if(yk) bilgi.push('📨 <b>' + d.acik.siparisler.length + ' açık sipariş</b> — ' + yk + ' ürün yolda, öneriden düşüldü'); }
     if(F.ozet && F.ozet.gecen !== null && F.ozet.gecen !== undefined) bilgi.push('🚚 Son geliş ' + escapeHtml(F.ozet.son) + ' (' + (F.ozet.gecen === 0 ? 'bugün' : F.ozet.gecen + ' gün önce') + ')' + (F.ozet.zamani ? ' — <b style="color:var(--accent);">sırası geldi</b>' : ''));
     var sf = (d.faturalar || [])[0];
     if(sf) bilgi.push('<span data-tfis="' + escapeHtml(String(sf[0])) + '" data-tkaynak="' + escapeHtml(sf[1] || '') + '" style="cursor:pointer;">📄 Son belge ' + escapeHtml(sf[2]) + (d.alis && sf[6] !== null ? ' · ' + escapeHtml(fmtMoney(sf[6])) : '') + ' <b style="color:var(--accent);">' + (ted.acikFis[String(sf[0])] ? '▲ kapat' : '▼ aç') + '</b></span>');
@@ -5855,7 +5861,7 @@
     html += toplam ? goster.map(function(x){ return tedUrunSatir(x, F, F.kod); }).join('') + ekler.map(function(x){
       return '<div class="chSatir"><div class="ust" style="align-items:center;"><span style="min-width:0; overflow:hidden; text-overflow:ellipsis;">' + escapeHtml(x.ad) + '</span>' + tedAdetDugme(F.kod, x) + '</div><div class="alt"><span>➕ elle eklendi' + (x.barkod ? ' · ' + escapeHtml(x.barkod) : '') + '</span></div></div>';
     }).join('') : '<div class="hint">Siparişte ürün yok — ' + hedef + ' günlük stok yeterli. 👍 Ürün eklemek için yukarıdaki kutuya yaz ya da 📋 Tümü / 📉 Azalanlar sekmesinden + bas.</div>';
-    html += '<div class="hint" style="margin-top:10px; font-size:11px;">Öneri = ' + hedef + ' günlük satış − stok' + (ted.hedef[F.kod] ? '' : ' (otomatik: firmanın geliş aralığı + 3 gün)') + '. Koli içi adet tanımlıysa ona, yoksa geçmiş alışların ortak katına yuvarlanır. Siparişler yalnız bu uygulamada saklanır, ERP\'ye yazılmaz. Firmaya iletince "📨 Sipariş verildi" ile işaretle.' + (d.sonVeri ? ' ERP verisi: ' + escapeHtml(d.sonVeri) : '') + '</div>';
+    html += '<div class="hint" style="margin-top:10px; font-size:11px;">Öneri = ' + hedef + ' günlük satış − stok' + (ted.hedef[F.kod] ? '' : ' (otomatik: firmanın geliş aralığı + 3 gün)') + (d.acik && Number(d.acik.teslim) >= 1 ? ' + teslim süresi (' + fmtQty(Math.min(14, Math.round(Number(d.acik.teslim)))) + ' gün)' : '') + ' − yoldaki (sipariş verilmiş, gelmemiş) mal. Koli içi adet tanımlıysa ona, yoksa geçmiş alışların ortak katına yuvarlanır. Siparişler yalnız bu uygulamada saklanır, ERP\'ye yazılmaz. Firmaya iletince "📨 Sipariş verildi" ile işaretle.' + (d.sonVeri ? ' ERP verisi: ' + escapeHtml(d.sonVeri) : '') + '</div>';
     return html;
   }
   function tedGecmisHtml(d){
@@ -6319,6 +6325,8 @@
   document.getElementById('malHareketMeta').addEventListener('click', function(e){
     if(e.target.closest && e.target.closest('#malIadeMetaBtn') && malIadeFisler.length) malIadeGoster();
     if(e.target.closest && e.target.closest('#malBelgeDuzenleBtn')) malBelgeDuzenle();
+    var sb = e.target.closest && e.target.closest('[data-malsip]');
+    if(sb){ var v = sb.getAttribute('data-malsip'); if(v === 'ac') malSiparis.acik = !malSiparis.acik; else { malSiparis.sec = v; malSiparis.acik = true; } renderMalMeta(); }
   });
   // Okutma sırasında belge bilgilerine (tür, cari, belge no, sebep) geri dönüp düzeltme.
   // Okutulan ürünler ve kayıt kimliği aynen kalır; düğmeye basınca listeye geri dönülür.
@@ -6400,6 +6408,7 @@
       malSebep = d.sebep || '';
       malItems = d.items.slice();
       malItems.forEach(function(it){ if(!it.v) it.v = 1; }); // eski taslaklar: sürüm 1
+      malSiparis = { kod: '', liste: [], yukleniyor: false, sec: '', acik: false };
       malBatchId = d.batchId || makeId();
       malCariInputEl.value = malCari ? malCari.name : '';
       malFaturaInputEl.value = malFatura;
@@ -6412,6 +6421,7 @@
     }
     malBelge = MAL_BELGE[tip][0];
     malCari = null; malFatura = ''; malSebep = ''; malAciklama = ''; malItems = []; malBatchId = makeId();
+    malSiparis = { kod: '', liste: [], yukleniyor: false, sec: '', acik: false };
     malCariInputEl.value = ''; malFaturaInputEl.value = ''; malSebepSelectEl.value = '';
     malCariPickedEl.classList.add('hidden');
     renderBelgeSeg();
@@ -6603,7 +6613,71 @@
     if(degisti){ saveMalDraft(); renderMalList(); }
   }
   // Satıştan iade: carinin son aldığı fiyatlar sunucudan bir kez çekilir (internet yoksa raf fiyatı kalır).
+  // ---- 📨 Siparişle karşılaştırma (Mal Giriş, alış): bu firmaya verilmiş, malı tam gelmemiş sipariş(ler) ----
+  var malSiparis = { kod: '', liste: [], yukleniyor: false, sec: '', acik: false };
+  function malSiparisUygun(){ return malTip === 'giris' && !malIadeSatis(); }
+  function malSiparisGetir(){
+    var kod = malCariKod();
+    if(!malSiparisUygun() || !kod || malSiparis.kod === kod || malSiparis.yukleniyor) return;
+    var auth = currentAuth(); if(!auth || !navigator.onLine) return;
+    malSiparis.yukleniyor = true;
+    jsonpRequestP(state.serverUrl || DEFAULT_SERVER_URL, { action: 'mal_siparis', user: auth.user, pass: auth.pass, cariKod: kod }, function(err, d){
+      malSiparis.yukleniyor = false;
+      if(err || !d || d.status !== 'ok') return;
+      var l = d.siparisler || [];
+      malSiparis = { kod: kod, liste: l, yukleniyor: false, sec: l.length ? l[l.length - 1].id : '', acik: false };
+      if(malCariKod() === kod && !malScreenEl.classList.contains('hidden')) renderMalMeta();
+    }, 30000);
+  }
+  // Okutulanlar (adet; koli barkodu çarpanla adede çevrilir) siparişin satırlarıyla eşleştirilir.
+  // Dönüş: { sp, satirlar: [{ b, k, ad, sip, once, bu, fark }], yok: [{ b, k, ad, bu }], eksik, fazla, tam }
+  function malSipKarsi(){
+    if(!malSiparisUygun() || !malCariKod() || malSiparis.kod !== malCariKod() || !malSiparis.liste.length) return null;
+    var sp = malSiparis.liste.filter(function(x){ return x.id === malSiparis.sec; })[0] || malSiparis.liste[malSiparis.liste.length - 1];
+    var okunan = {}, sira = [];
+    malItems.forEach(function(it){
+      var kat = catalogMap.get(it.barkod) || {}, k = it.stokKodu || kat.stockCode || '', key = k || it.barkod;
+      var o = okunan[key]; if(!o){ o = okunan[key] = { ad: it.ad, b: it.barkod, k: k, m: 0 }; sira.push(key); }
+      o.m += (Number(it.miktar) || 0) * (koliCarpani(kat) || 1);
+    });
+    var kullanilan = {}, R = { sp: sp, satirlar: [], yok: [], eksik: 0, fazla: 0, tam: 0 };
+    (sp.satirlar || []).forEach(function(r){
+      var b = String(r[0] || ''), k = String(r[1] || ''), key = null;
+      if(k && okunan[k]) key = k;
+      else if(b) key = sira.filter(function(x){ return okunan[x].b === b; })[0] || null;
+      var bu = key ? okunan[key].m : 0; if(key) kullanilan[key] = 1;
+      var sip = Number(r[3]) || 0, once = Number(r[4]) || 0, fark = Math.round((once + bu - sip) * 1000) / 1000;
+      R.satirlar.push({ b: b, k: k, ad: r[2] || (key && okunan[key].ad) || b, sip: sip, once: once, bu: bu, fark: fark });
+      if(fark < 0) R.eksik++; else if(fark > 0) R.fazla++; else R.tam++;
+    });
+    sira.forEach(function(x){ if(!kullanilan[x]) R.yok.push({ b: okunan[x].b, k: okunan[x].k, ad: okunan[x].ad, bu: okunan[x].m }); });
+    return R;
+  }
+  function malSipHtml(){
+    var R = malSipKarsi(); if(!R) return '';
+    var oz = (R.eksik ? '🔻 ' + R.eksik + ' eksik' : '') + (R.fazla ? (R.eksik ? ' · ' : '') + '🔺 ' + R.fazla + ' fazla' : '') + (R.yok.length ? (R.eksik || R.fazla ? ' · ' : '') + '➕ ' + R.yok.length + ' siparişte yok' : '');
+    var renk = R.eksik ? 'var(--amber)' : 'var(--accent)';
+    var html = '<button type="button" data-malsip="ac" style="width:100%; margin-top:8px; text-align:left; background:var(--panel); border:1.5px solid ' + renk + '; color:var(--text); font-size:13px; padding:9px 10px; border-radius:10px; line-height:1.4;">' +
+      '📨 <b>Bu firmaya sipariş verilmiş</b> (' + escapeHtml(R.sp.gonderim || '') + ', ' + R.satirlar.length + ' ürün)<br><span style="font-weight:800; color:' + renk + ';">' + (oz || '✅ Okutulanlar siparişle aynı') + '</span> <span style="color:var(--muted);">' + (malSiparis.acik ? '▲ kapat' : '▼ karşılaştır') + '</span></button>';
+    if(!malSiparis.acik) return html;
+    if(malSiparis.liste.length > 1) html += '<div style="display:flex; gap:6px; flex-wrap:wrap; margin-top:6px;">' + malSiparis.liste.map(function(x){
+      return '<button type="button" data-malsip="' + escAttr(x.id) + '" class="hrkSekme' + (x.id === R.sp.id ? ' on' : '') + '" style="padding:5px 9px; font-size:12px;">' + escapeHtml(x.gonderim) + '</button>'; }).join('') + '</div>';
+    var sirala = R.satirlar.slice().sort(function(a, b){ var o = function(x){ return x.fark < 0 ? 0 : x.fark > 0 ? 1 : 2; }; return o(a) - o(b); });
+    html += '<div style="margin-top:6px; font-size:12.5px; line-height:1.45;">' + sirala.map(function(x){
+      var ik = x.fark < 0 ? '🔻' : x.fark > 0 ? '🔺' : '✅', ne = x.fark < 0 ? '<b style="color:var(--red);">' + fmtQty(-x.fark) + ' eksik</b>' : x.fark > 0 ? '<b style="color:var(--amber);">' + fmtQty(x.fark) + ' fazla</b>' : '<span style="color:var(--accent);">tam</span>';
+      return '<div style="padding:5px 0; border-bottom:1px solid var(--line);">' + ik + ' ' + escapeHtml(x.ad) + '<div style="font-family:var(--mono); color:var(--muted); font-size:11.5px;">sipariş ' + fmtQty(x.sip) + ' · gelen ' + fmtQty(x.once + x.bu) + (x.once ? ' (önceden ' + fmtQty(x.once) + ' + şimdi ' + fmtQty(x.bu) + ')' : '') + ' → ' + ne + '</div></div>';
+    }).join('') + R.yok.map(function(x){
+      return '<div style="padding:5px 0; border-bottom:1px solid var(--line);">➕ ' + escapeHtml(x.ad) + '<div style="font-family:var(--mono); color:var(--muted); font-size:11.5px;">siparişte yok · gelen ' + fmtQty(x.bu) + '</div></div>';
+    }).join('') + '<div class="hint" style="margin-top:6px;">Miktarlar adet (koli okutulduysa adede çevrildi). Kaydedince fark otomatik bildirilir (mail + yönetici özeti).</div></div>';
+    return html;
+  }
+  function malSipYukle(){
+    var R = malSipKarsi(); if(!R) return null;
+    return { id: R.sp.id, gonderim: R.sp.gonderim || '',
+      satirlar: R.satirlar.map(function(x){ return [x.b, x.k, x.ad, x.sip, x.once, x.bu]; }).concat(R.yok.map(function(x){ return [x.b, x.k, x.ad, 0, 0, x.bu]; })) };
+  }
   function malCariFiyatGetir(){
+    malSiparisGetir();
     var kod = malCariKod();
     if(!malIadeSatis() || !kod || malCariFiyatlar.kod === kod || malCariFiyatlar.yukleniyor) return;
     var auth = currentAuth(); if(!auth || !navigator.onLine) return;
@@ -6645,6 +6719,7 @@
       '<div style="color:var(--muted);">' + escapeHtml(malCari ? malCari.name : '') + (malCari && malCari.code ? ' · ' + escapeHtml(malCari.code) : '') + '</div>' +
       (malSebep ? '<div style="color:var(--muted);">Sebep: ' + escapeHtml(malSebep) + '</div>' : '') +
       '<div style="font-family:var(--mono); color:var(--muted);"><b style="color:var(--text);">' + malKalemSayisi() + ' kalem</b> · ' + malItems.length + ' satır · toplam ' + fmtQty(toplam) + '</div>' + fiyatHtml +
+      malSipHtml() +
       (malTip === 'giris' && malIadeFisler.length ? '<button type="button" id="malIadeMetaBtn" style="width:100%; margin-top:8px; background:var(--red); border-color:var(--red); color:#fff; font-weight:800; font-size:13.5px; padding:10px;">⚠️ Bekleyen iade irsaliyesi (' + malIadeFisler.length + ') — içeriği gör</button>' : '');
   }
   // Faturayla karşılaştırma için: farklı ürün (barkod) sayısı = faturadaki kalem sayısı.
@@ -6911,7 +6986,7 @@
     var url = state.serverUrl || DEFAULT_SERVER_URL;
     var payload = {
       type: 'mal_hareket', batchId: malBatchId, tip: malTip, belgeTuru: malBelge,
-      cari: malCari.name, cariKodu: malCari.code || '', faturaNo: malFatura, sebep: malSebep, aciklama: malAciklama, konum: konumMetni(),
+      cari: malCari.name, cariKodu: malCari.code || '', faturaNo: malFatura, sebep: malSebep, aciklama: malAciklama, konum: konumMetni(), siparisFark: malSipYukle(),
       personel: state.personnel || (state.currentUser && state.currentUser.name) || '',
       rows: malItems.map(function(it){
         return { barkod: it.barkod, ad: it.ad, stokKodu: it.stokKodu, miktar: it.miktar, birim: it.birim, kdv: it.kdv, fiyat: it.fiyat, tarih: it.tarih, saat: it.saat, kayitId: it.id, v: it.v || 1,
