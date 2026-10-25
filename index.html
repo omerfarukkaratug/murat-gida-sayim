@@ -431,7 +431,7 @@
   <header style="border:none; padding:0 0 16px; background:transparent; display:flex; align-items:flex-start; justify-content:space-between;">
     <div>
       <h1><img src="logo-header.png" alt="Murat Gıda" style="height:30px; width:auto; display:block;"></h1>
-      <div class="sub"><img src="icon.svg" alt="" style="width:15px;height:15px;vertical-align:-3px;margin-right:5px;">KRT Saha · Murat Gıda • offline • Android • build 266</div>
+      <div class="sub"><img src="icon.svg" alt="" style="width:15px;height:15px;vertical-align:-3px;margin-right:5px;">KRT Saha · Murat Gıda • offline • Android • build 267</div>
     </div>
     <button type="button" id="themeToggleBtn" title="Tema seç" style="background:var(--panel2); border:1.5px solid var(--line); color:var(--text); width:34px; height:34px; border-radius:50%; font-size:15px; padding:0; display:flex; align-items:center; justify-content:center; flex-shrink:0;">🎨</button>
   </header>
@@ -6639,6 +6639,9 @@
   }
   // Satıştan iade: carinin son aldığı fiyatlar sunucudan bir kez çekilir (internet yoksa raf fiyatı kalır).
   // ---- 📨 Siparişle karşılaştırma (Mal Giriş, alış): bu firmaya verilmiş, malı tam gelmemiş sipariş(ler) ----
+  // Satış irsaliyesinde bu sebepler ERP'ye gitmez (sunucu ve 033 SQL ile aynı liste).
+  var MAL_ERP_GITMEZ_SEBEP = ['Tedarikçiye iade', 'Fire / zayi', 'Şubeler arası transfer', 'Sayım farkı / düzeltme'];
+  function malErpGitmez(){ return malTip === 'cikis' && /^sat/i.test(malBelge || '') && !/ade/i.test(malBelge || '') && /rsaliye/i.test(malBelge || '') && MAL_ERP_GITMEZ_SEBEP.indexOf(malSebep) !== -1; }
   var malSiparis = { kod: '', liste: [], yukleniyor: false, sec: '', acik: false };
   function malSiparisUygun(){ return malTip === 'giris' && !malIadeSatis(); }
   function malSiparisGetir(){
@@ -6744,6 +6747,7 @@
       '<div style="color:var(--muted);">' + escapeHtml(malCari ? malCari.name : '') + (malCari && malCari.code ? ' · ' + escapeHtml(malCari.code) : '') + '</div>' +
       (malSebep ? '<div style="color:var(--muted);">Sebep: ' + escapeHtml(malSebep) + '</div>' : '') +
       '<div style="font-family:var(--mono); color:var(--muted);"><b style="color:var(--text);">' + malKalemSayisi() + ' kalem</b> · ' + malItems.length + ' satır · toplam ' + fmtQty(toplam) + '</div>' + fiyatHtml +
+      (malErpGitmez() ? '<div style="margin-top:8px; padding:8px 10px; border-radius:10px; border:1.5px solid var(--amber); color:var(--amber); font-weight:800; font-size:12.5px;">⚠️ Sebep "' + escapeHtml(malSebep) + '" — bu belge ERP\'ye OTOMATİK GİTMEZ. Müşteriye satışsa ✏️ Düzenle → sebebi "Satış" seç.</div>' : '') +
       malSipHtml() +
       (malTip === 'giris' && malIadeFisler.length ? '<button type="button" id="malIadeMetaBtn" style="width:100%; margin-top:8px; background:var(--red); border-color:var(--red); color:#fff; font-weight:800; font-size:13.5px; padding:10px;">⚠️ Bekleyen iade irsaliyesi (' + malIadeFisler.length + ') — içeriği gör</button>' : '');
   }

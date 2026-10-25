@@ -1538,6 +1538,8 @@ function teslimFarkMetni(tf) {
   return m + '\n';
 }
 
+// Satış irsaliyesinde bu sebepler ERP'ye irsaliye olarak GİTMEZ (033 SQL ile aynı liste); Satış / Diğer gider.
+var MAL_ERP_GITMEZ_SEBEP = ['Tedarikçiye iade', 'Fire / zayi', 'Şubeler arası transfer', 'Sayım farkı / düzeltme'];
 function sendMalMail(batch, teslimFark) {
   // Property hiç ayarlanmamışsa (null) sabit varsayılan adrese gider. Panelden
   // bilerek boş bırakılıp kaydedilmişse (boş metin, null değil) mail kapatılmış
@@ -1557,10 +1559,11 @@ function sendMalMail(batch, teslimFark) {
       'Kalem sayısı: ' + batch.kalemSayisi + ' · Toplam miktar: ' + trSayi(batch.toplamMiktar) + '\n' +
       'Kaydeden: ' + batch.personel + ' · ' + batch.tarih + ' ' + batch.saat + '\n\n' +
       teslimFarkMetni(teslimFark) +
-      (/rsaliye/i.test(String(batch.belgeTuru || '')) && !(/^sat/i.test(String(batch.belgeTuru || '')) && !/ade/i.test(String(batch.belgeTuru || '')) && batch.sebep && batch.sebep !== 'Satış')
+      (/rsaliye/i.test(String(batch.belgeTuru || '')) && !(/^sat/i.test(String(batch.belgeTuru || '')) && !/ade/i.test(String(batch.belgeTuru || '')) && MAL_ERP_GITMEZ_SEBEP.indexOf(String(batch.sebep || '')) !== -1)
         ? '⚠️ BU BELGE ERP\'YE OTOMATİK İRSALİYE OLARAK AKTARILIYOR. Ekteki Excel\'i ERP\'ye İÇE AKTARMAYIN — mal iki kez girer.\n' +
           'Excel yalnız kontrol içindir. Aktarım durumu: uygulamada Mal Giriş → 🧾 İrsaliyeler.'
-        : 'Ürün listesi ekte Excel dosyası olarak bulunuyor (ERP12 mal aktarım şablonu).'),
+        : (/rsaliye/i.test(String(batch.belgeTuru || '')) ? 'ℹ️ Sebep "' + batch.sebep + '" olduğu için bu belge ERP\'ye OTOMATİK GİTMEDİ. Ürün listesi ekte Excel dosyası olarak bulunuyor (ERP12 mal aktarım şablonu).'
+          : 'Ürün listesi ekte Excel dosyası olarak bulunuyor (ERP12 mal aktarım şablonu).')),
     attachments: [blob]
   });
   return true;
