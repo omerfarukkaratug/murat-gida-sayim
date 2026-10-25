@@ -431,7 +431,7 @@
   <header style="border:none; padding:0 0 16px; background:transparent; display:flex; align-items:flex-start; justify-content:space-between;">
     <div>
       <h1><img src="logo-header.png" alt="Murat Gıda" style="height:30px; width:auto; display:block;"></h1>
-      <div class="sub"><img src="icon.svg" alt="" style="width:15px;height:15px;vertical-align:-3px;margin-right:5px;">KRT Saha · Murat Gıda • offline • Android • build 262</div>
+      <div class="sub"><img src="icon.svg" alt="" style="width:15px;height:15px;vertical-align:-3px;margin-right:5px;">KRT Saha · Murat Gıda • offline • Android • build 263</div>
     </div>
     <button type="button" id="themeToggleBtn" title="Tema seç" style="background:var(--panel2); border:1.5px solid var(--line); color:var(--text); width:34px; height:34px; border-radius:50%; font-size:15px; padding:0; display:flex; align-items:center; justify-content:center; flex-shrink:0;">🎨</button>
   </header>
@@ -473,6 +473,8 @@
     <div style="text-align:center; font-weight:800; font-size:12px; color:var(--muted); text-transform:uppercase; letter-spacing:.06em; margin-bottom:14px;">Ne yapmak istersin?</div>
     <div id="menuListe">
       <button type="button" class="menuBtn" id="menuSayimBtn"><span class="menuIcon">📋</span><span>Sayım<span class="menuSub">Barkod okutarak stok sayımı</span></span></button>
+      <button type="button" class="menuBtn" id="menuMiniBtn"><span class="menuIcon">🎯</span><span>Günün Mini Sayımı<span class="menuSub">Riskli ürünlerden kısa sayım listesi</span></span></button>
+      <button type="button" class="menuBtn hidden" id="menuOzetBtn"><span class="menuIcon">📊</span><span>Günün Özeti<span class="menuSub">Yalnız müdahale gerektiren işler</span></span></button>
       <button type="button" class="menuBtn" id="menuMalGirisBtn"><span class="menuIcon">📥</span><span>Mal Giriş<span class="menuSub">Fatura/irsaliye ile stok girişi</span></span></button>
       <button type="button" class="menuBtn" id="menuMalCikisBtn"><span class="menuIcon">📤</span><span>Mal Çıkış<span class="menuSub">Fatura/irsaliye ile stok çıkışı</span></span></button>
       <button type="button" class="menuBtn" id="menuFiyatBtn"><span class="menuIcon">💰</span><span>Fiyat &amp; Stok Sorgula<span class="menuSub">Barkod okut, fiyatı ve stoğu gör</span></span></button>
@@ -910,6 +912,31 @@
       <input type="text" id="tedarikAra" placeholder="🔍 Tedarikçi ara: adı ya da cari kodu" autocomplete="off" style="width:100%;">
     </div>
     <div id="tedarikBody" style="flex:1; overflow-y:auto; padding:12px 14px 24px;"><div class="hint">⏳ Yükleniyor…</div></div>
+  </div>
+
+  <!-- 🎯 Günün mini sayımı (kör sayım) ve 📊 Yönetici özeti -->
+  <div id="miniScreen" class="hidden" style="position:fixed; inset:0; background:var(--bg); z-index:52; display:flex; flex-direction:column;">
+    <div style="padding:16px 16px 10px; border-bottom:1px solid var(--line); background:var(--panel); box-shadow:var(--sh-sm);">
+      <div style="display:flex; align-items:center; justify-content:space-between;">
+        <div style="font-weight:800; font-size:16px;">🎯 Günün Mini Sayımı</div>
+        <button type="button" data-minikapat="1" aria-label="Kapat" style="width:34px; height:34px; border-radius:50%; background:var(--panel2); border:1.5px solid var(--line); color:var(--text); font-size:18px; line-height:1; padding:0; display:flex; align-items:center; justify-content:center;">✕</button>
+      </div>
+      <div class="hrkSekmeler hidden" id="miniSekmeler" style="margin:10px 0 0; gap:8px;">
+        <button type="button" class="hrkSekme on" data-minisekme="liste" style="padding:9px 4px;"><b style="font-size:13px; font-family:inherit;">📋 Bugünkü liste</b></button>
+        <button type="button" class="hrkSekme" data-minisekme="sonuc" style="padding:9px 4px;"><b style="font-size:13px; font-family:inherit;">📊 Sonuçlar</b></button>
+      </div>
+    </div>
+    <div id="miniBody" style="flex:1; overflow-y:auto; padding:12px 14px 90px;"></div>
+    <div id="miniAlt" style="position:absolute; left:0; right:0; bottom:0; padding:10px 14px calc(10px + env(safe-area-inset-bottom)); background:var(--panel); border-top:1px solid var(--line);">
+      <button type="button" class="btn-main" id="miniKaydet" style="margin:0;">💾 Kaydet</button>
+    </div>
+  </div>
+  <div id="ozetScreen" class="hidden" style="position:fixed; inset:0; background:var(--bg); z-index:50; display:flex; flex-direction:column;">
+    <div style="padding:16px; border-bottom:1px solid var(--line); background:var(--panel); box-shadow:var(--sh-sm); display:flex; align-items:center; justify-content:space-between;">
+      <div style="font-weight:800; font-size:16px;">📊 Günün Özeti</div>
+      <button type="button" data-ozetkapat="1" aria-label="Kapat" style="width:34px; height:34px; border-radius:50%; background:var(--panel2); border:1.5px solid var(--line); color:var(--text); font-size:18px; line-height:1; padding:0; display:flex; align-items:center; justify-content:center;">✕</button>
+    </div>
+    <div id="ozetBody" style="flex:1; overflow-y:auto; padding:12px 14px 24px;"></div>
   </div>
 
   <!-- 🧾 İrsaliyeler: telefondan ERP'ye giden irsaliyelerin durumu + ERP'deki irsaliyeler (Mal Giriş/Çıkış ekranından açılır) -->
@@ -1989,6 +2016,7 @@
       document.getElementById('menuCariHrkBtn').classList.toggle('hidden', !canSeeCariHrk());
       document.getElementById('menuStokHrkBtn').classList.toggle('hidden', !canSeeStokHrk());
       document.getElementById('menuTedarikBtn').classList.toggle('hidden', !canSeeTedarik());
+      document.getElementById('menuOzetBtn').classList.toggle('hidden', !hasPerm('rapor'));
       document.getElementById('menuEtiketBtn').classList.toggle('hidden', !canSeeEtiket());
     document.getElementById('menuDogrulaBtn').classList.toggle('hidden', !canSeeEtiket());
       document.getElementById('menuDogrulaBtn').classList.toggle('hidden', !canSeeEtiket());
@@ -2087,6 +2115,7 @@
     document.getElementById('menuCariHrkBtn').classList.toggle('hidden', !canSeeCariHrk());
     document.getElementById('menuStokHrkBtn').classList.toggle('hidden', !canSeeStokHrk());
     document.getElementById('menuTedarikBtn').classList.toggle('hidden', !canSeeTedarik());
+    document.getElementById('menuOzetBtn').classList.toggle('hidden', !hasPerm('rapor'));
     document.getElementById('menuMesaiBtn').classList.toggle('hidden', !canSeeMesai());
     document.getElementById('menuPlasiyerBtn').classList.toggle('hidden', !canSeePlasiyer());
     document.getElementById('menuHazirlaBtn').classList.toggle('hidden', !canSeeHazirla());
@@ -4708,6 +4737,143 @@
     var r = { riskli: ['🔴 Riskli', 'var(--red)'], dikkat: ['🟡 Dikkat', 'var(--amber)'], normal: ['🟢 Normal', 'var(--green)'] }[seviye] || ['—', 'var(--muted)'];
     return '<span style="font-weight:800; color:' + r[1] + ';">' + r[0] + (puan !== null && puan !== undefined ? ' · risk ' + puan + '/100' : '') + '</span>';
   }
+  // ============================================================
+  // 🎯 GÜNÜN MİNİ SAYIMI: sunucu her gün riskli ürünlerden kısa bir liste hazırlar (herkese aynı).
+  // Kör sayım: sistem stoğu gösterilmez. Girilen adetler telefonda saklanır, Kaydet ile gider.
+  // ============================================================
+  var mini = { liste: null, gun: '', rapor: false, sekme: 'liste', hata: '', yuk: false, sonuc: null, d: {} };
+  var miniEl = document.getElementById('miniScreen'), miniBodyEl = document.getElementById('miniBody');
+  function miniTaslakOku(){ try { var t = JSON.parse(localStorage.getItem('mkMiniTaslak') || 'null'); return t && t.d ? t : { gun: '', d: {} }; } catch(e){ return { gun: '', d: {} }; } }
+  function miniTaslakYaz(){ try { localStorage.setItem('mkMiniTaslak', JSON.stringify({ gun: mini.gun, d: mini.d })); } catch(e){} }
+  function miniIstek(param, bitti){
+    var auth = currentAuth(); if(!auth){ bitti('Önce giriş yap'); return; }
+    if(!navigator.onLine){ bitti('İnternet yok'); return; }
+    jsonpRequestP(state.serverUrl || DEFAULT_SERVER_URL, Object.assign({ action: 'mini_sayim', user: auth.user, pass: auth.pass }, param), function(err, d){
+      if(err || !d || d.status !== 'ok') bitti(err || (d && d.message) || 'bilinmeyen hata'); else bitti(null, d);
+    }, 60000);
+  }
+  function miniAc(sekme){
+    miniEl.classList.remove('hidden'); mini.sekme = sekme || 'liste';
+    var t = miniTaslakOku(); mini.d = t.d || {}; mini.gun = t.gun || '';
+    miniGetir();
+  }
+  function miniGetir(yenile){
+    mini.yuk = true; miniCiz();
+    miniIstek({ ne: 'liste', yenile: yenile ? '1' : '' }, function(err, d){
+      mini.yuk = false; mini.hata = err || '';
+      if(d){
+        if(d.gun !== mini.gun){ mini.d = {}; mini.gun = d.gun; miniTaslakYaz(); }   // yeni gün: eski taslak düşer
+        mini.liste = d.liste || []; mini.rapor = !!d.rapor;
+      }
+      document.getElementById('miniSekmeler').classList.toggle('hidden', !mini.rapor);
+      if(mini.sekme === 'sonuc') miniSonucGetir(); else miniCiz();
+    });
+  }
+  function miniSonucGetir(){
+    mini.yuk = true; miniCiz();
+    miniIstek({ ne: 'sonuc' }, function(err, d){ mini.yuk = false; mini.hata = err || ''; if(d) mini.sonuc = d.satirlar || []; miniCiz(); });
+  }
+  function miniBekleyenSayi(){ return Object.keys(mini.d).filter(function(b){ return String(mini.d[b].m) !== ''; }).length; }
+  function miniCiz(){
+    document.querySelectorAll('[data-minisekme]').forEach(function(b){ b.classList.toggle('on', b.getAttribute('data-minisekme') === mini.sekme); });
+    var alt = document.getElementById('miniAlt'), btn = document.getElementById('miniKaydet');
+    alt.classList.toggle('hidden', mini.sekme !== 'liste');
+    var n = miniBekleyenSayi(); btn.textContent = '💾 Kaydet' + (n ? ' (' + n + ' ürün)' : ''); btn.disabled = !n;
+    if(mini.sekme === 'sonuc'){ miniBodyEl.innerHTML = miniSonucHtml(); return; }
+    if(mini.yuk && !mini.liste){ miniBodyEl.innerHTML = '<div class="hint">⏳ Günün listesi hazırlanıyor…</div>'; return; }
+    if(mini.hata && !mini.liste){ miniBodyEl.innerHTML = '<div class="hint" style="color:var(--red);">❌ ' + escapeHtml(mini.hata) + '</div>'; return; }
+    var l = mini.liste || [], sayildi = l.filter(function(x){ return x.sayildi; }).length;
+    var html = '<div class="hint" style="margin:0 0 10px;">Bugün <b>' + l.length + '</b> ürün · <b>' + sayildi + '</b> sayıldı. Ürünü bul, rafta ve depoda <b>toplam</b> kaç tane varsa yaz. Sistem stoğu gösterilmez.</div>' +
+      '<div style="display:flex; gap:8px; margin-bottom:10px;"><input type="text" id="miniAra" inputmode="numeric" placeholder="Barkod okut / yaz" autocomplete="off" style="flex:1; min-width:0;">' +
+      '<button type="button" id="miniKamera" class="geriBtn" style="margin:0; padding:0 14px;">📷</button>' + (mini.rapor ? '<button type="button" id="miniYenile" class="geriBtn" style="margin:0; padding:0 12px;" title="Listeyi yeniden hesapla">↻</button>' : '') + '</div>';
+    if(!l.length) return miniBodyEl.innerHTML = html + '<div class="hint">Bugün sayılacak riskli ürün çıkmadı. 👍</div>';
+    html += l.map(function(x){
+      var v = mini.d[x.b] ? mini.d[x.b].m : '';
+      return '<div class="chSatir" id="mini_' + escapeHtml(x.b) + '" style="' + (x.sayildi ? 'opacity:.6;' : '') + '"><div class="ust" style="align-items:center;"><span style="min-width:0;">' + escapeHtml(x.a || x.b) + '</span>' +
+        (x.sayildi ? '<span style="color:var(--green); white-space:nowrap; font-size:12.5px;">✓ ' + escapeHtml(x.sayildi.kim) + '</span>' :
+          '<input type="text" inputmode="decimal" data-minim="' + escapeHtml(x.b) + '" value="' + escapeHtml(String(v).replace('.', ',')) + '" placeholder="Adet" style="width:84px; flex:none; text-align:center; font-family:var(--mono); font-weight:800; padding:8px;">') + '</div>' +
+        '<div class="alt"><span>' + escapeHtml(x.b) + (x.br ? ' · ' + escapeHtml(x.br) : '') + '</span></div>' +
+        (x.neden && x.neden.length ? '<div class="alt"><span style="color:var(--amber); font-weight:700;">' + x.neden.map(escapeHtml).join(' · ') + '</span></div>' : '') + '</div>';
+    }).join('');
+    var odak = document.activeElement && document.activeElement.getAttribute && document.activeElement.getAttribute('data-minim');
+    miniBodyEl.innerHTML = html;
+    if(odak){ var e = miniBodyEl.querySelector('[data-minim="' + odak + '"]'); if(e) e.focus(); }
+  }
+  function miniSonucHtml(){
+    if(mini.yuk && !mini.sonuc) return '<div class="hint">⏳ Yükleniyor…</div>';
+    if(mini.hata && !mini.sonuc) return '<div class="hint" style="color:var(--red);">❌ ' + escapeHtml(mini.hata) + '</div>';
+    var l = mini.sonuc || [];
+    if(!l.length) return '<div class="hint">Son 14 günde mini sayım yapılmamış.</div>';
+    var farkli = l.filter(function(r){ return r[7] !== null && r[7] !== 0; }), top = farkli.reduce(function(t, r){ return t + (Number(r[8]) || 0); }, 0);
+    return '<div class="chOzet"><div>SAYILAN<b>' + l.length + '</b></div><div>FARKLI<b>' + farkli.length + '</b></div><div>FARK TUTARI<b>' + escapeHtml(fmtMoney(top)) + '</b></div></div>' +
+      l.map(function(r){
+        var f = r[7], renk = f === null ? 'var(--muted)' : f < 0 ? 'var(--red)' : f > 0 ? 'var(--amber)' : 'var(--green)';
+        return '<div class="chSatir"><div class="ust"><span style="min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">' + escapeHtml(r[4] || r[3]) + '</span>' +
+          '<span style="color:' + renk + '; white-space:nowrap; font-family:var(--mono);">' + (f === null ? '?' : (f > 0 ? '+' : '') + escapeHtml(fmtQty(f))) + '</span></div>' +
+          '<div class="alt"><span>' + escapeHtml(r[0]) + ' ' + escapeHtml(r[1]) + ' · ' + escapeHtml(r[2]) + ' · sistem ' + (r[5] === null ? '?' : escapeHtml(fmtQty(r[5]))) + ' / sayılan ' + escapeHtml(fmtQty(r[6])) + '</span>' +
+          (r[8] ? '<span style="white-space:nowrap; font-family:var(--mono);">' + escapeHtml(fmtMoney(r[8])) + '</span>' : '') + '</div></div>';
+      }).join('') + '<div class="hint" style="margin-top:8px;">Fark = sayılan − sistem stoğu (sayım anındaki ERP stoğu). Tutar satış fiyatıyla. ERP\'ye yazılmaz; düzeltme gerekiyorsa ERP\'de yapılır.</div>';
+  }
+  function miniBul(bk){
+    bk = String(bk || '').trim(); if(!bk) return;
+    var e = document.getElementById('mini_' + bk);
+    if(!e){ var c = catalogMap.get(bk); warnToast((c ? c.name + ' — ' : '') + 'bugünkü listede yok'); return; }
+    e.scrollIntoView({ block: 'center' }); var i = e.querySelector('[data-minim]'); if(i) setTimeout(function(){ i.focus(); }, 200); else successToast('Bu ürün bugün zaten sayıldı');
+  }
+  miniEl.addEventListener('click', function(e){
+    var t = e.target.closest && e.target.closest('[data-minikapat],[data-minisekme],#miniKamera,#miniYenile');
+    if(!t) return;
+    if(t.hasAttribute('data-minikapat')){ miniEl.classList.add('hidden'); return; }
+    if(t.hasAttribute('data-minisekme')){ mini.sekme = t.getAttribute('data-minisekme'); if(mini.sekme === 'sonuc') miniSonucGetir(); else miniCiz(); return; }
+    if(t.id === 'miniKamera'){ startQuickScan(function(v){ miniBul(v); }); return; }
+    if(t.id === 'miniYenile'){ mini.liste = null; miniGetir(true); }
+  });
+  miniEl.addEventListener('keydown', function(e){ if(e.target.id === 'miniAra' && e.key === 'Enter'){ e.preventDefault(); miniBul(e.target.value); e.target.value = ''; } });
+  miniEl.addEventListener('input', function(e){
+    var b = e.target.getAttribute && e.target.getAttribute('data-minim'); if(!b) return;
+    var v = String(e.target.value).replace(',', '.').trim();
+    if(v === ''){ delete mini.d[b]; } else if(!isNaN(Number(v)) && Number(v) >= 0){ mini.d[b] = { m: Number(v), id: (mini.d[b] && mini.d[b].id) || makeId() }; }
+    miniTaslakYaz();
+    var n = miniBekleyenSayi(), btn = document.getElementById('miniKaydet'); btn.textContent = '💾 Kaydet' + (n ? ' (' + n + ' ürün)' : ''); btn.disabled = !n;
+  });
+  document.getElementById('miniKaydet').addEventListener('click', function(){
+    var satirlar = Object.keys(mini.d).map(function(b){ return [b, mini.d[b].m, mini.d[b].id]; });
+    if(!satirlar.length) return;
+    var btn = this; btn.disabled = true; btn.textContent = 'Gönderiliyor…';
+    miniIstek({ ne: 'kaydet', satirlar: JSON.stringify(satirlar) }, function(err, d){
+      if(err){ btn.disabled = false; miniCiz(); warnToast('Gönderilemedi: ' + err + ' — adetler telefonda saklı, tekrar dene'); return; }
+      var tamam = {}; (d.tamam || []).forEach(function(id){ tamam[id] = true; });
+      var kim = (state.currentUser && state.currentUser.name) || '';
+      Object.keys(mini.d).forEach(function(b){ if(tamam[mini.d[b].id]){ (mini.liste || []).forEach(function(x){ if(x.b === b) x.sayildi = { kim: kim, m: mini.d[b].m }; }); delete mini.d[b]; } });
+      miniTaslakYaz(); miniCiz(); successToast('Mini sayım kaydedildi');
+    });
+  });
+  document.getElementById('menuMiniBtn').addEventListener('click', function(){ miniAc('liste'); });
+
+  // ---- 📊 Günün özeti (yönetici): yalnız müdahale gerektirenler ----
+  var ozetEl = document.getElementById('ozetScreen'), ozetBodyEl = document.getElementById('ozetBody');
+  function ozetAc(){
+    ozetEl.classList.remove('hidden'); ozetBodyEl.innerHTML = '<div class="hint">⏳ Hazırlanıyor…</div>';
+    var auth = currentAuth(); if(!auth || !navigator.onLine){ ozetBodyEl.innerHTML = '<div class="hint" style="color:var(--red);">❌ İnternet yok</div>'; return; }
+    jsonpRequestP(state.serverUrl || DEFAULT_SERVER_URL, { action: 'yonetici_ozet', user: auth.user, pass: auth.pass }, function(err, d){
+      if(err || !d || d.status !== 'ok'){ ozetBodyEl.innerHTML = '<div class="hint" style="color:var(--red);">❌ ' + escapeHtml(err || (d && d.message) || 'hata') + '</div>'; return; }
+      var l = d.maddeler || [], renk = { acil: 'var(--red)', uyari: 'var(--amber)', bilgi: 'var(--accent)' }, ikon = { acil: '🔴', uyari: '🟡', bilgi: '🔵' };
+      ozetBodyEl.innerHTML = (l.length ? l.map(function(m){
+        return '<div class="chSatir"' + (m[3] ? ' data-ozetgit="' + escapeHtml(m[3]) + '" style="cursor:pointer; border-left:4px solid ' + renk[m[0]] + ';"' : ' style="border-left:4px solid ' + renk[m[0]] + ';"') + '><div style="font-weight:800;">' + ikon[m[0]] + ' ' + escapeHtml(m[1]) + '</div>' +
+          (m[2] ? '<div class="hint" style="margin:4px 0 0;">' + escapeHtml(m[2]) + '</div>' : '') + (m[3] ? '<div style="font-size:12px; color:var(--accent); font-weight:800; margin-top:4px;">Aç →</div>' : '') + '</div>';
+      }).join('') : '<div class="chSatir" style="border-left:4px solid var(--green);">✅ <b>Müdahale gerektiren bir şey yok.</b></div>') +
+        '<div class="hint" style="margin-top:10px;">Hazırlanma: ' + escapeHtml(d.zaman || '') + '</div>';
+    }, 60000);
+  }
+  ozetEl.addEventListener('click', function(e){
+    if(e.target.closest('[data-ozetkapat]')){ ozetEl.classList.add('hidden'); return; }
+    var g = e.target.closest('[data-ozetgit]'); if(!g) return;
+    var h = g.getAttribute('data-ozetgit');
+    if(h === 'irs') irsAc('giden');
+    else if(h === 'mini') miniAc('sonuc');
+  });
+  document.getElementById('menuOzetBtn').addEventListener('click', ozetAc);
+
   // ============================================================
   // 🧾 İRSALİYELER: telefondan ERP'ye giden irsaliyelerin durumu ve ERP'deki irsaliyeler.
   // Fiyatsız irsaliye dökümü (PDF): Mal Çıkış ekranından ve ERP irsaliyesinin detayından.
@@ -7951,6 +8117,8 @@
     ['plasiyerScreen', function(){ plasiyerGeri(); }],
     ['hazirlaScreen', function(){ hazirlaGeri(); }],
     ['irsScreen', function(){ irsKapat(); }],
+    ['miniScreen', function(){ document.getElementById('miniScreen').classList.add('hidden'); }],
+    ['ozetScreen', function(){ document.getElementById('ozetScreen').classList.add('hidden'); }],
     ['malHareketScreen', function(){ if(!malSaving) closeMalHareketScreen(); }]
   ];
   var geriKayitli = false, geriYutuluyor = false;

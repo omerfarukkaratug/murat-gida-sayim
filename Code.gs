@@ -134,6 +134,12 @@ function doGet(e) {
   if (e.parameter && e.parameter.action === 'erp_durum') {
     return erpDurum(e.parameter, e.parameter.callback);
   }
+  if (e.parameter && e.parameter.action === 'mini_sayim') {
+    return miniSayim(e.parameter, e.parameter.callback);
+  }
+  if (e.parameter && e.parameter.action === 'yonetici_ozet') {
+    return yoneticiOzet(e.parameter, e.parameter.callback);
+  }
   if (e.parameter && e.parameter.action === 'mal_cari_fiyat') {
     return malCariFiyat(e.parameter, e.parameter.callback);
   }
@@ -3671,12 +3677,13 @@ function tedarik(p, callback) {
 
 // ============================================================
 // 🧾 İRSALİYELER: telefondan giden irsaliyelerin ERP'ye aktarım durumu ve ERP'deki irsaliyeler.
-// "hareket" (Mal Giriş/Çıkış) yetkisi. Yalnız okur. Tutar / birim fiyat yalnız alisGorur.
+// Giriş yapmış herkes (Mal Giriş/Çıkış kullananlar). Yalnız okur. Tutar / birim fiyat yalnız alisGorur.
 //   ne: 'aktarim' · 'liste' (gun, ara) · 'fis' (fisId, kaynak)
 // ============================================================
 function erpDurum(p, callback) {
-  var auth = requirePermission(p.user, p.pass, 'hareket');
-  if (!auth.ok) return outJson({ status: 'error', message: auth.message }, callback);
+  // Mal Giriş/Çıkış yapan herkes görebilir (giriş yeter); tutar/fiyat yalnız alisGorur.
+  var auth = kimlikOnbellek(p.user, p.pass);
+  if (!auth.ok) return outJson({ status: 'error', kimlik: true, message: 'Giriş gerekli — çıkış yapıp tekrar giriş yap' }, callback);
   var props = PropertiesService.getScriptProperties();
   var url = String(props.getProperty('DB_URL') || '').trim().replace(/\/+$/, '');
   var anahtar = String(props.getProperty('DB_ANAHTAR') || '').trim();
@@ -3723,12 +3730,185 @@ function erpDurum(p, callback) {
   }
 }
 
+// ============================================================
+// 🎯 GÜNLÜK MİNİ SAYIM: her gün riskli ürünlerden kısa bir sayım listesi (herkese aynı liste).
+// Kör sayım: personel sistem stoğunu görmez. Sonuçlar 'MiniSayim' sekmesine yazılır; ERP'ye YAZILMAZ.
+//   ne: 'liste' (giriş yapan herkes) · 'kaydet' (satirlar: [[barkod, sayılan, kayıtId]]) · 'sonuc' (rapor yetkisi)
+// Risk: eksi stok, mini sayımda önceden fark, geçen büyük sayımda fark, çok satan (ciro), pahalı, satışı durmuş,
+//       uzun süredir sayılmamış. Son 14 günde mini sayımda sayılan (farksız) ürün tekrar gelmez.
+// ============================================================
+var MINI_BASLIK = ['Tarih', 'Saat', 'Personel', 'Barkod', 'Ürün', 'Stok Kodu', 'Birim', 'Sistem Stok', 'Sayılan', 'Fark', 'Liste Günü', 'Kayıt ID'];
+function miniSheet() {
+  var ss = SpreadsheetApp.getActiveSpreadsheet(), sh = ss.getSheetByName('MiniSayim');
+  if (!sh) { sh = ss.insertSheet('MiniSayim'); sh.getRange(1, 1, 1, MINI_BASLIK.length).setValues([MINI_BASLIK]); }
+  return sh;
+}
+function miniGun() { return Utilities.formatDate(new Date(), 'Europe/Istanbul', 'yyyy-MM-dd'); }
+function miniKayitlar(gunSayisi) {
+  var sh = miniSheet(), n = sh.getLastRow();
+  if (n < 2) return [];
+  var sinir = Utilities.formatDate(new Date(Date.now() - gunSayisi * 86400000), 'Europe/Istanbul', 'yyyy-MM-dd');
+  return sh.getRange(2, 1, n - 1, MINI_BASLIK.length).getValues().filter(function (r) { return String(r[0]) >= sinir; });
+}
+function miniKatalog() {
+  var sh = SpreadsheetApp.getActiveSpreadsheet().getSheetByName('Katalog'), m = {};
+  if (!sh || sh.getLastRow() < 2) return m;
+  sh.getRange(2, 1, sh.getLastRow() - 1, 8).getValues().forEach(function (r) {
+    var bk = String(r[1] || '').trim(); if (!bk) return;
+    var koli = Number(r[6]) > 1;
+    m[bk] = { ad: String(r[0] || ''), barkod: bk, kod: String(r[2] || '').trim(), stok: Number(r[3]), fiyat: Number(r[4]) || 0, birim: String(r[7] || ''), koli: koli };
+  });
+  return m;
+}
+function miniListeHesapla(adet) {
+  var kat = miniKatalog(), aday = {}, ayar = dbAyar();
+  if (ayar) { try { var r = dbCagir(ayar, 'mini_sayim_aday', {}); if (r && r.status === 'ok') aday = r.urunler || {}; } catch (e) { gunlukYaz('veritabani', 'mini sayım', 'Aday verisi alınamadı: ' + e, true); } }
+  var son = {};   // stok kodu / barkod → son mini sayım [gün, fark]
+  miniKayitlar(30).forEach(function (r) { var k = String(r[5] || r[3]); if (!son[k] || String(r[0]) >= son[k][0]) son[k] = [String(r[0]), Number(r[9]) || 0]; });
+  var bugun = miniGun(), sinir14 = Utilities.formatDate(new Date(Date.now() - 14 * 86400000), 'Europe/Istanbul', 'yyyy-MM-dd');
+  var sinir90 = Utilities.formatDate(new Date(Date.now() - 90 * 86400000), 'Europe/Istanbul', 'yyyy-MM-dd');
+  var gorulen = {}, liste = [];
+  Object.keys(kat).forEach(function (bk) {
+    var u = kat[bk]; if (u.koli || isNaN(u.stok)) return;
+    var anahtar = u.kod || bk; if (gorulen[anahtar]) return; gorulen[anahtar] = true;
+    var a = aday[u.kod] || [0, 0, null, null], s30 = Number(a[0]) || 0, s90 = Number(a[1]) || 0, ms = son[anahtar];
+    if (u.stok === 0 && s90 <= 0) return;                                  // ölü ürün
+    var puan = 0, neden = [];
+    if (ms && ms[0] >= sinir14 && !ms[1]) return;                          // yakında sayıldı, fark yoktu
+    if (ms && ms[0] === bugun) return;                                     // bugün zaten sayıldı
+    if (u.stok < 0) { puan += 100; neden.push('Eksi stok'); }
+    if (ms && ms[1]) { puan += 60; neden.push('Mini sayımda fark çıkmıştı'); }
+    var gf = a[3] === null || a[3] === undefined ? 0 : Math.abs(Number(a[3])) * u.fiyat;
+    if (gf >= 200) { puan += 40 + Math.min(30, gf / 500); neden.push('Geçen sayımda fark'); }
+    var ciro = s30 * u.fiyat;
+    if (ciro >= 5000) { puan += Math.min(40, ciro / 2500); neden.push('Çok satan'); }
+    if (u.fiyat >= 300 && u.stok > 0) { puan += 15; neden.push('Pahalı ürün'); }
+    if (u.stok > 0 && s30 <= 0 && s90 > 0) { puan += 25; neden.push('Satışı durdu'); }
+    if (!a[2] || String(a[2]) < sinir90) { puan += 10; if (puan > 10) neden.push('Uzun süredir sayılmadı'); }
+    if (puan < 25) return;
+    liste.push([bk, u.ad, u.kod, u.birim, neden, Math.round(puan)]);
+  });
+  liste.sort(function (x, y) { return y[5] - x[5]; });
+  return liste.slice(0, adet);
+}
+function miniSayim(p, callback) {
+  var auth = kimlikOnbellek(p.user, p.pass);
+  if (!auth.ok) return outJson({ status: 'error', kimlik: true, message: 'Giriş gerekli' }, callback);
+  var ne = String(p.ne || 'liste'), props = PropertiesService.getScriptProperties(), gun = miniGun();
+  var rapor = auth.role === 'yonetici' || auth.permissions.indexOf('rapor') !== -1;
+  if (ne === 'liste') {
+    var kayit = null; try { kayit = JSON.parse(props.getProperty('MINI_SAYIM_LISTE') || 'null'); } catch (e) { kayit = null; }
+    if (!kayit || kayit.gun !== gun || p.yenile === '1' && rapor) {
+      var adet = Math.max(5, Math.min(60, parseInt(props.getProperty('MINI_SAYIM_ADET') || '20', 10) || 20));
+      kayit = { gun: gun, liste: miniListeHesapla(adet) };
+      props.setProperty('MINI_SAYIM_LISTE', JSON.stringify(kayit));
+    }
+    var sayilan = {};
+    miniKayitlar(1).forEach(function (r) { if (String(r[10]) === gun) sayilan[String(r[3])] = { kim: String(r[2]), m: Number(r[8]) }; });
+    return outJson({ status: 'ok', gun: gun, rapor: rapor, liste: kayit.liste.map(function (x) {
+      return { b: x[0], a: x[1], k: x[2], br: x[3], neden: rapor ? x[4] : [], sayildi: sayilan[x[0]] ? sayilan[x[0]] : null };
+    }) }, callback);
+  }
+  if (ne === 'kaydet') {
+    var ham; try { ham = JSON.parse(String(p.satirlar || '[]')); } catch (e) { ham = null; }
+    if (!Array.isArray(ham) || !ham.length) return outJson({ status: 'error', message: 'Sayım yok' }, callback);
+    var kat = miniKatalog(), sh = miniSheet(), var_ = {};
+    miniKayitlar(2).forEach(function (r) { var_[String(r[11])] = true; });
+    var t = simdiMetin(), tarih = gun, saat = Utilities.formatDate(new Date(), 'Europe/Istanbul', 'HH:mm:ss'), yeni = [], tamam = [];
+    ham.slice(0, 200).forEach(function (h) {
+      var bk = String(h[0] || '').trim(), m = Number(h[1]), id = String(h[2] || '').substring(0, 60);
+      if (!bk || !(m >= 0) || m > 1e6 || !id) return;
+      tamam.push(id); if (var_[id]) return; var_[id] = true;
+      var u = kat[bk] || { ad: '', kod: '', birim: '', stok: NaN };
+      var sist = isNaN(u.stok) ? '' : u.stok;
+      yeni.push([tarih, saat, String(p.user || ''), bk, u.ad, u.kod, u.birim, sist, m, sist === '' ? '' : Math.round((m - sist) * 1000) / 1000, gun, id]);
+    });
+    if (yeni.length) {
+      var ilk = sh.getLastRow() + 1;
+      sh.getRange(ilk, 1, yeni.length, 1).setNumberFormat('@'); sh.getRange(ilk, 4, yeni.length, 1).setNumberFormat('@'); sh.getRange(ilk, 6, yeni.length, 1).setNumberFormat('@');
+      sh.getRange(ilk, 1, yeni.length, MINI_BASLIK.length).setValues(yeni);
+      gunlukYaz('mini_sayim', String(p.user || ''), 'Mini sayım: ' + yeni.length + ' ürün sayıldı', false);
+    }
+    return outJson({ status: 'ok', tamam: tamam }, callback);
+  }
+  if (ne === 'sonuc') {
+    if (!rapor) return outJson({ status: 'error', message: 'Bu işlem için yetkin yok' }, callback);
+    var kat2 = miniKatalog(), fiyatlar = {};
+    Object.keys(kat2).forEach(function (bk) { fiyatlar[bk] = kat2[bk].fiyat; });
+    var sat = miniKayitlar(14).map(function (r) {
+      var fark = r[9] === '' ? null : Number(r[9]);
+      return [String(r[0]), String(r[1]).substring(0, 5), String(r[2]), String(r[3]), String(r[4]), r[7] === '' ? null : Number(r[7]), Number(r[8]), fark,
+        fark === null ? null : Math.round(fark * (fiyatlar[String(r[3])] || 0) * 100) / 100];
+    }).reverse();
+    return outJson({ status: 'ok', satirlar: sat }, callback);
+  }
+  return outJson({ status: 'error', message: 'Bilinmeyen işlem' }, callback);
+}
+
+// ============================================================
+// 📊 YÖNETİCİ ÖZETİ: yalnız müdahale gerektirenler, tek ekranda. "rapor" yetkisi.
+// ============================================================
+function yoneticiOzet(p, callback) {
+  var auth = kimlikOnbellek(p.user, p.pass);
+  if (!auth.ok) return outJson({ status: 'error', kimlik: true, message: 'Giriş gerekli' }, callback);
+  if (!(auth.role === 'yonetici' || auth.permissions.indexOf('rapor') !== -1)) return outJson({ status: 'error', message: 'Bu ekran için yetkin yok' }, callback);
+  var maddeler = [];   // [seviye: 'acil'|'uyari'|'bilgi', başlık, açıklama, ekran]
+  var ayar = dbAyar();
+  // 1) ERP'ye irsaliye aktarımı
+  if (ayar) {
+    try {
+      var d = dbCagir(ayar, 'erp_aktarim_durum', { p_gun: 3 });
+      if (d && d.status === 'ok') {
+        var o = d.ozet || {}, n = d.nabiz;
+        if (n && Number(n.dk) > 15 && Number(o.bekliyor) > 0) maddeler.push(['acil', 'ERP aktarım programı çalışmıyor', n.dk + ' dakikadır haber yok, ' + o.bekliyor + ' belge bekliyor. ERP bilgisayarını kontrol et.', 'irs']);
+        if (Number(o.hata) > 0) maddeler.push(['acil', o.hata + ' belge ERP\'ye yazılamadı', 'İrsaliyeler ekranında sebebi yazıyor.', 'irs']);
+        if (Number(o.degisti) > 0) maddeler.push(['uyari', o.degisti + ' belge ERP\'ye gittikten sonra değişti', 'ERP\'deki belge eski hâliyle duruyor; muhasebe düzeltmeli.', 'irs']);
+        var gec = (d.belgeler || []).filter(function (r) { return r[5] === 'bekliyor' && Number(r[8]) >= 30; }).length;
+        if (gec && !(n && Number(n.dk) > 15)) maddeler.push(['uyari', gec + ' belge 30 dakikadan uzun süredir bekliyor', '', 'irs']);
+        var sy = (d.nabizlar || {}).erp_sql_yedek;
+        if (!sy || /^HATA/.test(String(sy.mesaj)) || Number(sy.dk) > 50 * 60) maddeler.push(['uyari', 'ERP SQL yedeği', sy ? sy.mesaj + ' (' + sy.zaman + ')' : 'Yedek bilgisi hiç gelmedi', '']);
+      }
+    } catch (e) { maddeler.push(['uyari', 'ERP aktarım durumu okunamadı', String(e).substring(0, 120), '']); }
+  }
+  // 2) Mini sayım farkları (bugün + dün)
+  try {
+    var dun = Utilities.formatDate(new Date(Date.now() - 86400000), 'Europe/Istanbul', 'yyyy-MM-dd');
+    var kat = miniKatalog(), fiyat = function (bk) { return (kat[bk] && kat[bk].fiyat) || 0; };
+    var farklar = miniKayitlar(2).filter(function (r) { return String(r[0]) >= dun && r[9] !== '' && Number(r[9]) !== 0; });
+    if (farklar.length) {
+      var tutar = farklar.reduce(function (t, r) { return t + Number(r[9]) * fiyat(String(r[3])); }, 0);
+      maddeler.push([Math.abs(tutar) >= 1000 ? 'acil' : 'uyari', 'Mini sayımda ' + farklar.length + ' üründe fark', 'Toplam ' + trSayi(Math.round(tutar * 100) / 100, 2) + ' ₺ (satış fiyatıyla). En büyükleri: ' +
+        farklar.sort(function (a, b) { return Math.abs(Number(b[9]) * fiyat(String(b[3]))) - Math.abs(Number(a[9]) * fiyat(String(a[3]))); }).slice(0, 3).map(function (r) { return r[4] + ' (' + (Number(r[9]) > 0 ? '+' : '') + r[9] + ')'; }).join(', '), 'mini']);
+    }
+    var lk = null; try { lk = JSON.parse(PropertiesService.getScriptProperties().getProperty('MINI_SAYIM_LISTE') || 'null'); } catch (e2) { lk = null; }
+    if (lk && lk.gun === miniGun()) {
+      var sayilan = {}; miniKayitlar(1).forEach(function (r) { if (String(r[10]) === lk.gun) sayilan[String(r[3])] = 1; });
+      var kalan = lk.liste.filter(function (x) { return !sayilan[x[0]]; }).length;
+      var saat = Number(Utilities.formatDate(new Date(), 'Europe/Istanbul', 'H'));
+      if (kalan && saat >= 15) maddeler.push(['bilgi', 'Bugünkü mini sayımda ' + kalan + ' ürün sayılmadı', lk.liste.length + ' üründen ' + (lk.liste.length - kalan) + ' tanesi sayıldı.', 'mini']);
+    }
+    // 3) Eksi stok
+    var eksi = Object.keys(kat).filter(function (bk) { return !kat[bk].koli && kat[bk].stok < 0; });
+    if (eksi.length) maddeler.push(['uyari', eksi.length + ' ürün eksi stokta', 'ERP\'de stok eksiye düşmüş: giriş unutulmuş ya da yanlış barkodla satılmış olabilir. Mini sayım listesine öncelikle girer.', 'mini']);
+  } catch (e3) { maddeler.push(['uyari', 'Sayım verisi okunamadı', String(e3).substring(0, 120), '']); }
+  // 4) Sunucu bekçisi (alan adı, disk, yedek, ERP verisi)
+  if (typeof KRTSunucu !== 'undefined') {
+    try {
+      var b = KRTSunucu.bakim(false);
+      ((b && b.maddeler) || []).forEach(function (m) { if (m.durum === 'acil' || m.durum === 'uyari') maddeler.push([m.durum, m.ad, m.metin, 'bakim']); });
+    } catch (e4) { /* bekçi yok */ }
+  }
+  var sira = { acil: 0, uyari: 1, bilgi: 2 };
+  maddeler.sort(function (a, b) { return sira[a[0]] - sira[b[0]]; });
+  return outJson({ status: 'ok', zaman: simdiMetin(), maddeler: maddeler }, callback);
+}
+
 // Mal Giriş "Satıştan İade": bu carinin her ürünü EN SON hangi fiyattan aldığı (net, KDV dahil).
-// "hareket" yetkisi + fiyat görme yetkisi. Yalnız satış fiyatı gider (maliyet/oran gitmez).
+// Giriş + fiyat görme yetkisi. Yalnız satış fiyatı gider (maliyet/oran gitmez).
 // r: [stok kodu, barkod, son net satış fiyatı (KDV dahil)]
 function malCariFiyat(p, callback) {
-  var auth = requirePermission(p.user, p.pass, 'hareket');
-  if (!auth.ok) return outJson({ status: 'error', message: auth.message }, callback);
+  var auth = kimlikOnbellek(p.user, p.pass);
+  if (!auth.ok) return outJson({ status: 'error', kimlik: true, message: 'Giriş gerekli' }, callback);
   if (!fiyatGorur(auth)) return outJson({ status: 'ok', satirlar: [], fiyatYok: true }, callback);
   var cariKod = String(p.cariKod || '').trim().substring(0, 80);
   if (!cariKod) return outJson({ status: 'ok', satirlar: [] }, callback);
