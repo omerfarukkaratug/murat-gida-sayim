@@ -345,7 +345,7 @@
   .logo{width:22px; height:22px; flex-shrink:0;}
 
   /* Koyu temalarda koyu renkli logo görünmez kalıyordu — açık renge çevir */
-  body.dark #setup header img, body.night #setup header img{filter:invert(1);}
+  body.dark #setup header img, body.night #setup header img, body.k-buyu #setup header img, body.k-oyun #setup header img, body.k-uzay #setup header img, body.k-retro #setup header img, body.k-stadyum #setup header h1 img{filter:invert(1);}
 
   /* KDV etiketi (sayım listesi + fiyat sorgu) */
   .item .meta .kdvTag{color:var(--accent); font-weight:800;}
@@ -393,6 +393,124 @@
   #qtyEntryKdv{margin:-4px 0 10px;}
   #qtyEntry .barcodeDisplay{font-size:22px; margin-bottom:4px;}
 
+
+  /* ===================== 🎭 KONSEPT TEMALAR =====================
+     Renk + yazı tipi + menü süsü + menü simgeleri birlikte değişir. Süsler yalnız giriş / ana menü ekranında;
+     okutma ekranları sade kalır (hız ve okunurluk). Hepsi CSS, internet gerekmez. */
+  body[class*="k-"] #setup{background-image:var(--bgimg, none); background-attachment:fixed;}
+  body[class*="k-"] #menuBaslik{font-size:13px;}
+  /* 🧙 Büyü Okulu — mürdüm zemin, parşömen yazı, altın vurgu, yıldız tozu */
+  body.k-buyu{
+    --bg:#1b1020; --panel:#2a1830; --panel2:#35203b; --line:#5a3a52;
+    --text:#f5e9c8; --muted:#c9b089; --green:#7bd88f; --amber:#f0b44c; --red:#ff7a7a;
+    --accent:#c9962b; --accent2:#f0c75e; --ink:#f5e9c8; --glow:rgba(240,199,94,.40);
+    --sans: Georgia, "Times New Roman", "Noto Serif", serif;
+    --sh-sm:0 1px 2px rgba(0,0,0,.5); --sh-md:0 6px 18px rgba(0,0,0,.55); --sh-lg:0 -6px 24px rgba(0,0,0,.6);
+    --bgimg: radial-gradient(1.5px 1.5px at 12% 18%, #f0c75e 60%, transparent 61%), radial-gradient(1px 1px at 72% 12%, #fff3c4 60%, transparent 61%),
+             radial-gradient(1.5px 1.5px at 40% 62%, #f0c75e 60%, transparent 61%), radial-gradient(1px 1px at 88% 48%, #fff3c4 60%, transparent 61%),
+             radial-gradient(1px 1px at 22% 84%, #fff3c4 60%, transparent 61%), radial-gradient(900px 500px at 50% -10%, #3d1f45, transparent 70%);
+  }
+  body.k-buyu .stripes{background:linear-gradient(90deg, #7a4a12, #f0c75e 50%, #7a4a12); box-shadow:0 0 12px rgba(240,199,94,.6);}
+  body.k-buyu .menuBtn{border:1.5px solid #8a6a2e; background:linear-gradient(180deg, #3a2240, #2a1830); box-shadow:inset 0 0 0 1px rgba(240,199,94,.12);}
+  body.k-buyu .menuBtn .menuIcon{filter:drop-shadow(0 0 6px rgba(240,199,94,.7));}
+  body.k-buyu #menuBaslik{color:#f0c75e; font-style:italic; text-transform:none; letter-spacing:.02em;}
+  body.k-buyu .btn-main{color:#2a1408;}
+  /* ⛏️ Piksel Blok — kare köşe, kalın çerçeve, blok gölge, çim + toprak */
+  body.k-piksel{
+    --bg:#bfe3a0; --panel:#f3e9cf; --panel2:#e6d6a8; --line:#5c3d1c;
+    --text:#2b1d0e; --muted:#6b5232; --green:#2f8f1f; --amber:#b86b00; --red:#b3261e;
+    --accent:#3f8f24; --accent2:#5cb83a; --ink:#2b1d0e; --glow:rgba(63,143,36,.35);
+    --r-sm:0px; --r-md:0px; --r-lg:0px;
+    --sans: ui-monospace, "Cascadia Mono", Consolas, "Courier New", monospace;
+    --bgimg: conic-gradient(#b3da92 25%, #c8eaa9 0 50%, #b3da92 0 75%, #c8eaa9 0); 
+  }
+  body.k-piksel #setup{background-size:32px 32px;}
+  body.k-piksel .stripes{height:8px; background:repeating-linear-gradient(90deg, #5cb83a 0 16px, #3f8f24 16px 32px); border-bottom:4px solid #7a5230;}
+  body.k-piksel .menuBtn, body.k-piksel #setup .card, body.k-piksel .btn-main, body.k-piksel .hizliGecis button{border:3px solid #3b2610 !important; border-radius:0 !important;
+    box-shadow:inset -4px -4px 0 rgba(0,0,0,.22), inset 4px 4px 0 rgba(255,255,255,.45) !important;}
+  body.k-piksel .menuBtn .menuIcon{background:#8b5a2b; padding:6px; box-shadow:inset -3px -3px 0 rgba(0,0,0,.3), inset 3px 3px 0 rgba(255,255,255,.3);}
+  body.k-piksel #menuBaslik{color:#2b1d0e; letter-spacing:.12em;}
+  /* 📱 Sosyal Akış — beyaz akış, renk geçişli hikâye halkaları, kalp vurgu */
+  body.k-sosyal{
+    --bg:#fafafa; --panel:#ffffff; --panel2:#f6f6f8; --line:#e6e6ea;
+    --text:#111111; --muted:#737373; --green:#16a34a; --amber:#d97706; --red:#ed2456;
+    --accent:#d62976; --accent2:#fa7e1e; --ink:#111; --glow:rgba(214,41,118,.30);
+    --r-md:18px; --r-lg:22px;
+  }
+  body.k-sosyal .stripes{background:linear-gradient(90deg, #feda75, #fa7e1e, #d62976, #962fbf, #4f5bd5);}
+  body.k-sosyal .btn-main{background:linear-gradient(90deg, #fa7e1e, #d62976 55%, #962fbf);}
+  body.k-sosyal .menuBtn{background:#fff;}
+  body.k-sosyal .menuBtn .menuIcon{width:46px; height:46px; display:flex; align-items:center; justify-content:center; border-radius:50%; font-size:21px;
+    background:linear-gradient(#fff, #fff) padding-box, linear-gradient(45deg, #feda75, #fa7e1e, #d62976, #962fbf) border-box; border:3px solid transparent;}
+  body.k-sosyal #menuBaslik{color:#111; text-transform:none; letter-spacing:0; font-size:15px;}
+  /* 🎮 Oyuncu Neon — siyah zemin, camgöbeği + pembe neon parıltı */
+  body.k-oyun{
+    --bg:#07070d; --panel:#10101c; --panel2:#161628; --line:#2c2c55;
+    --text:#eaf6ff; --muted:#8b93c7; --green:#39ff88; --amber:#ffd23f; --red:#ff4d6d;
+    --accent:#00d5ff; --accent2:#ff2bd6; --ink:#eaf6ff; --glow:rgba(0,213,255,.45);
+    --sh-sm:0 1px 2px rgba(0,0,0,.6); --sh-md:0 6px 18px rgba(0,0,0,.6); --sh-lg:0 -6px 24px rgba(0,0,0,.7);
+    --bgimg: linear-gradient(rgba(0,213,255,.06) 1px, transparent 1px), linear-gradient(90deg, rgba(255,43,214,.06) 1px, transparent 1px);
+  }
+  body.k-oyun #setup{background-size:28px 28px;}
+  body.k-oyun .stripes{background:linear-gradient(90deg, #00d5ff, #ff2bd6); box-shadow:0 0 14px #00d5ff;}
+  body.k-oyun .menuBtn{border:1.5px solid #00d5ff; box-shadow:0 0 10px rgba(0,213,255,.35), inset 0 0 12px rgba(255,43,214,.10); text-transform:uppercase; letter-spacing:.03em;}
+  body.k-oyun .menuBtn .menuSub{text-transform:none; letter-spacing:0;}
+  body.k-oyun .menuBtn .menuIcon{filter:drop-shadow(0 0 6px #ff2bd6);}
+  body.k-oyun #menuBaslik{color:#00d5ff; text-shadow:0 0 8px #00d5ff; letter-spacing:.2em;}
+  body.k-oyun .btn-main{background:linear-gradient(90deg, #00d5ff, #ff2bd6); color:#07070d;}
+  /* 🚀 Uzay — derin lacivert, yıldızlar, mor-mavi bulutsu */
+  body.k-uzay{
+    --bg:#050a1f; --panel:#0e1638; --panel2:#152052; --line:#26346e;
+    --text:#e8ecff; --muted:#97a3d6; --green:#4ade80; --amber:#fbbf24; --red:#f87171;
+    --accent:#8b5cf6; --accent2:#38bdf8; --ink:#e8ecff; --glow:rgba(139,92,246,.45);
+    --sh-sm:0 1px 2px rgba(0,0,0,.5); --sh-md:0 6px 18px rgba(0,0,0,.55); --sh-lg:0 -6px 24px rgba(0,0,0,.6);
+    --bgimg: radial-gradient(1px 1px at 10% 20%, #fff 60%, transparent 61%), radial-gradient(1px 1px at 30% 70%, #fff 60%, transparent 61%),
+             radial-gradient(1.5px 1.5px at 65% 30%, #c7d2fe 60%, transparent 61%), radial-gradient(1px 1px at 85% 80%, #fff 60%, transparent 61%),
+             radial-gradient(1px 1px at 50% 50%, #fff 60%, transparent 61%), radial-gradient(700px 400px at 90% 0%, rgba(139,92,246,.35), transparent 70%),
+             radial-gradient(600px 400px at 0% 100%, rgba(56,189,248,.22), transparent 70%);
+  }
+  body.k-uzay .stripes{background:linear-gradient(90deg, #38bdf8, #8b5cf6, #ec4899);}
+  body.k-uzay .menuBtn{background:rgba(21,32,82,.85); border-color:#33448a;}
+  body.k-uzay #menuBaslik{color:#c4b5fd;}
+  /* 🌸 Pastel Tatlı — pembe-lila pastel, yumuşak köşeler */
+  body.k-pastel{
+    --bg:#fff7fb; --panel:#ffffff; --panel2:#ffeef6; --line:#f9cfe2;
+    --text:#5b3a55; --muted:#a07a98; --green:#3fae6a; --amber:#d58a1a; --red:#e2557a;
+    --accent:#f06aa8; --accent2:#a78bfa; --ink:#5b3a55; --glow:rgba(240,106,168,.30);
+    --r-sm:14px; --r-md:22px; --r-lg:26px;
+    --bgimg: radial-gradient(circle at 15% 15%, #ffe0ef 0 40px, transparent 41px), radial-gradient(circle at 85% 25%, #e9e0ff 0 50px, transparent 51px),
+             radial-gradient(circle at 70% 85%, #ffe9d6 0 45px, transparent 46px);
+  }
+  body.k-pastel .stripes{background:linear-gradient(90deg, #ffb3d1, #c4b5fd, #a5f3fc);}
+  body.k-pastel .btn-main{background:linear-gradient(90deg, #f472b6, #a78bfa);}
+  body.k-pastel .menuBtn .menuIcon{background:#fff; border-radius:50%; width:44px; height:44px; display:flex; align-items:center; justify-content:center; box-shadow:0 3px 8px rgba(240,106,168,.25);}
+  body.k-pastel #menuBaslik{color:#f06aa8; text-transform:none; letter-spacing:0; font-size:14px;}
+  /* ⚽ Stadyum — çim şeritleri, beyaz kartlar, yeşil + sarı */
+  body.k-stadyum{
+    --bg:#2f8a3e; --panel:#ffffff; --panel2:#f1f7ef; --line:#cfe3c9;
+    --text:#0f2a14; --muted:#56705a; --green:#15803d; --amber:#d97706; --red:#dc2626;
+    --accent:#15803d; --accent2:#f5b700; --ink:#0f2a14; --glow:rgba(21,128,61,.35);
+    --bgimg: repeating-linear-gradient(180deg, #2f8a3e 0 44px, #379a47 44px 88px);
+  }
+  body.k-stadyum .stripes{background:#fff; height:5px;}
+  body.k-stadyum #setup header .sub, body.k-stadyum #setup header{color:#fff;}
+  body.k-stadyum .menuBtn{border-left:6px solid #f5b700;}
+  body.k-stadyum #menuBaslik{color:#15803d;}
+  /* 📼 Retro 80'ler — gün batımı ızgarası, pembe + sarı */
+  body.k-retro{
+    --bg:#1a0b2e; --panel:#24113f; --panel2:#2e1650; --line:#4b2a7a;
+    --text:#fff1fb; --muted:#c9a6e6; --green:#5ef2a1; --amber:#ffd319; --red:#ff5c8a;
+    --accent:#ff2a8a; --accent2:#ffd319; --ink:#fff1fb; --glow:rgba(255,42,138,.45);
+    --bgimg: linear-gradient(transparent 62%, rgba(255,42,138,.18) 62%), linear-gradient(90deg, rgba(255,211,25,.10) 1px, transparent 1px), linear-gradient(rgba(255,211,25,.10) 1px, transparent 1px);
+  }
+  body.k-retro #setup{background-size:auto, 40px 40px, 40px 40px;}
+  body.k-retro .stripes{background:linear-gradient(90deg, #ffd319, #ff901f, #ff2975, #f222ff, #8c1eff);}
+  body.k-retro .menuBtn{border-color:#ff2a8a; box-shadow:4px 4px 0 #ffd319;}
+  body.k-retro #menuBaslik{color:#ffd319; letter-spacing:.18em;}
+  body.k-retro .btn-main{background:linear-gradient(90deg, #ff2a8a, #ff901f); }
+  #themeModal .sheet{max-height:86vh; overflow-y:auto;}
+  .themeGrup{grid-column:1 / -1; font-size:12px; font-weight:800; color:var(--muted); text-transform:uppercase; letter-spacing:.06em; margin:6px 0 -2px;}
+  .themeSwatch .tIkon{position:absolute; inset:0; display:flex; align-items:center; justify-content:center; gap:6px; font-size:18px; letter-spacing:0;}
   /* Tema seçici */
   #themeModal{position:fixed; inset:0; background:rgba(10,10,10,.55); z-index:60; display:flex; align-items:flex-end; justify-content:center;}
   #themeModal .sheet{width:100%; max-width:480px; background:var(--panel); border-radius:20px 20px 0 0; padding:18px 16px calc(18px + env(safe-area-inset-bottom)); box-shadow:var(--sh-lg);}
@@ -431,7 +549,7 @@
   <header style="border:none; padding:0 0 16px; background:transparent; display:flex; align-items:flex-start; justify-content:space-between;">
     <div>
       <h1><img src="logo-header.png" alt="Murat Gıda" style="height:30px; width:auto; display:block;"></h1>
-      <div class="sub"><img src="icon.svg" alt="" style="width:15px;height:15px;vertical-align:-3px;margin-right:5px;">KRT Saha · Murat Gıda • offline • Android • build 267</div>
+      <div class="sub"><img src="icon.svg" alt="" style="width:15px;height:15px;vertical-align:-3px;margin-right:5px;">KRT Saha · Murat Gıda • offline • Android • build 268</div>
     </div>
     <button type="button" id="themeToggleBtn" title="Tema seç" style="background:var(--panel2); border:1.5px solid var(--line); color:var(--text); width:34px; height:34px; border-radius:50%; font-size:15px; padding:0; display:flex; align-items:center; justify-content:center; flex-shrink:0;">🎨</button>
   </header>
@@ -470,7 +588,7 @@
 
   <div class="card hidden" id="homeMenuScreen">
     <div id="konumDurumu" class="hint hidden" style="text-align:center; margin:-4px 0 12px;"></div>
-    <div style="text-align:center; font-weight:800; font-size:12px; color:var(--muted); text-transform:uppercase; letter-spacing:.06em; margin-bottom:14px;">Ne yapmak istersin?</div>
+    <div id="menuBaslik" style="text-align:center; font-weight:800; font-size:12px; color:var(--muted); text-transform:uppercase; letter-spacing:.06em; margin-bottom:14px;">Ne yapmak istersin?</div>
     <div id="menuListe">
       <button type="button" class="menuBtn" id="menuSayimBtn"><span class="menuIcon">📋</span><span>Sayım<span class="menuSub">Barkod okutarak stok sayımı</span></span></button>
       <button type="button" class="menuBtn" id="menuMiniBtn"><span class="menuIcon">🎯</span><span>Günün Mini Sayımı<span class="menuSub">Riskli ürünlerden kısa sayım listesi</span></span></button>
@@ -1445,8 +1563,39 @@
     { key:'manav',  name:'Taze Yeşil',  bg:'#f2f8ec', panel:'#ffffff', accent:'#15803d' },
     { key:'sunset', name:'Gün Batımı',  bg:'#fff3e6', panel:'#ffffff', accent:'#d9480f' },
     { key:'night',  name:'Gece Mavisi', bg:'#0a1428', panel:'#111f3a', accent:'#3b82f6' },
-    { key:'custom', name:'Özel' } // bg/panel/accent burada sabit değil — kullanıcının kendi seçtiği renkler
+    { key:'custom', name:'Özel' }, // bg/panel/accent burada sabit değil — kullanıcının kendi seçtiği renkler
+    // 🎭 Konsept temalar: renk + yazı tipi + süs + menü simgeleri. ikon sırası KONSEPT_MENU ile aynı.
+    { key:'k-buyu',    konsept:true, name:'Büyü Okulu',   bg:'#1b1020', bgs:'linear-gradient(135deg,#1b1020,#3d1f45)', panel:'#2a1830', accent:'#f0c75e', baslik:'Bugün hangi büyüyü yapacaksın?',
+      ikon:['📜','🔮','🦉','🗝️','🧹','🪙','🪶','🧿','⌛','⚗️','🧭','🌀','🧳','📖','🧪'] },
+    { key:'k-piksel',  konsept:true, name:'Piksel Blok',  bg:'#bfe3a0', bgs:'conic-gradient(#b3da92 25%,#c8eaa9 0 50%,#b3da92 0 75%,#c8eaa9 0) 0 0/16px 16px', panel:'#f3e9cf', accent:'#3f8f24', baslik:'Bugün ne inşa ediyoruz?',
+      ikon:['⛏️','🏹','🗺️','🧱','🪓','💎','🪧','🟩','⏳','🧰','🛤️','🧭','📦','📕','🌾'] },
+    { key:'k-sosyal',  konsept:true, name:'Sosyal Akış',  bg:'#fafafa', bgs:'linear-gradient(135deg,#feda75,#fa7e1e,#d62976,#962fbf)', panel:'#ffffff', accent:'#d62976', baslik:'Bugünün akışı ✨',
+      ikon:['📸','✨','📈','📩','🚀','💸','🏷️','✅','⏰','🛍️','🚚','🔁','📦','💬','🤝'] },
+    { key:'k-oyun',    konsept:true, name:'Oyuncu Neon',  bg:'#07070d', bgs:'linear-gradient(135deg,#07070d,#161628)', panel:'#10101c', accent:'#00d5ff', baslik:'GÖREV SEÇ ▸',
+      ikon:['🎮','🎯','🏆','🧲','🚀','🪙','🏷️','👁️','⏱️','🕹️','🏎️','⚡','🗃️','💳','🛰️'] },
+    { key:'k-uzay',    konsept:true, name:'Uzay',         bg:'#050a1f', bgs:'radial-gradient(circle at 80% 20%,#8b5cf6,#050a1f 70%)', panel:'#0e1638', accent:'#38bdf8', baslik:'Bugünkü görev ne, kaptan?',
+      ikon:['🚀','🛸','🌍','🪐','☄️','🌟','🏷️','🔭','🌙','👨‍🚀','🛰️','🌌','📦','📡','🌠'] },
+    { key:'k-pastel',  konsept:true, name:'Pastel Tatlı', bg:'#fff7fb', bgs:'linear-gradient(135deg,#ffe0ef,#e9e0ff,#d6f5ff)', panel:'#ffffff', accent:'#f06aa8', baslik:'Bugün ne yapalım? 🌸',
+      ikon:['🐰','🍓','🌈','🧁','🎀','🍬','🏷️','💖','⏰','🧺','🚲','🌸','🍱','📔','🛍️'] },
+    { key:'k-stadyum', konsept:true, name:'Stadyum',      bg:'#2f8a3e', bgs:'repeating-linear-gradient(90deg,#2f8a3e 0 12px,#379a47 12px 24px)', panel:'#ffffff', accent:'#f5b700', baslik:'Maç başlıyor — pozisyonunu seç!',
+      ikon:['⚽','🥅','🏆','🧤','👟','🪙','🎫','🟨','⏱️','🎒','🚌','🔄','📦','📒','🛒'] },
+    { key:'k-retro',   konsept:true, name:"Retro 80'ler", bg:'#1a0b2e', bgs:'linear-gradient(180deg,#ffd319,#ff2a8a 55%,#1a0b2e 56%)', panel:'#24113f', accent:'#ff2a8a', baslik:'Hadi başlayalım ▶',
+      ikon:['📼','💾','📺','📟','🛹','💿','🏷️','🕶️','⏰','🎧','🚗','🌴','📦','☎️','🛍️'] }
   ];
+  var KONSEPT_MENU = ['menuSayimBtn','menuMiniBtn','menuOzetBtn','menuMalGirisBtn','menuMalCikisBtn','menuFiyatBtn','menuEtiketBtn','menuDogrulaBtn','menuMesaiBtn','menuHazirlaBtn','menuPlasiyerBtn','menuHareketBtn','menuStokHrkBtn','menuCariHrkBtn','menuTedarikBtn'];
+  function konseptTema(){ return THEMES.filter(function(t){ return t.key === state.theme && t.konsept; })[0] || null; }
+  // Menü düğmesinin (id) bu temadaki simgesi; konsept tema değilse null (orijinal simge kalır).
+  function konseptIkonu(id){ var t = konseptTema(), i = KONSEPT_MENU.indexOf(id); return t && i !== -1 ? t.ikon[i] : null; }
+  function konseptUygula(){
+    var t = konseptTema();
+    KONSEPT_MENU.forEach(function(id){
+      var b = document.getElementById(id), ic = b && b.querySelector('.menuIcon'); if(!ic) return;
+      if(!ic.hasAttribute('data-orig')) ic.setAttribute('data-orig', ic.textContent);
+      ic.textContent = konseptIkonu(id) || ic.getAttribute('data-orig');
+    });
+    var bs = document.getElementById('menuBaslik'); if(bs) bs.textContent = t ? t.baslik : 'Ne yapmak istersin?';
+    if(typeof hizliGecisCiz === 'function') try { hizliGecisCiz(); } catch(e){}
+  }
   function themeKnown(k){ return THEMES.some(function(t){ return t.key === k; }); }
 
   // ---- Basit hex renk matematiği: özel temanın panel2/line/muted/glow gibi
@@ -1514,19 +1663,23 @@
     }
     var metaTheme = document.querySelector('meta[name="theme-color"]');
     if(metaTheme) metaTheme.setAttribute('content', bgForMeta);
+    konseptUygula();
   }
   var themeModalEl = document.getElementById('themeModal');
   var themeGridEl = document.getElementById('themeGrid');
   var customThemeEditorEl = document.getElementById('customThemeEditor');
   function renderThemeGrid(){
     var ct = getCustomTheme();
-    themeGridEl.innerHTML = THEMES.map(function(t){
+    var tile = function(t){
       var on = t.key === state.theme;
       var sw = t.key === 'custom' ? ct : t;
+      var ic = t.konsept ? '<span class="tIkon">' + t.ikon.slice(0, 4).join('') + '</span>' : '<i style="background:' + sw.panel + ';"></i><b style="background:' + sw.accent + ';"></b>';
       return '<button type="button" class="themeTile' + (on ? ' active' : '') + '" data-theme="' + t.key + '">' +
-        '<span class="themeSwatch" style="background:' + sw.bg + ';"><i style="background:' + sw.panel + ';"></i><b style="background:' + sw.accent + ';"></b></span>' +
+        '<span class="themeSwatch" style="background:' + (t.bgs || sw.bg) + ';">' + ic + '</span>' +
         '<span>' + (t.key === 'custom' ? '🎨 ' : '') + t.name + (on ? ' ✓' : '') + '</span></button>';
-    }).join('');
+    };
+    themeGridEl.innerHTML = '<div class="themeGrup">🎭 Konsept temalar — renk, simge, süs</div>' + THEMES.filter(function(t){ return t.konsept; }).map(tile).join('') +
+      '<div class="themeGrup">Sade renkler</div>' + THEMES.filter(function(t){ return !t.konsept; }).map(tile).join('');
   }
   function populateCustomThemeInputs(){
     var ct = getCustomTheme();
@@ -6484,7 +6637,7 @@
     document.querySelectorAll('.hizliGecis').forEach(function(el){
       var aktif = el.getAttribute('data-ekran') === 'mal' ? malTip : el.getAttribute('data-ekran');
       el.innerHTML = gorunen.map(function(g){
-        return '<button type="button" data-hedef="' + g[0] + '"' + (g[0] === aktif ? ' class="on"' : '') + '><span>' + g[1] + '</span><span>' + g[2] + '</span></button>';
+        return '<button type="button" data-hedef="' + g[0] + '"' + (g[0] === aktif ? ' class="on"' : '') + '><span>' + (konseptIkonu(g[3]) || g[1]) + '</span><span>' + g[2] + '</span></button>';
       }).join('');
     });
   }
