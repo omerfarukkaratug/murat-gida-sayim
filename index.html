@@ -2,7 +2,8 @@
 <html lang="tr">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, viewport-fit=cover">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+<style>/* Ekran kaymasın: iki parmakla / çift dokunuşla yakınlaştırma kapalı, sayfa yana taşmaz */ html{touch-action:pan-x pan-y; overflow-x:hidden;} body{overflow-x:hidden; max-width:100vw;} html,body{overscroll-behavior:none;}</style>
 <title>KRT Saha — Murat Gıda</title>
 <link rel="manifest" href="manifest.json">
 <link rel="icon" href="icon.svg?v=236" type="image/svg+xml">
@@ -82,7 +83,7 @@
   header{padding:16px 18px 12px; background:var(--panel); box-shadow:var(--sh-sm); position:relative; z-index:2;}
   header h1{font-size:14px; letter-spacing:.02em; margin:0 0 2px; font-weight:800; display:flex; align-items:center; gap:8px;}
   header .sub{font-size:11px; color:var(--muted); font-family:var(--mono);}
-  .screen{height:calc(100 * var(--eh) - 4px); display:flex; flex-direction:column;}
+  .screen{height:calc(100 * var(--eh) - 4px); display:flex; flex-direction:column; overflow-x:hidden; max-width:100vw;}
   .hidden{display:none !important;}
   /* YAN ÇEVİRME: telefon yan dönünce uygulama da diğer uygulamalar gibi döner ve ekranı
      tam genişlikte kullanır; iPhone yazıları kendiliğinden büyütmez.
@@ -397,7 +398,7 @@
   /* ===================== 🎭 KONSEPT TEMALAR =====================
      Renk + yazı tipi + menü süsü + menü simgeleri birlikte değişir. Süsler yalnız giriş / ana menü ekranında;
      okutma ekranları sade kalır (hız ve okunurluk). Hepsi CSS, internet gerekmez. */
-  body[class*="k-"] #setup{background-image:var(--bgimg, none); background-attachment:fixed;}
+  body[class*="k-"] #setup{background-image:var(--bgimg, none);}
   body[class*="k-"] #menuBaslik{font-size:13px;}
   /* 🧙 Büyü Okulu — mürdüm zemin, parşömen yazı, altın vurgu, yıldız tozu */
   body.k-buyu{
@@ -549,7 +550,7 @@
   <header style="border:none; padding:0 0 16px; background:transparent; display:flex; align-items:flex-start; justify-content:space-between;">
     <div>
       <h1><img src="logo-header.png" alt="Murat Gıda" style="height:30px; width:auto; display:block;"></h1>
-      <div class="sub"><img src="icon.svg" alt="" style="width:15px;height:15px;vertical-align:-3px;margin-right:5px;">KRT Saha · Murat Gıda • offline • Android • build 268</div>
+      <div class="sub"><img src="icon.svg" alt="" style="width:15px;height:15px;vertical-align:-3px;margin-right:5px;">KRT Saha · Murat Gıda • offline • Android • build 269</div>
     </div>
     <button type="button" id="themeToggleBtn" title="Tema seç" style="background:var(--panel2); border:1.5px solid var(--line); color:var(--text); width:34px; height:34px; border-radius:50%; font-size:15px; padding:0; display:flex; align-items:center; justify-content:center; flex-shrink:0;">🎨</button>
   </header>
