@@ -555,7 +555,7 @@
   <header style="border:none; padding:0 0 16px; background:transparent; display:flex; align-items:flex-start; justify-content:space-between;">
     <div>
       <h1><img src="logo-header.png" alt="Murat Gıda" style="height:30px; width:auto; display:block;"></h1>
-      <div class="sub"><img src="icon.svg" alt="" style="width:15px;height:15px;vertical-align:-3px;margin-right:5px;">KRT Saha · Murat Gıda • offline • Android • build 270</div>
+      <div class="sub"><img src="icon.svg" alt="" style="width:15px;height:15px;vertical-align:-3px;margin-right:5px;">KRT Saha · Murat Gıda • offline • Android • build 271</div>
     </div>
     <button type="button" id="themeToggleBtn" title="Tema seç" style="background:var(--panel2); border:1.5px solid var(--line); color:var(--text); width:34px; height:34px; border-radius:50%; font-size:15px; padding:0; display:flex; align-items:center; justify-content:center; flex-shrink:0;">🎨</button>
   </header>
@@ -1904,6 +1904,28 @@
     var mesaj = 'Telefon hafızası %' + yuzde + ' dolu (' + ((state.session && state.session.scans) ? state.session.scans.length : 0) + ' okutma). ' +
       (hafizaOrani >= 0.85 ? 'HEMEN' : 'Vardiya sonunda') + ' "Bitir / Yeni" ile sayımı bitirip yeni sayım başlatın — veriler sunucuda güvende, kaybolmaz.';
     setTimeout(function(){ if(hafizaOrani >= 0.85) errorToast(mesaj); else warnToast(mesaj); }, 50);
+  }
+  // UZUN SAYIM (20 saat): iPhone'un uygulamaya verdiği hafıza ~10-11 bin okutmada dolar. Hafıza %70'i geçince ve
+  // telefondaki BÜTÜN okutmalar sunucuda onaylanmışsa, "Bitir / Yeni" kendiliğinden yapılır: onaylı kayıtlar
+  // telefondan temizlenir (sunucuda aynen durur), personel kaldığı yerden okutmaya devam eder. Onaylanmamış tek
+  // bir kayıt bile varsa hiçbir şey silinmez — önce gönderim tamamlanır.
+  function hafizaOtoYeni(){
+    if(hafizaOrani < 0.7) return false;
+    var sess = state.session; if(!sess || !sess.scans || !sess.scans.length) return false;
+    if((sess.deletedIds || []).length) return false;
+    if(!sess.scans.every(function(it){ return (it.a || 0) >= (it.v || 1); })) return false;
+    if(state.pendingSessions.some(function(p){ return p.sessionId === sess.id && ((p.rows || []).length || (p.deletedIds || []).length); })) return false;
+    var acik = document.querySelector('#qtyEntry:not(.hidden), #reviewScreen:not(.hidden)'); if(acik) return false;
+    var onceki = sess, adet = sess.scans.length;
+    state.pendingSessions = state.pendingSessions.filter(function(p){ return p.sessionId !== sess.id; });
+    state.session = { scans: [], id: makeId(), deletedIds: [], ackedV: {} };
+    if(!save()){ state.session = onceki; return false; }
+    hafizaOrani = 0;
+    if(typeof renderList === 'function') renderList();
+    updatePendingBadge();
+    setTimeout(function(){ toast('⚠️ Telefon hafızası dolmak üzereydi: sunucuya ulaşmış ' + adet + ' okutma telefondan temizlendi. Veriler sunucuda güvende — okutmaya devam et.', 'warn', 8000); }, 60);
+    try { if(typeof gunlukGonder === 'function') gunlukGonder('Hafıza doldu, ' + adet + ' onaylı okutma telefondan temizlendi (otomatik Bitir/Yeni)'); } catch(e){}
+    return true;
   }
   // Kritik bir işlem telefona yazılamadığında: toast kolayca gözden kaçabildiği
   // için ekranı durduran bir uyarı gösterilir ve hata sesi çalınır.
@@ -8897,6 +8919,7 @@
     var finish = function(){
       syncInProgress = false;
       save(); updatePendingBadge();
+      if(!anyError) hafizaOtoYeni();
       if(localChanged && typeof renderList === 'function') renderList();
       var uyar = recordSyncResult(anyError);
       if(!silent){

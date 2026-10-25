@@ -122,7 +122,15 @@ function sekmeYap(defter, ad) {
       k = k || 1;
       if (n < 1 || n + k - 1 > s.getMaxRows()) throw new Error('Satır aralığı sekmenin dışında');
       if (s.getMaxRows() - k < 1 + s.donmus || (s.getMaxRows() - k < 1)) throw new Error('Sekmedeki tüm donmamış satırlar silinemez');
-      s.veri.splice(n - 1, k); s.maxSatir = Math.max(1, s.getMaxRows() - k); s._hepsi = true; return s;
+      s.veri.splice(n - 1, k); s.maxSatir = Math.max(1, s.getMaxRows() - k);
+      // HIZ: silinen satırdan SONRAKİ satırlar bir yukarı kayar; yalnız onlar yeniden yazılır (sondaki fazlalık
+      // veritabanında uzunluk farkıyla silinir). Büyük sayımda (100 bin satır) telefondan silinen kayıt genelde
+      // sondadır — eskiden her silmede bütün tablo baştan yazılıyordu. Kayan kısım tablonun yarısından fazlaysa
+      // eskisi gibi tamamı yazılır.
+      const kayan = s.veri.length - (n - 1);
+      if (s._hepsi || s._yeni || kayan > s.veri.length / 2) s._hepsi = true;
+      else for (let i = n - 1; i < s.veri.length; i++) s._kirli.add(i);
+      return s;
     },
     appendRow(r) { const i = s.getLastRow(); s.veri[i] = r.map(hucreKopya); for (let j = 0; j < i; j++) if (!s.veri[j]) s.veri[j] = []; s._kirli.add(i); return s; },
     clear() { s.veri = []; s._hepsi = true; return s; },
