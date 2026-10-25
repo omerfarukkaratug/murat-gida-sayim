@@ -431,7 +431,7 @@
   <header style="border:none; padding:0 0 16px; background:transparent; display:flex; align-items:flex-start; justify-content:space-between;">
     <div>
       <h1><img src="logo-header.png" alt="Murat Gıda" style="height:30px; width:auto; display:block;"></h1>
-      <div class="sub"><img src="icon.svg" alt="" style="width:15px;height:15px;vertical-align:-3px;margin-right:5px;">KRT Saha · Murat Gıda • offline • Android • build 264</div>
+      <div class="sub"><img src="icon.svg" alt="" style="width:15px;height:15px;vertical-align:-3px;margin-right:5px;">KRT Saha · Murat Gıda • offline • Android • build 265</div>
     </div>
     <button type="button" id="themeToggleBtn" title="Tema seç" style="background:var(--panel2); border:1.5px solid var(--line); color:var(--text); width:34px; height:34px; border-radius:50%; font-size:15px; padding:0; display:flex; align-items:center; justify-content:center; flex-shrink:0;">🎨</button>
   </header>
@@ -5163,9 +5163,9 @@
   var FIRMA_UNVAN = 'Murat Pastane Bakliyat Ltd. Şti.';
   var MK_ERP_IMZA = 'KRT Saha ile hazırlanmıştır.';
   var FIRMA_LOGO = new Image(); FIRMA_LOGO.src = 'logo-header.png';
-  // Belgelerin altındaki KRT Saha tanıtım bandı (logo + kısa yazı + krtsaha.com QR kodu).
+  // Belgelerin altındaki KRT Saha tanıtım bandı (logo + kısa yazı + Google Play QR kodu).
   var KRT_LOGO = new Image(); KRT_LOGO.src = 'icon-192.png';
-  var KRT_QR_URL = 'https://krtsaha.com';
+  var KRT_QR_URL = 'https://play.google.com/store/apps/details?id=com.krtsaha.app';   // QR doğrudan Google Play sayfasını açar
   var qrLibSoz = null;
   function qrLibYukle(){
     if(window.qrcode) return Promise.resolve(window.qrcode);
@@ -5392,7 +5392,7 @@
         var maxW = IW - (lx - bx) - (qs ? qs + 40 : 20);
         yazi('KRT Saha', lx, by + 26, 22, true, '#0B3D2E', 'left', maxW);
         yazi('Bu belge KRT Saha ile hazırlandı — sayım, mal kabul, irsaliye, sipariş ve etiket tek mobil uygulamada.', lx, by + 54, 15, false, '#333', 'left', maxW);
-        yazi('İşletmeniz için: krtsaha.com', lx, by + 78, 15, true, '#16A34A', 'left', maxW);
+        yazi('Google Play\'de "KRT Saha" · QR\'ı okutun · krtsaha.com', lx, by + 78, 15, true, '#16A34A', 'left', maxW);
       }
       yazi('Sayfa ' + (i + 1) + ' / ' + sayfalar.length, W - KN, H - KN + 10, 14, false, '#666', 'right');
       yazi(FIRMA_UNVAN + ' · ' + m.baslik, KN, H - KN + 10, 14, false, '#666', 'left', IW - 200);
