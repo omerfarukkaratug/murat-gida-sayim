@@ -3774,6 +3774,11 @@ function erpDurum(p, callback) {
     }
     if (!bas) return outJson({ status: 'error', message: 'Belge bulunamadı' }, callback);
     bas.status = 'ok'; bas.satirlar = bsat;
+    // ERP'ye geçtiyse ERP'deki GÜNCEL hâli de gelir (muhasebe ERP'de düzeltmiş olabilir; 031 SQL yoksa sessizce yok sayılır).
+    var erpNo = String(p.erpNo || '').trim().substring(0, 60);
+    if (erpNo && bas.cariKodu) {
+      try { var eh = dbCagir({ url: url, anahtar: anahtar }, 'erp_belge_hali', { p_belge_no: erpNo, p_cari_kod: bas.cariKodu }); if (eh && eh.status === 'ok') bas.erp = eh; } catch (ehe) { /* 031 yok */ }
+    }
     return outJson(bas, callback);
   }
   if (ne === 'fis') {

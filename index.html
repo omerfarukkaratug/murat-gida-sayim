@@ -431,7 +431,7 @@
   <header style="border:none; padding:0 0 16px; background:transparent; display:flex; align-items:flex-start; justify-content:space-between;">
     <div>
       <h1><img src="logo-header.png" alt="Murat Gıda" style="height:30px; width:auto; display:block;"></h1>
-      <div class="sub"><img src="icon.svg" alt="" style="width:15px;height:15px;vertical-align:-3px;margin-right:5px;">KRT Saha · Murat Gıda • offline • Android • build 265</div>
+      <div class="sub"><img src="icon.svg" alt="" style="width:15px;height:15px;vertical-align:-3px;margin-right:5px;">KRT Saha · Murat Gıda • offline • Android • build 266</div>
     </div>
     <button type="button" id="themeToggleBtn" title="Tema seç" style="background:var(--panel2); border:1.5px solid var(--line); color:var(--text); width:34px; height:34px; border-radius:50%; font-size:15px; padding:0; display:flex; align-items:center; justify-content:center; flex-shrink:0;">🎨</button>
   </header>
@@ -4932,20 +4932,44 @@
   function irsBelgeHtml(a, r){
     if(a.yukleniyor) return '<div class="chFis">⏳ Belge yükleniyor…</div>';
     if(a.hata) return '<div class="chFis" style="color:var(--red);">❌ ' + escapeHtml(a.hata) + '</div>';
-    var d = a.veri || {};
-    return '<div class="chFis">' + (d.satirlar || []).map(function(x){
-        return '<div class="chFisSatir"><span style="min-width:0;">' + escapeHtml(x[1] || x[0]) + '<small>' + escapeHtml(x[0]) + '</small></span><b>' + escapeHtml(fmtQty(x[3])) + ' ' + escapeHtml(x[4] || '') + '</b></div>';
-      }).join('') + (d.aciklama ? '<div style="margin-top:6px; color:var(--muted);">📝 ' + escapeHtml(d.aciklama) + '</div>' : '') + '</div>' +
-      (r[5] === 'ok' ? '<div style="display:flex; gap:8px; margin-top:8px; flex-wrap:wrap;"><button type="button" class="geriBtn" data-irsbyazdir="' + escapeHtml(r[0]) + '" style="margin:0; border-color:var(--accent); color:var(--accent);">🖨️ Yazdır (PDF, fiyatsız)</button>' +
+    var d = a.veri || {}, e = d.erp && d.erp.bulundu ? d.erp : null;
+    var satirHtml = function(ad, kod, miktar, birim, renk){ return '<div class="chFisSatir"' + (renk ? ' style="color:' + renk + ';"' : '') + '><span style="min-width:0;">' + escapeHtml(ad) + '<small>' + escapeHtml(kod) + '</small></span><b>' + escapeHtml(fmtQty(miktar)) + ' ' + escapeHtml(birim || '') + '</b></div>'; };
+    var govde;
+    if(e){
+      // ERP'deki GÜNCEL hâl gösterilir; telefondakinden farklı satırlar işaretlenir.
+      var fark = irsErpFark(d.satirlar || [], e.satirlar || []);
+      govde = '<div style="font-size:12px; font-weight:800; margin-bottom:4px; color:' + (fark.var ? 'var(--amber)' : 'var(--green)') + ';">' + (fark.var ? '✏️ ERP\'de düzeltilmiş — ERP\'deki hâli:' : '✅ ERP\'deki hâli (telefondakiyle aynı):') + '</div>' +
+        (e.satirlar || []).map(function(x){ var k = x[0] || x[1], f = fark.erp[k]; return satirHtml(x[2] || (catalogMap.get(String(x[1])) || {}).name || x[1], x[1] || x[0], x[3], unitFor(String(x[1])), f === 'yeni' ? 'var(--green)' : f === 'degisti' ? 'var(--amber)' : ''); }).join('') +
+        fark.silinen.map(function(x){ return '<div class="chFisSatir" style="color:var(--red); text-decoration:line-through;"><span style="min-width:0;">' + escapeHtml(x[1] || x[0]) + '<small>ERP\'de silinmiş</small></span><b>' + escapeHtml(fmtQty(x[3])) + '</b></div>'; }).join('') +
+        (fark.var ? '<div class="hint" style="margin:6px 0 0;">🟢 ERP\'de eklenen · 🟠 miktarı değişen · 🔴 ERP\'de silinen. Telefonda ' + (d.satirlar || []).length + ' satır kaydedilmişti.</div>' : '') +
+        '<div class="hint" style="margin:4px 0 0;">ERP verisi: ' + escapeHtml(e.guncelleme || '') + ' (ERP\'de yapılan düzeltme en geç ~1 saatte görünür)</div>';
+    } else {
+      govde = (d.satirlar || []).map(function(x){ return satirHtml(x[1] || x[0], x[0], x[3], x[4]); }).join('') +
+        (r[5] === 'ok' ? '<div class="hint" style="margin:6px 0 0;">ERP\'deki hâli henüz gelmedi (ERP verisi saatte bir gelir) — telefonda kaydedilen gösteriliyor.</div>' : '');
+    }
+    return '<div class="chFis">' + govde + (d.aciklama ? '<div style="margin-top:6px; color:var(--muted);">📝 ' + escapeHtml(d.aciklama) + '</div>' : '') + '</div>' +
+      (r[5] === 'ok' || e ? '<div style="display:flex; gap:8px; margin-top:8px; flex-wrap:wrap;"><button type="button" class="geriBtn" data-irsbyazdir="' + escapeHtml(r[0]) + '" style="margin:0; border-color:var(--accent); color:var(--accent);">🖨️ Yazdır (PDF, fiyatsız)</button>' +
         '<button type="button" class="geriBtn" data-irsara="' + escapeHtml(r[6]) + '" style="margin:0;">🧾 ERP\'deki hâlini aç</button></div>'
         : '<div class="hint" style="margin:6px 0 0;">Yazdırma, belge ERP\'ye geçince açılır.</div>');
+  }
+  // Telefonda kaydedilen satırlar (r: [barkod, ad, stok kodu, miktar, birim]) ile ERP'deki (x: [stok kodu, barkod, ad, miktar]) karşılaştırması.
+  // Ürün başına toplam miktar; anahtar stok kodu (yoksa barkod).
+  function irsErpFark(tel, erp){
+    var t = {}, e = {}, ad = {}, R = { var: false, erp: {}, silinen: [] };
+    tel.forEach(function(r){ var k = r[2] || (catalogMap.get(String(r[0])) || {}).stockCode || r[0]; t[k] = (t[k] || 0) + (Number(r[3]) || 0); if(!ad[k]) ad[k] = r; });
+    erp.forEach(function(x){ var k = x[0] || x[1]; e[k] = (e[k] || 0) + (Number(x[3]) || 0); });
+    Object.keys(e).forEach(function(k){ if(!(k in t)){ R.erp[k] = 'yeni'; R.var = true; } else if(Math.abs(t[k] - e[k]) > 1e-6){ R.erp[k] = 'degisti'; R.var = true; } });
+    Object.keys(t).forEach(function(k){ if(!(k in e)){ var r = ad[k]; R.silinen.push([r[0], r[1], r[2], t[k]]); R.var = true; } });
+    return R;
   }
   function irsTarih(t){ var m = /^(\d{4})-(\d\d)-(\d\d)/.exec(String(t || '')); return m ? m[3] + '.' + m[2] + '.' + m[1] : String(t || ''); }
   function irsBelgeYazdir(bid){
     var a = irs.acikB[bid], d = a && a.veri; if(!d) return;
     var r = ((irs.aktarim || {}).belgeler || []).filter(function(x){ return x[0] === bid; })[0] || [];
-    irsaliyePdf({ tur: d.belgeTuru || r[1], belgeNo: r[6] || d.belgeNo, tarih: irsTarih(d.tarih), cari: d.cari || r[2], cariKod: d.cariKodu, hazirlayan: d.personel || r[3], aciklama: d.aciklama,
-      satirlar: (d.satirlar || []).map(function(x){ return { barkod: x[0], ad: x[1], kod: x[2], miktar: x[3], birim: x[4] }; }) });
+    var e = d.erp && d.erp.bulundu ? d.erp : null;   // ERP'deki güncel hâl varsa o yazdırılır
+    irsaliyePdf({ tur: d.belgeTuru || r[1], belgeNo: r[6] || d.belgeNo, tarih: e && e.tarih ? e.tarih : irsTarih(d.tarih), cari: d.cari || r[2], cariKod: d.cariKodu, hazirlayan: d.personel || r[3], aciklama: d.aciklama,
+      satirlar: e ? (e.satirlar || []).map(function(x){ var c = catalogMap.get(String(x[1])) || {}; return { barkod: x[1], kod: x[0], ad: x[2] || c.name || '', miktar: x[3], birim: unitFor(String(x[1])) }; })
+        : (d.satirlar || []).map(function(x){ return { barkod: x[0], ad: x[1], kod: x[2], miktar: x[3], birim: x[4] }; }) });
   }
   var IRS_TUR = [['', 'Tümü'], ['5', 'Alış'], ['6', 'Satış'], ['7', 'Alıştan iade'], ['8', 'Satıştan iade']];   // faturalanmış irsaliyeler listelenmez (028)
   function irsErpHtml(){
@@ -4986,7 +5010,8 @@
       var bid = t.getAttribute('data-irsbelge');
       if(irs.acikB[bid]){ delete irs.acikB[bid]; irsCiz(); return; }
       irs.acikB[bid] = { yukleniyor: true }; irsCiz();
-      irsIstek({ ne: 'belge', batchId: bid }, function(err, d){ irs.acikB[bid] = err ? { hata: err } : { veri: d }; irsCiz(); });
+      var rb = ((irs.aktarim || {}).belgeler || []).filter(function(x){ return x[0] === bid; })[0] || [];
+      irsIstek({ ne: 'belge', batchId: bid, erpNo: (rb[5] === 'ok' || String(rb[5] || '').indexOf('degisti') === 0) ? (rb[6] || '') : '' }, function(err, d){ irs.acikB[bid] = err ? { hata: err } : { veri: d }; irsCiz(); });
       return;
     }
     if(t.hasAttribute('data-irsfis')){
