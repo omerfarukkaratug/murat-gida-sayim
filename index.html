@@ -114,8 +114,12 @@
   .menuBtn .menuSub{display:block; font-weight:500; font-size:11.5px; color:var(--muted); margin-top:2px;}
   /* Kişisel menü: 1 / 2 / 3 sütun, küçük / normal / büyük (her kullanıcı kendi telefonunda ayarlar) */
   #menuListe{display:grid; grid-template-columns:1fr; gap:10px;}
-  #menuListe.sutun2{grid-template-columns:1fr 1fr;}
-  #menuListe.sutun3{grid-template-columns:1fr 1fr 1fr; gap:8px;}
+  #menuListe.sutun2{grid-template-columns:repeat(2, minmax(0, 1fr));}
+  #menuListe.sutun3{grid-template-columns:repeat(3, minmax(0, 1fr)); gap:8px;}
+  /* Uzun kelime (Hareketleri, Doğrulama) sütunu genişletip menüyü sağa taşırmasın */
+  #menuListe .menuBtn{min-width:0; overflow-wrap:break-word; hyphens:auto;}
+  #menuListe .menuBtn > span:last-child{min-width:0; max-width:100%;}
+  body.k-buyu #menuListe.sutun3 .menuBtn, body.k-piksel #menuListe.sutun3 .menuBtn{font-size:12px;}
   #menuListe .menuGizli{display:none !important;}
   #menuListe.sutun2 .menuBtn, #menuListe.sutun3 .menuBtn{flex-direction:column; justify-content:center; text-align:center; gap:6px; padding:14px 8px; min-height:96px;}
   #menuListe.sutun3 .menuBtn{font-size:13px; padding:12px 4px; min-height:84px; line-height:1.2;}
@@ -351,9 +355,10 @@
   /* KDV etiketi (sayım listesi + fiyat sorgu) */
   .item .meta .kdvTag{color:var(--accent); font-weight:800;}
   /* Üstte hızlı geçiş: menüye dönmeden ekranlar arası tek dokunuş */
-  .hizliGecis{display:flex; gap:5px; margin:0 0 10px;}
+  .hizliGecis{display:flex; gap:5px; margin:0 0 10px; overflow-x:auto; scrollbar-width:none; -webkit-overflow-scrolling:touch;}
+  .hizliGecis::-webkit-scrollbar{display:none;}
   .hizliGecis:empty{display:none;}
-  .hizliGecis button{flex:1 1 0; min-width:0; display:flex; flex-direction:column; align-items:center; gap:1px; padding:5px 2px; border-radius:12px; border:1.5px solid var(--line); background:var(--panel2); color:var(--text); font-weight:800; font-size:11.5px; line-height:1.2; white-space:nowrap; overflow:hidden;}
+  .hizliGecis button{flex:1 0 52px; min-width:52px; display:flex; flex-direction:column; align-items:center; gap:1px; padding:5px 2px; border-radius:12px; border:1.5px solid var(--line); background:var(--panel2); color:var(--text); font-weight:800; font-size:11.5px; line-height:1.2; white-space:nowrap; overflow:hidden;}
   .hizliGecis button span:first-child{font-size:17px;}
   .hizliGecis button.on{background:var(--accent); border-color:var(--accent); color:#fff;}
 
@@ -550,7 +555,7 @@
   <header style="border:none; padding:0 0 16px; background:transparent; display:flex; align-items:flex-start; justify-content:space-between;">
     <div>
       <h1><img src="logo-header.png" alt="Murat Gıda" style="height:30px; width:auto; display:block;"></h1>
-      <div class="sub"><img src="icon.svg" alt="" style="width:15px;height:15px;vertical-align:-3px;margin-right:5px;">KRT Saha · Murat Gıda • offline • Android • build 269</div>
+      <div class="sub"><img src="icon.svg" alt="" style="width:15px;height:15px;vertical-align:-3px;margin-right:5px;">KRT Saha · Murat Gıda • offline • Android • build 270</div>
     </div>
     <button type="button" id="themeToggleBtn" title="Tema seç" style="background:var(--panel2); border:1.5px solid var(--line); color:var(--text); width:34px; height:34px; border-radius:50%; font-size:15px; padding:0; display:flex; align-items:center; justify-content:center; flex-shrink:0;">🎨</button>
   </header>
@@ -1665,6 +1670,14 @@
     var metaTheme = document.querySelector('meta[name="theme-color"]');
     if(metaTheme) metaTheme.setAttribute('content', bgForMeta);
     konseptUygula();
+    // Alt sayfalar (plasiyer, hazırlama, mesai, etiket) aynı temayı kullansın: renkler tema-ortak.js ile okunur.
+    try {
+      if(konseptTema()){
+        var cs = getComputedStyle(document.body), v = {};
+        ['--bg','--panel','--panel2','--line','--text','--muted','--green','--amber','--red','--accent','--accent2','--sans'].forEach(function(k){ v[k] = cs.getPropertyValue(k).trim(); });
+        localStorage.setItem('mkKonsept', JSON.stringify({ key: state.theme, v: v }));
+      } else localStorage.removeItem('mkKonsept');
+    } catch(e){}
   }
   var themeModalEl = document.getElementById('themeModal');
   var themeGridEl = document.getElementById('themeGrid');
