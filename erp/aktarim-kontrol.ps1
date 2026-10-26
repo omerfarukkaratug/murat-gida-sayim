@@ -5,8 +5,9 @@
 #     (Gorev ayari "onceki calisiyorsa yenisini baslatma" oldugu icin takili bir kopya
 #      butun sonraki calismalari engeller.)
 #  3) Gorevi simdi baslatir.
-#  4) "AYAR" ile calistirilirsa: gorev en fazla 10 dakika calissin (takilirsa Windows kendisi
-#     kapatsin) diye ayarlar - Windows sifresi burada sorulur, hicbir yere gonderilmez.
+#  4) "AYAR" ile calistirilirsa: gorevler gizli-calistir.vbs olmadan dogrudan PowerShell ile calisir,
+#     ERP aktarimi en fazla 10 dakika calisir (takilirsa Windows kapatir). Windows sifresi burada
+#     sorulur, hicbir yere gonderilmez.
 #  ERP verisine DOKUNMAZ.
 # =====================================================================
 $Gorev   = "MK Saha ERP Aktarim"
@@ -48,6 +49,8 @@ Write-Host ""
 Write-Host "=== 2) CALISAN KOPYALAR ==="
 $kopyalar = @(Get-CimInstance Win32_Process -Filter "Name='powershell.exe'" -ErrorAction SilentlyContinue | Where-Object { $_.CommandLine -like "*siparis-aktar.ps1*" })
 if (-not $kopyalar.Count) { Write-Host "Calisan siparis-aktar.ps1 yok." }
+# gizli-calistir.vbs hata penceresi acarsa (Tamam'a basilmasini bekler) gorev de takili kalir: onlar da kapatilir.
+$kopyalar += @(Get-CimInstance Win32_Process -Filter "Name='wscript.exe'" -ErrorAction SilentlyContinue | Where-Object { $_.CommandLine -like "*gizli-calistir.vbs*" })
 foreach ($p in $kopyalar) {
     $dk = [int]((Get-Date) - $p.CreationDate).TotalMinutes
     Write-Host ("PID {0}: {1} dakikadir calisiyor" -f $p.ProcessId, $dk)
@@ -58,21 +61,39 @@ foreach ($p in $kopyalar) {
 
 if ($Ayarla) {
     Write-Host ""
-    Write-Host "=== AYAR: gorev en fazla 10 dakika calissin ==="
+    Write-Host "=== AYAR: gorevler gizli-calistir.vbs OLMADAN, dogrudan PowerShell ile calissin ==="
+    Write-Host "(Oturum kapali calisan gorev zaten pencere acmaz; vbs hata verince gorev takiliyordu.)"
+    $Gorevler = @("MK Saha ERP Aktarim", "KRT Saha ERP SQL Yedek", "MK Mal Indir", "MK Cari Hareketleri", "MK Urun Hareketleri", "MK Sayim Yerel Kopya", "KRT Saha Yedek Indir")
     try {
         $kullanici = "$env:COMPUTERNAME\$env:USERNAME"
         $gs = Read-Host "Bu Windows hesabinin ($kullanici) sifresini yazin (ekranda gorunmez)" -AsSecureString
         $sifre = [Runtime.InteropServices.Marshal]::PtrToStringAuto([Runtime.InteropServices.Marshal]::SecureStringToBSTR($gs))
         if (-not $sifre) { throw "Sifre bos." }
-        $s = $g.Settings
-        $s.ExecutionTimeLimit = "PT10M"
-        $s.MultipleInstances = "IgnoreNew"
-        $s.DisallowStartIfOnBatteries = $false
-        $s.StopIfGoingOnBatteries = $false
-        Set-ScheduledTask -TaskName $Gorev -TaskPath $g.TaskPath -Settings $s -User $kullanici -Password $sifre -ErrorAction Stop | Out-Null
+        foreach ($ad in $Gorevler) {
+            $t = Get-ScheduledTask -TaskName $ad -ErrorAction SilentlyContinue
+            if (-not $t) { Write-Host "YOK (atlandi): $ad"; continue }
+            $yeni = @()
+            foreach ($e in $t.Actions) {
+                $arg = [string]$e.Arguments
+                if ($e.Execute -match "wscript" -and $arg -match 'gizli-calistir\.vbs"?\s+"?([A-Za-z]:\\[^"]+?\.ps1)"?\s*(.*)$') {
+                    $dosya = $Matches[1]; $kalan = $Matches[2].Trim()
+                    $yeniArg = '-NoProfile -NonInteractive -ExecutionPolicy Bypass -WindowStyle Hidden -File "' + $dosya + '"' + $(if ($kalan) { " " + $kalan } else { "" })
+                    $yeni += New-ScheduledTaskAction -Execute "powershell.exe" -Argument $yeniArg -WorkingDirectory "C:\Scripts"
+                } else { $yeni += $e }
+            }
+            $s = $t.Settings
+            $s.ExecutionTimeLimit = $(if ($ad -eq "MK Saha ERP Aktarim") { "PT10M" } elseif ($ad -like "*Yedek*") { "PT3H" } else { "PT1H" })
+            $s.MultipleInstances = "IgnoreNew"
+            $s.DisallowStartIfOnBatteries = $false
+            $s.StopIfGoingOnBatteries = $false
+            try {
+                Set-ScheduledTask -TaskName $ad -TaskPath $t.TaskPath -Action $yeni -Settings $s -User $kullanici -Password $sifre -ErrorAction Stop | Out-Null
+                Write-Host ("TAMAM: {0} (sure siniri {1})" -f $ad, $s.ExecutionTimeLimit)
+            } catch { Write-Host "AYARLANAMADI: $ad - $($_.Exception.Message)" }
+        }
         $sifre = $null
-        Write-Host "TAMAM: takilan calisma 10 dakikada kendiliginden kapanir, gorev oturum kapali olsa da calisir."
     } catch { Write-Host "AYARLANAMADI: $($_.Exception.Message)" }
+    $g = Get-ScheduledTask -TaskName $Gorev
 }
 
 Write-Host ""
