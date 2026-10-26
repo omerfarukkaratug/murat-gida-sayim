@@ -1379,10 +1379,16 @@ function malBatchFromRows(rows) {
     items: []
   };
   var lines = [MAL_CSV_HEADERS.join(';')];
+  // Excel / CSV'de fiyat HER ZAMAN KDV HARİÇ: ERP12 bu şablondaki fiyatı KDV hariç sayıp KDV'yi kendisi ekler.
+  // Telefonda alış türleri (alış irsaliyesi/fişi, alıştan iade) zaten KDV hariç saklanır; satış türleri
+  // (satış irsaliyesi/fişi, satıştan iade) raf / son satış fiyatıyla KDV DAHİL saklanır → burada KDV'den arındırılır.
+  var bAd = String(f[12] || ''), bIade = /ade/i.test(bAd);
+  var kdvDahilSakli = String(f[2]) === 'Giriş' ? bIade : !(bIade && /^al/i.test(bAd));
   rows.forEach(function (r) {
     var miktar = Number(r[9]) || 0;
     var fiyat = (r[16] === '' || r[16] === null || r[16] === undefined) ? '' : Number(r[16]);
     var kdv = (r[15] === '' || r[15] === null || r[15] === undefined) ? '' : Number(r[15]);
+    if (fiyat !== '' && !isNaN(fiyat) && kdvDahilSakli) fiyat = Math.round(fiyat / (1 + (Number(kdv) || 0) / 100) * 10000) / 10000;
     var grup = kdvGrup(kdv);
     // Yeni (katalogda olmayan) ürünlerde fiyat bilinmediği için SFİYAT da boş kalır —
     // sadece barkod ve miktar zorunlu, geri kalanı ERP12'de elle tamamlanır.
@@ -3775,7 +3781,7 @@ function erpDurum(p, callback) {
         if (String(r[MAL_COL.BATCH - 1]) !== bid) return;
         if (!bas) bas = { tarih: String(r[0] || ''), saat: String(r[1] || ''), tip: String(r[2] || ''), cari: String(r[3] || ''), belgeNo: String(r[4] || ''),
           personel: String(r[5] || ''), belgeTuru: String(r[12] || ''), cariKodu: String(r[13] || ''), aciklama: String(r[MAL_COL.ACIKLAMA - 1] || '') };
-        bsat.push([String(r[6] || ''), String(r[7] || ''), String(r[8] || ''), Number(r[9]) || 0, String(r[10] || '')]);
+        bsat.push([String(r[6] || ''), String(r[7] || ''), String(r[8] || ''), Number(r[9]) || 0, String(r[10] || ''), r[15] === '' || r[15] === null || r[15] === undefined ? '' : Number(r[15])]);
       });
     }
     if (!bas) return outJson({ status: 'error', message: 'Belge bulunamadı' }, callback);

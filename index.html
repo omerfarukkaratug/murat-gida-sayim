@@ -577,7 +577,7 @@
   <header style="border:none; padding:0 0 16px; background:transparent; display:flex; align-items:flex-start; justify-content:space-between;">
     <div>
       <h1><img src="logo-header.png" alt="Murat Gıda" style="height:30px; width:auto; display:block;"></h1>
-      <div class="sub"><img src="icon.svg" alt="" style="width:15px;height:15px;vertical-align:-3px;margin-right:5px;">KRT Saha · Murat Gıda • offline • Android • build 272</div>
+      <div class="sub"><img src="icon.svg" alt="" style="width:15px;height:15px;vertical-align:-3px;margin-right:5px;">KRT Saha · Murat Gıda • offline • Android • build 273</div>
     </div>
     <button type="button" id="themeToggleBtn" title="Tema seç" style="background:var(--panel2); border:1.5px solid var(--line); color:var(--text); width:34px; height:34px; border-radius:50%; font-size:15px; padding:0; display:flex; align-items:center; justify-content:center; flex-shrink:0;">🎨</button>
   </header>
@@ -5502,12 +5502,12 @@
       // ERP'deki GÜNCEL hâl gösterilir; telefondakinden farklı satırlar işaretlenir.
       var fark = irsErpFark(d.satirlar || [], e.satirlar || []);
       govde = '<div style="font-size:12px; font-weight:800; margin-bottom:4px; color:' + (fark.var ? 'var(--amber)' : 'var(--green)') + ';">' + (fark.var ? '✏️ ERP\'de düzeltilmiş — ERP\'deki hâli:' : '✅ ERP\'deki hâli (telefondakiyle aynı):') + '</div>' +
-        (e.satirlar || []).map(function(x){ var k = x[0] || x[1], f = fark.erp[k]; return satirHtml(x[2] || (catalogMap.get(String(x[1])) || {}).name || x[1], x[1] || x[0], x[3], unitFor(String(x[1])), f === 'yeni' ? 'var(--green)' : f === 'degisti' ? 'var(--amber)' : ''); }).join('') +
+        (e.satirlar || []).map(function(x){ var k = x[0] || x[1], f = fark.erp[k], kd = formatKdv((catalogMap.get(String(x[1])) || {}).kdv); return satirHtml(x[2] || (catalogMap.get(String(x[1])) || {}).name || x[1], (x[1] || x[0]) + (kd ? ' · ' + kd : ''), x[3], unitFor(String(x[1])), f === 'yeni' ? 'var(--green)' : f === 'degisti' ? 'var(--amber)' : ''); }).join('') +
         fark.silinen.map(function(x){ return '<div class="chFisSatir" style="color:var(--red); text-decoration:line-through;"><span style="min-width:0;">' + escapeHtml(x[1] || x[0]) + '<small>ERP\'de silinmiş</small></span><b>' + escapeHtml(fmtQty(x[3])) + '</b></div>'; }).join('') +
         (fark.var ? '<div class="hint" style="margin:6px 0 0;">🟢 ERP\'de eklenen · 🟠 miktarı değişen · 🔴 ERP\'de silinen. Telefonda ' + (d.satirlar || []).length + ' satır kaydedilmişti.</div>' : '') +
         '<div class="hint" style="margin:4px 0 0;">ERP verisi: ' + escapeHtml(e.guncelleme || '') + ' (ERP\'de yapılan düzeltme en geç ~1 saatte görünür)</div>';
     } else {
-      govde = (d.satirlar || []).map(function(x){ return satirHtml(x[1] || x[0], x[0], x[3], x[4]); }).join('') +
+      govde = (d.satirlar || []).map(function(x){ var k = formatKdv(x[5] !== '' && x[5] !== undefined ? x[5] : (catalogMap.get(String(x[0])) || {}).kdv); return satirHtml(x[1] || x[0], x[0] + (k ? ' · ' + k : ''), x[3], x[4]); }).join('') +
         (r[5] === 'ok' ? '<div class="hint" style="margin:6px 0 0;">ERP\'deki hâli henüz gelmedi (ERP verisi saatte bir gelir) — telefonda kaydedilen gösteriliyor.</div>' : '');
     }
     return '<div class="chFis">' + govde + (d.aciklama ? '<div style="margin-top:6px; color:var(--muted);">📝 ' + escapeHtml(d.aciklama) + '</div>' : '') + '</div>' +
@@ -5532,7 +5532,7 @@
     var e = d.erp && d.erp.bulundu ? d.erp : null;   // ERP'deki güncel hâl varsa o yazdırılır
     irsaliyePdf({ tur: d.belgeTuru || r[1], belgeNo: r[6] || d.belgeNo, tarih: e && e.tarih ? e.tarih : irsTarih(d.tarih), cari: d.cari || r[2], cariKod: d.cariKodu, hazirlayan: d.personel || r[3], aciklama: d.aciklama,
       satirlar: e ? (e.satirlar || []).map(function(x){ var c = catalogMap.get(String(x[1])) || {}; return { barkod: x[1], kod: x[0], ad: x[2] || c.name || '', miktar: x[3], birim: unitFor(String(x[1])) }; })
-        : (d.satirlar || []).map(function(x){ return { barkod: x[0], ad: x[1], kod: x[2], miktar: x[3], birim: x[4] }; }) });
+        : (d.satirlar || []).map(function(x){ return { barkod: x[0], ad: x[1], kod: x[2], miktar: x[3], birim: x[4], kdv: x[5] }; }) });
   }
   var IRS_TUR = [['', 'Tümü'], ['5', 'Alış'], ['6', 'Satış'], ['7', 'Alıştan iade'], ['8', 'Satıştan iade']];   // faturalanmış irsaliyeler listelenmez (028)
   function irsErpHtml(){
@@ -5596,8 +5596,8 @@
   // o: { tur, belgeNo, tarih, cari, cariKod, hazirlayan, aciklama, satirlar: [{ barkod, kod, ad, miktar, birim }] }
   function irsaliyePdf(o){
     var g = {}, sira = [];
-    (o.satirlar || []).forEach(function(x){ var k = x.barkod || x.kod || x.ad; if(!g[k]){ g[k] = { barkod: x.barkod || '', kod: x.kod || '', ad: x.ad || '', miktar: 0, birim: x.birim || '' }; sira.push(k); } g[k].miktar += Number(x.miktar) || 0; });
-    var top = 0, satirlar = sira.map(function(k, i){ var x = g[k]; top += x.miktar; return [i + 1, x.barkod, x.kod, x.ad, fmtQty(x.miktar), x.birim]; });
+    (o.satirlar || []).forEach(function(x){ var k = x.barkod || x.kod || x.ad; if(!g[k]){ var kv = (x.kdv !== '' && x.kdv !== undefined && x.kdv !== null) ? x.kdv : (catalogMap.get(String(x.barkod || '')) || {}).kdv; g[k] = { barkod: x.barkod || '', kod: x.kod || '', ad: x.ad || '', miktar: 0, birim: x.birim || '', kdv: (kv !== '' && kv !== undefined && kv !== null && !isNaN(Number(kv))) ? '%' + Number(kv) : '' }; sira.push(k); } g[k].miktar += Number(x.miktar) || 0; });
+    var top = 0, satirlar = sira.map(function(k, i){ var x = g[k]; top += x.miktar; return [i + 1, x.barkod, x.kod, x.ad, x.kdv, fmtQty(x.miktar), x.birim]; });
     var bilgi = [['Cari', o.cari || '—']];
     if(o.cariKod) bilgi.push(['Cari kodu', o.cariKod]);
     bilgi.push(['Belge türü', o.tur || 'İrsaliye'], ['Belge no', o.belgeNo || '—'], ['Belge tarihi', o.tarih || new Date().toLocaleDateString('tr-TR')]);
@@ -5606,8 +5606,8 @@
     var baslik = (o.tur || 'İrsaliye') + ' — Fiyatsız Döküm';
     var m = { baslik: baslik, dosya: ((o.tur || 'Irsaliye') + '_' + (o.belgeNo || o.cari || 'taslak')).replace(/[^A-Za-z0-9ğüşıöçĞÜŞİÖÇ_-]+/g, '_').slice(0, 80),
       bolumler: [{ ad: 'İrsaliye', baslik: baslik, bilgi: bilgi,
-        sutunlar: [{ ad: '#', w: 5, tur: 'i' }, { ad: 'Barkod', w: 17 }, { ad: 'Stok kodu', w: 13 }, { ad: 'Ürün', w: 45 }, { ad: 'Miktar', w: 11, hiza: 'r' }, { ad: 'Birim', w: 9, hiza: 'c' }],
-        satirlar: satirlar, toplam: ['', '', '', 'TOPLAM: ' + satirlar.length + ' kalem', fmtQty(top), ''],
+        sutunlar: [{ ad: '#', w: 5, tur: 'i' }, { ad: 'Barkod', w: 16 }, { ad: 'Stok kodu', w: 12 }, { ad: 'Ürün', w: 40 }, { ad: 'KDV', w: 7, hiza: 'c' }, { ad: 'Miktar', w: 11, hiza: 'r' }, { ad: 'Birim', w: 9, hiza: 'c' }],
+        satirlar: satirlar, toplam: ['', '', '', 'TOPLAM: ' + satirlar.length + ' kalem', '', fmtQty(top), ''],
         notlar: ['Fiyat bilgisi içermez. Resmî e-irsaliye yerine geçmez; teslimat kontrolü içindir.'],
         imza: ['Teslim Eden', 'Teslim Alan'] }] };
     m.reklam = true;
@@ -7327,7 +7327,7 @@
     var toplamSatir = malItems.length;
     malListEl.innerHTML = malItems.slice().reverse().map(function(it, i){
       var sira = toplamSatir - i; // okutma sırası: ilk okutulan 1 (liste en yeniden eskiye)
-      var kdvTxt = formatKdv(it.kdv);
+      var kdvTxt = formatKdv(it.kdv !== '' && it.kdv !== undefined && it.kdv !== null ? it.kdv : (catalogMap.get(it.barkod) || {}).kdv);   // fiyat görmeyen de KDV oranını görür
       var fiyatSatir = '';
       if(malFiyatGorur()){
         var f = malFiyat(it);
