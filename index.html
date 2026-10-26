@@ -350,7 +350,7 @@
   .logo{width:22px; height:22px; flex-shrink:0;}
 
   /* Koyu temalarda koyu renkli logo görünmez kalıyordu — açık renge çevir */
-  body.dark #setup header img, body.night #setup header img, body.k-buyu #setup header img, body.k-oyun #setup header img, body.k-uzay #setup header img, body.k-retro #setup header img, body.k-stadyum #setup header h1 img{filter:invert(1);}
+  body.dark #setup header img, body.night #setup header img, body.k-buyu #setup header img, body.k-oyun #setup header img, body.k-uzay #setup header img, body.k-retro #setup header img, body.k-aslan #setup header img, body.k-stadyum #setup header h1 img{filter:invert(1);}
 
   /* KDV etiketi (sayım listesi + fiyat sorgu) */
   .item .meta .kdvTag{color:var(--accent); font-weight:800;}
@@ -514,6 +514,19 @@
   body.k-retro .menuBtn{border-color:#ff2a8a; box-shadow:4px 4px 0 #ffd319;}
   body.k-retro #menuBaslik{color:#ffd319; letter-spacing:.18em;}
   body.k-retro .btn-main{background:linear-gradient(90deg, #ff2a8a, #ff901f); }
+  /* 🦁 Sarı-Kırmızı Aslan — koyu kırmızı zemin, sarı vurgu, çapraz şerit (kulüp logosu / adı yok) */
+  body.k-aslan{
+    --bg:#4a0716; --panel:#6b0d22; --panel2:#7d132c; --line:#b8862a;
+    --text:#fff7e0; --muted:#f1d58c; --green:#7ee08a; --amber:#ffd34d; --red:#ff8a8a;
+    --accent:#fdb912; --accent2:#ffd34d; --ink:#fff7e0; --glow:rgba(253,185,18,.45);
+    --sh-sm:0 1px 2px rgba(0,0,0,.5); --sh-md:0 6px 18px rgba(0,0,0,.55); --sh-lg:0 -6px 24px rgba(0,0,0,.6);
+    --bgimg: repeating-linear-gradient(135deg, rgba(253,185,18,.07) 0 22px, transparent 22px 44px), radial-gradient(700px 380px at 50% -5%, #8c1530, transparent 70%);
+  }
+  body.k-aslan .stripes{height:6px; background:linear-gradient(90deg, #fdb912 0 50%, #c8102e 50% 100%);}
+  body.k-aslan .menuBtn{border:1.5px solid #b8862a; border-left:6px solid #fdb912; background:linear-gradient(180deg, #7d132c, #6b0d22);}
+  body.k-aslan .menuBtn .menuIcon{filter:drop-shadow(0 0 5px rgba(253,185,18,.7));}
+  body.k-aslan #menuBaslik{color:#fdb912; text-transform:none !important; letter-spacing:.01em !important; font-size:14px;}
+  body.k-aslan .btn-main{background:linear-gradient(90deg, #fdb912, #ffd34d); color:#5c0a1c;}
   #themeModal .sheet{max-height:86vh; overflow-y:auto;}
   .themeGrup{grid-column:1 / -1; font-size:12px; font-weight:800; color:var(--muted); text-transform:uppercase; letter-spacing:.06em; margin:6px 0 -2px;}
   .themeSwatch .tIkon{position:absolute; inset:0; display:flex; align-items:center; justify-content:center; gap:6px; font-size:18px; letter-spacing:0;}
@@ -577,7 +590,7 @@
   <header style="border:none; padding:0 0 16px; background:transparent; display:flex; align-items:flex-start; justify-content:space-between;">
     <div>
       <h1><img src="logo-header.png" alt="Murat Gıda" style="height:30px; width:auto; display:block;"></h1>
-      <div class="sub"><img src="icon.svg" alt="" style="width:15px;height:15px;vertical-align:-3px;margin-right:5px;">KRT Saha · Murat Gıda • offline • Android • build 273</div>
+      <div class="sub"><img src="icon.svg" alt="" style="width:15px;height:15px;vertical-align:-3px;margin-right:5px;">KRT Saha · Murat Gıda • offline • Android • build 274</div>
     </div>
     <button type="button" id="themeToggleBtn" title="Tema seç" style="background:var(--panel2); border:1.5px solid var(--line); color:var(--text); width:34px; height:34px; border-radius:50%; font-size:15px; padding:0; display:flex; align-items:center; justify-content:center; flex-shrink:0;">🎨</button>
   </header>
@@ -1621,6 +1634,9 @@
       ikon:['🐰','🍓','🌈','🧁','🎀','🍬','🏷️','💖','⏰','🧺','🚲','🌸','🍱','📔','🛍️','🐷'] },
     { key:'k-stadyum', konsept:true, name:'Stadyum',      bg:'#2f8a3e', bgs:'repeating-linear-gradient(90deg,#2f8a3e 0 12px,#379a47 12px 24px)', panel:'#ffffff', accent:'#f5b700', baslik:'Maç başlıyor — pozisyonunu seç!',
       ikon:['⚽','🥅','🏆','🧤','👟','🪙','🎫','🟨','⏱️','🎒','🚌','🔄','📦','📒','🛒','🏅'] },
+    { key:'k-aslan',   konsept:true, name:'Sarı-Kırmızı Aslan', bg:'#4a0716', bgs:'linear-gradient(90deg,#fdb912 0 50%,#c8102e 50% 100%)', panel:'#6b0d22', accent:'#fdb912',
+      baslik:['Aslan uyanık, kanarya kafeste 🦁🐤🔒', 'Kadıköy\'den ses yok, sen okutmaya devam 🔇', 'Kanaryalar şarkı söylesin, biz sayalım 🎶🐤', 'Bugün de lacivert yok, sadece sarı-kırmızı 💛❤️', 'Kupayı da biz sayarız, stoğu da 🏆', 'Kanarya yine yem bekliyor, biz iş bitiriyoruz 🦁'],
+      ikon:['🦁','⚽','🏆','🧤','👟','🪙','🎫','🟨','⏱️','🎒','🚌','🔁','📦','📒','🛒','💛'] },
     { key:'k-retro',   konsept:true, name:"Retro 80'ler", bg:'#1a0b2e', bgs:'linear-gradient(180deg,#ffd319,#ff2a8a 55%,#1a0b2e 56%)', panel:'#24113f', accent:'#ff2a8a', baslik:'Hadi başlayalım ▶',
       ikon:['📼','💾','📺','📟','🛹','💿','🏷️','🕶️','⏰','🎧','🚗','🌴','📦','☎️','🛍️','💵'] }
   ];
@@ -1635,7 +1651,7 @@
       if(!ic.hasAttribute('data-orig')) ic.setAttribute('data-orig', ic.textContent);
       ic.textContent = konseptIkonu(id) || ic.getAttribute('data-orig');
     });
-    var bs = document.getElementById('menuBaslik'); if(bs) bs.textContent = t ? t.baslik : 'Ne yapmak istersin?';
+    var bs = document.getElementById('menuBaslik'); if(bs) bs.textContent = t ? (Array.isArray(t.baslik) ? t.baslik[Math.floor(Math.random() * t.baslik.length)] : t.baslik) : 'Ne yapmak istersin?';
     if(typeof hizliGecisCiz === 'function') try { hizliGecisCiz(); } catch(e){}
   }
   function themeKnown(k){ return THEMES.some(function(t){ return t.key === k; }); }
@@ -2326,6 +2342,7 @@
     return hasPerm('rapor') || hasPerm('temizle') || hasPerm('kullanici_yonetimi') || hasPerm('ayarlar') || hasPerm('canli_durum') || hasPerm('duzelt');
   }
   function showLoggedInUI(){
+    try { konseptUygula(); } catch(e){}   // menü her açılışta (konsept temada başlık değişir)
     loginCardEl.classList.add('hidden');
     loggedInCardEl.classList.remove('hidden');
     document.getElementById('homeMenuScreen').classList.remove('hidden');
