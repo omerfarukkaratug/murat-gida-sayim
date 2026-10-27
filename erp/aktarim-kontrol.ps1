@@ -72,6 +72,7 @@ if ($Ayarla) {
         foreach ($ad in $Gorevler) {
             $t = Get-ScheduledTask -TaskName $ad -ErrorAction SilentlyContinue
             if (-not $t) { Write-Host "YOK (atlandi): $ad"; continue }
+            if ((@($t.Actions | ForEach-Object { [string]$_.Arguments }) -join " ") -like "*aktarim-dongu.ps1*") { Write-Host "ATLANDI (yeni surekli dongu kurulu): $ad"; continue }
             $yeni = @()
             foreach ($e in $t.Actions) {
                 $arg = [string]$e.Arguments

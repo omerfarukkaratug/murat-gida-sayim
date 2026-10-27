@@ -72,8 +72,16 @@ else {
         }
     }
     if ($g.State -eq "Disabled") { Sonuc "Gorev KAPALI (Disabled)." }
-    $dk = if ($i.LastRunTime) { [int]((Get-Date) - $i.LastRunTime).TotalMinutes } else { 99999 }
-    if ($dk -gt 3) { $gorevGec = $true; Y "UYARI: gorev $dk dakikadir calismamis" }
+    $dongu = (@($g.Actions | ForEach-Object { [string]$_.Arguments }) -join " ") -like "*aktarim-dongu.ps1*"
+    if ($dongu) {
+        $dp = @(Get-CimInstance Win32_Process -Filter "Name='powershell.exe'" -ErrorAction SilentlyContinue | Where-Object { $_.CommandLine -like "*aktarim-dongu.ps1*" })
+        if ($dp.Count) { Y ("Surekli dongu CALISIYOR (PID {0}, {1} dk once basladi)" -f $dp[0].ProcessId, [int]((Get-Date) - $dp[0].CreationDate).TotalMinutes) }
+        else { $gorevGec = $true; Y "UYARI: surekli dongu CALISMIYOR"; Sonuc "Aktarim dongusu calismiyor - ERP-AKTARIM-KUR.bat yeniden calistirilmali; C:\Scripts\aktarim-dongu-log.txt dosyasina bak." }
+        if (Test-Path "C:\Scripts\aktarim-dongu-log.txt") { Y "aktarim-dongu-log.txt:"; Get-Content "C:\Scripts\aktarim-dongu-log.txt" -Tail 8 | ForEach-Object { Y ("  " + $_) } }
+    } else {
+        $dk = if ($i.LastRunTime) { [int]((Get-Date) - $i.LastRunTime).TotalMinutes } else { 99999 }
+        if ($dk -gt 3) { $gorevGec = $true; Y "UYARI: gorev $dk dakikadir calismamis"; Sonuc "Gorev Zamanlayici dakikalik gorevi $dk dakikadir BASLATMIYOR (kacirilan $($i.NumberOfMissedRuns)). Cozum: ERP-AKTARIM-KUR.bat (surekli dongu)." }
+    }
     if ($kod -eq 2147943726) { Sonuc "Gorev OTURUM ACAMIYOR: Windows sifresi degismis - GOREVLERI-OTURUMSUZ.bat / ERP-AKTARIM-KONTROL.bat yeniden calistirilmali." }
     # Gorev gecmisi (acik ise)
     try {
