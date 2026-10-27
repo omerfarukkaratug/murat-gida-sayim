@@ -28,14 +28,49 @@ try {
         Where-Object { $_.CommandLine -like "*aktarim-dongu.ps1*" -or ($_.CommandLine -like "*siparis-aktar.ps1*" -and $_.CommandLine -like "*DONGU*") } |
         ForEach-Object { try { Stop-Process -Id $_.ProcessId -Force -ErrorAction Stop; Write-Host "Eski calisan kopya kapatildi (PID $($_.ProcessId))" } catch {} }
 
-    $eylem = New-ScheduledTaskAction -Execute "powershell.exe" -Argument "-NoProfile -NonInteractive -ExecutionPolicy Bypass -WindowStyle Hidden -File `"$Dongu`"" -WorkingDirectory "C:\Scripts"
-    $t1 = New-ScheduledTaskTrigger -AtStartup
-    $t2 = New-ScheduledTaskTrigger -Daily -At "00:00"
-    $t2.Repetition = (New-ScheduledTaskTrigger -Once -At "00:00" -RepetitionInterval (New-TimeSpan -Minutes 5) -RepetitionDuration (New-TimeSpan -Hours 23 -Minutes 59)).Repetition
-    $ayar = New-ScheduledTaskSettingsSet -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries -StartWhenAvailable -MultipleInstances IgnoreNew `
-        -ExecutionTimeLimit (New-TimeSpan -Seconds 0) -RestartCount 999 -RestartInterval (New-TimeSpan -Minutes 1)
-    Register-ScheduledTask -TaskName $Ad -Action $eylem -Trigger @($t1, $t2) -Settings $ayar -User $kullanici -Password $sifre -RunLevel Highest `
-        -Description "KRT Saha: telefondan gelen irsaliyeleri ERP'ye aktaran surekli dongu (aktarim-dongu.ps1)" -ErrorAction Stop | Out-Null
+    # Gorev XML ile kurulur: eski Windows surumlerinde (2012) tetik nesnesinin "Repetition" ozelligi yok.
+    $baslangic = (Get-Date).ToString("yyyy-MM-dd") + "T00:00:00"
+    $arg = "-NoProfile -NonInteractive -ExecutionPolicy Bypass -WindowStyle Hidden -File &quot;$Dongu&quot;"
+    $xml = @"
+<?xml version="1.0" encoding="UTF-16"?>
+<Task version="1.2" xmlns="http://schemas.microsoft.com/windows/2004/02/mit/task">
+  <RegistrationInfo><Description>KRT Saha: telefondan gelen irsaliyeleri ERP'ye aktaran surekli dongu (aktarim-dongu.ps1)</Description></RegistrationInfo>
+  <Triggers>
+    <BootTrigger><Enabled>true</Enabled></BootTrigger>
+    <CalendarTrigger>
+      <Repetition><Interval>PT5M</Interval><Duration>P1D</Duration><StopAtDurationEnd>false</StopAtDurationEnd></Repetition>
+      <StartBoundary>$baslangic</StartBoundary><Enabled>true</Enabled>
+      <ScheduleByDay><DaysInterval>1</DaysInterval></ScheduleByDay>
+    </CalendarTrigger>
+  </Triggers>
+  <Principals><Principal id="Author"><UserId>$kullanici</UserId><LogonType>Password</LogonType><RunLevel>HighestAvailable</RunLevel></Principal></Principals>
+  <Settings>
+    <MultipleInstancesPolicy>IgnoreNew</MultipleInstancesPolicy>
+    <DisallowStartIfOnBatteries>false</DisallowStartIfOnBatteries>
+    <StopIfGoingOnBatteries>false</StopIfGoingOnBatteries>
+    <AllowHardTerminate>true</AllowHardTerminate>
+    <StartWhenAvailable>true</StartWhenAvailable>
+    <RunOnlyIfNetworkAvailable>false</RunOnlyIfNetworkAvailable>
+    <IdleSettings><StopOnIdleEnd>false</StopOnIdleEnd><RestartOnIdle>false</RestartOnIdle></IdleSettings>
+    <AllowStartOnDemand>true</AllowStartOnDemand>
+    <Enabled>true</Enabled>
+    <Hidden>false</Hidden>
+    <RunOnlyIfIdle>false</RunOnlyIfIdle>
+    <WakeToRun>false</WakeToRun>
+    <ExecutionTimeLimit>PT0S</ExecutionTimeLimit>
+    <Priority>7</Priority>
+    <RestartOnFailure><Interval>PT1M</Interval><Count>999</Count></RestartOnFailure>
+  </Settings>
+  <Actions Context="Author"><Exec><Command>powershell.exe</Command><Arguments>$arg</Arguments><WorkingDirectory>C:\Scripts</WorkingDirectory></Exec></Actions>
+</Task>
+"@
+    try {
+        Register-ScheduledTask -TaskName $Ad -Xml $xml -User $kullanici -Password $sifre -ErrorAction Stop | Out-Null
+    } catch {
+        # Gorev kurulamazsa aktarim yine de SIMDI baslasin (oturum acik kaldikca calisir)
+        Start-Process -FilePath "powershell.exe" -ArgumentList @("-NoProfile", "-ExecutionPolicy", "Bypass", "-WindowStyle", "Hidden", "-File", "`"$Dongu`"") -WindowStyle Hidden
+        throw ("Gorev kurulamadi: " + $_.Exception.Message + " -- aktarim dongusu GECICI olarak bu oturumda baslatildi (oturum kapanirsa durur).")
+    }
     $sifre = $null
     Write-Host "TAMAM: gorev kuruldu (acilista + 5 dakikada bir kontrol, surekli dongu)."
     Start-ScheduledTask -TaskName $Ad
