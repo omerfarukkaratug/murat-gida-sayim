@@ -121,10 +121,22 @@ function bekciOlustur({ ayar, depo, gunluk, epostaGonder, disIstek }) {
   async function erpAktarimOku() {
     try { erpSon = { zaman: Date.now(), veri: await dbRpc('erp_aktarim_durum', { p_gun: 3 }) }; }
     catch (e) { erpSon = { zaman: Date.now(), hata: e.message }; }
+    erpSon.kuyruk = await kuyrukOku();
     return erpSon;
+  }
+  // Sunucu → bulut (veri tabanı) gönderim kuyruğu: en eski bekleyen kaydın yaşı. Takılırsa ERP programı yeni
+  // belgeleri HİÇ göremez (bulutta yoklar) — bu yüzden ayrıca bakılır.
+  async function kuyrukOku() {
+    try {
+      const r = await depo.havuz.query("select count(*)::int as n, min(deger->>1) as ilk from mk.satir where sekme = 'DbKuyruk' and satir > 0 and coalesce(deger->>0, '') <> ''");
+      const n = r.rows[0].n, ilk = r.rows[0].ilk, t = ilk ? Date.parse(String(ilk).replace(' ', 'T') + '+03:00') : NaN;
+      return { n, dk: isNaN(t) ? 0 : Math.max(0, Math.round((Date.now() - t) / 60000)), sonHata: (await ozellik('DB_SON_HATA')) || '' };
+    } catch (e) { return null; }
   }
   function erpSorunlar(v) {
     const l = (v && v.belgeler) || [], n = v && v.nabiz, s = [];
+    const k = erpSon && erpSon.kuyruk;
+    if (k && k.n && k.dk >= 10) s.push({ anahtar: 'kuyruk:' + new Date().toISOString().slice(0, 13), durum: 'acil', metin: 'Sunucudan buluta gönderim TAKILDI: ' + k.n + ' kayıt ' + k.dk + ' dakikadır bekliyor. Telefondan kaydedilen mal / sayım buluta gitmediği için ERP programı yeni belgeleri göremez. Son hata: ' + (k.sonHata || '—') });
     const bekleyen = l.filter((r) => r[5] === 'bekliyor'), gec = bekleyen.filter((r) => Number(r[8]) >= 20);
     const saat = Number(new Date().toLocaleTimeString('en-GB', { timeZone: 'Europe/Istanbul', hour: '2-digit', hour12: false }));
     if (n && Number(n.dk) > 15 && bekleyen.length && saat >= 7 && saat < 22) s.push({ anahtar: 'nabiz:' + new Date().toISOString().slice(0, 13), durum: 'acil', metin: 'ERP aktarım programı ' + n.dk + ' dakikadır çalışmıyor, ' + bekleyen.length + ' belge bekliyor. ERP bilgisayarı açık mı, "MK Saha ERP Aktarim" görevi çalışıyor mu?' });
@@ -154,8 +166,9 @@ function bekciOlustur({ ayar, depo, gunluk, epostaGonder, disIstek }) {
   // Anlık uyarı: yeni bir hata / değişiklik / durma görülünce HEMEN e-posta (her konu bir kez).
   async function erpAnlik() {
     await erpAktarimOku();
-    if (!erpSon.veri || !ayar.smtp) return;
-    const sorun = erpSorunlar(erpSon.veri);
+    if (!ayar.smtp) return;
+    const sorun = erpSorunlar(erpSon.veri || {});
+    if (erpSon.hata && !/does not exist|404/i.test(erpSon.hata)) sorun.push({ anahtar: 'bulut:' + new Date().toISOString().slice(0, 13), durum: 'acil', metin: 'Bulut veri tabanına (ERP programının baktığı yer) ulaşılamıyor: ' + erpSon.hata });
     if (!sorun.length) return;
     let gonderilen = [];
     try { gonderilen = JSON.parse((await kayitOku('erp_uyari')) || '[]'); } catch (e) { gonderilen = []; }

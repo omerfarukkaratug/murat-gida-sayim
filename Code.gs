@@ -3407,6 +3407,28 @@ function dbKuyrukKaydiGonder(ayar, tur, veri) {
 
 // Kuyruktaki kayıtları SIRAYLA gönderir; ilk ağ hatasında durur (sıra
 // bozulmasın). Gönderilenler kuyruktan silinir. Aynı anda tek gönderim.
+// Veri tabanının hiç kabul etmediği kuyruk kaydı: silinmez, 'DbKuyrukHata' sekmesinde saklanır (incelenip geri alınabilir).
+function dbKarantinaYaz(r, hata) {
+  var ss = SpreadsheetApp.getActiveSpreadsheet(), sh = ss.getSheetByName('DbKuyrukHata');
+  if (!sh) { sh = ss.insertSheet('DbKuyrukHata'); sh.getRange(1, 1, 1, 5).setValues([['Zaman', 'Hata', 'Kuyruk ID', 'Kayıt Zamanı', 'Tür']]); }
+  var satir = [simdiMetin(), String(hata).substring(0, 500)].concat(r.map(function (x) { return x === null || x === undefined ? '' : x; }));
+  var hedef = sh.getLastRow() + 1;
+  sh.getRange(hedef, 1, 1, satir.length).setNumberFormat('@').setValues([satir]);
+}
+// Kuyruğun durumu (İrsaliyeler ekranı, yönetici özeti, bekçi): bekleyen kayıt, en eski kaydın yaşı, son hata.
+function dbKuyrukDurum() {
+  var sh = dbKuyrukSheet(false), n = sh ? Math.max(sh.getLastRow() - 1, 0) : 0, dk = 0, malBatch = {};
+  if (n > 0) {
+    var v = sh.getRange(2, 1, Math.min(n, 2000), 4).getValues();
+    var ilk = String(v[0][1] || ''), t = Date.parse(ilk.replace(' ', 'T') + '+03:00');
+    if (!isNaN(t)) dk = Math.max(0, Math.round((Date.now() - t) / 60000));
+    v.forEach(function (r) { if (String(r[2]) === 'mal') { var m = /"batchId":"([^"]+)"/.exec(String(r[3] || '')); if (m) malBatch[m[1]] = 1; } });
+  }
+  var ks = SpreadsheetApp.getActiveSpreadsheet().getSheetByName('DbKuyrukHata');
+  var props = PropertiesService.getScriptProperties();
+  return { bekleyen: n, enEskiDk: dk, sonHata: props.getProperty('DB_SON_HATA') || '', karantina: ks ? Math.max(ks.getLastRow() - 1, 0) : 0, malBatch: malBatch };
+}
+
 function dbKuyrukGonder(sureMs) {
   var ayar = dbAyar();
   if (!ayar) return { durum: 'kapali' };
@@ -3436,7 +3458,21 @@ function dbKuyrukGonder(sureMs) {
       }
       var sonuc;
       try { sonuc = dbKuyrukKaydiGonder(ayar, String(r[2]), veri); }
-      catch (ag) { agHatasi = String(ag.message || ag); break; }
+      catch (ag) {
+        var hm = String(ag.message || ag), hk = (/HTTP (\d{3})/.exec(hm) || [])[1] || '';
+        props.setProperty('DB_SON_HATA', simdiMetin() + ' | ' + r[2] + ' | ' + hm.substring(0, 300));
+        // KALICI VERİ HATASI (HTTP 400/409/422: veri tabanı bu kaydı hiçbir zaman kabul etmeyecek): kayıt karantinaya
+        // alınır, SIRA DEVAM EDER. Eskiden tek bir bozuk kayıt kuyruğun başında kalıp arkasındaki bütün mal / sayım
+        // kayıtlarını (ve ERP'ye irsaliye aktarımını) süresiz durduruyordu. Ağ / yetki / salt-okunur veri tabanı gibi
+        // GEÇİCİ hatalarda eskisi gibi beklenir (sıra bozulmaz).
+        if ((hk === '400' || hk === '409' || hk === '422') && !/read-only|salt|quota|disk/i.test(hm)) {
+          try { dbKarantinaYaz(r, hm); } catch (ke) { /* karantina yazılamazsa da sıra açılsın */ }
+          gunlukYaz('veritabani', 'gölge kopya', 'KAYIT KARANTİNAYA ALINDI (' + r[2] + ', ' + r[1] + '): ' + hm.substring(0, 200) + ' — sıradaki kayıtlar gönderilmeye devam ediyor', true);
+          gonderilen[kimlik] = true; reddedilen++;
+          continue;
+        }
+        agHatasi = hm; break;
+      }
       gonderilen[kimlik] = true;
       gonderilenSayi++;
       if (sonuc && sonuc.status === 'error') {
@@ -3809,6 +3845,26 @@ function erpDurum(p, callback) {
       if (fn === 'fis_detay') { sonuc.toplam = null; (sonuc.satirlar || []).forEach(function (r) { r[4] = null; r[5] = null; }); }
     }
     sonuc.alis = alis;
+    if (fn === 'erp_aktarim_durum') {
+      // Sunucuda kaydedilmiş ama BULUTA (ERP programının baktığı yere) henüz ulaşmamış belgeler de listelensin:
+      // ERP programı onları göremez; sorun sunucu → bulut gönderimindedir.
+      try {
+        var kd = dbKuyrukDurum(); sonuc.kuyruk = { bekleyen: kd.bekleyen, enEskiDk: kd.enEskiDk, sonHata: kd.sonHata, karantina: kd.karantina };
+        var var_ = {}; (sonuc.belgeler || []).forEach(function (r) { var_[r[0]] = 1; });
+        var ms = SpreadsheetApp.getActiveSpreadsheet().getSheetByName('MalHareket'), ek = {};
+        if (ms && ms.getLastRow() >= 2) {
+          var sinirT = Utilities.formatDate(new Date(Date.now() - 3 * 86400000), 'Europe/Istanbul', 'yyyy-MM-dd');
+          ms.getRange(2, 1, ms.getLastRow() - 1, MAL_COL.BATCH).getValues().forEach(function (r) {
+            var b = String(r[MAL_COL.BATCH - 1] || ''), bt = String(r[12] || '');
+            if (!b || var_[b] || !kd.malBatch[b] || !/rsaliye/i.test(bt) || formatDateValue(r[0]) < sinirT) return;
+            if (!ek[b]) ek[b] = [b, bt, String(r[3] || ''), String(r[5] || ''), formatDateValue(r[0]) + ' ' + formatTimeValue(r[1]), 'kuyruk', '', 'Sunucuda kayıtlı, buluta henüz gönderilmedi', kd.enEskiDk, 0, String(r[2] || '')];
+            ek[b][9]++;
+          });
+        }
+        Object.keys(ek).forEach(function (b) { sonuc.belgeler.unshift(ek[b]); });
+        if (Object.keys(ek).length) sonuc.ozet.kuyruk = Object.keys(ek).length;
+      } catch (ke) { /* kuyruk okunamadı: liste yine gelir */ }
+    }
     return outJson(sonuc, callback);
   } catch (err) {
     gunlukYaz('veritabani', 'irsaliyeler', 'Sorgu başarısız: ' + err, true);
@@ -3947,6 +4003,14 @@ function yoneticiOzet(p, callback) {
   if (!(auth.role === 'yonetici' || auth.permissions.indexOf('rapor') !== -1)) return outJson({ status: 'error', message: 'Bu ekran için yetkin yok' }, callback);
   var maddeler = [];   // [seviye: 'acil'|'uyari'|'bilgi', başlık, açıklama, ekran]
   var ayar = dbAyar();
+  // 0) Sunucu → bulut (veri tabanı) gönderimi: takılırsa ERP programı yeni belgeleri hiç göremez
+  if (ayar) {
+    try {
+      var kq = dbKuyrukDurum();
+      if (kq.bekleyen && kq.enEskiDk >= 10) maddeler.push(['acil', 'Buluta gönderim takıldı: ' + kq.bekleyen + ' kayıt ' + kq.enEskiDk + ' dakikadır bekliyor', 'Mal / sayım kayıtları sunucuda güvende ama buluta (ERP programının baktığı yere) gitmiyor. Son hata: ' + (kq.sonHata || '—'), 'irs']);
+      if (kq.karantina) maddeler.push(['uyari', kq.karantina + ' kayıt veri tabanınca kabul edilmedi (karantinada)', 'DbKuyrukHata sekmesinde. Son hata: ' + (kq.sonHata || '—'), '']);
+    } catch (e0) { /* kuyruk yok */ }
+  }
   // 1) ERP'ye irsaliye aktarımı
   if (ayar) {
     try {

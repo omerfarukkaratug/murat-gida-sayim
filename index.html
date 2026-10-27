@@ -590,7 +590,7 @@
   <header style="border:none; padding:0 0 16px; background:transparent; display:flex; align-items:flex-start; justify-content:space-between;">
     <div>
       <h1><img src="logo-header.png" alt="Murat Gıda" style="height:30px; width:auto; display:block;"></h1>
-      <div class="sub"><img src="icon.svg" alt="" style="width:15px;height:15px;vertical-align:-3px;margin-right:5px;">KRT Saha · Murat Gıda • offline • Android • build 274</div>
+      <div class="sub"><img src="icon.svg" alt="" style="width:15px;height:15px;vertical-align:-3px;margin-right:5px;">KRT Saha · Murat Gıda • offline • Android • build 275</div>
     </div>
     <button type="button" id="themeToggleBtn" title="Tema seç" style="background:var(--panel2); border:1.5px solid var(--line); color:var(--text); width:34px; height:34px; border-radius:50%; font-size:15px; padding:0; display:flex; align-items:center; justify-content:center; flex-shrink:0;">🎨</button>
   </header>
@@ -5482,7 +5482,8 @@
     irsIstek({ ne: 'liste', gun: irs.gun, ara: irs.ara }, function(err, d){ if(no !== irs.no) return; irs.listeYuk = false; irs.listeHata = err || ''; if(d) irs.liste = d; irsCiz(); });
   }
   var IRS_DURUM = { ok: ['✅', 'ERP\'de', 'var(--green)'], bekliyor: ['⏳', 'Bekliyor', 'var(--amber)'], hata: ['❌', 'ERP\'ye yazılamadı', 'var(--red)'],
-    degisti: ['⚠️', 'ERP\'ye gittikten sonra değişti', 'var(--red)'], degisti_bildirildi: ['⚠️', 'ERP\'ye gittikten sonra değişti', 'var(--red)'] };
+    degisti: ['⚠️', 'ERP\'ye gittikten sonra değişti', 'var(--red)'], degisti_bildirildi: ['⚠️', 'ERP\'ye gittikten sonra değişti', 'var(--red)'],
+    kuyruk: ['☁️', 'Buluta gitmedi', 'var(--red)'] };
   function irsSure(dk){ dk = Number(dk) || 0; return dk < 60 ? dk + ' dakikadır' : dk < 1440 ? Math.round(dk / 60) + ' saattir' : Math.round(dk / 1440) + ' gündür'; }
   function irsGidenHtml(){
     if(irs.aktarimYuk && !irs.aktarim) return '<div class="hint">⏳ Yükleniyor…</div>';
@@ -5493,6 +5494,8 @@
     if(!n) html += '<div class="chSatir" style="border-left:4px solid var(--amber);">⚠️ ERP aktarım programından henüz haber yok' + (bekleyen ? ' — <b>' + bekleyen + ' belge bekliyor</b>' : '') + '<div class="hint" style="margin:4px 0 0;">ERP bilgisayarındaki siparis-aktar.ps1 yeni sürümü kurulunca burada "çalışıyor" yazar.</div></div>';
     else if(Number(n.dk) > 15) html += '<div class="chSatir" style="border-left:4px solid var(--red);">❌ <b>ERP aktarım programı ' + irsSure(n.dk) + ' çalışmıyor</b>' + (bekleyen ? ' — ' + bekleyen + ' belge bekliyor' : '') + '<div class="hint" style="margin:4px 0 0;">ERP bilgisayarı açık mı? Kayıtlar kaybolmaz; program çalışınca kendiliğinden gider.</div></div>';
     else html += '<div class="chSatir" style="border-left:4px solid var(--green);">✅ ERP aktarım programı çalışıyor <span class="hint" style="margin:0;">(son ' + escapeHtml(String(n.dk)) + ' dk önce)</span></div>';
+    var kq = d.kuyruk;
+    if(kq && kq.bekleyen && kq.enEskiDk >= 10) html += '<div class="chSatir" style="border-left:4px solid var(--red);">❌ <b>Sunucudan buluta gönderim takıldı</b> — ' + kq.bekleyen + ' kayıt ' + irsSure(kq.enEskiDk) + ' bekliyor<div class="hint" style="margin:4px 0 0;">Kayıtlar sunucuda güvende ama ERP programı onları göremiyor. Yöneticiye e-posta gitti.' + (kq.sonHata ? ' Son hata: ' + escapeHtml(kq.sonHata) : '') + '</div></div>';
     if(y && state.currentUser && state.currentUser.role === 'yonetici') html += '<div class="hint" style="margin:0 0 10px;">💾 ERP SQL yedeği: ' + escapeHtml(y.mesaj) + ' · ' + escapeHtml(y.zaman) + '</div>';
     html += '<div class="chOzet"><div>✅ ERP\'DE<b>' + (o.ok || 0) + '</b></div><div>⏳ BEKLİYOR<b>' + (o.bekliyor || 0) + '</b></div><div>❌ HATA<b>' + (o.hata || 0) + '</b></div><div>⚠️ DEĞİŞTİ<b>' + (o.degisti || 0) + '</b></div></div>';
     if(!l.length) return html + '<div class="hint">Son 7 günde telefondan ERP\'ye giden irsaliye yok.</div>';
@@ -5502,7 +5505,7 @@
       return '<div class="chSatir" data-irsbelge="' + escapeHtml(r[0]) + '" style="cursor:pointer;"><div class="ust"><span style="min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">' + dd[0] + ' ' + escapeHtml(r[1]) + ' · ' + escapeHtml(r[2] || '') + '</span>' +
         '<span style="color:' + dd[2] + '; white-space:nowrap; font-size:12px;">' + dd[1] + '</span></div>' +
         '<div class="alt"><span>' + escapeHtml(r[3] || '') + ' · ' + escapeHtml(r[4]) + ' · ' + escapeHtml(String(r[9])) + ' satır</span><span style="font-family:var(--mono); white-space:nowrap;">' + escapeHtml(r[6] || '') + '</span></div>' +
-        (r[5] === 'hata' || r[5].indexOf('degisti') === 0 ? '<div style="color:var(--red); font-size:12px; margin-top:4px;">' + escapeHtml(r[5] === 'hata' ? r[7] : 'Telefonda değiştirildi; ERP\'deki belge ESKİ hâliyle duruyor — muhasebe ERP\'de elle düzeltmeli.') + '</div>' : '') +
+        (r[5] === 'hata' || r[5] === 'kuyruk' || r[5].indexOf('degisti') === 0 ? '<div style="color:var(--red); font-size:12px; margin-top:4px;">' + escapeHtml(r[5] === 'hata' || r[5] === 'kuyruk' ? r[7] : 'Telefonda değiştirildi; ERP\'deki belge ESKİ hâliyle duruyor — muhasebe ERP\'de elle düzeltmeli.') + '</div>' : '') +
         (gec ? '<div style="color:var(--amber); font-size:12px; margin-top:4px;">' + irsSure(r[8]) + ' bekliyor — ERP bilgisayarı kapalı olabilir</div>' : '') +
         (ab ? irsBelgeHtml(ab, r) : '') + '</div>';
     }).join('');
