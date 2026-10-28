@@ -3709,8 +3709,10 @@ function cariHareket(p, callback) {
     if (fn === 'cari_vade') { try { sonuc.odeme = dbCagir({ url: url, anahtar: anahtar }, 'cari_odeme', { p_cari_kod: govde.p_cari_kod }); } catch (oe) { sonuc.odeme = null; } }
     return outJson(sonuc, callback);
   } catch (err) {
-    gunlukYaz('veritabani', 'cari hareketleri', 'Sorgu başarısız: ' + err, true);
-    return outJson({ status: 'error', message: 'Veri tabanına ulaşılamadı — biraz sonra tekrar dene' }, callback);
+    gunlukYaz('veritabani', 'cari hareketleri', 'Sorgu başarısız (' + fn + '): ' + err, true);
+    // Asıl sebep ekranda görünsün (zaman aşımı mı, veri tabanı hatası mı) — yalnız kısa teknik özet.
+    var ozet = String(err && err.message || err).replace(/apikey[^,}]*/ig, '').substring(0, 160);
+    return outJson({ status: 'error', message: 'Veri tabanına ulaşılamadı — biraz sonra tekrar dene (' + ozet + ')' }, callback);
   }
 }
 
