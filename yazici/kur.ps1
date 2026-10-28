@@ -23,20 +23,34 @@ if (-not (Test-Path (Join-Path $Klasor "SumatraPDF.exe"))) {
     Write-Host "sumatrapdfreader.org adresinden 'portable' surumu indir, adini SumatraPDF.exe yapip C:\MKBaski icine koy."
 }
 
+# Yardimci dosyalar da C:\MKBaski icine (baska klasorden calistirildiysa).
+foreach ($f in @("CALISTIR.bat", "GIZLI-BASLAT.vbs", "DENE.bat", "OTOMATIK-BASLAT.bat")) {
+    $k = Join-Path $PSScriptRoot $f; $h = Join-Path $Klasor $f
+    if ((Test-Path $k) -and ((Resolve-Path $k).Path -ne $h)) { Copy-Item $k $h -Force }
+}
+if (-not (Test-Path (Join-Path $Klasor "CALISTIR.bat")) -or -not (Test-Path (Join-Path $Klasor "GIZLI-BASLAT.vbs"))) {
+    Write-Host "HATA: CALISTIR.bat ve GIZLI-BASLAT.vbs de C:\MKBaski icinde olmali."; Read-Host "Kapatmak icin Enter"; exit 1
+}
+
 # Otomatik baslatma: yonetici yetkisi GEREKTIRMEYEN yol - kullanicinin "Baslangic" klasorune
-# kucuk bir dosya konur; oturum acilinca baski programi kendiliginden baslar.
+# GIZLI-BASLAT.vbs konur; oturum acilinca baski programi ekranda pencere gostermeden baslar.
 $baslangic = [Environment]::GetFolderPath("Startup")
-$baslatici = Join-Path $baslangic "MK Baski Programi.cmd"
 try {
-    Set-Content -Path $baslatici -Encoding ASCII -Value ("@echo off`r`nstart `"`" /min powershell.exe -NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File `"$Klasor\baski-ajani.ps1`"")
-    Write-Host "Otomatik baslatma eklendi: oturum acilinca baski programi kendiliginden baslar."
+    Remove-Item (Join-Path $baslangic "MK Baski Programi.cmd") -Force -ErrorAction SilentlyContinue
+    Copy-Item (Join-Path $Klasor "GIZLI-BASLAT.vbs") (Join-Path $baslangic "MK Baski Programi.vbs") -Force
+    Write-Host "Otomatik baslatma eklendi: oturum acilinca baski programi gorunmez olarak baslar."
 } catch {
     Write-Host "UYARI: Otomatik baslatma eklenemedi: $($_.Exception.Message)"
 }
 # Eski surumun ekledigi zamanlanmis gorev varsa kaldirilir (iki kez baslamasin).
 schtasks /Delete /TN "MK Baski Programi" /F 2>$null | Out-Null
 
-Write-Host "Simdi baslatiliyor..."
-Start-Process powershell.exe -ArgumentList "-NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File `"$Klasor\baski-ajani.ps1`""
+# Acik kalan eski (gorunur) kopya kapatilir.
+Get-CimInstance Win32_Process -ErrorAction SilentlyContinue | Where-Object { $_.ProcessId -ne $PID -and (($_.Name -eq "cmd.exe" -and $_.CommandLine -like "*CALISTIR.bat*") -or ($_.Name -eq "powershell.exe" -and $_.CommandLine -like "*baski-ajani.ps1*")) } |
+    ForEach-Object { try { Stop-Process -Id $_.ProcessId -Force -ErrorAction Stop } catch {} }
+Start-Sleep -Seconds 2
+
+Write-Host "Simdi gorunmez olarak baslatiliyor..."
+Start-Process wscript.exe -ArgumentList ("`"" + (Join-Path $Klasor "GIZLI-BASLAT.vbs") + "`"")
 Write-Host "Tamam. Durum icin: C:\MKBaski\baski-log.txt ve uygulamada Etiket > Yazicilar ve baski isleri."
 Read-Host "Kapatmak icin Enter"
