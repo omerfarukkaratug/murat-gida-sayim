@@ -837,7 +837,7 @@ var BASKI_IS_SEKME = 'BaskiIsleri';
 var BASKI_IS_BASLIK = ['Id', 'Zaman', 'Kullanıcı', 'Yazıcı', 'Biçim', 'Ürün', 'Durum', 'Mesaj', 'Güncelleme', 'Veri'];
 var BASKI_YAZICI_SEKME = 'Yazicilar';
 var BASKI_YAZICI_BASLIK = ['Kimlik', 'Ad', 'Bilgisayar', 'Windows Adı', 'Mod', 'Son Görülme', 'Konum', 'Biçimler', 'Gizli'];
-var BASKI_BICIMLER = ['zebra', 'raf', 'a6', 'a5', 'a4', 'a3'];
+var BASKI_BICIMLER = ['zebra', 'raf', 'a6', 'a5', 'a4', 'a3', 'makbuz'];   // makbuz: 80 mm termal fiş (Kasa Tahsilat)
 var BASKI_IS_SAKLA = 40;
 var BASKI_CEVRIMICI_SN = 180;   // program bu kadar saniyedir sormadıysa bilgisayar kapalı sayılır
 function baskiSayfa(ad, baslik) {
@@ -1041,7 +1041,7 @@ function baskiAjanAl(bilgisayar, yazicilarJson, callback, durumlarJson, surum) {
       if (String(ir[j][6]) !== 'bekliyor' || !benim[String(ir[j][3])]) continue;
       isheet.getRange(j + 2, 7, 1, 3).setNumberFormat('@').setValues([['basiliyor', '', baskiZaman()]]);
       // İşin verisi de aynı yanıtla gider (veri): baskı programı sayfaya doğrudan verir, sayfa sunucuya ikinci kez sormaz.
-      var ayar = {}, veri = ''; try { var hv = JSON.parse(String(ir[j][9])) || {}; ayar = hv.ayar || {}; veri = JSON.stringify({ status: 'ok', liste: hv.liste || [], ayar: ayar }); } catch (pe) { ayar = {}; veri = ''; }
+      var ayar = {}, veri = ''; try { var hv = JSON.parse(String(ir[j][9])) || {}; ayar = hv.ayar || {}; veri = JSON.stringify({ status: 'ok', liste: hv.liste || [], ayar: ayar, makbuz: hv.makbuz || null }); } catch (pe) { ayar = {}; veri = ''; }
       return outJson({ status: 'ok', is: { id: String(ir[j][0]), windowsAdi: benim[String(ir[j][3])], bicim: String(ir[j][4]), ayar: ayar, veri: veri } }, callback);
     }
     return outJson({ status: 'ok', is: null }, callback);
@@ -1051,7 +1051,7 @@ function baskiAjanVeri(id, callback) {
   var ir = baskiSatirlar(baskiSayfa(BASKI_IS_SEKME, BASKI_IS_BASLIK), 10);
   for (var j = ir.length - 1; j >= 0; j--) {
     if (String(ir[j][0]) !== String(id)) continue;
-    try { var v = JSON.parse(String(ir[j][9])); return outJson({ status: 'ok', liste: v.liste || [], ayar: v.ayar || {} }, callback); }
+    try { var v = JSON.parse(String(ir[j][9])); return outJson({ status: 'ok', liste: v.liste || [], ayar: v.ayar || {}, makbuz: v.makbuz || null }, callback); }
     catch (e) { return outJson({ status: 'error', message: 'İş verisi okunamadı' }, callback); }
   }
   return outJson({ status: 'error', message: 'İş bulunamadı' }, callback);
@@ -6074,7 +6074,10 @@ function tasimaIslem(P) {
 //   ne: cariler · cari (cariKod) · kaydet · liste · isle · iptal · yetki · yetki_kaydet
 // ============================================================
 var KASA_TAH_BASLIK = ['Id', 'Makbuz No', 'Zaman', 'Tarih', 'Düzenleyen', 'Cari Kodu', 'Cari Adı', 'Tutar', 'Ödeme Şekli', 'Teslim Eden', 'Açıklama',
-  'ERP Bakiyesi', 'Önceki Bakiye', 'Kalan Bakiye', 'Durum', 'ERP Durumu', 'ERP İşleyen', 'ERP Zamanı', 'İptal Eden', 'İptal Nedeni', 'İptal Zamanı'];
+  'ERP Bakiyesi', 'Önceki Bakiye', 'Kalan Bakiye', 'Durum', 'ERP Durumu', 'ERP İşleyen', 'ERP Zamanı', 'İptal Eden', 'İptal Nedeni', 'İptal Zamanı', 'Kasa', 'Kasa Seri No'];
+// Her kasanın KENDİ sıra numarası (KASA2-000015): kasadan çıkan makbuz destesinde arada eksik numara olmadığı
+// kontrol edilebilir. İptal edilen makbuz silinmez, numarası listede "iptal" olarak durur.
+var KASA_ADLAR = ['Kasa 1', 'Kasa 2', 'Kasa 3', 'Kasa 4', 'Ofis', 'Saha'];
 var KASA_YETKI_BASLIK = ['Personel', 'Cari Kodu', 'Cari Adı', 'Ekleyen', 'Zaman'];
 var KASA_YONTEM = ['Nakit', 'Kredi kartı', 'Yemek çeki', 'Havale / EFT', 'Çek / Senet', 'Diğer'];
 // Yemek çeki seçilince hangi firma olduğu da seçilir; kayıtta "Yemek çeki - Multinet" gibi yazılır.
@@ -6087,6 +6090,7 @@ function kasaYontemGecerli(y) {
 function kasaSayfa(ad, baslik) {
   var ss = SpreadsheetApp.getActiveSpreadsheet(), sh = ss.getSheetByName(ad);
   if (!sh) { sh = ss.insertSheet(ad); sh.getRange(1, 1, 1, baslik.length).setValues([baslik]); sh.setFrozenRows(1); }
+  else if (String(sh.getRange(1, baslik.length).getValue()) !== baslik[baslik.length - 1]) sh.getRange(1, 1, 1, baslik.length).setValues([baslik]);   // yeni sütunlar
   return sh;
 }
 function kasaSatirlar(ad, baslik) {
@@ -6110,7 +6114,7 @@ function kasaNesne(r) {
   return { id: String(r[0]), no: String(r[1]), zaman: String(r[2]), tarih: String(r[3]), personel: String(r[4]), cariKod: String(r[5]), cariAd: String(r[6]), tutar: Number(r[7]) || 0,
     yontem: String(r[8]), teslimEden: String(r[9]), aciklama: String(r[10]), erpBakiye: r[11] === '' ? null : Number(r[11]), onceki: r[12] === '' ? null : Number(r[12]),
     kalan: r[13] === '' ? null : Number(r[13]), durum: String(r[14] || 'aktif'), erpDurum: String(r[15] || 'bekliyor'), erpIsleyen: String(r[16] || ''), erpZaman: String(r[17] || ''),
-    iptalEden: String(r[18] || ''), iptalNeden: String(r[19] || ''), iptalZaman: String(r[20] || '') };
+    iptalEden: String(r[18] || ''), iptalNeden: String(r[19] || ''), iptalZaman: String(r[20] || ''), kasa: String(r[21] || ''), seri: String(r[22] || '') };
 }
 // ERP ekstresi (saatte bir gelir) + eşleştirme: ERP'de aynı carinin, aynı tutarda ALACAK satırı (tahsilat) tahsilattan
 // sonra görünmüşse o tahsilat "ERP'de" sayılır. Her ERP satırı tek bir tahsilatla eşleşir.
@@ -6164,7 +6168,7 @@ function kasaTahsilat(p, callback) {
     var cari = kasaCariHarita(), l = [];
     if (izin === null) Object.keys(cari).forEach(function (k) { l.push([k, cari[k].ad, cari[k].bakiye]); });
     else Object.keys(izin).forEach(function (k) { l.push([k, (cari[k] && cari[k].ad) || izin[k], cari[k] ? cari[k].bakiye : null]); });
-    return outJson({ status: 'ok', hepsi: izin === null, cariler: l, yontemler: KASA_YONTEM, yemekCeki: KASA_YEMEK_CEKI, muhasebe: muhasebe }, callback);
+    return outJson({ status: 'ok', hepsi: izin === null, cariler: l, yontemler: KASA_YONTEM, yemekCeki: KASA_YEMEK_CEKI, kasalar: KASA_ADLAR, muhasebe: muhasebe }, callback);
   }
   if (ne === 'cari') {
     if (!cariKod || !izinVar(cariKod)) return outJson({ status: 'error', message: 'Bu cariye giriş yetkin yok' }, callback);
@@ -6184,6 +6188,8 @@ function kasaTahsilat(p, callback) {
     if (!(tutar > 0) || tutar > 10000000) return outJson({ status: 'error', message: 'Tutar geçersiz' }, callback);
     if (!kasaYontemGecerli(yontem)) return outJson({ status: 'error', message: yontem === 'Yemek çeki' ? 'Yemek çekinin firmasını seç' : 'Ödeme şeklini seç' }, callback);
     if (teslim.length < 2) return outJson({ status: 'error', message: 'Parayı teslim edenin adını yaz' }, callback);
+    var kasaAd = String(p.kasa || '').trim();
+    if (KASA_ADLAR.indexOf(kasaAd) === -1) return outJson({ status: 'error', message: 'Bu cihazın kasasını seç (Kasa 1, Kasa 2…)' }, callback);
     var lock = LockService.getScriptLock();
     try { lock.waitLock(20000); } catch (le) { return outJson({ status: 'error', message: 'Sunucu meşgul, tekrar dene' }, callback); }
     try {
@@ -6195,15 +6201,18 @@ function kasaTahsilat(p, callback) {
       var props = PropertiesService.getScriptProperties(), no = (parseInt(props.getProperty('KASA_MAKBUZ_NO') || '0', 10) || 0) + 1;
       props.setProperty('KASA_MAKBUZ_NO', String(no));
       var makbuz = 'KT-' + ('000000' + no).slice(-6), zaman = simdiMetin(), tarih = Utilities.formatDate(new Date(), 'Europe/Istanbul', 'yyyy-MM-dd');
+      var kAnahtar = 'KASA_SERI_' + kasaAd.toUpperCase().replace(/[^A-Z0-9]/g, ''), kNo = (parseInt(props.getProperty(kAnahtar) || '0', 10) || 0) + 1;
+      props.setProperty(kAnahtar, String(kNo));
+      var seri = kasaAd.toUpperCase().replace(/[^A-Z0-9]/g, '') + '-' + ('000000' + kNo).slice(-6);
       var cariAd = (ek2 && ek2.cariAd) || ((kasaCariHarita()[cariKod] || {}).ad) || (izin && izin[cariKod]) || cariKod;
       var onceki = oz2.guncel, kalan = onceki === null ? '' : kasaPara(onceki - tutar);
       var satir = [id, makbuz, zaman, tarih, ben, cariKod, cariAd, tutar, yontem, teslim, acik, oz2.erpBakiye === null ? '' : oz2.erpBakiye, onceki === null ? '' : onceki, kalan,
-        'aktif', 'bekliyor', '', '', '', '', ''];
+        'aktif', 'bekliyor', '', '', '', '', '', kasaAd, seri];
       var sh = kasaSayfa('KasaTahsilat', KASA_TAH_BASLIK), hedef = sh.getLastRow() + 1;
       sh.getRange(hedef, 1, 1, 6).setNumberFormat('@');
       sh.getRange(hedef, 1, 1, satir.length).setValues([satir]);
       var t = kasaNesne(satir);
-      gunlukYaz('kasa', ben, 'Tahsilat ' + makbuz + ': ' + cariAd + ' ' + trSayi(tutar, 2) + ' TL (' + yontem + ')', false);
+      gunlukYaz('kasa', ben, 'Tahsilat ' + makbuz + ' (' + seri + '): ' + cariAd + ' ' + trSayi(tutar, 2) + ' TL (' + yontem + ')', false);
       try { kasaMail(t, 'YENİ'); } catch (me) { /* mail gitmese de kayıt güvende */ }
       return outJson({ status: 'ok', tahsilat: t }, callback);
     } finally { lock.releaseLock(); }
@@ -6221,7 +6230,7 @@ function kasaTahsilat(p, callback) {
       if (p.bekleyen === '1') return t.durum === 'aktif' && t.erpDurum === 'bekliyor';
       return t.tarih >= sinir;
     }).reverse();
-    return outJson({ status: 'ok', tahsilatlar: l2.slice(0, 500), muhasebe: muhasebe }, callback);
+    return outJson({ status: 'ok', tahsilatlar: l2.slice(0, 1000), muhasebe: muhasebe, kasalar: KASA_ADLAR }, callback);
   }
   if (ne === 'isle' || ne === 'iptal') {
     var tid = String(p.id || '').substring(0, 60), sh2 = kasaSayfa('KasaTahsilat', KASA_TAH_BASLIK), rows = kasaSatirlar('KasaTahsilat', KASA_TAH_BASLIK);
@@ -6248,6 +6257,28 @@ function kasaTahsilat(p, callback) {
       return outJson({ status: 'ok' }, callback);
     }
     return outJson({ status: 'error', message: 'Makbuz bulunamadı' }, callback);
+  }
+  if (ne === 'yazicilar') {
+    // Baskı programının bildirdiği yazıcılar: "Makbuz" biçimi işaretli olanlar önce.
+    var yl = baskiYazicilar().filter(function (y) { return !y.gizli; }).map(function (y) { return [y.kimlik, y.ad, y.konum, y.cevrimici, y.bicimler.indexOf('makbuz') !== -1]; });
+    yl.sort(function (a, b) { return (b[4] - a[4]) || (b[3] - a[3]); });
+    return outJson({ status: 'ok', yazicilar: yl }, callback);
+  }
+  if (ne === 'yazdir') {
+    // Makbuzu kasadaki (ağdaki) termal yazıcıya gönderir: baskı programı alıp basar.
+    var mid = String(p.id || '').substring(0, 60), tum = kasaSatirlar('KasaTahsilat', KASA_TAH_BASLIK).map(kasaNesne);
+    var mt = tum.filter(function (t) { return t.id === mid; })[0];
+    if (!mt) return outJson({ status: 'error', message: 'Makbuz bulunamadı' }, callback);
+    if (!muhasebe && mt.personel.toLowerCase() !== ben.toLowerCase() && !izinVar(mt.cariKod)) return outJson({ status: 'error', message: 'Bu makbuzu yazdırma yetkin yok' }, callback);
+    var yz = baskiYazicilar().filter(function (y) { return y.kimlik === String(p.yazici || ''); })[0];
+    if (!yz) return outJson({ status: 'error', message: 'Yazıcı bulunamadı' }, callback);
+    var isId = 'KT' + Utilities.getUuid().replace(/-/g, '').substring(0, 20), z = baskiZaman();
+    var veriM = JSON.stringify({ liste: [], ayar: { bicim: 'makbuz' }, makbuz: { t: mt, kopya: String(p.kopya) === '1', unvan: (typeof FIRMA_UNVAN_SUNUCU !== 'undefined' ? FIRMA_UNVAN_SUNUCU : 'Murat Pastane Bakliyat Ltd. Şti.') } });
+    var bsh = baskiSayfa(BASKI_IS_SEKME, BASKI_IS_BASLIK);
+    bsh.getRange(bsh.getLastRow() + 1, 1, 1, 10).setNumberFormat('@').setValues([[isId, z, ben.substring(0, 60), yz.kimlik, 'makbuz', '1', yz.mod === 'manuel' ? 'onay_bekliyor' : 'bekliyor', '', z, veriM]]);
+    var fazla = bsh.getLastRow() - 1 - BASKI_IS_SAKLA; if (fazla > 0) bsh.deleteRows(2, fazla);
+    gunlukYaz('kasa', ben, 'Makbuz ' + mt.no + ' yazıcıya gönderildi: ' + yz.ad, false);
+    return outJson({ status: 'ok', isId: isId, cevrimici: yz.cevrimici, yazici: yz.ad }, callback);
   }
   if (ne === 'yetki' || ne === 'yetki_kaydet') {
     if (!yon) return outJson({ status: 'error', message: 'Cari yetkisini yalnız yönetici verir' }, callback);
@@ -6284,7 +6315,7 @@ function kasaMail(t, tur) {
     body: (tur === 'İPTAL' ? 'AŞAĞIDAKİ TAHSİLAT İPTAL EDİLDİ (' + t.iptalEden + ': ' + t.iptalNeden + '). ERP\'ye işlendiyse ERP\'den de geri alın.\n\n' :
       'Kasada tahsilat alındı. ERP\'ye OTOMATİK YAZILMADI — muhasebe ERP\'ye kasa tahsilatı olarak işlemeli.\n' +
       'ERP\'ye işlenince uygulama aynı tutarı ERP\'de görüp kendiliğinden "ERP\'de" yapar (saatte bir).\n\n') +
-      'Makbuz no: ' + t.no + '\nTarih: ' + t.zaman + '\nCari: ' + t.cariAd + ' (' + t.cariKod + ')\nTutar: ' + trSayi(t.tutar, 2) + ' TL\nÖdeme şekli: ' + t.yontem +
+      'Makbuz no: ' + t.no + (t.seri ? '\nKasa: ' + t.kasa + ' — seri no ' + t.seri : '') + '\nTarih: ' + t.zaman + '\nCari: ' + t.cariAd + ' (' + t.cariKod + ')\nTutar: ' + trSayi(t.tutar, 2) + ' TL\nÖdeme şekli: ' + t.yontem +
       '\nTeslim eden: ' + t.teslimEden + '\nDüzenleyen (kasiyer): ' + t.personel + (t.aciklama ? '\nAçıklama: ' + t.aciklama : '') +
       '\n\nÖnceki bakiye: ' + tl(t.onceki) + '\nKalan bakiye: ' + tl(t.kalan) + '\n(ERP bakiyesi: ' + tl(t.erpBakiye) + ')' });
   return true;

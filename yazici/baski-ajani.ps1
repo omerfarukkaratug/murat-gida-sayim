@@ -23,7 +23,7 @@ $Sumatra       = Join-Path $Klasor "SumatraPDF.exe"
 $IsKlasoru     = Join-Path $Klasor "is"
 $Profil        = Join-Path $Klasor "tarayici-profil"
 $BeklemeSn     = 3      # iki sorgu arasi bekleme
-$AjanSurum     = "170"  # sunucuya bildirilir; uygulama eski programi uyarir
+$AjanSurum     = "171"  # sunucuya bildirilir; uygulama eski programi uyarir
 Add-Type -AssemblyName System.Drawing   # Zebra etiketi goruntu olarak basilir
 $ZebraParcaBoy = 40     # bir goruntudeki en fazla etiket (etiket.html PARCA_BOY ile ayni olmali)
 # Uygulamada GORUNMEYECEK yazicilar (sanal yazicilar)
@@ -439,6 +439,8 @@ function Bas($is) {
     if ($is.ayar -and $is.ayar.cift -eq $true -and $bicim -ne "zebra") { $ayar += ",duplexlong"; $kagit += " arkali onlu" }
     # Zebra (rulo etiket): kagit boyutu yazicinin kendi ayarindan gelir, yalnizca olcek korunur.
     if ($bicim -eq "zebra") { $ayar = "noscale"; $kagit = "rulo etiket" }
+    # Makbuz (Kasa Tahsilat): 80 mm termal fis; sayfa boyu icerige gore PDF'te, kagit yazicinin kendi rulo ayarindan.
+    if ($bicim -eq "makbuz") { $ayar = "noscale"; $kagit = "makbuz 80 mm" }
 
     $pdfKb = 0; try { $pdfKb = [Math]::Round((Get-Item $pdf).Length / 1KB) } catch {}
     if ($pdfKb -lt 1) { Bitti $id "hata" "Etiket dosyasi bos olustu - yeniden gonder"; Yaz-Log "HATA: PDF bos ($pdf)."; return }

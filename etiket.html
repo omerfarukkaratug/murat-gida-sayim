@@ -2221,7 +2221,7 @@
   var baski = { yazicilar: [], isler: [], hazir: false }, izlenen = {};
   var DURUM_AD = { onay_bekliyor: '⏳ onay bekliyor', bekliyor: '🕓 sırada', basiliyor: '🖨️ basılıyor', basildi: '✅ basıldı', hata: '❌ hata', iptal: '🚫 iptal' };
   var yaziciDuzen = '';   // düzenlemesi açık yazıcı
-  function bicimYazi(y){ return y.bicimler && y.bicimler.length ? y.bicimler.map(function(b){ return (BICIM[b] || {}).ad || b; }).join(', ') : 'her biçim'; }
+  function bicimYazi(y){ return y.bicimler && y.bicimler.length ? y.bicimler.map(function(b){ return b === 'makbuz' ? 'Makbuz (80 mm)' : ((BICIM[b] || {}).ad || b); }).join(', ') : 'her biçim'; }
   function yaziciBasar(y){ return !y.gizli && (!y.bicimler || !y.bicimler.length || y.bicimler.indexOf(yaziciBicim(durum.bicim)) !== -1); }
   function yaziciBul(kimlik){ return baski.yazicilar.filter(function(y){ return y.kimlik === kimlik; })[0]; }
   function baskiCiz(){
@@ -2244,7 +2244,7 @@
               '<label>Konum (kat, bölüm ya da şube)</label><input id="yzKonum" value="' + esc(y.konum || '') + '" maxlength="40" list="yzKonumlar" placeholder="örn. Alt kat, Üst kat, Merkez, Şube 2">' +
               '<datalist id="yzKonumlar">' + konumlar.filter(Boolean).map(function(x){ return '<option value="' + esc(x) + '">'; }).join('') + '</datalist>' +
               '<label>Bu yazıcı hangi biçimleri basar? (hiçbiri işaretli değilse hepsi)</label><div style="display:flex; flex-wrap:wrap; gap:6px 14px; font-size:13.5px;">' +
-                ['zebra', 'raf', 'a6', 'a5', 'a4', 'a3'].map(function(b){ return '<label style="display:flex; align-items:center; gap:6px; margin:0; text-transform:none; letter-spacing:0; color:var(--text);"><input type="checkbox" data-yzb="' + b + '"' + (y.bicimler.indexOf(b) !== -1 ? ' checked' : '') + ' style="width:20px; height:20px;">' + esc(BICIM[b].ad) + '</label>'; }).join('') + '</div>' +
+                ['zebra', 'raf', 'a6', 'a5', 'a4', 'a3', 'makbuz'].map(function(b){ return '<label style="display:flex; align-items:center; gap:6px; margin:0; text-transform:none; letter-spacing:0; color:var(--text);"><input type="checkbox" data-yzb="' + b + '"' + (y.bicimler.indexOf(b) !== -1 ? ' checked' : '') + ' style="width:20px; height:20px;">' + esc((BICIM[b] || { ad: 'Makbuz (80 mm fiş, Kasa Tahsilat)' }).ad) + '</label>'; }).join('') + '</div>' +
               '<div class="satir"><div><label>Baskı</label><select id="yzMod"><option value="otomatik"' + (y.mod !== 'manuel' ? ' selected' : '') + '>Otomatik bassın</option><option value="manuel"' + (y.mod === 'manuel' ? ' selected' : '') + '>Bilgisayardaki kişi onaylasın</option></select></div></div>' +
               '<label style="display:flex; align-items:center; gap:8px; margin-top:10px; text-transform:none; letter-spacing:0; font-size:13.5px; color:var(--text);"><input id="yzGizli" type="checkbox"' + (y.gizli ? ' checked' : '') + ' style="width:20px; height:20px;">Yazıcı listesinde gösterme (kullanılmayan yazıcı)</label>' +
               '<div class="satir" style="margin-top:10px;"><button type="button" class="ana" data-yz="kaydet" data-k="' + esc(y.kimlik) + '" style="flex:1.5;">Kaydet</button>' +
@@ -2399,7 +2399,7 @@
   }
   // Bir biçimin basılacak ürünlerini yazıcısına gönderir (yazıcı listesi yüklenmiş olmalı). sormadan: yazıcı penceresi açılmaz.
   // Yazıcı durumu iki ayrı şeydir: (1) bilgisayardaki baskı programı çalışıyor mu, (2) Windows yazıcıyı görüyor mu.
-  var AJAN_SURUM = 170, WIN_DURUM = { kapali: 'yazıcı kapalı ya da kablosu takılı değil', kagit: 'kâğıt / etiket sorunu', hata: 'yazıcı hata veriyor' };
+  var AJAN_SURUM = 171, WIN_DURUM = { kapali: 'yazıcı kapalı ya da kablosu takılı değil', kagit: 'kâğıt / etiket sorunu', hata: 'yazıcı hata veriyor' };
   function yzDurumHtml(y){
     if(!y.cevrimici) return '<span style="color:var(--red);">● bilgisayar ya da baskı programı kapalı</span>';
     if(WIN_DURUM[y.winDurum]) return '<span style="color:var(--amber);">● ' + WIN_DURUM[y.winDurum] + '</span>';
@@ -3053,7 +3053,7 @@
     // Baskı programı (SumatraPDF) yatık sayfayı sürücü "portrait" iken 90° çevirir. Bu yüzden iş kipinde
     // Zebra sayfası kare yapılır, etiket en üstte durur: kare sayfa çevrilmez; program sayfayı kâğıdın sol üstünden
     // basar, 34 mm'lik kâğıda sığmayan boş alt kısım basılmaz.
-    $('sayfaBoyutu').textContent = durum.bicim === 'zebra' ? '@page{ size:' + Z.w + 'mm ' + (zebraKare() ? Z.w : Z.h) + 'mm; margin:0; }'
+    if(!window.MB_MAKBUZ) $('sayfaBoyutu').textContent = durum.bicim === 'zebra' ? '@page{ size:' + Z.w + 'mm ' + (zebraKare() ? Z.w : Z.h) + 'mm; margin:0; }'
       : dizVar() ? '@page{ size:' + '210mm 297mm' + '; margin:0; }'
       : '@page{ size:' + B.w + 'mm ' + B.h + 'mm; margin:0; }';
     if(dizVar() && durum.bicim !== 'karma') $('bicimAciklama').textContent = durum.bicim === 'a5' ? 'Bir A4 kâğıda 2 tane A5 afiş basılır (kâğıtta yan dönmüş çıkar). Yazdırma penceresinde A4 ve dikey seç; basınca ortadaki kesik çizgiden kes.' : 'Bir A4 kâğıda 4 tane A6 afiş basılır. Yazdırma penceresinde A4 seç; basınca kesik çizgilerden kes.';
@@ -3511,6 +3511,7 @@
     });
   }
   function ciz(){
+    if(window.MB_MAKBUZ) return;   // makbuz işi basılıyor: etiket çizimi sayfayı silmesin
     bicimCiz();
     var B = BICIM[durum.bicim], et = basilacaklar(), html = '';
     if(durum.bicim === 'raf'){
@@ -3683,6 +3684,45 @@
   if(!IS_NO){ varsayilanCiz(); sekmeAc(/[?&]dogrula=1/.test(location.search) ? 'kontrol' : (durum.sekme || 'urun')); }
 
   if(!IS_NO && /[?&]dogrula=1/.test(location.search) && !$('icerik').classList.contains('gizli')) setTimeout(dogrulaAc, 400);
+  // ---- Kasa Tahsilat makbuzu: baskı programı 80 mm termal yazıcıya basar (sayfa uzunluğu içeriğe göre) ----
+  function mbTL(n){ return (Number(n) || 0).toLocaleString('tr-TR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + ' TL'; }
+  function mbBakiye(b){ if(b === null || b === undefined || b === '' || isNaN(Number(b))) return '—'; b = Number(b); return Math.abs(b) < 0.005 ? 'Hesap kapalı' : (b > 0 ? 'Borç: ' : 'Alacak: ') + mbTL(Math.abs(b)); }
+  function mbYazi(n){
+    var b = ['', 'BİR', 'İKİ', 'ÜÇ', 'DÖRT', 'BEŞ', 'ALTI', 'YEDİ', 'SEKİZ', 'DOKUZ'], o = ['', 'ON', 'YİRMİ', 'OTUZ', 'KIRK', 'ELLİ', 'ALTMIŞ', 'YETMİŞ', 'SEKSEN', 'DOKSAN'];
+    var uc = function(x){ var y = Math.floor(x / 100), r = ''; if(y) r += (y > 1 ? b[y] : '') + 'YÜZ'; x %= 100; return r + o[Math.floor(x / 10)] + b[x % 10]; };
+    var tam = function(x){ if(!x) return 'SIFIR'; var g = ['', 'BİN', 'MİLYON', 'MİLYAR'], r = '', i = 0; while(x > 0){ var p = x % 1000; if(p) r = (i === 1 && p === 1 ? '' : uc(p)) + g[i] + r; x = Math.floor(x / 1000); i++; } return r; };
+    var k = Math.round((Number(n) || 0) * 100), tl = Math.floor(k / 100); k %= 100;
+    return tam(tl) + ' TÜRK LİRASI' + (k ? ' ' + tam(k) + ' KURUŞ' : '');
+  }
+  function isMakbuzCiz(m){
+    window.MB_MAKBUZ = true;
+    var t = m.t || {}, z = String(t.zaman || ''), kalan = t.kalan;
+    var sat = function(a, b, st){ return '<div style="display:flex; justify-content:space-between; gap:6px;' + (st || '') + '"><span>' + a + '</span><span style="text-align:right;">' + b + '</span></div>'; };
+    var hr = '<div style="border-top:1px dashed #000; margin:5px 0;"></div>';
+    var html = '<div class="sayfa" style="width:72mm; margin:0 auto; padding:3mm 2mm; background:#fff; color:#000; font-family:\'Courier New\', monospace; font-size:12px; line-height:1.35; box-sizing:border-box;">' +
+      '<div style="text-align:center;"><img src="logo-header.png" alt="" style="height:30px; filter:grayscale(1) contrast(1.4);"><div style="font-weight:800; font-size:11px;">' + esc(m.unvan || '') + '</div></div>' + hr +
+      '<div style="text-align:center; font-weight:800; font-size:15px;">TAHSİLAT MAKBUZU</div>' + (m.kopya ? '<div style="text-align:center; font-weight:800;">** KOPYA **</div>' : '') +
+      (t.durum === 'iptal' ? '<div style="text-align:center; font-weight:800; font-size:15px;">*** İPTAL EDİLDİ ***</div>' : '') +
+      sat('Makbuz No', '<b>' + esc(t.no) + '</b>') + (t.seri ? sat(esc(t.kasa) + ' sıra no', '<b>' + esc(t.seri) + '</b>') : '') + sat('Tarih', esc(z.slice(8, 10) + '.' + z.slice(5, 7) + '.' + z.slice(0, 4) + ' ' + z.slice(11, 16))) + hr +
+      '<div style="font-weight:800;">' + esc(t.cariAd) + '</div><div>Cari kodu: ' + esc(t.cariKod) + '</div>' + hr +
+      sat('TUTAR', esc(mbTL(t.tutar)), ' font-size:18px; font-weight:800;') + '<div style="font-size:10.5px;">Yalnız ' + esc(mbYazi(t.tutar)) + '</div>' +
+      sat('Ödeme şekli', esc(t.yontem)) + (t.aciklama ? '<div>Açıklama: ' + esc(t.aciklama) + '</div>' : '') + hr +
+      sat('Önceki bakiye', esc(mbBakiye(t.onceki))) + sat('Bu tahsilat', '−' + esc(mbTL(t.tutar))) +
+      sat(Number(kalan) < 0 ? 'ALACAK' : 'KALAN BORÇ', esc(kalan === null || kalan === '' || kalan === undefined ? '—' : Math.abs(Number(kalan)) < 0.005 ? 'Hesap kapalı' : mbTL(Math.abs(Number(kalan)))), ' font-weight:800; font-size:14px;') +
+      '<div style="font-size:9.5px; margin-top:3px;">Bakiye ERP kayıtlarına göredir; ERP\'ye henüz işlenmemiş tahsilatlar düşülmüştür.</div>' +
+      '<div style="display:flex; gap:8px; margin-top:8px;"><div style="flex:1; text-align:center; font-size:11px;"><div style="height:34px; border-bottom:1px solid #000; margin-bottom:3px;"></div>Düzenleyen<br><b>' + esc(t.personel) + '</b></div>' +
+      '<div style="flex:1; text-align:center; font-size:11px;"><div style="height:34px; border-bottom:1px solid #000; margin-bottom:3px;"></div>Teslim eden<br><b>' + esc(t.teslimEden) + '</b></div></div>' + hr +
+      '<div style="text-align:center; font-size:9.5px;">KRT Saha ile hazırlanmıştır · krtsaha.com</div></div>';
+    var el = $('baski'); el.innerHTML = html;
+    var bitir = function(){
+      var h = Math.ceil(el.querySelector('.sayfa').getBoundingClientRect().height / 3.7795) + 6;   // px → mm (+ kesim payı)
+      window.MB_MAKBUZ = true;   // etiket biçim çizimi sayfa boyutunu A4'e geri çevirmesin
+      $('sayfaBoyutu').textContent = '@page{ size:80mm ' + h + 'mm; margin:0; }';
+      document.title = 'HAZIR';
+    };
+    var img = el.querySelector('img');
+    if(img && !img.complete){ var tm = setTimeout(bitir, 3000); img.onload = img.onerror = function(){ clearTimeout(tm); bitir(); }; } else bitir();
+  }
   if(IS_NO){
     document.title = 'BEKLIYOR';
     // Baskı programı işin verisini sayfaya doğrudan verdiyse (MK_IS_VERI) sunucuya sorulmaz: saniyeler kazanılır.
@@ -3690,6 +3730,7 @@
       // Çizilemeyen iş sunucuya "hata" diye yazılır; program basmadan önce buna bakar, boş kâğıt çıkmaz.
       var isHata = function(m){ document.title = 'HATA ' + m; sunucuSor({ action: 'baski_ajan_bitti', id: IS_NO, anahtar: IS_ANAHTAR, durum: 'hata', mesaj: m }, function(){}); };
       if(hata || !veri || veri.status !== 'ok' || !Array.isArray(veri.liste)){ isHata('iş verisi alınamadı: ' + ((veri && veri.message) || hata || '')); return; }
+      if(veri.makbuz){ isMakbuzCiz(veri.makbuz); return; }   // Kasa Tahsilat makbuzu (80 mm termal)
       var a = veri.ayar || {};
       durum.liste = veri.liste;
       if(BICIM[a.bicim]) durum.bicim = (a.altBicim && BICIM[a.altBicim] && yaziciBicim(a.altBicim) === a.bicim) ? a.altBicim : (a.bicim === 'a5' && a.yatay) ? 'a5y' : a.bicim;

@@ -590,7 +590,7 @@
   <header style="border:none; padding:0 0 16px; background:transparent; display:flex; align-items:flex-start; justify-content:space-between;">
     <div>
       <h1><img src="logo-header.png" alt="Murat Gıda" style="height:30px; width:auto; display:block;"></h1>
-      <div class="sub"><img src="icon.svg" alt="" style="width:15px;height:15px;vertical-align:-3px;margin-right:5px;">KRT Saha · Murat Gıda • offline • Android • build 276</div>
+      <div class="sub"><img src="icon.svg" alt="" style="width:15px;height:15px;vertical-align:-3px;margin-right:5px;">KRT Saha · Murat Gıda • offline • Android • build 277</div>
     </div>
     <button type="button" id="themeToggleBtn" title="Tema seç" style="background:var(--panel2); border:1.5px solid var(--line); color:var(--text); width:34px; height:34px; border-radius:50%; font-size:15px; padding:0; display:flex; align-items:center; justify-content:center; flex-shrink:0;">🎨</button>
   </header>
@@ -5162,7 +5162,7 @@
     kasa.yuk = true; kasa.hata = ''; kasaCiz();
     kasaIstek({ ne: 'cariler' }, function(err, d){
       kasa.yuk = false; kasa.hata = err || '';
-      if(d){ kasa.cariler = d.cariler || []; kasa.hepsi = !!d.hepsi; kasa.yontemler = d.yontemler || []; kasa.yemekCeki = d.yemekCeki || []; kasa.muhasebe = !!d.muhasebe; }
+      if(d){ kasa.cariler = d.cariler || []; kasa.hepsi = !!d.hepsi; kasa.yontemler = d.yontemler || []; kasa.yemekCeki = d.yemekCeki || []; kasa.kasalar = d.kasalar || []; kasa.muhasebe = !!d.muhasebe; }
       kasaCiz();
     });
   }
@@ -5229,6 +5229,7 @@
       (oz.bekleyenToplam ? ' · ERP\'ye henüz işlenmemiş tahsilat: <b>−' + escapeHtml(kasaTL(oz.bekleyenToplam)) + '</b> (' + oz.bekleyen.length + ' makbuz)' : '') + '</div>' +
       (d.ekstreYok ? '<div class="hint" style="margin:4px 0 0; color:var(--amber);">ERP ekstresi alınamadı; bakiye cari listesinden.</div>' : '') + '</div>';
     // Tahsilat formu
+    if(F) h += kasaCihazKasaHtml();
     if(F){
       var tutarN = Number(String(F.tutar).replace(/\./g, '').replace(',', '.'));
       h += '<div class="chSatir kasaForm"><div style="font-weight:800;">➕ Tahsilat al</div>' +
@@ -5264,16 +5265,18 @@
     var iptalOlur = t.durum === 'aktif' && (yon || (String(t.personel).toLowerCase() === String(ben || '').toLowerCase() && t.tarih === bugun));
     var h = '<div class="chSatir" data-kasatah="' + escapeHtml(t.id) + '" style="cursor:pointer;' + (t.durum === 'iptal' ? ' opacity:.65;' : '') + '"><div class="ust"><span style="min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">' + escapeHtml(t.no) + ' · ' + escapeHtml(t.cariAd) + '</span>' +
       '<span style="font-family:var(--mono); white-space:nowrap;' + (t.durum === 'iptal' ? ' text-decoration:line-through;' : '') + '">' + escapeHtml(kasaTL(t.tutar)) + '</span></div>' +
-      '<div class="alt" style="font-size:12px;"><span class="hint" style="margin:0;">' + escapeHtml(t.zaman.slice(5, 16)) + ' · ' + escapeHtml(t.yontem) + ' · ' + escapeHtml(t.personel) + '</span><span class="kasaChip" style="color:' + d[1] + '; border:1px solid ' + d[1] + ';">' + d[0] + '</span></div>';
+      '<div class="alt" style="font-size:12px;"><span class="hint" style="margin:0;">' + (t.seri ? '<b>' + escapeHtml(t.seri) + '</b> · ' : '') + escapeHtml(t.zaman.slice(5, 16)) + ' · ' + escapeHtml(t.yontem) + ' · ' + escapeHtml(t.personel) + '</span><span class="kasaChip" style="color:' + d[1] + '; border:1px solid ' + d[1] + ';">' + d[0] + '</span></div>';
     if(ac){
       h += '<div class="hint" style="margin:6px 0 0;">Teslim eden: <b>' + escapeHtml(t.teslimEden) + '</b>' + (t.aciklama ? ' · ' + escapeHtml(t.aciklama) : '') + ' · kalan: ' + escapeHtml(kasaBakiye(t.kalan).metin) +
         (t.erpIsleyen ? '<br>' + escapeHtml(t.erpIsleyen.replace(/\s*\[\[.*\]\]$/, '')) + (t.erpZaman ? ' (' + escapeHtml(t.erpZaman.slice(5, 16)) + ')' : '') : '') +
         (t.durum === 'iptal' ? '<br><span style="color:var(--red);">İptal: ' + escapeHtml(t.iptalEden) + ' — ' + escapeHtml(t.iptalNeden) + '</span>' : '') + '</div>' +
         '<div style="display:flex; flex-wrap:wrap; gap:6px; margin-top:8px;">' +
         '<button type="button" class="geriBtn" data-kasayaz="' + escapeHtml(t.id) + '" style="margin:0;">🖨️ ' + (t.durum === 'iptal' ? 'Yazdır' : 'Kopya yazdır') + '</button>' +
+        '<button type="button" class="geriBtn" data-kasagonder="' + escapeHtml(t.id) + '" style="margin:0;">📡 Kasa yazıcısına</button>' +
         (kasa.muhasebe && t.durum === 'aktif' && t.erpDurum === 'bekliyor' ? '<button type="button" class="geriBtn" data-kasaisle="' + escapeHtml(t.id) + '" style="margin:0; color:var(--green);">✔ ERP\'ye işlendi</button>' : '') +
         (kasa.muhasebe && t.erpDurum === 'erp_elle' ? '<button type="button" class="geriBtn" data-kasaislegeri="' + escapeHtml(t.id) + '" style="margin:0;">↩ İşareti geri al</button>' : '') +
-        (iptalOlur ? '<button type="button" class="geriBtn" data-kasaiptal="' + escapeHtml(t.id) + '" style="margin:0; color:var(--red);">✕ İptal et</button>' : '') + '</div>';
+        (iptalOlur ? '<button type="button" class="geriBtn" data-kasaiptal="' + escapeHtml(t.id) + '" style="margin:0; color:var(--red);">✕ İptal et</button>' : '') + '</div>' +
+        (kasa.yzSecim && kasa.yzSecim.id === t.id ? kasaYzSecimHtml() : '');
     }
     return h + '</div>';
   }
@@ -5287,6 +5290,16 @@
     h += '<div class="chOzet"><div>TOPLAM<b>' + escapeHtml(kasaTL(top(function(){ return true; }))) + '</b></div><div>NAKİT<b>' + escapeHtml(kasaTL(top(function(t){ return t.yontem === 'Nakit'; }))) + '</b></div><div>KART<b>' + escapeHtml(kasaTL(top(function(t){ return t.yontem === 'Kredi kartı'; }))) + '</b></div><div>YEMEK ÇEKİ<b>' + escapeHtml(kasaTL(top(function(t){ return /^Yemek çeki/.test(t.yontem); }))) + '</b></div></div>';
     var cekler = {}; akt.forEach(function(t){ var m = /^Yemek çeki - (.+)$/.exec(t.yontem); if(m) cekler[m[1]] = (cekler[m[1]] || 0) + t.tutar; });
     if(Object.keys(cekler).length) h += '<div class="hint" style="margin:-4px 0 10px;">🍽️ ' + Object.keys(cekler).map(function(k){ return escapeHtml(k) + ': <b>' + escapeHtml(kasaTL(cekler[k])) + '</b>'; }).join(' · ') + '</div>';
+    // Kasa bazında sıra kontrolü: her kasanın makbuz numaraları arka arkaya mı? (iptaller de sayılır, silinmez)
+    var kGrup = {};
+    l.forEach(function(t){ var m = /^(.+)-(\d+)$/.exec(t.seri || ''); if(!m) return; var g = kGrup[t.kasa || m[1]] = kGrup[t.kasa || m[1]] || { on: m[1], no: [], iptal: 0 }; g.no.push(Number(m[2])); if(t.durum === 'iptal') g.iptal++; });
+    Object.keys(kGrup).sort().forEach(function(k){
+      var g = kGrup[k], n = g.no.sort(function(a, b){ return a - b; }), eksik = [];
+      for(var i = 1; i < n.length; i++) for(var x = n[i - 1] + 1; x < n[i] && eksik.length < 20; x++) eksik.push(x);
+      var pad = function(x){ return g.on + '-' + ('000000' + x).slice(-6); };
+      h += '<div class="chSatir" style="padding:8px 12px; border-left:4px solid ' + (eksik.length ? 'var(--red)' : 'var(--green)') + ';"><div class="ust" style="font-size:13px;"><span>🧾 ' + escapeHtml(k) + ': ' + escapeHtml(pad(n[0])) + ' → ' + escapeHtml(pad(n[n.length - 1])) + '</span><span>' + n.length + ' makbuz' + (g.iptal ? ', ' + g.iptal + ' iptal' : '') + '</span></div>' +
+        '<div class="hint" style="margin:2px 0 0; color:' + (eksik.length ? 'var(--red)' : 'var(--green)') + ';">' + (eksik.length ? '❌ Bu aralıkta listede olmayan numara: ' + eksik.map(pad).join(', ') + ' (tarih aralığını genişletip kontrol et)' : '✅ Arada eksik numara yok') + '</div></div>';
+    });
     if(kasa.muhasebe) h += '<button type="button" class="geriBtn" data-kasaeslestir="1">🔄 ERP ile karşılaştır (işlenenleri bul)</button>';
     if(kasa.yuk) h += '<div class="hint">⏳ Yenileniyor…</div>';
     if(!l.length) return h + '<div class="hint">Bu aralıkta tahsilat yok.</div>';
@@ -5310,6 +5323,14 @@
     if(kasa.yDegisti) h += '<button type="button" class="btn-main" data-kasaykaydet="1" style="margin-top:12px;">💾 ' + escapeHtml(kasa.yKisi) + ' için kaydet</button>';
     return h;
   }
+  function kasaCihazKasa(){ try { return localStorage.getItem('mkKasaAdi') || ''; } catch(e){ return ''; } }
+  function kasaCihazKasaHtml(){
+    var k = kasaCihazKasa(), l = (kasa.kasalar && kasa.kasalar.length) ? kasa.kasalar : ['Kasa 1', 'Kasa 2', 'Kasa 3', 'Kasa 4', 'Ofis', 'Saha'];
+    if(k && !kasa.kasaDegistir) return '<div class="hint" style="margin:0 0 8px;">🧾 Bu cihaz: <b>' + escapeHtml(k) + '</b> — makbuzlar bu kasanın sıra numarasıyla kesilir · <a href="#" data-kasakasadegis="1">değiştir</a></div>';
+    return '<div class="chSatir" style="border-left:4px solid var(--amber);"><div style="font-weight:800; margin-bottom:6px;">🧾 Bu cihaz hangi kasada?</div><div class="kasaYontem">' +
+      l.map(function(x){ return '<button type="button" data-kasakasasec="' + escapeHtml(x) + '" class="' + (x === k ? 'on' : '') + '">' + escapeHtml(x) + '</button>'; }).join('') +
+      '</div><div class="hint" style="margin:6px 0 0;">Her kasanın makbuzları kendi sıra numarasıyla gider (KASA2-000001, 000002…); arada eksik makbuz olursa listede görünür.</div></div>';
+  }
   function kasaOtoYazdir(){ try { return localStorage.getItem('mkKasaOtoYaz') !== '0'; } catch(e){ return true; } }
   // ---- Makbuz (80 mm termal): ekranda önizleme + tarayıcının yazdır penceresi ----
   function kasaMakbuzHtml(t, kopya){
@@ -5319,6 +5340,7 @@
       '<div class="mOrta mKalin" style="font-size:15px;">TAHSİLAT MAKBUZU</div>' +
       (kopya ? '<div class="mOrta mKalin">** KOPYA **</div>' : '') + (t.durum === 'iptal' ? '<div class="mOrta mKalin" style="font-size:15px;">*** İPTAL EDİLDİ ***</div>' : '') +
       '<div class="mSat"><span>Makbuz No</span><span class="mKalin">' + escapeHtml(t.no) + '</span></div>' +
+      (t.seri ? '<div class="mSat"><span>' + escapeHtml(t.kasa) + ' sıra no</span><span class="mKalin">' + escapeHtml(t.seri) + '</span></div>' : '') +
       '<div class="mSat"><span>Tarih</span><span>' + escapeHtml(t.zaman.slice(8, 10) + '.' + t.zaman.slice(5, 7) + '.' + t.zaman.slice(0, 4) + ' ' + t.zaman.slice(11, 16)) + '</span></div><hr>' +
       '<div class="mKalin">' + escapeHtml(t.cariAd) + '</div><div>Cari kodu: ' + escapeHtml(t.cariKod) + '</div><hr>' +
       '<div class="mSat mBuyuk"><span>TUTAR</span><span>' + escapeHtml(kasaTL(t.tutar)) + '</span></div>' +
@@ -5342,11 +5364,39 @@
     var img = el.querySelector('img'), yaz = function(){ setTimeout(function(){ try { window.print(); } catch(e){ errorToast('Yazdırılamadı: ' + e.message); } setTimeout(bitir, 1500); }, 120); };
     if(img && !img.complete){ img.onload = img.onerror = yaz; } else yaz();
   }
+  // 📡 Makbuzu kasadaki (ağdaki) termal yazıcıya gönder: baskı programı olan bilgisayar basar.
+  function kasaYaziciyaGonder(id, yazici){
+    var t = kasaTahBul(id); if(!t) return;
+    var gonder = function(yk){
+      kasaIstek({ ne: 'yazdir', id: id, yazici: yk, kopya: (kasa.son && kasa.son.id === id) ? '' : '1' }, function(err, d){
+        if(err){ errorToast(err); return; }
+        try { localStorage.setItem('mkKasaYazici', yk); } catch(e){}
+        kasa.yzSecim = null; kasaCiz();
+        if(d.cevrimici) successToast('Makbuz yazıcıya gönderildi: ' + d.yazici); else warnToast('Gönderildi ama yazıcının bilgisayarı şu an kapalı görünüyor — açılınca basılır');
+      });
+    };
+    if(yazici){ gonder(yazici); return; }
+    kasaIstek({ ne: 'yazicilar' }, function(err, d){
+      if(err){ errorToast(err); return; }
+      var l = d.yazicilar || [], mk = l.filter(function(y){ return y[4]; }), son = ''; try { son = localStorage.getItem('mkKasaYazici') || ''; } catch(e){}
+      if(!l.length){ warnToast('Baskı programına bağlı yazıcı yok — kasa yazıcısını, baskı programı kurulu bilgisayara ekleyin'); return; }
+      if(mk.length === 1){ gonder(mk[0][0]); return; }
+      if(son && l.some(function(y){ return y[0] === son; }) && !kasa.yzSor){ gonder(son); return; }
+      kasa.yzSecim = { id: id, l: mk.length ? mk : l, isaretsiz: !mk.length }; kasaCiz();
+    });
+  }
+  function kasaYzSecimHtml(){
+    var Y = kasa.yzSecim; if(!Y) return '';
+    return '<div class="chSatir" style="border-left:4px solid var(--accent);"><div style="font-weight:800; margin-bottom:6px;">📡 Hangi yazıcıya?</div><div class="kasaYontem">' +
+      Y.l.map(function(y){ return '<button type="button" data-kasayzsec="' + escapeHtml(Y.id + '||' + y[0]) + '">' + (y[3] ? '🟢 ' : '⚪ ') + escapeHtml(y[1]) + (y[2] ? ' · ' + escapeHtml(y[2]) : '') + '</button>'; }).join('') + '</div>' +
+      (Y.isaretsiz ? '<div class="hint" style="margin:6px 0 0;">İpucu: Etiket → Yazıcılar\'da kasa yazıcısına "Makbuz (80 mm)" biçimini işaretlersen her seferinde sormaz.</div>' : '') + '</div>';
+  }
   function kasaMakbuzEkran(){
     var t = kasa.son;
     return '<div class="chSatir" style="border-left:4px solid var(--green);"><b>✅ Tahsilat kaydedildi: ' + escapeHtml(t.no) + '</b><div class="hint" style="margin:4px 0 0;">Muhasebeye e-posta gitti. ERP\'ye muhasebe işler; işlenince burada "ERP\'de" görünür.</div></div>' +
       '<div style="display:flex; gap:8px; flex-wrap:wrap; margin:10px 0;"><button type="button" class="btn-main" data-kasayaz="' + escapeHtml(t.id) + '" style="flex:2; padding:13px;">🖨️ Makbuzu yazdır</button>' +
-      '<button type="button" class="geriBtn" data-kasayeni="1" style="flex:1; margin:0; justify-content:center;">➕ Yeni tahsilat</button></div>' +
+      '<button type="button" class="geriBtn" data-kasagonder="' + escapeHtml(t.id) + '" style="flex:1; margin:0; justify-content:center;">📡 Kasa yazıcısına</button>' +
+      '<button type="button" class="geriBtn" data-kasayeni="1" style="flex:1; margin:0; justify-content:center;">➕ Yeni tahsilat</button></div>' + kasaYzSecimHtml() +
       '<div class="makbuzOnizleme">' + kasaMakbuzHtml(t, false) + '</div>' +
       '<div class="hint">Kasa bilgisayarında yazdır penceresinde termal yazıcıyı bir kez seçmen yeter; Chrome sonraki sefer onu hatırlar.</div>';
   }
@@ -5366,6 +5416,14 @@
   });
   kasaEl.addEventListener('change', function(e){ if(e.target.id === 'kasaOtoYaz'){ try { localStorage.setItem('mkKasaOtoYaz', e.target.checked ? '1' : '0'); } catch(er){} } });
   kasaEl.addEventListener('click', function(e){
+    var t0 = e.target.closest('[data-kasakasasec],[data-kasakasadegis],[data-kasagonder],[data-kasayzsec]');
+    if(t0){
+      e.preventDefault();
+      if(t0.hasAttribute('data-kasakasasec')){ try { localStorage.setItem('mkKasaAdi', t0.getAttribute('data-kasakasasec')); } catch(er){} kasa.kasaDegistir = false; if(kasa.form) kasa.form.hata = ''; kasaCiz(); return; }
+      if(t0.hasAttribute('data-kasakasadegis')){ kasa.kasaDegistir = true; kasaCiz(); return; }
+      if(t0.hasAttribute('data-kasagonder')){ kasaYaziciyaGonder(t0.getAttribute('data-kasagonder'), ''); return; }
+      if(t0.hasAttribute('data-kasayzsec')){ var pr = t0.getAttribute('data-kasayzsec').split('||'); kasaYaziciyaGonder(pr[0], pr[1]); return; }
+    }
     var t = e.target.closest('[data-kasakapat],[data-kasasekme],[data-kasacari],[data-kasageri],[data-kasayontem],[data-kasadevam],[data-kasavazgec],[data-kasakaydet],[data-kasatah],[data-kasayaz],[data-kasaisle],[data-kasaislegeri],[data-kasaiptal],[data-kasafiltre],[data-kasaeslestir],[data-kasayeni],[data-kasaykisi],[data-kasaycikar],[data-kasayekle],[data-kasaykaydet]');
     if(!t) return;
     var F = kasa.form, a = function(n){ return t.getAttribute(n); };
@@ -5386,6 +5444,7 @@
       else if(n > 10000000){ F.hata = 'Tutar çok büyük'; }
       else if(!F.yontem){ F.hata = 'Ödeme şeklini seç'; }
       else if(F.yontem === 'Yemek çeki'){ F.hata = 'Yemek çekinin firmasını seç (Multinet, Sodexo…)'; }
+      else if(!kasaCihazKasa()){ F.hata = 'Önce bu cihazın kasasını seç (yukarıda)'; }
       else if(String(F.teslim).trim().length < 2){ F.hata = 'Parayı teslim edenin adını yaz'; }
       else { F.hata = ''; F.onay = true; }
       kasaCiz(); return;
@@ -5394,7 +5453,7 @@
     if(t.hasAttribute('data-kasakaydet') && F && !F.kaydediliyor){
       var kod = kasa.cari.kod, tutar = Number(String(F.tutar).replace(/\./g, '').replace(',', '.'));
       F.kaydediliyor = true; kasaCiz();
-      kasaIstek({ ne: 'kaydet', cariKod: kod, id: F.id, tutar: String(tutar), yontem: F.yontem, teslimEden: F.teslim.trim(), aciklama: F.aciklama.trim() }, function(err, d){
+      kasaIstek({ ne: 'kaydet', cariKod: kod, id: F.id, tutar: String(tutar), yontem: F.yontem, teslimEden: F.teslim.trim(), aciklama: F.aciklama.trim(), kasa: kasaCihazKasa() }, function(err, d){
         F.kaydediliyor = false;
         if(err){ F.hata = err + ' — tekrar bas (çift kayıt olmaz)'; kasaCiz(); return; }
         kasa.son = d.tahsilat; kasa.form = null; kasa.liste = null; kasaCiz(); kasaBodyEl.scrollTop = 0;
