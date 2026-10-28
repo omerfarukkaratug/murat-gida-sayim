@@ -590,7 +590,7 @@
   <header style="border:none; padding:0 0 16px; background:transparent; display:flex; align-items:flex-start; justify-content:space-between;">
     <div>
       <h1><img src="logo-header.png" alt="Murat Gıda" style="height:30px; width:auto; display:block;"></h1>
-      <div class="sub"><img src="icon.svg" alt="" style="width:15px;height:15px;vertical-align:-3px;margin-right:5px;">KRT Saha · Murat Gıda • offline • Android • build 275</div>
+      <div class="sub"><img src="icon.svg" alt="" style="width:15px;height:15px;vertical-align:-3px;margin-right:5px;">KRT Saha · Murat Gıda • offline • Android • build 276</div>
     </div>
     <button type="button" id="themeToggleBtn" title="Tema seç" style="background:var(--panel2); border:1.5px solid var(--line); color:var(--text); width:34px; height:34px; border-radius:50%; font-size:15px; padding:0; display:flex; align-items:center; justify-content:center; flex-shrink:0;">🎨</button>
   </header>
@@ -5098,6 +5098,8 @@
   // ERP'ye yazılmaz (muhasebe işler); ERP'de aynı tutar görününce kayıt kendiliğinden "ERP'de" olur.
   // Kasiyer yalnız yöneticinin ona atadığı carileri görür.
   // ============================================================
+  var KASA_YONTEM_V = ['Nakit', 'Kredi kartı', 'Yemek çeki', 'Havale / EFT', 'Çek / Senet', 'Diğer'];
+  var KASA_YEMEK_V = ['Sodexo', 'Multinet', 'Ticket', 'Setcard', 'iWallet', 'Metropol', 'Token Flex'];
   var kasa = { sekme: 'cari', cariler: null, hepsi: false, yontemler: [], muhasebe: false, ara: '', cari: null, form: null, son: null, liste: null, filtre: 'bugun', acik: {}, yetki: null, yKisi: '', yAra: '', yDegisti: false, yuk: false, hata: '' };
   var kasaEl = document.getElementById('kasaScreen'), kasaBodyEl = document.getElementById('kasaBody');
   function canSeeKasa(){ return hasPerm('kasa_tahsilat') || hasPerm('rapor'); }
@@ -5160,7 +5162,7 @@
     kasa.yuk = true; kasa.hata = ''; kasaCiz();
     kasaIstek({ ne: 'cariler' }, function(err, d){
       kasa.yuk = false; kasa.hata = err || '';
-      if(d){ kasa.cariler = d.cariler || []; kasa.hepsi = !!d.hepsi; kasa.yontemler = d.yontemler || []; kasa.muhasebe = !!d.muhasebe; }
+      if(d){ kasa.cariler = d.cariler || []; kasa.hepsi = !!d.hepsi; kasa.yontemler = d.yontemler || []; kasa.yemekCeki = d.yemekCeki || []; kasa.muhasebe = !!d.muhasebe; }
       kasaCiz();
     });
   }
@@ -5231,7 +5233,8 @@
       var tutarN = Number(String(F.tutar).replace(/\./g, '').replace(',', '.'));
       h += '<div class="chSatir kasaForm"><div style="font-weight:800;">➕ Tahsilat al</div>' +
         '<label for="kasaTutar">Tutar (TL)</label><input type="text" id="kasaTutar" class="kasaTutar" inputmode="decimal" placeholder="0,00" value="' + escapeHtml(F.tutar) + '" autocomplete="off">' +
-        '<label>Ödeme şekli</label><div class="kasaYontem">' + (kasa.yontemler.length ? kasa.yontemler : ['Nakit', 'Kredi kartı', 'Havale / EFT', 'Çek / Senet', 'Diğer']).map(function(y){ return '<button type="button" data-kasayontem="' + escapeHtml(y) + '" class="' + (F.yontem === y ? 'on' : '') + '">' + escapeHtml(y) + '</button>'; }).join('') + '</div>' +
+        '<label>Ödeme şekli</label><div class="kasaYontem">' + (kasa.yontemler.length ? kasa.yontemler : KASA_YONTEM_V).map(function(y){ var on = F.yontem === y || (y === 'Yemek çeki' && /^Yemek çeki/.test(F.yontem)); return '<button type="button" data-kasayontem="' + escapeHtml(y) + '" class="' + (on ? 'on' : '') + '">' + (y === 'Yemek çeki' ? '🍽️ ' : '') + escapeHtml(y) + '</button>'; }).join('') + '</div>' +
+        (/^Yemek çeki/.test(F.yontem) ? '<label>Yemek çeki firması</label><div class="kasaYontem">' + ((kasa.yemekCeki && kasa.yemekCeki.length) ? kasa.yemekCeki : KASA_YEMEK_V).map(function(f){ var y = 'Yemek çeki - ' + f; return '<button type="button" data-kasayontem="' + escapeHtml(y) + '" class="' + (F.yontem === y ? 'on' : '') + '">' + escapeHtml(f) + '</button>'; }).join('') + '</div>' : '') +
         '<label for="kasaTeslim">Parayı teslim eden (ad soyad)</label><input type="text" id="kasaTeslim" placeholder="Ör: Ahmet Yılmaz" value="' + escapeHtml(F.teslim) + '" autocomplete="off">' +
         '<label for="kasaAciklama">Açıklama (isteğe bağlı)</label><input type="text" id="kasaAciklama" placeholder="Ör: müşterilerinin kartlarından, Ekim hesabı" value="' + escapeHtml(F.aciklama) + '" autocomplete="off" maxlength="200">' +
         (F.hata ? '<div style="color:var(--red); font-weight:800; margin-top:8px;">❌ ' + escapeHtml(F.hata) + '</div>' : '') +
@@ -5281,7 +5284,9 @@
     if(kasa.yuk && !kasa.liste) return h + '<div class="hint">⏳ Yükleniyor…</div>';
     var l = kasa.liste || [], akt = l.filter(function(t){ return t.durum === 'aktif'; });
     var top = function(f){ return akt.filter(f).reduce(function(a, t){ return a + t.tutar; }, 0); };
-    h += '<div class="chOzet"><div>TOPLAM<b>' + escapeHtml(kasaTL(top(function(){ return true; }))) + '</b></div><div>NAKİT<b>' + escapeHtml(kasaTL(top(function(t){ return t.yontem === 'Nakit'; }))) + '</b></div><div>KART<b>' + escapeHtml(kasaTL(top(function(t){ return t.yontem === 'Kredi kartı'; }))) + '</b></div></div>';
+    h += '<div class="chOzet"><div>TOPLAM<b>' + escapeHtml(kasaTL(top(function(){ return true; }))) + '</b></div><div>NAKİT<b>' + escapeHtml(kasaTL(top(function(t){ return t.yontem === 'Nakit'; }))) + '</b></div><div>KART<b>' + escapeHtml(kasaTL(top(function(t){ return t.yontem === 'Kredi kartı'; }))) + '</b></div><div>YEMEK ÇEKİ<b>' + escapeHtml(kasaTL(top(function(t){ return /^Yemek çeki/.test(t.yontem); }))) + '</b></div></div>';
+    var cekler = {}; akt.forEach(function(t){ var m = /^Yemek çeki - (.+)$/.exec(t.yontem); if(m) cekler[m[1]] = (cekler[m[1]] || 0) + t.tutar; });
+    if(Object.keys(cekler).length) h += '<div class="hint" style="margin:-4px 0 10px;">🍽️ ' + Object.keys(cekler).map(function(k){ return escapeHtml(k) + ': <b>' + escapeHtml(kasaTL(cekler[k])) + '</b>'; }).join(' · ') + '</div>';
     if(kasa.muhasebe) h += '<button type="button" class="geriBtn" data-kasaeslestir="1">🔄 ERP ile karşılaştır (işlenenleri bul)</button>';
     if(kasa.yuk) h += '<div class="hint">⏳ Yenileniyor…</div>';
     if(!l.length) return h + '<div class="hint">Bu aralıkta tahsilat yok.</div>';
@@ -5380,6 +5385,7 @@
       if(!(n > 0)){ F.hata = 'Tutarı yaz'; }
       else if(n > 10000000){ F.hata = 'Tutar çok büyük'; }
       else if(!F.yontem){ F.hata = 'Ödeme şeklini seç'; }
+      else if(F.yontem === 'Yemek çeki'){ F.hata = 'Yemek çekinin firmasını seç (Multinet, Sodexo…)'; }
       else if(String(F.teslim).trim().length < 2){ F.hata = 'Parayı teslim edenin adını yaz'; }
       else { F.hata = ''; F.onay = true; }
       kasaCiz(); return;

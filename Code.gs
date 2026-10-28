@@ -6076,7 +6076,14 @@ function tasimaIslem(P) {
 var KASA_TAH_BASLIK = ['Id', 'Makbuz No', 'Zaman', 'Tarih', 'Düzenleyen', 'Cari Kodu', 'Cari Adı', 'Tutar', 'Ödeme Şekli', 'Teslim Eden', 'Açıklama',
   'ERP Bakiyesi', 'Önceki Bakiye', 'Kalan Bakiye', 'Durum', 'ERP Durumu', 'ERP İşleyen', 'ERP Zamanı', 'İptal Eden', 'İptal Nedeni', 'İptal Zamanı'];
 var KASA_YETKI_BASLIK = ['Personel', 'Cari Kodu', 'Cari Adı', 'Ekleyen', 'Zaman'];
-var KASA_YONTEM = ['Nakit', 'Kredi kartı', 'Havale / EFT', 'Çek / Senet', 'Diğer'];
+var KASA_YONTEM = ['Nakit', 'Kredi kartı', 'Yemek çeki', 'Havale / EFT', 'Çek / Senet', 'Diğer'];
+// Yemek çeki seçilince hangi firma olduğu da seçilir; kayıtta "Yemek çeki - Multinet" gibi yazılır.
+var KASA_YEMEK_CEKI = ['Sodexo', 'Multinet', 'Ticket', 'Setcard', 'iWallet', 'Metropol', 'Token Flex'];
+function kasaYontemGecerli(y) {
+  if (KASA_YONTEM.indexOf(y) !== -1) return y !== 'Yemek çeki';
+  var m = /^Yemek çeki - (.+)$/.exec(String(y || ''));
+  return !!m && KASA_YEMEK_CEKI.indexOf(m[1]) !== -1;
+}
 function kasaSayfa(ad, baslik) {
   var ss = SpreadsheetApp.getActiveSpreadsheet(), sh = ss.getSheetByName(ad);
   if (!sh) { sh = ss.insertSheet(ad); sh.getRange(1, 1, 1, baslik.length).setValues([baslik]); sh.setFrozenRows(1); }
@@ -6157,7 +6164,7 @@ function kasaTahsilat(p, callback) {
     var cari = kasaCariHarita(), l = [];
     if (izin === null) Object.keys(cari).forEach(function (k) { l.push([k, cari[k].ad, cari[k].bakiye]); });
     else Object.keys(izin).forEach(function (k) { l.push([k, (cari[k] && cari[k].ad) || izin[k], cari[k] ? cari[k].bakiye : null]); });
-    return outJson({ status: 'ok', hepsi: izin === null, cariler: l, yontemler: KASA_YONTEM, muhasebe: muhasebe }, callback);
+    return outJson({ status: 'ok', hepsi: izin === null, cariler: l, yontemler: KASA_YONTEM, yemekCeki: KASA_YEMEK_CEKI, muhasebe: muhasebe }, callback);
   }
   if (ne === 'cari') {
     if (!cariKod || !izinVar(cariKod)) return outJson({ status: 'error', message: 'Bu cariye giriş yetkin yok' }, callback);
@@ -6175,7 +6182,7 @@ function kasaTahsilat(p, callback) {
     var yontem = String(p.yontem || ''), teslim = String(p.teslimEden || '').trim().substring(0, 80), acik = String(p.aciklama || '').trim().substring(0, 200);
     if (!id) return outJson({ status: 'error', message: 'Kayıt kimliği yok' }, callback);
     if (!(tutar > 0) || tutar > 10000000) return outJson({ status: 'error', message: 'Tutar geçersiz' }, callback);
-    if (KASA_YONTEM.indexOf(yontem) === -1) return outJson({ status: 'error', message: 'Ödeme şeklini seç' }, callback);
+    if (!kasaYontemGecerli(yontem)) return outJson({ status: 'error', message: yontem === 'Yemek çeki' ? 'Yemek çekinin firmasını seç' : 'Ödeme şeklini seç' }, callback);
     if (teslim.length < 2) return outJson({ status: 'error', message: 'Parayı teslim edenin adını yaz' }, callback);
     var lock = LockService.getScriptLock();
     try { lock.waitLock(20000); } catch (le) { return outJson({ status: 'error', message: 'Sunucu meşgul, tekrar dene' }, callback); }
