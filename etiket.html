@@ -3699,7 +3699,7 @@
     var t = m.t || {}, z = String(t.zaman || ''), kalan = t.kalan;
     var sat = function(a, b, st){ return '<div style="display:flex; justify-content:space-between; gap:6px;' + (st || '') + '"><span>' + a + '</span><span style="text-align:right;">' + b + '</span></div>'; };
     var hr = '<div style="border-top:1px dashed #000; margin:5px 0;"></div>';
-    var html = '<div class="sayfa" style="width:72mm; margin:0 auto; padding:3mm 2mm; background:#fff; color:#000; font-family:\'Courier New\', monospace; font-size:12px; line-height:1.35; box-sizing:border-box;">' +
+    var html = '<div class="sayfa" style="width:72mm; margin:0; padding:2mm 1.5mm; background:#fff; color:#000; font-family:\'Courier New\', monospace; font-size:12px; line-height:1.35; box-sizing:border-box;">' +
       '<div style="text-align:center;"><img src="logo-header.png" alt="" style="height:30px; filter:grayscale(1) contrast(1.4);"><div style="font-weight:800; font-size:11px;">' + esc(m.unvan || '') + '</div></div>' + hr +
       '<div style="text-align:center; font-weight:800; font-size:15px;">TAHSİLAT MAKBUZU</div>' + (m.kopya ? '<div style="text-align:center; font-weight:800;">** KOPYA **</div>' : '') +
       (t.durum === 'iptal' ? '<div style="text-align:center; font-weight:800; font-size:15px;">*** İPTAL EDİLDİ ***</div>' : '') +
@@ -3717,7 +3717,7 @@
     var bitir = function(){
       var h = Math.ceil(el.querySelector('.sayfa').getBoundingClientRect().height / 3.7795) + 6;   // px → mm (+ kesim payı)
       window.MB_MAKBUZ = true;   // etiket biçim çizimi sayfa boyutunu A4'e geri çevirmesin
-      $('sayfaBoyutu').textContent = '@page{ size:80mm ' + h + 'mm; margin:0; }';
+      $('sayfaBoyutu').textContent = '@page{ size:72mm ' + h + 'mm; margin:0; }';
       document.title = 'HAZIR';
     };
     var img = el.querySelector('img');

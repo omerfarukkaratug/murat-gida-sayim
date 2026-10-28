@@ -550,7 +550,7 @@
     body.makbuzBaskida{height:auto !important; overflow:visible !important; background:#fff !important;}
     body.makbuzBaskida > *:not(#makbuzBaski){display:none !important;}
     body.makbuzBaskida #makbuzBaski{display:block !important;}
-    @page{size:80mm auto; margin:0;}
+    body.makbuzBaskida #makbuzBaski .makbuz{width:72mm; box-sizing:border-box; padding:2mm 1.5mm; margin:0;}
   }
   /* Tema seçici */
   #themeModal{position:fixed; inset:0; background:rgba(10,10,10,.55); z-index:60; display:flex; align-items:flex-end; justify-content:center;}
@@ -590,7 +590,7 @@
   <header style="border:none; padding:0 0 16px; background:transparent; display:flex; align-items:flex-start; justify-content:space-between;">
     <div>
       <h1><img src="logo-header.png" alt="Murat Gıda" style="height:30px; width:auto; display:block;"></h1>
-      <div class="sub"><img src="icon.svg" alt="" style="width:15px;height:15px;vertical-align:-3px;margin-right:5px;">KRT Saha · Murat Gıda • offline • Android • build 277</div>
+      <div class="sub"><img src="icon.svg" alt="" style="width:15px;height:15px;vertical-align:-3px;margin-right:5px;">KRT Saha · Murat Gıda • offline • Android • build 278</div>
     </div>
     <button type="button" id="themeToggleBtn" title="Tema seç" style="background:var(--panel2); border:1.5px solid var(--line); color:var(--text); width:34px; height:34px; border-radius:50%; font-size:15px; padding:0; display:flex; align-items:center; justify-content:center; flex-shrink:0;">🎨</button>
   </header>
@@ -2781,7 +2781,7 @@
     e.preventDefault();
     state.currentUser = null;
     save();
-    try { document.getElementById('kasaScreen').classList.add('hidden'); document.getElementById('makbuzBaski').innerHTML = ''; } catch(er){}
+    try { document.getElementById('kasaScreen').classList.add('hidden'); document.getElementById('makbuzBaski').innerHTML = ''; document.body.classList.remove('makbuzBaskida'); } catch(er){}
     loginUserInput.value = '';
     showLoginUI();
   });
@@ -5145,7 +5145,7 @@
     kasaSekmeCiz();
     if(kasa.sekme === 'cari' && !kasa.cariler) kasaCarilerGetir(); else if(kasa.sekme === 'liste') kasaListeGetir(); else kasaCiz();
   }
-  function kasaKapat(){ kasaEl.classList.add('hidden'); }
+  function kasaKapat(){ kasaEl.classList.add('hidden'); document.body.classList.remove('makbuzBaskida'); }
   function kasaGeri(){
     if(kasa.son){ kasa.son = null; kasaCiz(); return true; }
     if(kasa.cari){ kasa.cari = null; kasa.form = null; kasaCiz(); return true; }
@@ -5357,11 +5357,21 @@
   function kasaYazdir(t, kopya){
     var el = document.getElementById('makbuzBaski');
     el.innerHTML = kasaMakbuzHtml(t, kopya);
+    // Sayfa = 72 mm genişlik (80 mm termal rulonun basılabilir alanı) x makbuzun gerçek boyu.
+    var sayfaBoy = function(){
+      var eskiSt = el.getAttribute('style') || '';
+      el.setAttribute('style', 'display:block; position:fixed; left:-9999px; top:0;');
+      var m = el.querySelector('.makbuz'); if(m){ m.style.width = '72mm'; m.style.boxSizing = 'border-box'; m.style.padding = '2mm 1.5mm'; }
+      var h = m ? Math.ceil(m.getBoundingClientRect().height / 3.7795) + 6 : 200;
+      el.setAttribute('style', eskiSt);
+      var st = document.getElementById('makbuzSayfa');
+      if(!st){ st = document.createElement('style'); st.id = 'makbuzSayfa'; document.head.appendChild(st); }
+      st.textContent = '@media print{ @page{ size:72mm ' + h + 'mm; margin:0; } }';
+    };
+    // iPhone'da window.print() hemen döner, önizleme sonra çizilir: sınıf hemen kaldırılırsa bütün ekran basılıyordu.
+    // Sınıf yalnız baskıda etkili; kasa ekranı kapanınca kaldırılır.
     document.body.classList.add('makbuzBaskida');
-    var bitir = function(){ document.body.classList.remove('makbuzBaskida'); window.removeEventListener('afterprint', bitir); };
-    window.addEventListener('afterprint', bitir);
-    // Logo yüklenmeden yazdırılmasın
-    var img = el.querySelector('img'), yaz = function(){ setTimeout(function(){ try { window.print(); } catch(e){ errorToast('Yazdırılamadı: ' + e.message); } setTimeout(bitir, 1500); }, 120); };
+    var img = el.querySelector('img'), yaz = function(){ sayfaBoy(); setTimeout(function(){ try { window.print(); } catch(e){ errorToast('Yazdırılamadı: ' + e.message); } }, 150); };
     if(img && !img.complete){ img.onload = img.onerror = yaz; } else yaz();
   }
   // 📡 Makbuzu kasadaki (ağdaki) termal yazıcıya gönder: baskı programı olan bilgisayar basar.
