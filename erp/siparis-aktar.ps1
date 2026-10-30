@@ -128,6 +128,18 @@ function Sayac($tx, $id, $tablo, $kodPc) {
     if ($kodPc -eq $null) { return }
     [void](Sql $tx "IF NOT EXISTS (SELECT 1 FROM dbo.SEQUNCES WHERE ID = @i) INSERT INTO dbo.SEQUNCES (ID, TABLO, KOD_PC) VALUES (@i, @t, @p)" @{ "@i" = $id; "@t" = $tablo; "@p" = $kodPc }).ExecuteNonQuery()
 }
+# ERP'nin degisiklik defteri (SEQUNCES_DEGISIKLIK): kasalar (POS bilgisayarlari) yeni / degisen kayitlari
+# buradan alir. ERP elle acilan kartin her satiri icin ISLEM=1 (yeni) yazar; yazilmazsa kart kasada OKUNMAZ.
+function Degisiklik($tx, $id, $tablo, $kodPc) {
+    if ($kodPc -eq $null) { return }
+    if ($script:DegVar -eq $null) { $script:DegVar = ([int](Deger $tx "SELECT COUNT(*) FROM sys.tables WHERE name = 'SEQUNCES_DEGISIKLIK'" $null) -gt 0) }
+    if (-not $script:DegVar) { return }
+    if ($script:DegKullanici -eq $null) {
+        $script:DegKullanici = Deger $tx "SELECT TOP 1 KULLANICI FROM dbo.SEQUNCES_DEGISIKLIK WITH (NOLOCK) WHERE KOD_PC = @p AND ISLEM = 1 AND TABLO = 'STOK' AND KULLANICI IS NOT NULL ORDER BY ID DESC" @{ "@p" = $kodPc }
+        if ($script:DegKullanici -eq $null) { $script:DegKullanici = [long]0 }
+    }
+    [void](Sql $tx "INSERT INTO dbo.SEQUNCES_DEGISIKLIK (KOD_PC, SEQUNCES, KULLANICI, ISLEM, TARIH, TABLO) VALUES (@p, @s, @k, 1, GETDATE(), @t)" @{ "@p" = $kodPc; "@s" = $id; "@k" = $script:DegKullanici; "@t" = $tablo }).ExecuteNonQuery()
+}
 # Terazi bayraklari (ERP FIRMASABITLERI): 29, 28, 26 tartim, 24 tutar, 27 adet.
 function Terazi($bar) { return ($bar.Length -le 7) -or ($bar.Length -eq 13 -and @("24","26","27","28","29") -contains $bar.Substring(0, 2)) }
 # Stok karti olmayan urune sablondan gecici kart acar. Doner: yeni STOK ID ya da $null (acilamazsa).
@@ -155,19 +167,19 @@ function Kart-Ac($tx, $r, $b) {
     else { $sira = [long](Deger $tx "SELECT ISNULL(MAX(SIRA), 0) + 1 FROM dbo.STOK" $null) }
     $sid = [long](Deger $tx "SELECT NEXT VALUE FOR dbo.ID" $null)
     Kopyala $tx "STOK" $sab @{ ID = $sid; KOD = $kod; AD = $ad; SIRA = $sira }
-    Sayac $tx $sid "STOK" $kodPc
+    Sayac $tx $sid "STOK" $kodPc; Degisiklik $tx $sid "STOK" $kodPc
     $uid = [long](Deger $tx "SELECT NEXT VALUE FOR dbo.ID" $null)
     Kopyala $tx "STOK_STOK_BIRIM" $sabBirim @{ ID = $uid; STOK = $sid }
-    Sayac $tx $uid "STOK_STOK_BIRIM" $kodPc
+    Sayac $tx $uid "STOK_STOK_BIRIM" $kodPc; Degisiklik $tx $uid "STOK_STOK_BIRIM" $kodPc
     foreach ($f in $sabFiyat) {
         $fid = [long](Deger $tx "SELECT NEXT VALUE FOR dbo.ID" $null)
         Kopyala $tx "STOK_STOK_BIRIM_FIYAT" $f @{ ID = $fid; STOK_STOK_BIRIM = $uid; FIYAT = [decimal]0 }
-        Sayac $tx $fid "STOK_STOK_BIRIM_FIYAT" $kodPc
+        Sayac $tx $fid "STOK_STOK_BIRIM_FIYAT" $kodPc; Degisiklik $tx $fid "STOK_STOK_BIRIM_FIYAT" $kodPc
     }
     $bid = [long](Deger $tx "SELECT NEXT VALUE FOR dbo.ID" $null)
     $bsira = [int](Deger $tx "SELECT ISNULL(MAX(unboundSIRA), 0) + 1 FROM dbo.STOK_BARKOD WITH (UPDLOCK, HOLDLOCK)" $null)
     Kopyala $tx "STOK_BARKOD" $sabBarkod @{ ID = $bid; STOK_STOK_BIRIM = $uid; BARKOD = $bar; unboundSIRA = $bsira }
-    Sayac $tx $bid "STOK_BARKOD" $kodPc
+    Sayac $tx $bid "STOK_BARKOD" $kodPc; Degisiklik $tx $bid "STOK_BARKOD" $kodPc
     [void]$script:AcilanKart.Add(("{0}`t{1}`t{2}`t{3}`t{4} x {5}`t{6} ({7})" -f (Get-Date -Format "yyyy-MM-dd HH:mm"), $kod, $bar, $ad, $b.tip, $r.miktar, $b.cari, $b.belge_turu))
     Yaz-Log "$(if ($Deneme) { 'DENEME: acilacakti' } else { 'YENI STOK KARTI' }): $kod / $bar / $ad (sablondan, fiyat 0)"
     return $sid
