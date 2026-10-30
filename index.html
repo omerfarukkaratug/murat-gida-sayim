@@ -590,7 +590,7 @@
   <header style="border:none; padding:0 0 16px; background:transparent; display:flex; align-items:flex-start; justify-content:space-between;">
     <div>
       <h1><img src="logo-header.png" alt="Murat Gıda" style="height:30px; width:auto; display:block;"></h1>
-      <div class="sub"><img src="icon.svg" alt="" style="width:15px;height:15px;vertical-align:-3px;margin-right:5px;">KRT Saha · Murat Gıda • offline • Android • build 279</div>
+      <div class="sub"><img src="icon.svg" alt="" style="width:15px;height:15px;vertical-align:-3px;margin-right:5px;">KRT Saha · Murat Gıda • offline • Android • build 280</div>
     </div>
     <button type="button" id="themeToggleBtn" title="Tema seç" style="background:var(--panel2); border:1.5px solid var(--line); color:var(--text); width:34px; height:34px; border-radius:50%; font-size:15px; padding:0; display:flex; align-items:center; justify-content:center; flex-shrink:0;">🎨</button>
   </header>
@@ -646,6 +646,7 @@
       <button type="button" class="menuBtn hidden" id="menuStokHrkBtn"><span class="menuIcon">📦</span><span>Stok Hareketleri<span class="menuSub">Ürünün tüm giriş/çıkışları, fatura ve fiş detayı</span></span></button>
       <button type="button" class="menuBtn hidden" id="menuCariHrkBtn"><span class="menuIcon">📒</span><span>Cari Hareketleri<span class="menuSub">Cari ekstresi: borç, alacak, bakiye</span></span></button>
       <button type="button" class="menuBtn hidden" id="menuKasaBtn"><span class="menuIcon">💵</span><span>Kasa Tahsilat<span class="menuSub">Veresiye carinin ödemesi, makbuz, bakiye</span></span></button>
+      <button type="button" class="menuBtn hidden" id="menuKarlilikBtn"><span class="menuIcon">💹</span><span>Kârlılık<span class="menuSub">Para kazandıran / sürüm ürünleri, enflasyon</span></span></button>
       <button type="button" class="menuBtn hidden" id="menuTedarikBtn"><span class="menuIcon">🛒</span><span>Tedarikçi Siparişi<span class="menuSub">Azalan ürünler, son fatura, ne kadar alınmalı</span></span></button>
     </div>
     <div class="hint" style="text-align:center; margin-top:14px;"><a href="#" id="menuDuzenLink" class="menuDuzenLink">✏️ Menüyü düzenle</a> · <a href="#" class="telKontrolAc menuDuzenLink">🩺 Telefonu kontrol et</a> · <a href="https://krtsaha.com/kurulum.html" target="_blank" rel="noopener" class="menuDuzenLink">❓ Yardım</a></div>
@@ -940,6 +941,17 @@
       </div>
     </div>
     <iframe id="mesaiFrame" title="Mesai" allow="geolocation; camera; fullscreen; screen-wake-lock" style="flex:1; width:100%; border:0; background:var(--bg);"></iframe>
+  </div>
+
+  <!-- KÂRLILIK: ayrı dosyadaki karlilik.html (yönetici / "karlilik" yetkisi). Maliyet içerir; ERP'ye yazmaz. -->
+  <div id="karlilikScreen" class="hidden" style="position:fixed; inset:0; background:var(--bg); z-index:50; display:flex; flex-direction:column;">
+    <div style="padding:16px 16px 10px; border-bottom:1px solid var(--line); background:var(--panel); box-shadow:var(--sh-sm);">
+      <div style="display:flex; align-items:center; justify-content:space-between;">
+        <div style="font-weight:800; font-size:16px;">💹 Kârlılık</div>
+        <button type="button" id="karlilikCloseBtn" aria-label="Kapat" style="width:34px; height:34px; border-radius:50%; background:var(--panel2); border:1.5px solid var(--line); color:var(--text); font-size:18px; line-height:1; padding:0; display:flex; align-items:center; justify-content:center;">✕</button>
+      </div>
+    </div>
+    <iframe id="karlilikFrame" title="Kârlılık" style="flex:1; width:100%; border:0; background:var(--bg);"></iframe>
   </div>
 
   <!-- SİPARİŞ HAZIRLAMA: ayrı dosyadaki hazirla.html (depo). ERP'ye hiçbir şey yazmaz. -->
@@ -2261,7 +2273,7 @@
       document.getElementById('menuHareketBtn').classList.toggle('hidden', !canSeeHareket());
       document.getElementById('menuCariHrkBtn').classList.toggle('hidden', !canSeeCariHrk());
       document.getElementById('menuStokHrkBtn').classList.toggle('hidden', !canSeeStokHrk());
-      document.getElementById('menuTedarikBtn').classList.toggle('hidden', !canSeeTedarik()); var _kb = document.getElementById('menuKasaBtn'); if(_kb) _kb.classList.toggle('hidden', !canSeeKasa());
+      document.getElementById('menuTedarikBtn').classList.toggle('hidden', !canSeeTedarik()); var _kb = document.getElementById('menuKasaBtn'); if(_kb) _kb.classList.toggle('hidden', !canSeeKasa()); var _kr = document.getElementById('menuKarlilikBtn'); if(_kr) _kr.classList.toggle('hidden', !hasPerm('karlilik'));
       document.getElementById('menuOzetBtn').classList.toggle('hidden', !hasPerm('rapor'));
       document.getElementById('menuEtiketBtn').classList.toggle('hidden', !canSeeEtiket());
     document.getElementById('menuDogrulaBtn').classList.toggle('hidden', !canSeeEtiket());
@@ -2361,7 +2373,7 @@
     document.getElementById('menuHareketBtn').classList.toggle('hidden', !canSeeHareket());
     document.getElementById('menuCariHrkBtn').classList.toggle('hidden', !canSeeCariHrk());
     document.getElementById('menuStokHrkBtn').classList.toggle('hidden', !canSeeStokHrk());
-    document.getElementById('menuTedarikBtn').classList.toggle('hidden', !canSeeTedarik()); var _kb = document.getElementById('menuKasaBtn'); if(_kb) _kb.classList.toggle('hidden', !canSeeKasa());
+    document.getElementById('menuTedarikBtn').classList.toggle('hidden', !canSeeTedarik()); var _kb = document.getElementById('menuKasaBtn'); if(_kb) _kb.classList.toggle('hidden', !canSeeKasa()); var _kr = document.getElementById('menuKarlilikBtn'); if(_kr) _kr.classList.toggle('hidden', !hasPerm('karlilik'));
     document.getElementById('menuOzetBtn').classList.toggle('hidden', !hasPerm('rapor'));
     document.getElementById('menuMesaiBtn').classList.toggle('hidden', !canSeeMesai());
     document.getElementById('menuPlasiyerBtn').classList.toggle('hidden', !canSeePlasiyer());
@@ -2634,6 +2646,26 @@
     closeHazirlaScreen();
   }
   document.getElementById('menuHazirlaBtn').addEventListener('click', openHazirlaScreen);
+  // ---------- KÂRLILIK (karlilik.html çerçeve içinde) ----------
+  function canSeeKarlilik(){ return hasPerm('karlilik'); }
+  function openKarlilikScreen(){
+    if(!canSeeKarlilik()){ warnToast('Kârlılık raporu yetkin yok — yöneticinden iste'); return; }
+    try { save(); } catch(e){}
+    document.getElementById('karlilikFrame').src = 'karlilik.html?gomulu=1&t=' + Date.now();
+    document.getElementById('karlilikScreen').classList.remove('hidden');
+  }
+  function closeKarlilikScreen(){
+    var el = document.getElementById('karlilikScreen');
+    if(!el || el.classList.contains('hidden')) return;
+    el.classList.add('hidden');
+    document.getElementById('karlilikFrame').src = 'about:blank';
+  }
+  function karlilikGeri(){
+    try { var w = document.getElementById('karlilikFrame').contentWindow; if(w && typeof w.mkGeri === 'function' && w.mkGeri()) return; } catch(e){}
+    closeKarlilikScreen();
+  }
+  document.getElementById('menuKarlilikBtn').addEventListener('click', openKarlilikScreen);
+  document.getElementById('karlilikCloseBtn').addEventListener('click', closeKarlilikScreen);
   document.getElementById('hazirlaCloseBtn').addEventListener('click', closeHazirlaScreen);
   document.getElementById('plasiyerCloseBtn').addEventListener('click', closePlasiyerScreen);
   // Etiket ayrı sayfada açılır (telefonun yazdırma penceresi tam sayfa ister).
@@ -2786,7 +2818,7 @@
     e.preventDefault();
     state.currentUser = null;
     save();
-    try { document.getElementById('kasaScreen').classList.add('hidden'); document.getElementById('makbuzBaski').innerHTML = ''; document.body.classList.remove('makbuzBaskida'); } catch(er){}
+    try { document.getElementById('kasaScreen').classList.add('hidden'); document.getElementById('makbuzBaski').innerHTML = ''; document.body.classList.remove('makbuzBaskida'); closeKarlilikScreen(); } catch(er){}
     loginUserInput.value = '';
     showLoginUI();
   });
@@ -8211,6 +8243,7 @@
     { key: 'tedarik', label: '🛒 Tedarikçi Siparişi' },
     // Kasa tahsilat: yalnız yöneticinin atadığı carilerin tahsilatı + makbuz. ERP'ye yazılmaz.
     { key: 'kasa_tahsilat', label: '💵 Kasa Tahsilat' },
+    { key: 'karlilik', label: '💹 Kârlılık raporu (maliyet ve kâr görür)' },
     { key: 'mesai', label: '🕐 Mesai (personel)' },
     { key: 'mesai_yonetim', label: '⭐ Ekip Lideri' },
     // Plasiyer (saha satış): ERP'ye yazmaz. Maliyet = tedarikçi, alış fiyatı, kâr marjı.
@@ -8889,6 +8922,7 @@
     ['miniScreen', function(){ document.getElementById('miniScreen').classList.add('hidden'); }],
     ['ozetScreen', function(){ document.getElementById('ozetScreen').classList.add('hidden'); }],
     ['kasaScreen', function(){ kasaGeri(); }],
+    ['karlilikScreen', function(){ karlilikGeri(); }],
     ['malHareketScreen', function(){ if(!malSaving) closeMalHareketScreen(); }]
   ];
   var geriKayitli = false, geriYutuluyor = false;

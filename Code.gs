@@ -143,6 +143,9 @@ function doGet(e) {
   if (e.parameter && e.parameter.action === 'kasa_tahsilat') {
     return kasaTahsilat(e.parameter, e.parameter.callback);
   }
+  if (e.parameter && e.parameter.action === 'karlilik') {
+    return karlilik(e.parameter, e.parameter.callback);
+  }
   if (e.parameter && e.parameter.action === 'mal_siparis') {
     return malSiparis(e.parameter, e.parameter.callback);
   }
@@ -273,7 +276,7 @@ function outJson(obj, callback) {
 // tabloyu açan biri şifreleri okuyamaz. Şifre telefonda hâlâ saklanır ve her
 // istekte sunucuya gönderilir — tam oturum sistemi veri tabanı geçişinde.
 // ============================================================
-var ALL_PERMS = ['kasa_tahsilat', 'rapor', 'temizle', 'kullanici_yonetimi', 'ayarlar', 'canli_durum', 'duzelt', 'hareket', 'cari_hareket', 'stok_hareket', 'mesai', 'mesai_yonetim', 'plasiyer', 'plasiyer_maliyet', 'plasiyer_yonetim', 'alis_fiyat', 'siparis_hazirla', 'sevkiyat', 'tedarik'];
+var ALL_PERMS = ['karlilik', 'kasa_tahsilat', 'rapor', 'temizle', 'kullanici_yonetimi', 'ayarlar', 'canli_durum', 'duzelt', 'hareket', 'cari_hareket', 'stok_hareket', 'mesai', 'mesai_yonetim', 'plasiyer', 'plasiyer_maliyet', 'plasiyer_yonetim', 'alis_fiyat', 'siparis_hazirla', 'sevkiyat', 'tedarik'];
 
 // ---- ŞİFRE ÖZETİ ----
 // Şifreler tabloda artık DÜZ METİN durmaz: "s256$<tuz>$<özet>" biçiminde,
@@ -6319,4 +6322,81 @@ function kasaMail(t, tur) {
       '\nTeslim eden: ' + t.teslimEden + '\nDüzenleyen (kasiyer): ' + t.personel + (t.aciklama ? '\nAçıklama: ' + t.aciklama : '') +
       '\n\nÖnceki bakiye: ' + tl(t.onceki) + '\nKalan bakiye: ' + tl(t.kalan) + '\n(ERP bakiyesi: ' + tl(t.erpBakiye) + ')' });
   return true;
+}
+
+
+// ============================================================
+// 💰 KÂRLILIK RAPORU — hangi ürün para kazandırıyor, hangisi sadece sürüm yapıyor, fiyatlar enflasyona yetişiyor mu.
+// Yetki: yönetici ya da 'karlilik'. Maliyet bilgisi içerdiği için başka hiçbir yetki göremez. ERP'ye yazmaz.
+// Veri: karlilik_veri (035_karlilik.sql) + Katalog (stok, güncel satış fiyatı, KDV) + aylık TÜFE (yönetici düzenler).
+// ============================================================
+var TUFE_OZELLIK = 'TUFE_AYLIK';
+// TÜİK aylık TÜFE değişimi (%). Yönetici Kârlılık → Enflasyon'dan düzeltir / yeni ayı ekler.
+var TUFE_VARSAYILAN = {
+  '2025-01': 5.03, '2025-02': 2.27, '2025-03': 2.46, '2025-04': 3.00, '2025-05': 1.53, '2025-06': 1.37,
+  '2025-07': 2.06, '2025-08': 2.04, '2025-09': 3.23, '2025-10': 2.55, '2025-11': 0.87, '2025-12': 0.89,
+  '2026-01': 4.84, '2026-02': 2.96, '2026-03': 1.94, '2026-04': 4.18, '2026-05': 1.71, '2026-06': 0.99,
+  '2026-07': 1.78, '2026-08': 1.84, '2026-09': 1.84
+};
+function tufeOku() {
+  var v = null; try { v = JSON.parse(PropertiesService.getScriptProperties().getProperty(TUFE_OZELLIK) || 'null'); } catch (e) { v = null; }
+  var m = {}; Object.keys(TUFE_VARSAYILAN).forEach(function (k) { m[k] = TUFE_VARSAYILAN[k]; });
+  if (v && typeof v === 'object') Object.keys(v).forEach(function (k) { if (/^\d{4}-\d{2}$/.test(k)) { if (v[k] === null) delete m[k]; else m[k] = Number(v[k]); } });
+  return m;
+}
+function karlilik(p, callback) {
+  var auth = kimlikOnbellek(p.user, p.pass);
+  if (!auth.ok) return outJson({ status: 'error', kimlik: true, message: 'Giriş gerekli — çıkış yapıp tekrar giriş yap' }, callback);
+  var yon = auth.role === 'yonetici';
+  if (!yon && auth.permissions.indexOf('karlilik') === -1) return outJson({ status: 'error', message: 'Kârlılık raporu yetkin yok — yöneticinden iste' }, callback);
+  var ne = String(p.ne || 'rapor');
+  if (ne === 'tufe_kaydet') {
+    if (!yon) return outJson({ status: 'error', message: 'Enflasyon oranlarını yalnız yönetici değiştirir' }, callback);
+    var gelen = {}; try { gelen = JSON.parse(String(p.tufe || '{}')) || {}; } catch (e) { return outJson({ status: 'error', message: 'Bozuk veri' }, callback); }
+    var kayit = {};
+    Object.keys(gelen).slice(0, 120).forEach(function (k) {
+      if (!/^\d{4}-\d{2}$/.test(k)) return;
+      var v = gelen[k]; if (v === null || v === '') { kayit[k] = null; return; }
+      v = Number(String(v).replace(',', '.')); if (isFinite(v) && v > -20 && v < 50) kayit[k] = Math.round(v * 100) / 100;
+    });
+    PropertiesService.getScriptProperties().setProperty(TUFE_OZELLIK, JSON.stringify(kayit));
+    return outJson({ status: 'ok', tufe: tufeOku() }, callback);
+  }
+  var ayar = dbAyar();
+  if (!ayar) return outJson({ status: 'error', message: 'Veri tabanı bağlantısı kapalı' }, callback);
+  var gun = Math.min(Math.max(parseInt(p.gun, 10) || 90, 7), 400);
+  // Katalog: stok kodu → KDV, toplam stok, güncel satış fiyatı (KDV dahil), son net alış
+  var kat = {}, sh = SpreadsheetApp.getActiveSpreadsheet().getSheetByName('Katalog');
+  if (sh && sh.getLastRow() > 1) {
+    var gen = Math.min(Math.max(sh.getLastColumn(), 6), KATALOG_BASLIK.length);
+    sh.getRange(2, 1, sh.getLastRow() - 1, gen).getValues().forEach(function (r) {
+      var kod = String(r[2] || '').trim(); if (!kod) return;
+      var k = kat[kod] || (kat[kod] = { ad: String(r[0] || ''), stok: null, fiyat: null, kdv: null, net: null, koli: false });
+      var koli = Number(r[6]) > 1;
+      if (!koli) {   // koli barkodu aynı stoğu ikinci kez saymasın, fiyatı koli fiyatıdır
+        if (k.stok === null && r[3] !== '' && !isNaN(Number(r[3]))) k.stok = Number(r[3]);
+        if (k.fiyat === null && Number(r[4]) > 0) k.fiyat = Number(r[4]);
+      }
+      if (k.kdv === null && r[5] !== '' && !isNaN(Number(r[5]))) k.kdv = Number(r[5]);
+      if (k.net === null && gen > 13 && Number(r[13]) > 0) k.net = Number(r[13]);
+    });
+  }
+  var kdv = {}; Object.keys(kat).forEach(function (k) { if (kat[k].kdv !== null) kdv[k] = kat[k].kdv; });
+  var v;
+  try { v = dbCagir(ayar, 'karlilik_veri', { p_gun: gun, p_kdv: kdv }); }
+  catch (e) { return outJson({ status: 'error', message: 'Veri tabanına ulaşılamadı: ' + String(e.message || e).substring(0, 150) }, callback); }
+  if (!v || v.status !== 'ok') return outJson({ status: 'error', message: (v && v.message) || 'Rapor hazırlanamadı (035_karlilik.sql çalıştırıldı mı?)' }, callback);
+  // Ürünlere katalogdan: [17 stok, 18 güncel satış fiyatı (KDV hariç), 19 katalogda var mı]
+  (v.urunler || []).forEach(function (r) {
+    var k = kat[r[0]], oran = 1 + ((k && k.kdv) || r[14] || 0) / 100;
+    r.push(k ? k.stok : null, k && k.fiyat ? Math.round(k.fiyat / oran * 10000) / 10000 : null, !!k);
+    if (k && !r[1]) r[1] = k.ad;
+  });
+  // Dönemde hiç satılmamış ama stokta duran ürünlerin toplam değeri (son net alıştan)
+  var satilan = {}; (v.urunler || []).forEach(function (r) { satilan[r[0]] = 1; });
+  var olu = { adet: 0, deger: 0 };
+  Object.keys(kat).forEach(function (kod) { var k = kat[kod]; if (!satilan[kod] && k.stok > 0 && k.net > 0) { olu.adet++; olu.deger += k.stok * k.net / (1 + (k.kdv || 0) / 100); } });
+  olu.deger = Math.round(olu.deger);
+  v.olu = olu; v.tufe = tufeOku(); v.yonetici = yon;
+  return outJson(v, callback);
 }

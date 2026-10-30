@@ -1,0 +1,425 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+<script src="tema-ortak.js?v=270"></script>
+<title>Kârlılık</title>
+<meta name="theme-color" content="#15803d">
+<!--
+  KRT Saha — 💰 KÂRLILIK RAPORU. index.html içinde çerçevede açılır (gomulu=1).
+  Hangi ürün para kazandırıyor, hangisi yalnız sürüm yapıyor, fiyatlar ve maliyetler enflasyona göre nerede.
+  Yetki: yönetici ya da "karlilik". Maliyet içerir. ERP'ye hiçbir şey yazmaz; ERP'den gelen veriyi okur.
+  Tutarlar KDV HARİÇ. Maliyet = satıldığı ayda geçerli son NET alış (iskontolar düşülmüş).
+-->
+<style>
+  :root{
+    --bg:#f2f8ec; --panel:#ffffff; --panel2:#e4f1d8; --line:#c3dfad;
+    --text:#10281a; --muted:#527a5f; --green:#15803d; --amber:#b45309; --red:#c81e1e; --blue:#1d4ed8;
+    --accent:#15803d; --accent2:#1fa04e;
+    --sans:-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    --mono:ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  }
+  @media (prefers-color-scheme: dark){
+    :root{ --bg:#0d1610; --panel:#14211a; --panel2:#1c2e23; --line:#2b4535;
+      --text:#e7f3ea; --muted:#94b49f; --green:#22c55e; --amber:#f59e0b; --red:#f87171; --blue:#60a5fa; --accent:#22c55e; --accent2:#34d26e; }
+  }
+  html{touch-action:pan-x pan-y; overflow-x:hidden;}
+  *{box-sizing:border-box;}
+  html,body{margin:0; background:var(--bg); color:var(--text); font-family:var(--sans); -webkit-text-size-adjust:100%;}
+  body{padding:12px 14px calc(24px + env(safe-area-inset-bottom)); max-width:900px; margin:0 auto; overflow-x:hidden;}
+  .gizli{display:none !important;}
+  .kart{background:var(--panel); border:1px solid var(--line); border-radius:16px; padding:14px; margin-bottom:12px;}
+  .kartBaslik{font-weight:800; margin-bottom:8px; display:flex; justify-content:space-between; align-items:center; gap:8px;}
+  .ipucu{font-size:12.5px; color:var(--muted); line-height:1.5;}
+  button{font-family:inherit; font-size:14px; font-weight:800; border-radius:12px; padding:9px 12px; border:1.5px solid var(--line); background:var(--panel2); color:var(--text); cursor:pointer;}
+  button.ana{background:var(--accent); border-color:var(--accent); color:#fff;}
+  button.kucuk{font-size:12.5px; padding:6px 10px; border-radius:10px;}
+  input,select{font-size:16px; padding:10px 12px; border-radius:12px; border:1.5px solid var(--line); background:var(--panel2); color:var(--text); font-family:inherit; width:100%;}
+  .sekmeler{display:flex; gap:6px; overflow-x:auto; scrollbar-width:none; margin:0 -14px 12px; padding:2px 14px 4px;}
+  .sekmeler::-webkit-scrollbar{display:none;}
+  .sekmeler button{flex-shrink:0; font-size:13.5px; padding:8px 12px; border-radius:20px; white-space:nowrap;}
+  .sekmeler button.on{background:var(--accent); border-color:var(--accent); color:#fff;}
+  .ust{display:flex; gap:8px; align-items:center; margin-bottom:10px;}
+  .ust select{width:auto; flex:1;}
+  .kutular{display:grid; grid-template-columns:repeat(auto-fill, minmax(150px, 1fr)); gap:8px; margin-bottom:12px;}
+  .kutu{background:var(--panel); border:1px solid var(--line); border-radius:14px; padding:10px 12px;}
+  .kutu .b{font-size:11px; font-weight:800; color:var(--muted); text-transform:uppercase; letter-spacing:.04em;}
+  .kutu .d{font-size:19px; font-weight:800; font-family:var(--mono); margin-top:3px; white-space:nowrap;}
+  .kutu .a{font-size:11.5px; color:var(--muted); margin-top:2px; line-height:1.35;}
+  .iyi{color:var(--green);} .kotu{color:var(--red);} .uyari{color:var(--amber);}
+  table{width:100%; border-collapse:collapse; font-size:13px;}
+  th{font-size:10.5px; text-transform:uppercase; letter-spacing:.04em; color:var(--muted); text-align:right; padding:6px 4px; border-bottom:1.5px solid var(--line); white-space:nowrap;}
+  th:first-child, td:first-child{text-align:left;}
+  td{padding:7px 4px; border-bottom:1px solid var(--line); text-align:right; font-family:var(--mono); white-space:nowrap;}
+  td:first-child{font-family:var(--sans); white-space:normal;}
+  .tablo{overflow-x:auto; margin:0 -4px;}
+  .cubuk{height:8px; border-radius:4px; background:var(--accent); display:inline-block; vertical-align:middle;}
+  .cubuk.r{background:var(--blue); opacity:.7;}
+  .urun{padding:10px 0; border-bottom:1px solid var(--line); cursor:pointer;}
+  .urun:last-child{border-bottom:none;}
+  .urun .s1{display:flex; justify-content:space-between; gap:8px; font-weight:800; font-size:14px;}
+  .urun .s1 span:first-child{min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;}
+  .urun .s2{display:flex; flex-wrap:wrap; gap:4px 12px; font-size:12px; color:var(--muted); margin-top:3px; font-family:var(--mono);}
+  .etk{display:inline-block; font-size:11px; font-weight:800; padding:2px 8px; border-radius:20px; background:var(--panel2); margin:4px 4px 0 0; font-family:var(--sans);}
+  .etk.k{background:rgba(200,30,30,.13); color:var(--red);} .etk.u{background:rgba(180,83,9,.14); color:var(--amber);} .etk.y{background:rgba(21,128,61,.14); color:var(--green);}
+  .cipler{display:flex; gap:6px; flex-wrap:wrap; margin-bottom:10px;}
+  .cipler button{font-size:12.5px; padding:6px 10px; border-radius:20px;}
+  .cipler button.on{background:var(--accent); border-color:var(--accent); color:#fff;}
+  .detay{position:fixed; inset:0; background:rgba(0,0,0,.45); z-index:40; display:flex; align-items:flex-end; justify-content:center;}
+  .detay .ic{background:var(--panel); width:100%; max-width:640px; max-height:88vh; overflow-y:auto; border-radius:20px 20px 0 0; padding:16px 16px calc(20px + env(safe-area-inset-bottom));}
+  .sat{display:flex; justify-content:space-between; gap:10px; padding:6px 0; border-bottom:1px solid var(--line); font-size:13.5px;}
+  .sat span:last-child{font-family:var(--mono); font-weight:700; text-align:right;}
+  #toast{position:fixed; left:14px; right:14px; bottom:calc(18px + env(safe-area-inset-bottom)); max-width:612px; margin:0 auto; padding:13px 16px; border-radius:14px; font-weight:800; color:#fff; z-index:50; text-align:center;}
+  .bekle{text-align:center; padding:40px 10px; color:var(--muted); font-weight:700;}
+  .tufeIzgara{display:grid; grid-template-columns:repeat(auto-fill, minmax(120px, 1fr)); gap:6px;}
+  .tufeIzgara label{font-size:11.5px; font-weight:800; color:var(--muted);}
+  .tufeIzgara input{padding:7px 9px; font-size:15px;}
+</style>
+</head>
+<body>
+  <div class="ust">
+    <select id="donem">
+      <option value="30">Son 30 gün</option>
+      <option value="90" selected>Son 90 gün</option>
+      <option value="180">Son 6 ay</option>
+      <option value="365">Son 1 yıl</option>
+    </select>
+    <button type="button" id="yenileBtn" class="kucuk">↻ Yenile</button>
+    <button type="button" id="csvBtn" class="kucuk">📥 Excel</button>
+  </div>
+  <div class="sekmeler" id="sekmeler"></div>
+  <div id="icerik"><div class="bekle">Rapor hazırlanıyor…</div></div>
+  <div id="detay" class="detay gizli"><div class="ic" id="detayIc"></div></div>
+  <div id="toast" class="gizli"></div>
+<script>
+(function(){
+  'use strict';
+  var SUNUCU_VARSAYILAN = (/(^|\.)(krtsaha\.com|github\.io)$/.test(location.hostname) ? 'https://sunucu.krtsaha.com/exec' : 'https://script.google.com/macros/s/AKfycbwH0hVGDXIQhdSxg2neDBNUEOxY1SNacJRz4cqf3WaP8xgAhlEnKfRv5xnlENKnh3XuYA/exec');
+  if (/^(sunucu\.|localhost$|127\.0\.0\.1$)/.test(location.hostname) && /^https?:$/.test(location.protocol)) SUNUCU_VARSAYILAN = location.origin + '/exec';
+  function oku(k){ try { return JSON.parse(localStorage.getItem(k) || 'null'); } catch(e){ return null; } }
+  function $(id){ return document.getElementById(id); }
+  function esc(s){ return String(s == null ? '' : s).replace(/[&<>"']/g, function(c){ return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]; }); }
+  function norm(s){ return String(s || '').toLocaleLowerCase('tr-TR').replace(/ı/g, 'i').replace(/ğ/g, 'g').replace(/ü/g, 'u').replace(/ş/g, 's').replace(/ö/g, 'o').replace(/ç/g, 'c'); }
+  function tl(v, ond){ if(v == null || !isFinite(v)) return '—'; return (Number(v) || 0).toLocaleString('tr-TR', { minimumFractionDigits: ond || 0, maximumFractionDigits: ond || 0 }) + ' ₺'; }
+  function sayi(v, ond){ if(v == null || !isFinite(v)) return '—'; return Number(v).toLocaleString('tr-TR', { maximumFractionDigits: ond == null ? 1 : ond }); }
+  function yuzde(v, isaret){ if(v == null || !isFinite(v)) return '—'; var s = Math.abs(v * 100).toLocaleString('tr-TR', { minimumFractionDigits: 1, maximumFractionDigits: 1 }); return (v < 0 && s !== '0,0' ? '−' : (isaret && v > 0 ? '+' : '')) + '%' + s; }
+  function renk(v){ return v == null || !isFinite(v) ? '' : v < 0 ? 'kotu' : 'iyi'; }
+
+  var meta = oku('sayimApp_meta_v2') || {};
+  var sunucu = (meta.serverUrl && meta.serverUrl.indexOf('script.google.com') === -1) ? meta.serverUrl : SUNUCU_VARSAYILAN;
+  var kimlik = (meta.currentUser && meta.savedCredentials) ? { user: meta.currentUser.name, pass: meta.savedCredentials.pass } : null;
+
+  var toastZ = null;
+  function toast(m, tur){ var t = $('toast'); t.textContent = m; t.classList.remove('gizli'); t.style.background = tur === 'hata' ? 'var(--red)' : 'var(--green)'; clearTimeout(toastZ); toastZ = setTimeout(function(){ t.classList.add('gizli'); }, tur === 'hata' ? 4500 : 2200); }
+  var istekNo = 0;
+  function istek(params, cb){
+    var ad = '__krCb' + (++istekNo) + '_' + Date.now(), sc = document.createElement('script'), bitti = false;
+    var z = setTimeout(function(){ son({ status:'error', message:'Sunucu cevap vermedi — interneti kontrol et' }); }, 90000);
+    function son(r){ if(bitti) return; bitti = true; clearTimeout(z); window[ad] = function(){}; if(sc.parentNode) sc.parentNode.removeChild(sc); cb(r || { status:'error', message:'Boş cevap' }); }
+    window[ad] = son;
+    params.user = kimlik ? kimlik.user : ''; params.pass = kimlik ? kimlik.pass : '';
+    var q = Object.keys(params).map(function(k){ return encodeURIComponent(k) + '=' + encodeURIComponent(params[k] == null ? '' : params[k]); }).join('&');
+    sc.src = sunucu + (sunucu.indexOf('?') >= 0 ? '&' : '?') + q + '&callback=' + ad;
+    sc.onerror = function(){ son({ status:'error', message:'Sunucuya ulaşılamadı — internet yok olabilir' }); };
+    document.body.appendChild(sc);
+  }
+
+  // ---------- Hesap ----------
+  var V = null, U = [], OZ = null, sekme = 'ozet', filtre = 'hepsi', sirala = 'kar', ara = '', enfFiltre = 'geri';
+  var KATEGORI = {
+    yildiz: ['⭐ Para kazandıran', 'Çok satıyor ve marjı ortalamanın üstünde — rafta, stokta asla eksik olmasın.', 'y'],
+    surum:  ['🔁 Sürüm ürünü', 'Çok satıyor ama marjı düşük — müşteri çeker, kârı az. Fiyatı ve alış şartları gözden geçirilmeli.', 'u'],
+    nis:    ['💎 Az satan ama kârlı', 'Marjı yüksek, satışı az — görünür yere koymak, önermek kâr getirir.', 'y'],
+    zayif:  ['🐢 Az satan, az kazandıran', 'Hem satışı hem marjı düşük — raf yeri ve stok bağlamaya değer mi?', ''],
+    zarar:  ['🔻 Zarar eden', 'Dönemde maliyetinin altında satılmış.', 'k'],
+    maliyetsiz: ['❔ Alışı bilinmeyen', 'ERP\'de alış kaydı yok; kârı hesaplanamadı.', '']
+  };
+  // Son 12 ayın birikimli TÜFE'si (rapor ayından önceki 12 tam ay; eksik ay varsa bilinenlerle)
+  function tufeBirikim(bitisAy, ay){
+    var t = V.tufe || {}, c = 1, n = 0, d = new Date(bitisAy + '-01T00:00:00');
+    for(var i = 0; i < ay; i++){
+      var k = d.getFullYear() + '-' + ('0' + (d.getMonth() + 1)).slice(-2);
+      if(t[k] != null){ c *= 1 + Number(t[k]) / 100; n++; }
+      d.setMonth(d.getMonth() - 1);
+    }
+    return { oran: c - 1, ay: n };
+  }
+  function sonrakiAy(k){ var d = new Date(k + '-01T00:00:00'); d.setMonth(d.getMonth() + 1); return d.getFullYear() + '-' + ('0' + (d.getMonth() + 1)).slice(-2); }
+  function oncekiAy(k){ var d = new Date(k + '-01T00:00:00'); d.setMonth(d.getMonth() - 1); return d.getFullYear() + '-' + ('0' + (d.getMonth() + 1)).slice(-2); }
+  function hesapla(){
+    var gun = V.gun, bugunAy = V.bugun.slice(6, 10) + '-' + V.bugun.slice(3, 5);
+    var t12 = tufeBirikim(oncekiAy(bugunAy), 12);
+    OZ = { ciro: 0, maliyet: 0, maliyetsiz: 0, kar: 0, yk: 0, kasa: 0, firma: 0, t12: t12, geri: 0, altinda: 0, ykZarar: 0, ortMarj: 0 };
+    U = (V.urunler || []).map(function(r){
+      var m = (Number(r[2]) || 0) + (Number(r[3]) || 0), ciro = Number(r[4]) || 0, mal = Number(r[5]) || 0, msz = Number(r[6]) || 0;
+      var kCiro = ciro - msz, kar = kCiro - mal, mOran = ciro > 0 ? kCiro / ciro : 0, kM = m * mOran;
+      var sonAlis = r[7] != null ? Number(r[7]) : null, satis = r[18] != null ? Number(r[18]) : null;
+      var u = { kod: r[0], ad: r[1] || r[0], kasaM: Number(r[2]) || 0, firmaM: Number(r[3]) || 0, m: m, ciro: ciro, maliyet: mal, maliyetsiz: msz,
+        kCiro: kCiro, kar: kar, marj: kCiro > 0 && mal > 0 ? kar / kCiro : null,
+        sonAlis: sonAlis, sonAlisT: r[8], cari: r[9], cariAd: r[10], alisOnce: r[11] != null ? Number(r[11]) : null,
+        kasaBirim: r[12] != null ? Number(r[12]) : null, kasaBirimOnce: r[13] != null ? Number(r[13]) : null,
+        kdv: r[14], ilk: r[15], gunSay: r[16], stok: r[17] != null ? Number(r[17]) : null, satis: satis, katalog: r[19] };
+      u.yk = sonAlis != null && mal > 0 ? kCiro - kM * sonAlis : null;               // yerine koyma kârı
+      u.enfPay = u.yk != null ? kar - u.yk : null;                                      // kârın eski ucuz maliyetten gelen kısmı
+      u.guncelMarj = satis > 0 && sonAlis != null ? (satis - sonAlis) / satis : null;
+      u.fiyatArtis = u.kasaBirim > 0 && u.kasaBirimOnce > 0 ? u.kasaBirim / u.kasaBirimOnce - 1 : null;
+      u.alisArtis = sonAlis > 0 && u.alisOnce > 0 ? sonAlis / u.alisOnce - 1 : null;
+      u.reelFiyat = u.fiyatArtis != null && t12.ay >= 6 ? (1 + u.fiyatArtis) / (1 + t12.oran) - 1 : null;
+      u.gunluk = m / gun;
+      u.devir = u.stok > 0 && u.gunluk > 0 ? u.stok / u.gunluk : (u.stok > 0 ? Infinity : null);
+      u.stokDeger = u.stok > 0 && sonAlis ? u.stok * sonAlis : 0;
+      OZ.ciro += ciro; OZ.maliyet += mal; OZ.maliyetsiz += msz; OZ.kar += mal > 0 ? kar : 0; OZ.yk += u.yk != null ? u.yk : 0;
+      OZ.kasa += m > 0 ? ciro * (u.kasaM / m) : 0; OZ.firma += m > 0 ? ciro * (u.firmaM / m) : 0;
+      return u;
+    });
+    var kCiroTop = U.reduce(function(t, u){ return t + (u.maliyet > 0 ? u.kCiro : 0); }, 0);
+    OZ.ortMarj = kCiroTop > 0 ? OZ.kar / kCiroTop : 0;
+    // Sürüm sınırı: cironun %80'ini yapan ürünler "çok satan"
+    var s = U.slice().sort(function(a, b){ return b.ciro - a.ciro; }), top = 0, sinir = OZ.ciro * 0.8;
+    s.forEach(function(u){ u.cokSatan = top < sinir; top += u.ciro; });
+    OZ.cokSatanAdet = s.filter(function(u){ return u.cokSatan; }).length;
+    // Kârın %80'i kaç üründen
+    var k = U.filter(function(u){ return u.kar > 0 && u.maliyet > 0; }).sort(function(a, b){ return b.kar - a.kar; }), kt = 0, kTop = k.reduce(function(t, u){ return t + u.kar; }, 0), n80 = 0;
+    for(var i = 0; i < k.length && kt < kTop * 0.8; i++){ kt += k[i].kar; n80++; }
+    OZ.kar80 = n80; OZ.urunSay = U.length;
+    U.forEach(function(u){
+      if(!(u.maliyet > 0)) u.kat = 'maliyetsiz';
+      else if(u.kar < 0) u.kat = 'zarar';
+      else if(u.cokSatan) u.kat = u.marj >= OZ.ortMarj ? 'yildiz' : 'surum';
+      else u.kat = u.marj >= OZ.ortMarj ? 'nis' : 'zayif';
+      u.uyari = [];
+      if(u.guncelMarj != null && u.guncelMarj < 0) u.uyari.push(['k', 'Şu an alışın altında satılıyor']);
+      if(u.reelFiyat != null && u.reelFiyat < -0.05) u.uyari.push(['u', 'Fiyat enflasyonun gerisinde (' + yuzde(u.reelFiyat, true) + ' reel)']);
+      if(u.alisArtis != null && u.fiyatArtis != null && u.alisArtis - u.fiyatArtis > 0.05) u.uyari.push(['u', 'Alış, satıştan hızlı arttı']);
+      if(u.yk != null && u.yk < 0 && u.kar >= 0) u.uyari.push(['k', 'Bugünkü alışla zarar ediyor']);
+      if(u.devir === Infinity || u.devir > 120) u.uyari.push(['', 'Stok ' + (u.devir === Infinity ? 'hiç dönmüyor' : Math.round(u.devir) + ' günlük')]);
+      if(u.guncelMarj != null && u.guncelMarj < 0) OZ.altinda++;
+      if(u.reelFiyat != null && u.reelFiyat < -0.05) OZ.geri++;
+      if(u.yk != null && u.yk < 0 && u.kar >= 0) OZ.ykZarar++;
+    });
+  }
+
+  // ---------- Çizim ----------
+  var SEKMELER = [['ozet', '📊 Özet'], ['urunler', '🛒 Ürünler'], ['enflasyon', '📈 Enflasyon'], ['firmalar', '🏭 Firmalar'], ['tufe', '⚙️ TÜFE']];
+  function sekmeCiz(){
+    $('sekmeler').innerHTML = SEKMELER.map(function(s){ return '<button type="button" data-sekme="' + s[0] + '"' + (s[0] === sekme ? ' class="on"' : '') + '>' + s[1] + '</button>'; }).join('');
+  }
+  function kutu(b, d, a, sinif){ return '<div class="kutu"><div class="b">' + b + '</div><div class="d ' + (sinif || '') + '">' + d + '</div>' + (a ? '<div class="a">' + a + '</div>' : '') + '</div>'; }
+  function ciz(){
+    sekmeCiz();
+    if(!V){ return; }
+    var h = '';
+    if(sekme === 'ozet') h = ozetHtml();
+    else if(sekme === 'urunler') h = urunlerHtml();
+    else if(sekme === 'enflasyon') h = enflasyonHtml();
+    else if(sekme === 'firmalar') h = firmalarHtml();
+    else h = tufeHtml();
+    $('icerik').innerHTML = h;
+  }
+  function ozetHtml(){
+    var enfPay = OZ.kar - OZ.yk;
+    var h = '<div class="ipucu" style="margin-bottom:8px;">' + esc(V.bas) + ' – ' + esc(V.bugun) + ' · KDV hariç · ERP verisi: ' + esc(V.sonVeri || '—') + '</div>';
+    h += '<div class="kutular">' +
+      kutu('Ciro', tl(OZ.ciro), 'Kasa ' + tl(OZ.kasa) + ' · Firma ' + tl(OZ.firma)) +
+      kutu('Brüt kâr', tl(OZ.kar), 'Marj ' + yuzde(OZ.ortMarj), renk(OZ.kar)) +
+      kutu('Bugünkü alışla kâr', tl(OZ.yk), 'Malı bugünkü fiyattan yeniden alsaydık', renk(OZ.yk)) +
+      kutu('Enflasyon payı', tl(enfPay), 'Kârın, malın eskiden ucuza alınmasından gelen kısmı', enfPay > 0 ? 'uyari' : '') +
+      kutu('Son 12 ay TÜFE', yuzde(OZ.t12.oran), OZ.t12.ay + ' ayın verisi') +
+      kutu('Satılmayan stok', tl(V.olu ? V.olu.deger : 0), (V.olu ? V.olu.adet : 0) + ' ürün dönemde hiç satılmadı') +
+    '</div>';
+    // Kategoriler
+    var kat = {}; U.forEach(function(u){ var k = kat[u.kat] || (kat[u.kat] = { n: 0, ciro: 0, kar: 0 }); k.n++; k.ciro += u.ciro; k.kar += u.maliyet > 0 ? u.kar : 0; });
+    h += '<div class="kart"><div class="kartBaslik">Ürünler ne kazandırıyor?</div>' +
+      '<div class="ipucu" style="margin-bottom:8px;">Kârın %80\'ini <b>' + OZ.kar80 + '</b> ürün getiriyor (satılan ' + OZ.urunSay + ' üründen). Cironun %80\'ini ' + OZ.cokSatanAdet + ' ürün yapıyor.</div>' +
+      '<div class="tablo"><table><tr><th>Grup</th><th>Ürün</th><th>Ciro</th><th>Kâr</th><th>Kârdaki payı</th></tr>' +
+      ['yildiz', 'surum', 'nis', 'zayif', 'zarar', 'maliyetsiz'].filter(function(k){ return kat[k]; }).map(function(k){
+        var x = kat[k];
+        return '<tr data-kat="' + k + '" style="cursor:pointer;"><td>' + KATEGORI[k][0] + '</td><td>' + x.n + '</td><td>' + tl(x.ciro) + '</td><td class="' + renk(x.kar) + '">' + tl(x.kar) + '</td><td>' + (OZ.kar > 0 ? yuzde(x.kar / OZ.kar) : '—') + '</td></tr>';
+      }).join('') + '</table></div><div class="ipucu" style="margin-top:6px;">Bir gruba dokun: o ürünler listelenir.</div></div>';
+    // Uyarılar
+    h += '<div class="kart"><div class="kartBaslik">Dikkat</div>' +
+      '<div class="sat" data-git="enflasyon" style="cursor:pointer;"><span>🔻 Şu an alışın altında satılan</span><span class="' + (OZ.altinda ? 'kotu' : '') + '">' + OZ.altinda + ' ürün ›</span></div>' +
+      '<div class="sat" data-git="enflasyon" style="cursor:pointer;"><span>📉 Fiyatı enflasyonun gerisinde kalan</span><span class="' + (OZ.geri ? 'uyari' : '') + '">' + OZ.geri + ' ürün ›</span></div>' +
+      '<div class="sat" data-git="enflasyon" style="cursor:pointer;"><span>⚠️ Bugünkü alışla zarar eden</span><span class="' + (OZ.ykZarar ? 'kotu' : '') + '">' + OZ.ykZarar + ' ürün ›</span></div></div>';
+    h += aylarHtml();
+    return h;
+  }
+  function aylarHtml(){
+    var a = V.aylar || []; if(!a.length) return '';
+    // Reel: her ayın kârı son ayın parasına çevrilir (aradaki TÜFE ile)
+    var son = a[a.length - 1][0], t = V.tufe || {};
+    var satirlar = a.map(function(r){
+      var ciro = r[1], mal = r[2], msz = r[3], kar = ciro - msz - mal, marj = ciro - msz > 0 ? kar / (ciro - msz) : null;
+      var c = 1, k = r[0]; while(k < son){ k = sonrakiAy(k); if(t[k] != null) c *= 1 + Number(t[k]) / 100; }
+      return { ay: r[0], ciro: ciro, kar: kar, marj: marj, reelKar: kar * c, reelCiro: ciro * c, kasa: r[4], firma: r[5] };
+    });
+    var mx = Math.max.apply(null, satirlar.map(function(s){ return Math.max(s.kar, s.reelKar, 1); }));
+    var AY = ['Oca','Şub','Mar','Nis','May','Haz','Tem','Ağu','Eyl','Eki','Kas','Ara'];
+    var h = '<div class="kart"><div class="kartBaslik">Aylık kâr — nominal ve bugünün parasıyla</div>' +
+      '<div class="ipucu" style="margin-bottom:8px;">Yeşil: o ayın kârı. Mavi: aynı kâr, aradaki TÜFE ile bugünün parasına çevrilmiş (reel). Mavi çubuk küçülüyorsa kâr enflasyona yeniliyor. Son ay henüz bitmedi.</div>' +
+      '<div class="tablo"><table><tr><th>Ay</th><th>Ciro</th><th>Kâr</th><th>Marj</th><th>Reel kâr</th><th style="text-align:left; min-width:120px;"></th></tr>';
+    satirlar.forEach(function(s, i){
+      var yil = i >= 12 ? satirlar[i - 12] : null, deg = yil && yil.reelCiro > 0 ? s.ciro / yil.reelCiro - 1 : null;
+      h += '<tr><td>' + AY[Number(s.ay.slice(5)) - 1] + ' ' + s.ay.slice(2, 4) + '</td><td>' + tl(s.ciro) + '</td><td class="' + renk(s.kar) + '">' + tl(s.kar) + '</td><td>' + yuzde(s.marj) + '</td><td>' + tl(s.reelKar) + '</td>' +
+        '<td style="text-align:left;"><span class="cubuk" style="width:' + Math.max(2, Math.round(Math.max(s.kar, 0) / mx * 110)) + 'px;"></span><br><span class="cubuk r" style="width:' + Math.max(2, Math.round(Math.max(s.reelKar, 0) / mx * 110)) + 'px;"></span>' +
+        (deg != null ? '<div style="font-size:11px;" class="' + renk(deg) + '">geçen yıla göre reel ciro ' + yuzde(deg, true) + '</div>' : '') + '</td></tr>';
+    });
+    return h + '</table></div></div>';
+  }
+  var SIRALAMA = [['kar', 'Kâr'], ['ciro', 'Ciro'], ['marj', 'Marj'], ['m', 'Adet'], ['zarar', 'En çok zarar'], ['devir', 'Stok günü']];
+  function siraliListe(l){
+    var f = { kar: function(u){ return -(u.kar || 0); }, ciro: function(u){ return -u.ciro; }, marj: function(u){ return u.marj == null ? 9 : -u.marj; }, m: function(u){ return -u.m; },
+      zarar: function(u){ return u.kar || 0; }, devir: function(u){ return u.devir == null ? -1 : -(u.devir === Infinity ? 1e9 : u.devir); } }[sirala];
+    return l.slice().sort(function(a, b){ return f(a) - f(b); });
+  }
+  function urunSatir(u){
+    var k = KATEGORI[u.kat];
+    return '<div class="urun" data-kod="' + esc(u.kod) + '"><div class="s1"><span>' + esc(u.ad) + '</span><span class="' + renk(u.kar) + '">' + (u.maliyet > 0 ? tl(u.kar) : '—') + '</span></div>' +
+      '<div class="s2"><span>' + sayi(u.m) + ' adet</span><span>ciro ' + tl(u.ciro) + '</span><span>marj ' + yuzde(u.marj) + '</span>' + (u.guncelMarj != null ? '<span>bugün ' + yuzde(u.guncelMarj) + '</span>' : '') + '</div>' +
+      '<div><span class="etk ' + k[2] + '">' + k[0] + '</span>' + u.uyari.map(function(x){ return '<span class="etk ' + x[0] + '">' + esc(x[1]) + '</span>'; }).join('') + '</div></div>';
+  }
+  function urunlerHtml(){
+    var l = U;
+    if(filtre !== 'hepsi') l = l.filter(function(u){ return u.kat === filtre; });
+    if(ara){ var q = norm(ara); l = l.filter(function(u){ return norm(u.ad).indexOf(q) !== -1 || norm(u.kod).indexOf(q) !== -1 || norm(u.cariAd).indexOf(q) !== -1; }); }
+    l = siraliListe(l);
+    var h = '<input id="araKutu" placeholder="Ürün, stok kodu ya da firma ara" value="' + esc(ara) + '" style="margin-bottom:8px;">' +
+      '<div class="cipler">' + [['hepsi', 'Hepsi']].concat(Object.keys(KATEGORI).map(function(k){ return [k, KATEGORI[k][0]]; })).map(function(c){ return '<button type="button" data-filtre="' + c[0] + '"' + (c[0] === filtre ? ' class="on"' : '') + '>' + c[1] + '</button>'; }).join('') + '</div>' +
+      '<div class="cipler"><span class="ipucu" style="align-self:center;">Sırala:</span>' + SIRALAMA.map(function(s){ return '<button type="button" data-sirala="' + s[0] + '"' + (s[0] === sirala ? ' class="on"' : '') + '>' + s[1] + '</button>'; }).join('') + '</div>';
+    if(filtre !== 'hepsi') h += '<div class="ipucu" style="margin-bottom:8px;">' + esc(KATEGORI[filtre][1]) + '</div>';
+    var top = l.reduce(function(t, u){ return t + (u.maliyet > 0 ? u.kar : 0); }, 0);
+    h += '<div class="kart"><div class="kartBaslik"><span>' + l.length + ' ürün</span><span class="' + renk(top) + '">' + tl(top) + '</span></div>' +
+      (l.length ? l.slice(0, 300).map(urunSatir).join('') : '<div class="ipucu">Ürün yok.</div>') +
+      (l.length > 300 ? '<div class="ipucu" style="margin-top:8px;">İlk 300 ürün gösteriliyor — aramayla daralt ya da Excel\'e aktar.</div>' : '') + '</div>';
+    return h;
+  }
+  function enflasyonHtml(){
+    var F = [['geri', '📉 Fiyatı geride kalan'], ['altinda', '🔻 Alışın altında'], ['yk', '⚠️ Bugünkü alışla zarar'], ['alis', '🏭 Alışı hızlı artan']];
+    var l;
+    if(enfFiltre === 'geri') l = U.filter(function(u){ return u.reelFiyat != null && u.reelFiyat < -0.05; }).sort(function(a, b){ return a.reelFiyat * a.ciro - b.reelFiyat * b.ciro; });
+    else if(enfFiltre === 'altinda') l = U.filter(function(u){ return u.guncelMarj != null && u.guncelMarj < 0; }).sort(function(a, b){ return b.ciro - a.ciro; });
+    else if(enfFiltre === 'yk') l = U.filter(function(u){ return u.yk != null && u.yk < 0; }).sort(function(a, b){ return a.yk - b.yk; });
+    else l = U.filter(function(u){ return u.alisArtis != null && u.fiyatArtis != null && u.alisArtis - u.fiyatArtis > 0.05; }).sort(function(a, b){ return (b.alisArtis - b.fiyatArtis) * b.ciro - (a.alisArtis - a.fiyatArtis) * a.ciro; });
+    var aciklama = {
+      geri: 'Son 30 gündeki kasa satış fiyatı, bir yıl önceki aynı dönemle karşılaştırıldı ve son 12 ayın TÜFE\'si (' + yuzde(OZ.t12.oran) + ') düşüldü. Reel %5\'ten fazla geride kalanlar. Ciroya göre en çok etkileyen en üstte.',
+      altinda: 'Katalogdaki satış fiyatı, en son net alış fiyatının altında. Satıldıkça zarar.',
+      yk: 'Dönemde kâr görünüyor ama malı bugünkü alış fiyatından yeniden alsaydık zarar ederdik. Fiyat güncellenmeli.',
+      alis: 'Son bir yılda alış fiyatı, kasadaki satış fiyatından en az 5 puan daha fazla arttı — marj eriyor.'
+    }[enfFiltre];
+    var h = '<div class="cipler">' + F.map(function(f){ return '<button type="button" data-enf="' + f[0] + '"' + (f[0] === enfFiltre ? ' class="on"' : '') + '>' + f[1] + '</button>'; }).join('') + '</div>' +
+      '<div class="ipucu" style="margin-bottom:8px;">' + aciklama + '</div>';
+    h += '<div class="kart"><div class="kartBaslik">' + l.length + ' ürün</div>' + (l.length ? '<div class="tablo"><table><tr><th>Ürün</th><th>Satış ↑</th><th>Alış ↑</th><th>Reel</th><th>Bugün marj</th><th>Ciro</th></tr>' +
+      l.slice(0, 300).map(function(u){
+        return '<tr data-kod="' + esc(u.kod) + '" style="cursor:pointer;"><td>' + esc(u.ad) + '</td><td>' + yuzde(u.fiyatArtis, true) + '</td><td>' + yuzde(u.alisArtis, true) + '</td><td class="' + renk(u.reelFiyat) + '">' + yuzde(u.reelFiyat, true) + '</td><td class="' + renk(u.guncelMarj) + '">' + yuzde(u.guncelMarj) + '</td><td>' + tl(u.ciro) + '</td></tr>';
+      }).join('') + '</table></div>' : '<div class="ipucu">Bu grupta ürün yok. 👍</div>') + '</div>';
+    if(OZ.t12.ay < 12) h += '<div class="ipucu">⚠️ TÜFE tablosunda son 12 ayın yalnız ' + OZ.t12.ay + ' ayı var — ⚙️ TÜFE sekmesinden eksik ayı ekle.</div>';
+    return h;
+  }
+  function firmalarHtml(){
+    var f = {};
+    U.forEach(function(u){
+      var k = u.cari || '?', x = f[k] || (f[k] = { kod: k, ad: u.cariAd || (k === '?' ? 'Alışı bilinmeyen' : k), n: 0, ciro: 0, kar: 0, kCiro: 0, alis: [], stok: 0 });
+      x.n++; x.ciro += u.ciro; if(u.maliyet > 0){ x.kar += u.kar; x.kCiro += u.kCiro; } if(u.alisArtis != null) x.alis.push(u.alisArtis); x.stok += u.stokDeger;
+    });
+    var l = Object.keys(f).map(function(k){ var x = f[k]; x.marj = x.kCiro > 0 ? x.kar / x.kCiro : null; x.ort = x.alis.length ? x.alis.sort(function(a, b){ return a - b; })[Math.floor(x.alis.length / 2)] : null; return x; })
+      .sort(function(a, b){ return b.kar - a.kar; });
+    return '<div class="ipucu" style="margin-bottom:8px;">Ürünler en son alındığı firmaya göre toplandı. Alış artışı: firmanın ürünlerinde son bir yıldaki alış fiyatı artışının ortancası.</div>' +
+      '<div class="kart"><div class="tablo"><table><tr><th>Firma</th><th>Ürün</th><th>Ciro</th><th>Kâr</th><th>Marj</th><th>Alış ↑</th><th>Stok</th></tr>' +
+      l.map(function(x){ return '<tr data-firma="' + esc(x.kod) + '" style="cursor:pointer;"><td>' + esc(x.ad) + '</td><td>' + x.n + '</td><td>' + tl(x.ciro) + '</td><td class="' + renk(x.kar) + '">' + tl(x.kar) + '</td><td>' + yuzde(x.marj) + '</td><td>' + yuzde(x.ort, true) + '</td><td>' + tl(x.stok) + '</td></tr>'; }).join('') +
+      '</table></div></div>';
+  }
+  function tufeHtml(){
+    var t = V.tufe || {}, aylar = [], d = new Date(V.bugun.slice(6, 10) + '-' + V.bugun.slice(3, 5) + '-01T00:00:00');
+    for(var i = 0; i < 24; i++){ d.setMonth(d.getMonth() - 1); aylar.push(d.getFullYear() + '-' + ('0' + (d.getMonth() + 1)).slice(-2)); }
+    return '<div class="kart"><div class="kartBaslik">Aylık TÜFE (%)</div>' +
+      '<div class="ipucu" style="margin-bottom:10px;">TÜİK\'in her ayın 3\'ünde açıkladığı aylık tüketici fiyat değişimi. Reel hesaplar bununla yapılır. ' + (V.yonetici ? 'Yeni ay açıklanınca buraya yaz ve kaydet.' : 'Yalnız yönetici değiştirebilir.') + '</div>' +
+      '<div class="tufeIzgara">' + aylar.map(function(k){ return '<div><label>' + k + '</label><input data-tufe="' + k + '" inputmode="decimal" value="' + (t[k] != null ? String(t[k]).replace('.', ',') : '') + '"' + (V.yonetici ? '' : ' disabled') + '></div>'; }).join('') + '</div>' +
+      (V.yonetici ? '<button type="button" class="ana" id="tufeKaydet" style="width:100%; margin-top:12px;">Kaydet</button>' : '') +
+      '<div class="ipucu" style="margin-top:10px;">Son 12 ay birikimli: <b>' + yuzde(OZ.t12.oran) + '</b></div></div>' +
+      '<div class="kart"><div class="kartBaslik">Hesaplar nasıl yapılıyor?</div><div class="ipucu">' +
+      '• Tutarlar KDV hariç. Ciro = kasa satışları (iadeler düşülmüş) + firmalara satış − firmadan satıştan iade.<br>' +
+      '• Maliyet = satıldığı ayda geçerli son NET alış fiyatı (satır ve dip iskontoları düşülmüş). Alışı hiç olmayan ürünün kârı hesaplanmaz.<br>' +
+      '• <b>Bugünkü alışla kâr</b>: aynı satış, malı bugünkü son alış fiyatından yeniden alsaydık. Brüt kâr ile arasındaki fark "enflasyon payı"dır: o kâr, malın eskiden ucuza alınmasından geliyor ve rafı yeniden doldurmaya yetmeyebilir.<br>' +
+      '• <b>Sürüm ürünü</b>: cironun %80\'ini yapan ürünlerden marjı ortalamanın altında olanlar. <b>Para kazandıran</b>: aynı gruptan marjı ortalamanın üstünde olanlar.<br>' +
+      '• <b>Reel fiyat değişimi</b>: son 30 gündeki ortalama kasa fiyatının bir yıl önceki aynı 30 güne göre artışı, son 12 ayın TÜFE\'sinden arındırılmış.</div></div>';
+  }
+  function detayAc(kod){
+    var u = U.filter(function(x){ return x.kod === kod; })[0]; if(!u) return;
+    var s = function(a, b, c){ return '<div class="sat"><span>' + a + '</span><span class="' + (c || '') + '">' + b + '</span></div>'; };
+    $('detayIc').innerHTML = '<div style="display:flex; justify-content:space-between; gap:8px; align-items:flex-start;"><div><div style="font-weight:800; font-size:16px;">' + esc(u.ad) + '</div><div class="ipucu">' + esc(u.kod) + ' · KDV %' + esc(u.kdv) + '</div></div><button type="button" class="kucuk" data-kapat="1">✕</button></div>' +
+      '<div>' + '<span class="etk ' + KATEGORI[u.kat][2] + '">' + KATEGORI[u.kat][0] + '</span>' + u.uyari.map(function(x){ return '<span class="etk ' + x[0] + '">' + esc(x[1]) + '</span>'; }).join('') + '</div>' +
+      '<div class="ipucu" style="margin:6px 0 4px;">' + esc(KATEGORI[u.kat][1]) + '</div>' +
+      s('Satılan (kasa + firma)', sayi(u.kasaM) + ' + ' + sayi(u.firmaM)) + s('Ciro', tl(u.ciro, 2)) + s('Maliyet', tl(u.maliyet, 2)) +
+      (u.maliyetsiz ? s('Maliyeti bilinmeyen ciro', tl(u.maliyetsiz, 2), 'uyari') : '') +
+      s('Brüt kâr', tl(u.kar, 2), renk(u.kar)) + s('Marj', yuzde(u.marj)) +
+      s('Bugünkü alışla kâr', tl(u.yk, 2), renk(u.yk)) + s('Enflasyon payı', tl(u.enfPay, 2)) +
+      s('Güncel satış fiyatı', tl(u.satis, 2)) + s('Son net alış', tl(u.sonAlis, 2) + (u.sonAlisT ? ' · ' + esc(u.sonAlisT) : '')) + s('Bugünkü marj', yuzde(u.guncelMarj), renk(u.guncelMarj)) +
+      s('Son alındığı firma', esc(u.cariAd || u.cari || '—')) +
+      s('Kasa fiyatı 1 yılda', yuzde(u.fiyatArtis, true) + (u.kasaBirimOnce ? ' (' + tl(u.kasaBirimOnce, 2) + ' → ' + tl(u.kasaBirim, 2) + ')' : '')) +
+      s('Alış fiyatı 1 yılda', yuzde(u.alisArtis, true) + (u.alisOnce ? ' (' + tl(u.alisOnce, 2) + ' → ' + tl(u.sonAlis, 2) + ')' : '')) +
+      s('Reel fiyat değişimi', yuzde(u.reelFiyat, true), renk(u.reelFiyat)) +
+      s('Stok', u.stok == null ? '—' : sayi(u.stok) + (u.devir != null ? ' · ' + (u.devir === Infinity ? 'satış yok' : Math.round(u.devir) + ' günlük') : '')) +
+      s('Günlük satış', sayi(u.gunluk, 2)) + s('Satış olan gün', esc(u.gunSay) + ' / ' + V.gun);
+    $('detay').classList.remove('gizli');
+  }
+
+  // ---------- Olaylar ----------
+  document.addEventListener('click', function(e){
+    var t;
+    if((t = e.target.closest('[data-sekme]'))){ sekme = t.getAttribute('data-sekme'); ciz(); window.scrollTo(0, 0); return; }
+    if((t = e.target.closest('[data-kat]'))){ filtre = t.getAttribute('data-kat'); sekme = 'urunler'; ciz(); window.scrollTo(0, 0); return; }
+    if((t = e.target.closest('[data-git]'))){ sekme = t.getAttribute('data-git'); ciz(); window.scrollTo(0, 0); return; }
+    if((t = e.target.closest('[data-filtre]'))){ filtre = t.getAttribute('data-filtre'); ciz(); return; }
+    if((t = e.target.closest('[data-sirala]'))){ sirala = t.getAttribute('data-sirala'); ciz(); return; }
+    if((t = e.target.closest('[data-enf]'))){ enfFiltre = t.getAttribute('data-enf'); ciz(); return; }
+    if((t = e.target.closest('[data-firma]'))){ var f = U.filter(function(u){ return (u.cari || '?') === t.getAttribute('data-firma'); })[0]; ara = f ? (f.cariAd || f.cari) : ''; filtre = 'hepsi'; sekme = 'urunler'; ciz(); window.scrollTo(0, 0); return; }
+    if((t = e.target.closest('[data-kapat]')) || e.target.id === 'detay'){ $('detay').classList.add('gizli'); return; }
+    if((t = e.target.closest('[data-kod]'))){ detayAc(t.getAttribute('data-kod')); return; }
+    if(e.target.id === 'tufeKaydet'){
+      var g = {}; document.querySelectorAll('[data-tufe]').forEach(function(i){ var v = i.value.trim(); g[i.getAttribute('data-tufe')] = v === '' ? null : v.replace(',', '.'); });
+      e.target.disabled = true;
+      istek({ action: 'karlilik', ne: 'tufe_kaydet', tufe: JSON.stringify(g) }, function(r){
+        e.target.disabled = false;
+        if(r.status !== 'ok'){ toast(r.message || 'Kaydedilemedi', 'hata'); return; }
+        V.tufe = r.tufe; hesapla(); ciz(); toast('TÜFE kaydedildi');
+      });
+    }
+  });
+  document.addEventListener('input', function(e){
+    if(e.target.id === 'araKutu'){ ara = e.target.value; var p = e.target.selectionStart; ciz(); var k = $('araKutu'); if(k){ k.focus(); try { k.setSelectionRange(p, p); } catch(er){} } }
+  });
+  $('donem').addEventListener('change', getir);
+  $('yenileBtn').addEventListener('click', getir);
+  $('csvBtn').addEventListener('click', function(){
+    if(!U.length){ toast('Önce rapor yüklensin', 'hata'); return; }
+    var n = function(v, o){ return v == null || !isFinite(v) ? '' : Number(v).toFixed(o == null ? 2 : o).replace('.', ','); };
+    var satir = [['Stok Kodu', 'Ürün', 'Grup', 'Kasa Adet', 'Firma Adet', 'Ciro', 'Maliyet', 'Brüt Kâr', 'Marj %', 'Bugünkü Alışla Kâr', 'Güncel Satış', 'Son Net Alış', 'Bugünkü Marj %', 'Satış Artışı 1 Yıl %', 'Alış Artışı 1 Yıl %', 'Reel Fiyat %', 'Stok', 'Stok Günü', 'Son Alış Firması', 'Uyarılar']];
+    siraliListe(U).forEach(function(u){
+      satir.push([u.kod, u.ad, KATEGORI[u.kat][0].replace(/^\S+\s/, ''), n(u.kasaM, 3), n(u.firmaM, 3), n(u.ciro), n(u.maliyet), n(u.kar), n(u.marj != null ? u.marj * 100 : null, 1), n(u.yk), n(u.satis), n(u.sonAlis), n(u.guncelMarj != null ? u.guncelMarj * 100 : null, 1),
+        n(u.fiyatArtis != null ? u.fiyatArtis * 100 : null, 1), n(u.alisArtis != null ? u.alisArtis * 100 : null, 1), n(u.reelFiyat != null ? u.reelFiyat * 100 : null, 1), n(u.stok, 3), u.devir === Infinity ? 'satış yok' : n(u.devir, 0), u.cariAd || u.cari, u.uyari.map(function(x){ return x[1]; }).join(' / ')]);
+    });
+    var csv = '﻿' + satir.map(function(r){ return r.map(function(c){ c = String(c == null ? '' : c); return /[;"\n]/.test(c) ? '"' + c.replace(/"/g, '""') + '"' : c; }).join(';'); }).join('\r\n');
+    var a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([csv], { type: 'text/csv;charset=utf-8' }));
+    a.download = 'karlilik-' + V.bugun.replace(/\./g, '-') + '-' + V.gun + 'gun.csv'; document.body.appendChild(a); a.click(); setTimeout(function(){ URL.revokeObjectURL(a.href); a.remove(); }, 1000);
+  });
+  // Geri tuşu (index.html çağırır): önce ürün penceresi kapanır
+  window.mkGeri = function(){ if(!$('detay').classList.contains('gizli')){ $('detay').classList.add('gizli'); return true; } return false; };
+
+  var getirNo = 0;
+  function getir(){
+    if(!kimlik){ $('icerik').innerHTML = '<div class="bekle">Önce uygulamada giriş yap.</div>'; return; }
+    var no = ++getirNo;
+    $('icerik').innerHTML = '<div class="bekle">Rapor hazırlanıyor…<br><span class="ipucu">Bütün satışlar ve alışlar hesaplanıyor, biraz sürebilir.</span></div>';
+    istek({ action: 'karlilik', ne: 'rapor', gun: $('donem').value }, function(r){
+      if(no !== getirNo) return;
+      if(r.status !== 'ok'){ $('icerik').innerHTML = '<div class="kart"><div class="kotu" style="font-weight:800;">Rapor alınamadı</div><div class="ipucu" style="margin-top:6px;">' + esc(r.message || '') + '</div></div>'; return; }
+      V = r; hesapla(); ciz();
+    });
+  }
+  sekmeCiz();
+  getir();
+})();
+</script>
+</body>
+</html>
