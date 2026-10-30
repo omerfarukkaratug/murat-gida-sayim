@@ -1,4 +1,4 @@
-const CACHE = 'sayim-v278';
+const CACHE = 'sayim-v279';
 // Barkod/QR kütüphaneleri sürüm numaralı adreslerden gelir ve hiç değişmez;
 // uygulama güncellense de silinmesinler diye AYRI ve kalıcı bir önbellekte durur.
 const KUTUPHANE_CACHE = 'sayim-kutuphane-v1';

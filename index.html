@@ -590,7 +590,7 @@
   <header style="border:none; padding:0 0 16px; background:transparent; display:flex; align-items:flex-start; justify-content:space-between;">
     <div>
       <h1><img src="logo-header.png" alt="Murat Gıda" style="height:30px; width:auto; display:block;"></h1>
-      <div class="sub"><img src="icon.svg" alt="" style="width:15px;height:15px;vertical-align:-3px;margin-right:5px;">KRT Saha · Murat Gıda • offline • Android • build 278</div>
+      <div class="sub"><img src="icon.svg" alt="" style="width:15px;height:15px;vertical-align:-3px;margin-right:5px;">KRT Saha · Murat Gıda • offline • Android • build 279</div>
     </div>
     <button type="button" id="themeToggleBtn" title="Tema seç" style="background:var(--panel2); border:1.5px solid var(--line); color:var(--text); width:34px; height:34px; border-radius:50%; font-size:15px; padding:0; display:flex; align-items:center; justify-content:center; flex-shrink:0;">🎨</button>
   </header>
@@ -1586,6 +1586,11 @@
   var scanParcaImza = [];    // her parçanın son yazılan imzası (değişti mi?)
   var scanParcaUzunluk = []; // her parçanın yazılan metin uzunluğu (hafıza hesabı)
   var state = load() || { personnel:"", serverUrl:"", session:{scans:[], id:null, deletedIds:[], ackedV:{}}, pendingSessions:[], newProductCounter:1 };
+  // Bozuk / yarım kalmış kayıt uygulamayı açılışta çökertmesin
+  if(!state || typeof state !== 'object') state = { personnel:"", serverUrl:"" };
+  if(!state.session || typeof state.session !== 'object') state.session = { scans:[], id:null, deletedIds:[], ackedV:{} };
+  if(!Array.isArray(state.pendingSessions)) state.pendingSessions = [];
+  if(!state.newProductCounter) state.newProductCounter = 1;
   if(!state.session.scans){
     // Eski sürümden geçiş: birleştirilmiş kayıtları ayrı taramalara çevir
     var migrated = [];
