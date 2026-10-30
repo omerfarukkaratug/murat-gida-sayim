@@ -410,7 +410,7 @@
   function getir(){
     if(!kimlik){ $('icerik').innerHTML = '<div class="bekle">Önce uygulamada giriş yap.</div>'; return; }
     var no = ++getirNo;
-    $('icerik').innerHTML = '<div class="bekle">Rapor hazırlanıyor…<br><span class="ipucu">Bütün satışlar ve alışlar hesaplanıyor, biraz sürebilir.</span></div>';
+    $('icerik').innerHTML = '<div class="bekle">Rapor hazırlanıyor…<br><span class="ipucu">Bütün satışlar ve alışlar hesaplanıyor — ilk açılış 10–20 sn sürebilir, sonraki 30 dakika anında gelir.</span></div>';
     istek({ action: 'karlilik', ne: 'rapor', gun: $('donem').value }, function(r){
       if(no !== getirNo) return;
       if(r.status !== 'ok'){ $('icerik').innerHTML = '<div class="kart"><div class="kotu" style="font-weight:800;">Rapor alınamadı</div><div class="ipucu" style="margin-top:6px;">' + esc(r.message || '') + '</div></div>'; return; }
