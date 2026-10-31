@@ -24,10 +24,10 @@
     :root{ --bg:#0d1610; --panel:#14211a; --panel2:#1c2e23; --line:#2b4535;
       --text:#e7f3ea; --muted:#94b49f; --green:#22c55e; --amber:#f59e0b; --red:#f87171; --blue:#60a5fa; --accent:#22c55e; --accent2:#34d26e; }
   }
-  html{touch-action:pan-x pan-y; overflow-x:hidden;}
+  html{touch-action:pan-x pan-y;}
   *{box-sizing:border-box;}
   html,body{margin:0; background:var(--bg); color:var(--text); font-family:var(--sans); -webkit-text-size-adjust:100%;}
-  body{padding:12px 14px calc(24px + env(safe-area-inset-bottom)); max-width:900px; margin:0 auto; overflow-x:hidden;}
+  body{padding:12px 14px calc(24px + env(safe-area-inset-bottom)); max-width:900px; margin:0 auto; overflow-x:clip;}
   .gizli{display:none !important;}
   .kart{background:var(--panel); border:1px solid var(--line); border-radius:16px; padding:14px; margin-bottom:12px;}
   .kartBaslik{font-weight:800; margin-bottom:8px; display:flex; justify-content:space-between; align-items:center; gap:8px;}
