@@ -28,7 +28,7 @@
   "İndirim" seçilince önceki fiyat girilmeden etiket basılmaz.
   FİYAT İZLEME: sunucu (Code.gs build 116+) her katalog yenilemesinde fiyatı
   değişen ürünü kaydeder ve katalogla birlikte "ft" (fiyatın değiştiği gün) ile
-  "of" (ondan önceki 30 günün en düşük fiyatı) gönderir. Bu sayfa fiyatı DÜŞEN
+  "of" (ondan önceki 10 günün en düşük fiyatı) gönderir. Bu sayfa fiyatı DÜŞEN
   ürünü görünce indirimi KENDİLİĞİNDEN YAZMAZ, önerir; onayı personel verir
   (her fiyat düşüşü kampanya değildir, ispat yükü satıcıdadır). İndirimli satış
   reklamında başlangıç ve bitiş tarihi de zorunludur → "İndirim bitiş tarihi".
@@ -1247,7 +1247,7 @@
     return 'eklendi';
   }
   function gunFarki(a, b){ return Math.round((Date.parse(a + 'T00:00:00') - Date.parse(b + 'T00:00:00')) / 86400000); }
-  // Fiyatı son 30 günde DÜŞMÜŞ mü? (önerilecek indirim: önceki fiyat = 30 günün en düşüğü)
+  // Fiyatı son 30 günde DÜŞMÜŞ mü? (önerilecek indirim: önceki fiyat = düşüşten önceki 10 günün en düşüğü)
   function dususBilgisi(k, fiyat){
     var of = sayi(k.of), ft = k.ft || '';
     if(!ft || isNaN(of) || !(of > fiyat + 0.004)) return null;
@@ -1547,7 +1547,7 @@
     if(!u.tarih) e.push('fiyat tarihi');
     var mik = sayi(u.mik); if(isNaN(mik) || mik <= 0) e.push('net miktar');
     if(u.indirim){
-      var o = sayi(u.onceki); if(isNaN(o) || o <= sayi(u.fiyat)) e.push('indirimden önceki fiyat (şimdiki fiyattan yüksek olmalı)');
+      var o = sayi(u.onceki); if(isNaN(o) || o <= sayi(u.fiyat)) e.push(String(u.onceki || '').trim() ? 'indirimden önceki fiyat şimdiki fiyattan yüksek olmalı' : 'indirimden önceki fiyat (son 10 günün en düşüğü) sistemde yok — Düzenle\'den yaz ya da indirimi kaldır');
       if(!u.bitis) e.push('indirim bitiş tarihi'); else if(u.bitis < bugun()) e.push('indirim bitiş tarihi geçmiş');
       else if(u.tarih && u.bitis < u.tarih) e.push('bitiş tarihi başlangıçtan önce');
     }
@@ -1608,6 +1608,14 @@
     var toplam = durum.liste.reduce(function(s, u){ return s + Math.max(1, parseInt(u.adet, 10) || 1); }, 0);
     $('listeSayi').textContent = durum.liste.length ? '(' + durum.liste.length + ' ürün, ' + toplam + ' etiket)' : '';
     if(!durum.liste.length){ kutu.innerHTML = '<div class="ipucu">Henüz ürün eklenmedi.</div>'; yazdirCiz(); return; }
+    // İndirim işaretli ama önceki fiyat boşsa: sistemdeki (son 10 günün en düşük) fiyatla doldur.
+    var doldu = false;
+    durum.liste.forEach(function(u){
+      if(!u.indirim || String(u.onceki || '').trim() || u.elle || !u.barkod || u.grup) return;
+      var dz = dususBilgisi({ ft: u.ft, of: u.of }, u.fiyat);
+      if(dz){ u.onceki = String(dz.onceki).replace('.', ','); u.tarih = dz.tarih; doldu = true; }
+    });
+    if(doldu) kaydet();
     kutu.innerHTML = durum.liste.map(function(u){
       var bf = birimFiyat(u), eks = eksikler(u);
       var trBarkod = /^86[89]/.test(u.barkod);
@@ -1680,7 +1688,7 @@
         '<div style="display:flex; align-items:center; gap:8px; margin-top:12px;"><input data-al="indirim" type="checkbox"' + (u.indirim ? ' checked' : '') + '><span style="font-size:13.5px; font-weight:700;">İndirimli satış (etikete "İNDİRİM" yazılır)</span></div>' +
         (u.indirim ? '<div class="satir"><div><label>İndirimden önceki fiyat (₺)</label><input data-al="onceki" type="text" inputmode="decimal" value="' + esc(u.onceki) + '" placeholder="örn. 129,90"></div>' +
             '<div><label>İndirim bitiş tarihi</label><input data-al="bitis" type="date" class="' + (u.bitis ? '' : 'eksik') + '" value="' + esc(u.bitis || '') + '"></div></div>' +
-          (dusus && sayi(u.onceki) > dusus.onceki + 0.004 ? '<div class="uyari" style="margin:6px 0 0;">Sistemde bu ürünün son 30 gündeki en düşük fiyatı <b>' + para(dusus.onceki) + ' ₺</b> görünüyor. Daha yüksek bir önceki fiyat yazarsan bunu kanıtlayamayabilirsin.</div>' : '') +
+          (dusus && sayi(u.onceki) > dusus.onceki + 0.004 ? '<div class="uyari" style="margin:6px 0 0;">Sistemde bu ürünün indirimden önceki son 10 gündeki en düşük fiyatı <b>' + para(dusus.onceki) + ' ₺</b> görünüyor. Daha yüksek bir önceki fiyat yazarsan bunu kanıtlayamayabilirsin.</div>' : '') +
           '<div class="ipucu" style="margin-top:4px;">Önceki fiyat: indirimden önceki <b>10 gün içinde uygulanan en düşük fiyat</b> (çabuk bozulan üründe bir önceki fiyat). "Fiyat tarihi" indirimin başladığı gün olmalı; indirimin bittiği gün de etikete yazılır. Kanıt sorumluluğu satıcıda.</div>'
           : '') +
         '</div>' +
@@ -2040,7 +2048,11 @@
     if(al === 'mik'){ var m = sayi(v); u.mik = isNaN(m) ? v : m; }
     else if(al === 'adet'){ u.adet = Math.min(99, Math.max(1, parseInt(v, 10) || 1)); }
     else if(al === 'koli'){ var kn = parseInt(v, 10); u.koli = kn > 1 ? kn : ''; }
-    else if(al === 'indirim'){ u.indirim = !!v; }
+    else if(al === 'indirim'){
+      u.indirim = !!v;
+      if(u.indirim && !String(u.onceki || '').trim()){ var dz1 = dususBilgisi({ ft: u.ft, of: u.of }, u.fiyat); if(dz1){ u.onceki = String(dz1.onceki).replace('.', ','); u.tarih = dz1.tarih; } }
+      if(u.indirim && !u.bitis) u.bitis = $('topluBitis').value || '';
+    }
     else u[al] = v;
     bilgiHatirla(u); kaydet();
     if(yenidenCiz) listeCiz();

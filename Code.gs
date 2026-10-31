@@ -1671,7 +1671,7 @@ function getKatalog(callback, alisGoster) {
         if (Number(r[6]) > 1) e.carpan = String(r[6]);
         if (r[7]) e.birim = String(r[7]); // ERP12 birim adı: ADET, KOLİ, KG…
         // Fiyat izleme (etiket için): fiyatın son değiştiği gün ve o günden
-        // önceki 30 gün içindeki en düşük fiyat. Hiç değişmediyse alan gelmez.
+        // önceki 10 gün içindeki en düşük fiyat. Hiç değişmediyse alan gelmez.
         var ft = fiyatTarihiMetni(r[8]);
         if (ft) { e.ft = ft; if (r[9] !== '' && r[9] !== null && r[9] !== undefined) e.of = String(r[9]); }
         if (r[10]) e.yer = String(r[10]); // üretim yeri (ERP stok kartındaki ülke)
@@ -2424,10 +2424,9 @@ function koliCarpan(v) {
 // karşılaştırılır. Fiyatı değişen her ürün için:
 //   • 'Fiyat Tarihi' (9. sütun): fiyatın değiştiği gün → etiketteki "fiyat
 //     değişiklik tarihi" buradan gelir, personel elle yazmaz.
-//   • 'Önceki Fiyat' (10. sütun): değişimden önceki 30 gün içinde uygulanan EN
+//   • 'Önceki Fiyat' (10. sütun): değişimden önceki 10 gün içinde uygulanan EN
 //     DÜŞÜK fiyat → "indirim" etiketi basılacaksa gösterilecek önceki fiyat.
-//     (Fiyat Etiketi Yönetmeliği m.11 on gün der; reklam kılavuzu otuz gün
-//     diyor. Otuz günün en düşüğü ikisini de karşılar.)
+//     (1 Ağustos 2026'dan beri yönetmelik: indirimin başlangıcından önceki son 10 gün.)
 //   • 'FiyatGecmisi' sekmesine bir satır: Zaman | Barkod | Eski | Yeni. Bu
 //     sekme, "önceki fiyat buydu" diyebilmenin KANITIDIR; 400 günden eski
 //     satırlar silinir.
@@ -2448,7 +2447,7 @@ function erpFiyatTarihi(v) {
 function ulkeMetni(v) { return String(v == null ? '' : v).replace(/\s+/g, ' ').trim().substring(0, 60); }
 var FIYAT_GECMIS_SEKME = 'FiyatGecmisi';
 var FIYAT_GECMIS_BASLIK = ['Zaman', 'Barkod', 'Eski Fiyat', 'Yeni Fiyat'];
-var ONCEKI_FIYAT_GUN = 30;
+var ONCEKI_FIYAT_GUN = 10;   // Ticari Reklam ve Haksız Ticari Uygulamalar Yön. (1 Ağustos 2026): indirimden önceki son 10 günün en düşük fiyatı
 function fiyatTz() { return Session.getScriptTimeZone() || 'Europe/Istanbul'; }
 // Hücredeki tarih (Sheets metni Date'e çevirebilir) → 'yyyy-MM-dd' ya da ''.
 function fiyatTarihiMetni(v) {
@@ -2456,7 +2455,7 @@ function fiyatTarihiMetni(v) {
   var m = /^(\d{4}-\d{2}-\d{2})/.exec(String(v || '').trim());
   return m ? m[1] : '';
 }
-// Değişen barkodlar için son 30 gündeki en düşük fiyat (geçmiş sekmesinden).
+// Değişen barkodlar için son 10 gündeki en düşük fiyat (geçmiş sekmesinden).
 function fiyatGecmisEnDusuk(barkodlar) {
   var sonuc = {};
   var sh = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(FIYAT_GECMIS_SEKME);
@@ -2467,7 +2466,7 @@ function fiyatGecmisEnDusuk(barkodlar) {
     if (!barkodlar[b]) return;
     var z = r[0] instanceof Date ? r[0].getTime() : Date.parse(r[0]);
     if (isNaN(z) || z < sinir) return;
-    // O değişimin iki ucu da son 30 günde uygulanmış fiyatlardır.
+    // O değişimin iki ucu da son 10 günde uygulanmış fiyatlardır.
     [r[2], r[3]].forEach(function (f) { f = Number(f); if (isFinite(f) && f > 0 && (sonuc[b] === undefined || f < sonuc[b])) sonuc[b] = f; });
   });
   return sonuc;
@@ -2549,7 +2548,7 @@ function saveKatalogBulk(entries) {
       }
     }
     // ERP kendi fiyat değişiklik kaydını gönderdiyse (STOK_STOK_BIRIM_DEGISIM) o esastır:
-    // gerçek değişiklik günü ve değişiklikten önceki 30 günün en düşük fiyatı.
+    // gerçek değişiklik günü ve değişiklikten önceki 10 günün en düşük fiyatı.
     var eft = erpFiyatTarihi(e.ft);
     if (eft) { ft = eft; var eof = cleanNum(e.of); of = (typeof eof === 'number' && eof > 0) ? eof : ''; erpli[b] = true; }
     return [e.name || '', e.barcode || '', e.stockCode || '', cleanNum(e.oldStock), f, cleanNum(e.kdv), koliCarpan(e.carpan), String(e.birim || ''), ft, of,

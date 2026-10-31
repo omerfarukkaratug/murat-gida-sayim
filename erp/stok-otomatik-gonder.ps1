@@ -172,7 +172,7 @@ LEFT JOIN (
 
 # Fiyat degisiklik kaydi (ERP12: STOK_STOK_BIRIM_DEGISIM). Her urun-birim icin
 # KDV dahil fiyat listesindeki SON degisiklik: tarihi, o gunku yeni fiyat ve
-# degisiklikten onceki 30 gunde gecerli olmus en dusuk fiyat. Etiketteki
+# degisiklikten onceki 10 gunde gecerli olmus en dusuk fiyat (yonetmelik, 1 Agustos 2026). Etiketteki
 # "fiyat degisiklik tarihi" ve indirimdeki "onceki fiyat" buradan gelir.
 $fiyatTarihQuery = @"
 SELECT t.STOK_STOK_BIRIM AS Ssb, t.TARIH AS Tarih, t.FIYAT AS Fiyat, MIN(d2.ESKI_FIYAT) AS EnDusuk
@@ -186,7 +186,7 @@ FROM (
 LEFT JOIN dbo.STOK_STOK_BIRIM_DEGISIM d2
   ON d2.STOK_STOK_BIRIM = t.STOK_STOK_BIRIM AND d2.STOK_FIYAT_AD = t.STOK_FIYAT_AD
  AND d2.ESKI_FIYAT > 0 AND d2.FIYAT <> d2.ESKI_FIYAT
- AND d2.TARIH <= t.TARIH AND d2.TARIH > DATEADD(day, -30, t.TARIH)
+ AND d2.TARIH <= t.TARIH AND d2.TARIH > DATEADD(day, -10, t.TARIH)
 WHERE t.sira = 1
 GROUP BY t.STOK_STOK_BIRIM, t.TARIH, t.FIYAT
 "@
