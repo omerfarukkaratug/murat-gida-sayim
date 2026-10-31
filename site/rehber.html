@@ -1,0 +1,328 @@
+<!doctype html>
+<html lang="tr"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Kullanım Rehberi — KRT Saha</title>
+<meta name="description" content="KRT Saha kullanım rehberi: sayım, mal giriş-çıkış, etiket, plasiyer, sipariş hazırlama, kasa tahsilat, mesai, kârlılık ve yönetici işlemleri adım adım.">
+<link rel="icon" href="/icon.svg" type="image/svg+xml"><link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png"><link rel="stylesheet" href="/stil.css">
+<style>
+  .kap{max-width:1120px}
+  .duzen{display:grid;grid-template-columns:240px 1fr;gap:40px;padding:36px 0 70px}
+  .icindekiler{position:sticky;top:16px;align-self:start;max-height:calc(100vh - 32px);overflow:auto;font-size:14.5px}
+  .icindekiler b{display:block;font-size:12px;letter-spacing:.06em;text-transform:uppercase;color:var(--muted);margin:14px 0 6px}
+  .icindekiler a{display:block;padding:4px 10px;border-radius:8px;text-decoration:none;color:var(--ink)}
+  .icindekiler a:hover{background:var(--panel)}
+  article h1{font-size:clamp(28px,4vw,40px);letter-spacing:-1px;margin:0 0 10px}
+  article>p.giris{font-size:18px;color:var(--muted);margin:0 0 24px}
+  section.mod{border-top:1px solid var(--line);padding:30px 0 10px;scroll-margin-top:12px}
+  section.mod h2{font-size:26px;letter-spacing:-.5px;margin:0 0 6px}
+  .kim{display:inline-block;font-size:12.5px;font-weight:700;background:var(--panel);border:1px solid var(--line);border-radius:999px;padding:3px 11px;color:var(--muted);margin:0 6px 10px 0}
+  .ikili{display:grid;grid-template-columns:1fr 220px;gap:28px;align-items:start}
+  .ikili img{width:100%;border-radius:22px;border:7px solid #16182c;box-shadow:0 18px 40px -18px rgba(40,30,120,.45);aspect-ratio:600/1229;object-fit:cover;object-position:top;background:#fff}
+  h3{font-size:17px;margin:18px 0 6px}
+  ol,ul{padding-left:22px;margin:6px 0}
+  li{margin:5px 0}
+  .ipucu{background:var(--panel);border:1px solid var(--line);border-left:4px solid var(--yesil);border-radius:10px;padding:10px 14px;margin:12px 0;font-size:15px}
+  .dikkat{border-left-color:#e8a317}
+  table{width:100%;border-collapse:collapse;font-size:14.5px;margin:10px 0}
+  th,td{text-align:left;padding:8px 10px;border-bottom:1px solid var(--line);vertical-align:top}
+  th{font-size:12px;text-transform:uppercase;letter-spacing:.05em;color:var(--muted)}
+  kbd{background:var(--panel);border:1px solid var(--line);border-bottom-width:2px;border-radius:6px;padding:0 6px;font-family:inherit;font-weight:700;font-size:.92em}
+  @media (max-width:900px){
+    .duzen{grid-template-columns:1fr}
+    .icindekiler{position:static;max-height:none;background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:6px 10px}
+    .ikili{grid-template-columns:1fr}
+    .ikili img{max-width:240px;margin:0 auto;display:block}
+  }
+</style></head>
+<body>
+<header><div class="kap"><a class="marka" href="/"><img src="/icon.svg" alt=""><b>KRT <i>Saha</i></b></a>
+<nav><a href="/#ozellikler">Özellikler</a><a href="/rehber.html">Kullanım rehberi</a><a href="/kurulum.html">Kurulum</a><a href="mailto:info@krtsaha.com">İletişim</a></nav></div></header>
+<main class="kap duzen">
+<aside class="icindekiler">
+  <b>Başlarken</b>
+  <a href="#baslarken">Giriş ve ana menü</a>
+  <a href="#temel">Her ekranda ortak olanlar</a>
+  <b>Mağaza</b>
+  <a href="#sayim">📋 Sayım</a>
+  <a href="#mini">🎯 Günün mini sayımı</a>
+  <a href="#mal">📥 Mal giriş / 📤 çıkış</a>
+  <a href="#irsaliye">🧾 İrsaliyeler ve ERP</a>
+  <a href="#fiyat">💰 Fiyat &amp; stok sorgula</a>
+  <a href="#etiket">🏷️ Etiket yazdır</a>
+  <a href="#dogrula">✅ QR etiket doğrulama</a>
+  <a href="#hareket">🔁 Hareketler ve cari</a>
+  <a href="#tedarik">🛒 Tedarikçi siparişi</a>
+  <b>Saha ve depo</b>
+  <a href="#plasiyer">🚚 Plasiyer</a>
+  <a href="#hazirla">📦 Sipariş hazırlama</a>
+  <a href="#kasa">💵 Kasa tahsilat</a>
+  <a href="#mesai">🕐 Mesai</a>
+  <b>Yönetim</b>
+  <a href="#ozet">📊 Günün özeti</a>
+  <a href="#karlilik">💹 Kârlılık</a>
+  <a href="#yonetici">⚙️ Kullanıcılar ve yetkiler</a>
+  <a href="#sorun">🛠️ Sorun olursa</a>
+</aside>
+
+<article>
+<h1>Kullanım rehberi</h1>
+<p class="giris">KRT Saha'nın bütün ekranları, kim kullanır, adım adım nasıl yapılır. Telefona kurulum için <a href="/kurulum.html">kurulum sayfasına</a> bakın.</p>
+
+<section class="mod" id="baslarken"><h2>Giriş ve ana menü</h2>
+<div class="ikili"><div>
+<ol>
+<li>Uygulamayı açın, yöneticinin verdiği <b>kullanıcı adı ve şifreyle</b> giriş yapın.</li>
+<li>Ana menüde yalnız <b>yetkiniz olan</b> ekranlar görünür. Bir ekran yoksa yöneticinizden yetki isteyin.</li>
+<li>Menünün altındaki <b>✏️ Menüyü düzenle</b> ile sık kullandıklarınızı üste alabilir, kullanmadıklarınızı gizleyebilirsiniz.</li>
+<li>Sağ üstteki <b>🎨</b> ile tema seçin: sade temalar ya da konsept temalar (oyun, uzay, retro…).</li>
+<li>Giriş ekranındaki <b>🩺 Telefonu kontrol et</b>, kamera, konum ve tarayıcı ayarlarında eksik varsa söyler.</li>
+</ol>
+<div class="ipucu">Fiyat ve stok bilgisi yalnız <b>şubede</b> görünür; telefon konumu ya da şube WiFi'ı ile anlaşılır. Sahada çalışan plasiyer ekranı konum istemez.</div>
+</div><img src="/ekran/menu.webp" alt="Ana menü" loading="lazy"></div>
+</section>
+
+<section class="mod" id="temel"><h2>Her ekranda ortak olanlar</h2>
+<ul>
+<li><b>Barkod okutma:</b> 📷 düğmesi kamerayı açar. Okunmuyorsa barkodu elle yazıp <kbd>Ekle</kbd> deyin. Klavye gibi çalışan Bluetooth barkod okuyucular da kullanılabilir.</li>
+<li><b>Koli barkodu:</b> okutulan barkod koli barkoduysa turuncu <b>📦 KOLİ</b> uyarısı çıkar; <b>koli sayısını</b> yazarsınız, uygulama adede çevirir (ör. 3 koli × 24 = 72 adet).</li>
+<li><b>İnternetsiz çalışma:</b> kayıt önce telefona yazılır. Üstteki nokta 🟢 ise gönderilmiş, 🟡 ise sırada bekliyor demektir. İnternet gelince kendiliğinden gider; telefonu kapatsanız da kaybolmaz.</li>
+<li><b>Hızlı geçiş çubuğu:</b> ekranların üstündeki simgelerle menüye dönmeden Sayım, Giriş, Çıkış, Fiyat… arasında geçilir. Yarım kalan mal girişi taslak olarak saklanır.</li>
+<li><b>Geri tuşu:</b> önce açık pencereyi kapatır, sonra ekrandan çıkar.</li>
+</ul>
+</section>
+
+<section class="mod" id="sayim"><h2>📋 Sayım</h2>
+<span class="kim">Tüm personel</span><span class="kim">Yönetici: rapor ve temizleme</span>
+<div class="ikili"><div>
+<h3>Sayım yapmak</h3>
+<ol>
+<li>Menüden <b>Sayım</b>'ı açın. Üstten sayılan yeri (depo, reyon, raf) seçin; okutmalar bu bölgeyle kaydedilir.</li>
+<li><b>Taramayı Başlat</b> ile kamerayı açın ya da barkodu yazın.</li>
+<li>Ürün okununca adet kutusu açılır: adedi yazın, <kbd>Enter</kbd>. Kg ile satılan üründe kilo yazılır (2,5 gibi).</li>
+<li>Aynı ürünü başka bir rafta tekrar okutabilirsiniz; toplam sayım sonunda birleşir.</li>
+<li>Yanlış okutmayı listedeki 🗑️ ile silin ya da adedine dokunup düzeltin.</li>
+</ol>
+<h3>Vardiya sonu</h3>
+<ul><li>Alttaki <b>Bitir / Yeni</b>: bu telefondaki sayım kapanır, telefon hafızası boşalır. Veriler sunucuda güvende.</li>
+<li>Telefon hafızası dolmaya başlarsa uygulama kendisi uyarır; bütün okutmalar sunucuda onaylandıysa yeni oturumu kendisi açar.</li></ul>
+<h3>Sayımı bitirmek (yönetici)</h3>
+<ol><li>Bütün telefonlarda bekleyen kayıt 0 olsun (Sistem Durumu ekranında görünür).</li>
+<li>Yönetici Paneli → <b>📊 Sayımı Bitir ve Rapor Oluştur</b>: aynı ürünler birleşir, fark raporu hazırlanır, e-postayla gelir.</li>
+<li><b>📥 Son Stok Sayımını İndir</b> ile ERP'ye aktarılacak dosyayı alın.</li>
+<li>Yeni sayımdan önce <b>🧹 Dosyayı Temizle</b> (eski kayıtlar arşive gider).</li></ol>
+<div class="ipucu">Büyük sayımda canlı takip için Yönetici Paneli → <b>📡 Canlı Durum</b>: kim kaç ürün saydı, hangi telefon geride.</div>
+</div><img src="/ekran/sayim.webp" alt="Sayım" loading="lazy"></div>
+</section>
+
+<section class="mod" id="mini"><h2>🎯 Günün mini sayımı</h2>
+<span class="kim">Personel</span><span class="kim">Yönetici: sonuçlar</span>
+<p>Her gün sistemin satış ve stok hareketine bakarak seçtiği birkaç riskli üründen kısa bir sayım listesi gelir (yakında sayılıp farkı çıkmayan ürünler tekrar gelmez). Ürünleri okutup sayın; sistem stoğu ile fark <b>Sonuçlar</b> sekmesinde tutarıyla görünür. Büyük farklar Günün Özeti'ne düşer.</p>
+</section>
+
+<section class="mod" id="mal"><h2>📥 Mal giriş · 📤 Mal çıkış</h2>
+<span class="kim">Mal kabul / depo</span><span class="kim">Çıkış için ayrı yetki</span><span class="kim">Alış fiyatını yalnız yetkili görür</span>
+<div class="ikili"><div>
+<h3>Mal girişi</h3>
+<ol>
+<li><b>Mal Giriş</b>'i açın, belge türünü seçin (alış irsaliyesi, alış faturası, iade…).</li>
+<li>Cariyi (tedarikçi) arayıp seçin. Bu tedarikçiye açık siparişiniz varsa ekranın üstünde <b>sipariş karşılaştırması</b> çıkar: ne geldi, ne eksik.</li>
+<li><b>Taramayı Başlat</b> ile ürünleri okutun, miktarı yazın. Fiyat boş bırakılırsa son net alış fiyatı kullanılır.</li>
+<li>Gerekirse belge no ve açıklama girin, <b>Kaydet</b>.</li>
+</ol>
+<h3>Mal çıkışı</h3>
+<p>Aynı akış; ayrıca <b>sebep</b> seçilir (satış, tedarikçiye iade, fire / zayi, şubeler arası transfer, sayım farkı…). Satış irsaliyeleri ERP'ye gider; iade / fire / transfer gibi iç hareketler e-postayla muhasebeye bildirilir.</p>
+<div class="ipucu">ERP'de kartı olmayan yeni bir ürün okutursanız <b>"stok açmadan ekle"</b> seçilebilir: ERP'de şablondan geçici bir kart açılır (MKS- kodlu), kasada da okunur. Muhasebe sonra kartı düzenler.</div>
+<div class="ipucu dikkat">Kilo ile girilen üründe kesir olur; adetli üründe kesir yazılırsa uygulama uyarır.</div>
+</div><img src="/ekran/mal-giris.webp" alt="Mal giriş" loading="lazy"></div>
+</section>
+
+<section class="mod" id="irsaliye"><h2>🧾 İrsaliyeler ve ERP</h2>
+<div class="ikili"><div>
+<p>Mal Giriş / Çıkış ekranındaki <b>🧾 İrsaliyeler</b> düğmesi, uygulamadan giden her belgenin durumunu gösterir:</p>
+<table><tr><th>Durum</th><th>Anlamı</th></tr>
+<tr><td>✅ ERP'de</td><td>Belge ERP'ye yazıldı; ERP'deki belge numarası yanında.</td></tr>
+<tr><td>⏳ Bekliyor</td><td>ERP aktarım programı birkaç dakika içinde alacak. Uzun beklerse ERP bilgisayarı kapalı olabilir.</td></tr>
+<tr><td>❌ Hata</td><td>Sebebi yazar (ör. "ERP'de stok kartı yok"). Düzeltilince tekrar denenir.</td></tr>
+<tr><td>⚠️ Değişti</td><td>Belge ERP'de sonradan değiştirilmiş; "ERP hâli" ile farkı görürsünüz.</td></tr></table>
+<p>ERP'ye geçen belge buradan açılıp yazdırılabilir; satır sırası okutma sırasıyla aynıdır.</p>
+</div><img src="/ekran/irsaliye.webp" alt="İrsaliyeler" loading="lazy"></div>
+</section>
+
+<section class="mod" id="fiyat"><h2>💰 Fiyat &amp; stok sorgula</h2>
+<span class="kim">Fiyat görme / stok görme yetkisi</span>
+<p>Barkodu okutun: ürün adı, satış fiyatı, KDV, stok, (yetkiliyse) son alış fiyatı ve tedarikçi görünür. Müşteri sorduğunda raf etiketine bakmadan kontrol için kullanılır. İnternet yokken de telefondaki katalogdan çalışır.</p>
+</section>
+
+<section class="mod" id="etiket"><h2>🏷️ Etiket yazdır</h2>
+<span class="kim">Etiket yetkisi</span><span class="kim">İndirim, çeşit, yazıcı için ayrı yetkiler</span>
+<div class="ikili"><div>
+<h3>Etiket basmak</h3>
+<ol>
+<li><b>Etiket Yazdır</b>'ı açın. Ürünü okutun ya da adını yazıp ekleyin.</li>
+<li>Biçim seçin: <b>Etiket</b> (raf etiketi), <b>A6</b>, <b>A5</b>, <b>A4</b>, <b>A3</b> afiş. Taslak: dik / yatay, dökme ürün kartı; A6–A5'te üstte 2 cm boşluk (raf rayına takılınca yazı kapanmaz).</li>
+<li>Kırmızı <b>Eksik</b> yazısı varsa tamamlayın (üretim yeri, net miktar…). Eksik varken etiket basılmaz.</li>
+<li>Alttaki <b>Yazdır</b>: <b>📡 Yazıcıya gönder</b> ile mağazadaki yazıcıdan basılır; ya da bu cihazdan yazdırılır.</li>
+</ol>
+<h3>Fiyatı değişenler</h3>
+<p>Fiyatı ERP'de değişen ürünler <b>Fiyat takibi</b> sekmesinde tarih sırasıyla listelenir; seçip toplu ekleyebilirsiniz. Etiketteki fiyat tarihi ERP'deki değişiklik tarihidir.</p>
+<h3>İndirim etiketi</h3>
+<ul><li>"İNDİRİM" yalnız <b>İndirimli satış</b> işaretlenince yazılır.</li>
+<li>Yönetmelik gereği indirimden önceki fiyat = indirim başlamadan önceki <b>son 10 günün en düşük fiyatı</b>. Sistem bunu ERP'nin fiyat geçmişinden kendisi doldurur.</li>
+<li>İndirim bitiş tarihi zorunludur. Meyve-sebze gibi çabuk bozulan üründe bir önceki fiyat elle yazılabilir.</li>
+<li>Fiyatı düştü ama kampanya değilse indirim işaretlemeyin; normal etiket yeni fiyatla basılır.</li></ul>
+<h3>Çeşitler tek etikette</h3>
+<p>Aynı fiyatlı çeşitler (yumuşatıcı kokuları gibi) için <b>🧩 tek etikette topla</b>: afişin altında çeşit adları küçük yazıyla listelenir. Gruptan birinin fiyatı değişirse etiket basılmaz, o ürün gruptan çıkarılır.</p>
+<div class="ipucu">Personel fiyatı, stok kodunu ve barkodu <b>değiştiremez</b>; yalnız yazım hatası için adı düzeltebilir. Fiyat her zaman ERP'den gelir.</div>
+</div><img src="/ekran/etiket.webp" alt="Etiket" loading="lazy"></div>
+</section>
+
+<section class="mod" id="dogrula"><h2>✅ QR etiket doğrulama</h2>
+<p>Basılan etiketlerde küçük bir QR kod vardır. <b>QR Etiket Doğrulama</b> ekranında raftaki etiketi okutun: etiketteki fiyatın bugünkü fiyatla aynı olup olmadığı görünür; eskiyse yeni etiket basılması gerekir. Denetimden önce raf turu için kullanılır.</p>
+</section>
+
+<section class="mod" id="hareket"><h2>🔁 Ürün, stok ve cari hareketleri</h2>
+<span class="kim">Her biri ayrı yetki</span>
+<div class="ikili"><div>
+<ul>
+<li><b>Ürün Hareketleri:</b> ürün kimden, kaça, ne zaman geldi; hangi müşteriye kaça satıldı; kasa satış toplamı.</li>
+<li><b>Stok Hareketleri:</b> ürünün bütün giriş-çıkışları (alış, satış, iade, fire, sayım…); satıra dokununca belgenin tamamı açılır.</li>
+<li><b>Cari Hareketleri:</b> carinin ekstresi (borç, alacak, bakiye), açık faturaların vadesi, ödeme alışkanlığına göre <b>risk</b> (yeşil / sarı / kırmızı). <b>Vade raporu</b>: bütün carilerin vadesi geçmiş alacakları.</li>
+</ul>
+</div><img src="/ekran/cari-risk.webp" alt="Cari" loading="lazy"></div>
+</section>
+
+<section class="mod" id="tedarik"><h2>🛒 Tedarikçi siparişi</h2>
+<span class="kim">Tedarik yetkisi</span><span class="kim">Fiyatları yalnız alış yetkilisi görür</span>
+<ol>
+<li>Tedarikçiyi arayın. Firma sayfasında sekmeler: <b>🛒 Sipariş · 📉 Azalanlar · ❌ Yok satanlar · 💤 Satılmayan · 📋 Tümü · 📄 Siparişler</b>.</li>
+<li>Öneri miktarı; son 60 günün kasa + firma satış hızı, eldeki stok ve firmanın genelde kaç günde bir geldiğine göre hesaplanır.</li>
+<li>Miktarları düzeltip siparişi kaydedin; WhatsApp ile paylaşılabilir. Mal gelince Mal Giriş ekranı siparişle karşılaştırır.</li>
+</ol>
+<div class="ipucu">Tedarikçi siparişleri ERP'ye yazılmaz; yalnız uygulamada tutulur.</div>
+</section>
+
+<section class="mod" id="plasiyer"><h2>🚚 Plasiyer</h2>
+<span class="kim">Plasiyer</span><span class="kim">Maliyet görme ayrı yetki</span><span class="kim">Plasiyer yönetimi</span>
+<div class="ikili"><div>
+<h3>Sipariş almak</h3>
+<ol>
+<li><b>Müşterilerim</b>'den müşteriyi seçin: bakiye, vadesi geçmiş tutar ve risk görünür.</li>
+<li><b>Sipariş al</b> (ya da <b>Araçtan satış</b>). Ürünü adıyla arayın ya da okutun.</li>
+<li>Her üründe liste fiyatı, müşteriye özel fiyat ve <b>bu müşteriye en son satılan fiyat</b> görünür; birine dokunup seçin.</li>
+<li>"Sık aldıkları" süzgeci müşterinin her zaman aldığı ürünleri getirir. Aynı fiyatlı çeşitleri tek seferde ekleyebilirsiniz.</li>
+<li><b>Kaydet</b>. İnternet yoksa sipariş telefonda bekler, gelince gider.</li>
+</ol>
+<h3>Taban fiyat</h3>
+<p>Fiyat, maliyetin yöneticinin belirlediği yüzde kadar altına yazılamaz. Maliyeti görmeyen plasiyerin telefonunda maliyet hiç yoktur; fiyat sunucuya sorulur, cevap yalnız "uygun / değil" olur.</p>
+<h3>Tahsilat notu, gün sonu, prim</h3>
+<ul><li><b>💵 Tahsilat notu:</b> tutar, yöntem, not. ERP'ye yazılmaz; muhasebe için kayıt.</li>
+<li><b>🧾 Gün sonu:</b> sipariş, araç satışı, tahsilat toplamları; WhatsApp'tan paylaş ya da yazdır.</li>
+<li><b>🏆 Prim:</b> aylık satış ve tahsilat üzerinden, yöneticinin girdiği oranlarla.</li>
+<li><b>İptal:</b> kayıt silinmez, sebebiyle iptal edilir. Plasiyer yalnız kendi kaydını, kayıt günü iptal eder.</li></ul>
+<div class="ipucu">Sipariş ekranında kâr ve marj gösterilmez — müşteri ekranı görebilir. Maliyet bilgisi ürüne <b>basılı tutunca</b>, yalnız yetkiliye açılır.</div>
+</div><img src="/ekran/plasiyer-siparis.webp" alt="Plasiyer sipariş" loading="lazy"></div>
+</section>
+
+<section class="mod" id="hazirla"><h2>📦 Sipariş hazırlama ve sevkiyat</h2>
+<span class="kim">Depo (hazırlama)</span><span class="kim">Sevkiyat / şoför</span>
+<div class="ikili"><div>
+<ol>
+<li><b>Sipariş Hazırlama</b>'da bekleyen siparişlerden birini açın, <b>Başla</b>.</li>
+<li>Ürünleri rafından alıp okutun. Her satırda alınan / istenen görünür; tamamlanan satır yeşile döner.</li>
+<li>Siparişte olmayan ürün okutulunca uzun uyarı sesi çıkar. Fazla okutma kırmızı "FAZLA" ile gösterilir; son okutmayı geri alabilirsiniz.</li>
+<li>Bitince <b>Hazır</b>. Eksik kalanlar bekleyen sipariş olarak kalır, hazırlayan notu plasiyere gider.</li>
+<li><b>Kontrol:</b> başka biri siparişi yeniden okutarak teslim alır. Fark varsa hazırlayana geri gönderilir.</li>
+<li>Şoför teslim edince işaretler. Rapor: kim hazırladı, kim kontrol etti, kaç fark çıktı.</li>
+</ol>
+</div><img src="/ekran/hazirlama.webp" alt="Sipariş hazırlama" loading="lazy"></div>
+</section>
+
+<section class="mod" id="kasa"><h2>💵 Kasa tahsilat</h2>
+<span class="kim">Kasiyer: yalnız yetkili carileri</span><span class="kim">Muhasebe: hepsi</span>
+<div class="ikili"><div>
+<h3>Tahsilat almak</h3>
+<ol>
+<li>İlk kullanımda <b>"Bu cihaz hangi kasada?"</b> sorusuna cevap verin (Kasa 1, Kasa 2…). Makbuz numaraları kasaya göre ayrı ilerler.</li>
+<li><b>Cariler</b>'den müşteriyi seçin: güncel bakiye ve ERP'ye henüz işlenmemiş tahsilatlar görünür.</li>
+<li>Tutarı ve ödeme şeklini seçin (nakit, kredi kartı, yemek çeki — Sodexo, Multinet, Ticket…, havale). Teslim edenin adını yazın.</li>
+<li><b>Kaydet</b>: makbuz ekranda açılır. <b>🖨️ Makbuzu yazdır</b> ya da <b>📡 Kasa yazıcısına</b> (termal yazıcıdan çıkar).</li>
+</ol>
+<ul><li>Makbuzda: makbuz no, kasa sıra no, önceki bakiye, bu tahsilat, kalan borç, düzenleyen ve teslim eden imzası.</li>
+<li>Muhasebeye otomatik e-posta gider; ERP'de aynı tutarlı tahsilat görününce kayıt kendiliğinden "ERP'de" olur.</li>
+<li><b>Tahsilatlar</b> listesinde her kasa için "arada eksik numara yok" kontrolü vardır.</li>
+<li>İptal: aynı gün, sebep yazarak. Numara korunur, muhasebeye "İPTAL" e-postası gider.</li></ul>
+<div class="ipucu">Uygulama kendiliğinden tahsilat oluşturmaz ve ERP'ye tahsilat yazmaz; her tahsilatı kasiyer girer, muhasebe ERP'ye işler.</div>
+</div><img src="/ekran/kasa.webp" alt="Kasa tahsilat" loading="lazy"></div>
+</section>
+
+<section class="mod" id="mesai"><h2>🕐 Mesai</h2>
+<span class="kim">Personel</span><span class="kim">Ekip lideri</span>
+<ol>
+<li>Kasa bilgisayarında ya da tablette ekip lideri <b>📺 Kod Ekranı</b>'nı açık tutar: 30 saniyede bir değişen QR ve 6 haneli kod.</li>
+<li>Personel <b>🟢 GİRİŞ YAP</b>'a basar, kasadaki QR'ı okutur (ya da kodu yazar). Konum mağazadaysa giriş sunucu saatiyle yazılır. Çıkış aynı şekilde.</li>
+<li>Personel vardiyasını görür, izin talep eder, duyuruları okur, görevlerini tamamlar.</li>
+<li>Ekip lideri: pano (kim içeride, kim geç kaldı), vardiya planı, izin onayı, eksik kayıt düzeltme, duyuru ve görev, aylık <b>puantaj</b> (fazla mesai, geç kalma) Excel ve imza sayfası.</li>
+</ol>
+<div class="ipucu">Konum ve kamera yalnız düğmeye basıldığında kullanılır; sürekli takip yoktur. Yıllık izin hakkı işe giriş tarihine göre İş Kanunu'na göre hesaplanır.</div>
+</section>
+
+<section class="mod" id="ozet"><h2>📊 Günün özeti</h2>
+<span class="kim">Rapor yetkisi</span>
+<div class="ikili"><div>
+<p>Sabah açılacak tek ekran. Yalnız müdahale gerektiren işler listelenir; her maddeye dokununca ilgili ekran açılır:</p>
+<ul><li>ERP'ye yazılamayan ya da uzun süredir bekleyen belgeler</li>
+<li>ERP aktarım programı çalışmıyor / ERP yedeği alınmamış</li>
+<li>Mini sayımda fark çıkan ürünler, teslimat farkları</li>
+<li>Bir günden eski, ERP'ye işlenmemiş kasa tahsilatları</li></ul>
+</div><img src="/ekran/ozet.webp" alt="Günün özeti" loading="lazy"></div>
+</section>
+
+<section class="mod" id="karlilik"><h2>💹 Kârlılık</h2>
+<span class="kim">Yönetici ya da kârlılık yetkisi</span>
+<div class="ikili"><div>
+<p>Dönem seçin (30 gün – 1 yıl). Tutarlar KDV hariçtir; maliyet, ürünün satıldığı ayda geçerli son net alış fiyatıdır.</p>
+<h3>Sekmeler</h3>
+<ul>
+<li><b>📊 Özet:</b> ciro (kasa / firma), brüt kâr ve marj, <b>bugünkü alışla kâr</b> (rafı bugünkü fiyattan doldursaydınız), <b>enflasyon payı</b> (kârın, malın eskiden ucuza alınmasından gelen kısmı), son 12 ay TÜFE, aylık nominal ve reel kâr.</li>
+<li><b>🛒 Ürünler:</b> ⭐ para kazandıran · 🔁 sürüm ürünü (çok satan, marjı düşük) · 💎 az satan ama kârlı · 🐢 az satan, az kazandıran · 🔻 zarar eden. Ürüne dokununca bütün rakamlar.</li>
+<li><b>📈 Enflasyon:</b> fiyatı TÜFE'nin gerisinde kalan, şu an alışın altında satılan, bugünkü alışla zarar eden, alışı satıştan hızlı artan ürünler.</li>
+<li><b>🏭 Firmalar:</b> tedarikçi bazında ciro, kâr, marj, alış fiyatı artışı, stoktaki mal değeri.</li>
+<li><b>⚙️ TÜFE:</b> TÜİK'in aylık oranları; yönetici her ay yeni ayı ekler.</li>
+</ul>
+<div class="ipucu">İlk bakılacak yer: <b>Enflasyon → Alışın altında</b>. Oradaki ürünler satıldıkça zarar ettirir.</div>
+</div><img src="/ekran/karlilik.webp" alt="Kârlılık" loading="lazy"></div>
+</section>
+
+<section class="mod" id="yonetici"><h2>⚙️ Kullanıcılar ve yetkiler</h2>
+<span class="kim">Yönetici</span>
+<p>Yönetici Paneli → <b>Kullanıcılar</b>: kullanıcı ekleyin, şifre verin, rol (yönetici / kullanıcı) ve yetkileri işaretleyin. Yönetici her şeyi görür. Sık kullanılan yetkiler:</p>
+<table>
+<tr><th>Yetki</th><th>Ne açar</th></tr>
+<tr><td>💰 Fiyat görme · 📦 Stok görme</td><td>Sayım, sorgu ve mal ekranlarında fiyat / stok</td></tr>
+<tr><td>💲 Alış fiyatı görme</td><td>Maliyet ve son alış fiyatı</td></tr>
+<tr><td>📤 Mal çıkış</td><td>Mal çıkış ekranı</td></tr>
+<tr><td>🏷️ Etiket (+ indirim, çeşit, yazıcı, ayar)</td><td>Etiket ekranı ve her işlemi ayrı ayrı</td></tr>
+<tr><td>🚚 Plasiyer (+ maliyet, yönetim)</td><td>Saha satış; maliyet ve atama ayrı</td></tr>
+<tr><td>📦 Sipariş hazırlama · 🚚 Sevkiyat</td><td>Depo ve teslimat</td></tr>
+<tr><td>💵 Kasa tahsilat</td><td>Kasa; hangi carilere yetkili olduğu Kasa → Cari yetkileri'nden</td></tr>
+<tr><td>📊 Rapor</td><td>Günün özeti, sayım raporu, bütün tahsilatlar</td></tr>
+<tr><td>💹 Kârlılık</td><td>Kârlılık raporu (maliyet ve kâr görür)</td></tr>
+<tr><td>🕐 Mesai · ⭐ Ekip lideri</td><td>Mesai; ekip yönetimi</td></tr>
+<tr><td>🌍 Şube dışında da görür</td><td>Fiyat/stok bilgisini mağaza dışında da görme</td></tr>
+</table>
+<p>Diğer yönetici araçları: <b>🩺 Sistem Durumu</b> (ERP'den ve telefonlardan en son ne geldi), <b>📡 Canlı Durum</b>, oturumları kapatma, yedekler, e-posta adresleri, şube konumları.</p>
+</section>
+
+<section class="mod" id="sorun"><h2>🛠️ Sorun olursa</h2>
+<ul>
+<li><b>Kamera açılmıyor / konum istiyor:</b> <a href="/kurulum.html#ayarlar">telefon ayarları</a>; giriş ekranındaki 🩺 Telefonu kontrol et.</li>
+<li><b>Kayıt gitmiyor (🟡 bekliyor):</b> interneti kontrol edin. Kayıt telefonda güvende; bağlantı gelince gider.</li>
+<li><b>Etiket basılmıyor:</b> kırmızı "Eksik" yazısını tamamlayın. Yazıcıya gönderilen iş gelmiyorsa yazıcının bağlı olduğu bilgisayar açık mı, baskı programı çalışıyor mu bakın (Etiket → Yazıcılar ekranında "● açık" görünmeli).</li>
+<li><b>Belge ERP'ye geçmiyor:</b> 🧾 İrsaliyeler ekranında sebebi yazar. "Aktarım programı çalışmıyor" yazıyorsa ERP bilgisayarı kapalı olabilir.</li>
+<li><b>Uygulama eski görünüyor:</b> uygulamayı kapatıp açın; güncelleme kendiliğinden gelir (sürüm numarası üstte yazar).</li>
+</ul>
+<p>Diğer sorular için: <a href="mailto:info@krtsaha.com">info@krtsaha.com</a></p>
+</section>
+</article>
+</main>
+<footer><div class="kap"><span>© 2026 KRT Saha · Murat Pastane Bakliyat Ltd. Şti. · Isparta</span><span><a href="/">Ana sayfa</a> · <a href="/kurulum.html">Kurulum</a> · <a href="/gizlilik.html">Gizlilik</a></span></div></footer>
+</body></html>

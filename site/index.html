@@ -1,22 +1,222 @@
 <!doctype html>
 <html lang="tr"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>KRT Saha — Mağaza ve saha operasyonu</title>
-<meta name="description" content="KRT Saha: stok sayımı, mal giriş-çıkış, raf etiketi, plasiyer siparişi, sipariş hazırlama ve sevkiyat tek uygulamada.">
-<link rel="icon" href="/icon.svg" type="image/svg+xml"><link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png"><link rel="stylesheet" href="/stil.css"></head>
+<title>KRT Saha — Market ve saha operasyonu tek uygulamada</title>
+<meta name="description" content="KRT Saha: barkodla stok sayımı, mal kabul ve ERP'ye irsaliye, yönetmeliğe uygun fiyat etiketi, plasiyer siparişi, depo hazırlama ve sevkiyat, kasa tahsilatı, kârlılık ve enflasyon raporu. Telefondan, internetsiz de çalışır.">
+<meta property="og:title" content="KRT Saha — Market ve saha operasyonu tek uygulamada">
+<meta property="og:description" content="Sayım, mal kabul, etiket, plasiyer, sevkiyat, kasa tahsilatı ve kârlılık — telefondan, ERP ile konuşarak.">
+<meta property="og:image" content="https://krtsaha.com/play/tanitim-1024x500.png">
+<link rel="icon" href="/icon.svg" type="image/svg+xml"><link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png"><link rel="stylesheet" href="/stil.css">
+<style>
+  .kap{max-width:1120px}
+  header{position:sticky;top:0;z-index:20;background:color-mix(in srgb,var(--bg) 88%,transparent);backdrop-filter:blur(10px);padding:14px 0}
+  nav a{margin-left:16px}
+  .hero{display:grid;grid-template-columns:1.15fr .85fr;gap:40px;align-items:center;padding:56px 0 40px}
+  .hero h1{font-size:clamp(32px,5.2vw,54px);letter-spacing:-1.4px}
+  .hero h1 em{font-style:normal;color:var(--mor)}
+  .hero p{max-width:560px}
+  .cta{display:flex;gap:10px;flex-wrap:wrap}
+  .btn.ikinci{background:transparent;color:var(--mor);border:2px solid var(--mor);padding:11px 20px}
+  .rozetler{display:flex;gap:8px;flex-wrap:wrap;margin-top:22px}
+  .rozetler span{font-size:13px;font-weight:700;background:var(--panel);border:1px solid var(--line);border-radius:999px;padding:5px 12px;color:var(--muted)}
+  .tel{position:relative;width:min(300px,78vw);margin:0 auto;border-radius:38px;padding:10px;background:#16182c;box-shadow:0 30px 60px -20px rgba(40,30,120,.45),0 0 0 1px #2b2f55}
+  .tel img{display:block;width:100%;height:auto;border-radius:29px;aspect-ratio:600/1229;object-fit:cover;object-position:top;background:#fff}
+  .tel.kucuk{width:min(250px,70vw);border-radius:32px;padding:8px}.tel.kucuk img{border-radius:25px}
+  .hero .tel{transform:rotate(2deg)}
+  .sayilar{display:grid;grid-template-columns:repeat(4,1fr);gap:14px;padding:10px 0 30px}
+  .sayi{background:var(--panel);border:1px solid var(--line);border-radius:18px;padding:18px}
+  .sayi b{display:block;font-size:28px;letter-spacing:-.5px;color:var(--mor)}
+  .sayi span{color:var(--muted);font-size:14px;line-height:1.4;display:block;margin-top:2px}
+  h2.bolum{font-size:clamp(26px,3.6vw,36px);letter-spacing:-.8px;margin:70px 0 6px}
+  .alt{color:var(--muted);font-size:18px;margin:0 0 28px;max-width:720px}
+  .ozellik{display:grid;grid-template-columns:1fr 1fr;gap:48px;align-items:center;padding:34px 0;border-top:1px solid var(--line)}
+  .ozellik.ters .gorsel{order:2}
+  .gorsel{display:flex;gap:16px;justify-content:center;flex-wrap:wrap}
+  .ozellik h3{font-size:26px;letter-spacing:-.5px;margin:0 0 10px}
+  .ozellik .etiket{display:inline-block;font-size:12px;font-weight:800;letter-spacing:.06em;text-transform:uppercase;color:var(--yesil);margin-bottom:8px}
+  .ozellik p{color:var(--muted);margin:0 0 12px}
+  .ozellik ul{margin:0;padding:0;list-style:none}
+  .ozellik li{position:relative;padding:6px 0 6px 28px;border-bottom:1px dashed var(--line)}
+  .ozellik li:last-child{border-bottom:none}
+  .ozellik li::before{content:"✓";position:absolute;left:4px;top:6px;color:var(--yesil);font-weight:900}
+  .izgara{grid-template-columns:repeat(auto-fit,minmax(250px,1fr));padding-top:0}
+  .kart h3{display:flex;gap:8px;align-items:center}
+  .adimlar{display:grid;grid-template-columns:repeat(3,1fr);gap:16px;counter-reset:a}
+  .adimlar .kart{position:relative;padding-top:44px}
+  .adimlar .kart::before{counter-increment:a;content:counter(a);position:absolute;top:14px;left:20px;width:24px;height:24px;border-radius:50%;background:var(--mor);color:#fff;font-weight:800;font-size:13px;display:flex;align-items:center;justify-content:center}
+  details{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:14px 18px;margin:10px 0}
+  summary{cursor:pointer;font-weight:700}
+  details p{color:var(--muted);margin:10px 0 0}
+  .son{margin:70px 0 60px;background:linear-gradient(135deg,var(--mor),#7b6ff5);color:#fff;border-radius:24px;padding:40px;display:flex;justify-content:space-between;align-items:center;gap:20px;flex-wrap:wrap}
+  .son h2{margin:0 0 6px;font-size:30px;letter-spacing:-.6px}.son p{margin:0;opacity:.9}
+  .son .btn{background:#fff;color:var(--mor)}
+  .not{font-size:13px;color:var(--muted)}
+  @media (max-width:860px){
+    .hero,.ozellik{grid-template-columns:1fr;gap:26px}
+    .ozellik.ters .gorsel{order:0}
+    .sayilar{grid-template-columns:1fr 1fr}
+    .adimlar{grid-template-columns:1fr}
+    nav a:not(.mob){display:none} nav a{margin-left:12px;font-size:14px}
+    .hero .tel{transform:none}
+  }
+</style></head>
 <body>
 <header><div class="kap"><a class="marka" href="/"><img src="/icon.svg" alt=""><b>KRT <i>Saha</i></b></a>
-<nav><a href="/kurulum.html">Kurulum</a><a href="/gizlilik.html">Gizlilik</a><a href="/hesap-silme.html">Hesap silme</a><a href="mailto:info@krtsaha.com">İletişim</a></nav></div></header>
+<nav><a href="#ozellikler">Özellikler</a><a href="#nasil">Nasıl çalışır</a><a class="mob" href="/rehber.html">Kullanım rehberi</a><a href="/kurulum.html">Kurulum</a><a class="mob" href="#iletisim">İletişim</a></nav></div></header>
+
 <main class="kap">
-<section class="hero"><h1>Mağazanın ve sahanın işi, tek uygulamada.</h1>
-<p>KRT Saha; sayım, etiket, mal kabul, plasiyer siparişi ve sevkiyatı telefondan, barkod okutarak ve internet olmadığında bile yapmanızı sağlar.</p>
-<a class="btn" href="https://play.google.com/store/apps/details?id=com.krtsaha.app">▶ Google Play'den indir</a> <a class="btn" href="https://app.krtsaha.com/" style="background:#fff;color:var(--mor);border:2px solid var(--mor)">Tarayıcıda aç</a></section>
-<section class="izgara">
-<div class="kart"><h3>📦 Stok sayımı</h3><p>Barkod okut, adet gir. Sayım farkları ve raporlar otomatik hazırlanır.</p></div>
-<div class="kart"><h3>🏷️ Raf etiketi</h3><p>Fiyat değişen ürünlerin etiketleri tek dokunuşla yazıcıya gider.</p></div>
-<div class="kart"><h3>🚚 Mal giriş-çıkış</h3><p>Gelen ve giden ürünler belgesiyle kaydedilir, ERP aktarım dosyası hazırlanır.</p></div>
-<div class="kart"><h3>🧾 Plasiyer</h3><p>Müşteri ziyareti, sipariş ve tahsilat sahadan girilir.</p></div>
-<div class="kart"><h3>✅ Sipariş hazırlama</h3><p>Depo, siparişi okutarak toplar; eksik ve fazla anında görünür.</p></div>
-<div class="kart"><h3>📶 Çevrimdışı çalışır</h3><p>Bağlantı koptuğunda kayıtlar telefonda saklanır, bağlanınca gönderilir.</p></div>
-</section></main>
-<footer><div class="kap"><span>© 2026 KRT Saha · Murat Pastane Bakliyat Ltd. Şti. · Isparta</span><span><a href="/gizlilik.html">Gizlilik Politikası</a> · <a href="mailto:info@krtsaha.com">info@krtsaha.com</a></span></div></footer>
+<section class="hero">
+  <div>
+    <h1>Marketin ve sahanın bütün işi, <em>tek telefonda.</em></h1>
+    <p>KRT Saha; stok sayımını, mal kabulü, raf etiketini, plasiyer siparişini, depo hazırlamayı, kasa tahsilatını ve kârlılık raporunu tek uygulamada toplar. Barkod okutarak çalışır, internet kesilse de durmaz, ERP'nizle konuşur.</p>
+    <div class="cta">
+      <a class="btn" href="https://play.google.com/store/apps/details?id=com.krtsaha.app">▶ Google Play'den indir</a>
+      <a class="btn ikinci" href="#iletisim">Demo isteyin</a>
+    </div>
+    <div class="rozetler"><span>📶 İnternetsiz çalışır</span><span>🔐 Rol bazlı yetki</span><span>🔄 ERP12 entegrasyonu</span><span>📱 Android · iPhone · bilgisayar</span></div>
+  </div>
+  <div class="tel"><img src="/ekran/menu.webp" alt="KRT Saha ana menüsü" width="600" height="1229"></div>
+</section>
+
+<section class="sayilar">
+  <div class="sayi"><b>17</b><span>modül tek uygulamada — ayrı program, ayrı şifre yok</span></div>
+  <div class="sayi"><b>15 telefon</b><span>aynı anda sayımda; 100 bin okutmada sıfır kayıp testli</span></div>
+  <div class="sayi"><b>30+</b><span>ayrı yetki — herkes yalnız işini görür, maliyet gizli kalır</span></div>
+  <div class="sayi"><b>0 kurulum</b><span>personelin telefonuna; tarayıcıdan ya da Play Store'dan</span></div>
+</section>
+
+<h2 class="bolum" id="ozellikler">Mağazada</h2>
+<p class="alt">Rafla depo arasındaki her iş, barkod okutarak ve kâğıtsız.</p>
+
+<div class="ozellik">
+  <div class="gorsel"><div class="tel"><img src="/ekran/sayim.webp" alt="Sayım ekranı" loading="lazy" width="600" height="1229"></div></div>
+  <div><span class="etiket">📋 Stok sayımı</span><h3>Onlarca kişi aynı anda sayar, tek kayıt kaybolmaz.</h3>
+  <p>Telefonun kamerasıyla barkod okutulur, adet yazılır. Bir ürün beş ayrı yerde sayılsa da toplamı doğru çıkar.</p>
+  <ul><li>Okutma önce telefona yazılır; internet gelince kendiliğinden gönderilir</li>
+  <li>Koli barkodu okutulunca koli sayısı sorulur, adede kendisi çevirir</li>
+  <li>Bölge / raf etiketiyle sayım; canlı durum ekranında kim ne saydı</li>
+  <li>Sayım bitince fark raporu ve ERP'ye aktarılacak dosya hazır</li>
+  <li><b>Günün mini sayımı:</b> her gün riskli birkaç üründen kısa sayım, fark anında görünür</li></ul></div>
+</div>
+
+<div class="ozellik ters">
+  <div class="gorsel"><div class="tel"><img src="/ekran/mal-giris.webp" alt="Mal giriş ekranı" loading="lazy" width="600" height="1229"></div><div class="tel kucuk"><img src="/ekran/irsaliye.webp" alt="İrsaliyeler ve ERP durumu" loading="lazy" width="600" height="1229"></div></div>
+  <div><span class="etiket">📥 Mal giriş · 📤 Mal çıkış</span><h3>Gelen mal okutulur, irsaliye ERP'ye kendiliğinden düşer.</h3>
+  <p>Tedarikçi seçilir, ürünler okutulur, kaydedilir. Alış irsaliyesi son net alış fiyatıyla ERP'ye yazılır; muhasebe fatura gelince eşleştirir.</p>
+  <ul><li>Alış, satış, iade, fire, depo transferi — sebebiyle birlikte</li>
+  <li>Açık sipariş karşılaştırması: siparişte olup gelmeyen, fazla gelen ürün</li>
+  <li>ERP'de stok kartı olmayan ürüne şablondan geçici kart açılır, kasada da okunur</li>
+  <li>Her belgenin ERP'deki hâli: geçti mi, ERP'de değiştirildi mi, fark ne</li>
+  <li>Muhasebeye KDV hariç Excel ve e-posta</li></ul></div>
+</div>
+
+<div class="ozellik">
+  <div class="gorsel"><div class="tel"><img src="/ekran/etiket.webp" alt="Etiket ekranı" loading="lazy" width="600" height="1229"></div></div>
+  <div><span class="etiket">🏷️ Fiyat etiketi</span><h3>Yönetmeliğe uygun etiket, telefondan yazıcıya.</h3>
+  <p>Fiyatı değişen ürünler kendiliğinden listelenir. Personel fiyata, barkoda dokunamaz; yalnız basar.</p>
+  <ul><li>Raf etiketi (Zebra), A6 / A5 / A4 / A3 afiş, dökme ürün kartı</li>
+  <li>Birim fiyat, fiyat tarihi, üretim yeri ve yerli üretim logosu otomatik</li>
+  <li>İndirim etiketinde önceki fiyat: son 10 günün en düşüğü, sistemden gelir</li>
+  <li>Aynı fiyatlı çeşitler tek etikette; QR ile raftaki etiketin güncelliği doğrulanır</li>
+  <li>Bilgisayardaki küçük baskı programı sayesinde telefondan doğrudan yazıcıya</li></ul></div>
+</div>
+
+<div class="izgara">
+  <div class="kart"><h3>💰 Fiyat &amp; stok sorgula</h3><p>Barkodu okut; fiyat, stok, son alış, hangi tedarikçiden geldiği — yetkine göre.</p></div>
+  <div class="kart"><h3>🔁 Ürün / 📦 stok hareketleri</h3><p>Ürün kimden kaça geldi, kime satıldı; bütün giriş-çıkışlar belge belge.</p></div>
+  <div class="kart"><h3>🛒 Tedarikçi siparişi</h3><p>Azalan, yok satan ve hiç satılmayan ürünler; son 60 günün satış hızına göre ne kadar alınmalı.</p></div>
+</div>
+
+<h2 class="bolum">Sahada ve depoda</h2>
+<p class="alt">Plasiyerin aldığı sipariş, depoda okutularak toplanır, kontrol edilip müşteriye teslim edilir.</p>
+
+<div class="ozellik ters">
+  <div class="gorsel"><div class="tel kucuk"><img src="/ekran/plasiyer-musteri.webp" alt="Plasiyer müşterilerim" loading="lazy" width="600" height="1229"></div><div class="tel kucuk"><img src="/ekran/plasiyer-siparis.webp" alt="Plasiyer sipariş" loading="lazy" width="600" height="1229"></div></div>
+  <div><span class="etiket">🚚 Plasiyer</span><h3>Müşteri, bakiye, risk, son satış fiyatı — hepsi cepte.</h3>
+  <p>Plasiyer kendi müşterilerini, bakiyelerini ve ödeme riskini görür; sipariş, araçtan satış ve tahsilat notu girer.</p>
+  <ul><li>Müşteriye özel fiyat ve bu müşteriye en son satılan fiyat tek dokunuşla</li>
+  <li>Maliyetin altına satış engeli — maliyeti görmeyen plasiyere bile</li>
+  <li>Aynı fiyatlı çeşitleri (kokular, renkler) siparişe tek seferde ekleme</li>
+  <li>Gün sonu raporu, WhatsApp'tan paylaşma, aylık prim hesabı</li>
+  <li>Kâr ve marj müşterinin görebileceği ekranda hiç görünmez</li></ul></div>
+</div>
+
+<div class="ozellik">
+  <div class="gorsel"><div class="tel kucuk"><img src="/ekran/hazirlama.webp" alt="Sipariş hazırlama" loading="lazy" width="600" height="1229"></div><div class="tel kucuk"><img src="/ekran/kontrol.webp" alt="Sevkiyat kontrolü" loading="lazy" width="600" height="1229"></div></div>
+  <div><span class="etiket">📦 Sipariş hazırlama · sevkiyat</span><h3>Depo okutarak toplar, ikinci kişi kontrol eder.</h3>
+  <p>Eksik ve fazla anında görünür; yanlış ürün okutulunca telefon öter. Hazırlanan sipariş başka biri tarafından yeniden okutularak teslim alınır.</p>
+  <ul><li>Koli barkodu otomatik adede çevrilir</li>
+  <li>Siparişte olmayan ürün: uyarı; eksik kalan: bekleyen siparişe</li>
+  <li>Şoför teslimi, hazırlayan / kontrol eden raporu</li></ul></div>
+</div>
+
+<div class="ozellik ters">
+  <div class="gorsel"><div class="tel kucuk"><img src="/ekran/kasa.webp" alt="Kasa tahsilat" loading="lazy" width="600" height="1229"></div><img src="/ekran/makbuz.webp" alt="Tahsilat makbuzu" loading="lazy" width="240" style="width:220px;height:auto;align-self:center;border-radius:6px;box-shadow:0 12px 30px -12px rgba(0,0,0,.35)"></div>
+  <div><span class="etiket">💵 Kasa tahsilat</span><h3>Veresiye müşterinin ödemesi, makbuzuyla.</h3>
+  <p>Kasiyer yalnız yetkili olduğu carilere tahsilat girer; termal yazıcıdan makbuz çıkar, muhasebeye e-posta gider.</p>
+  <ul><li>Nakit, kart, yemek çeki (Sodexo, Multinet, Ticket…), havale</li>
+  <li>Makbuzda önceki bakiye, bu tahsilat, kalan borç; düzenleyen ve teslim eden</li>
+  <li>Her kasanın kendi sıra numarası — arada eksik makbuz anında görünür</li>
+  <li>ERP'de işlenince kendiliğinden eşleşir; işlenmeyen uyarı verir</li></ul></div>
+</div>
+
+<h2 class="bolum">Yönetimde</h2>
+<p class="alt">Rakamlar ERP'den gelir; patron ekranında yalnız karar verilecek şeyler kalır.</p>
+
+<div class="ozellik">
+  <div class="gorsel"><div class="tel kucuk"><img src="/ekran/karlilik.webp" alt="Kârlılık raporu" loading="lazy" width="600" height="1229"></div><div class="tel kucuk"><img src="/ekran/enflasyon.webp" alt="Enflasyon raporu" loading="lazy" width="600" height="1229"></div></div>
+  <div><span class="etiket">💹 Kârlılık ve enflasyon</span><h3>Hangi ürün para kazandırıyor, hangisi sadece sürüm yapıyor?</h3>
+  <p>Kasa ve firma satışları ürün ürün, satıldığı aydaki net alış maliyetiyle hesaplanır. Enflasyona karşı gerçekten kazanıp kazanmadığınız görünür.</p>
+  <ul><li>Para kazandıran · sürüm ürünü · az satan ama kârlı · zarar eden</li>
+  <li><b>Bugünkü alışla kâr:</b> rafı bugünkü fiyattan doldursaydınız ne kalırdı</li>
+  <li>Fiyatı TÜFE'nin gerisinde kalan, alışın altında satılan ürünler</li>
+  <li>Aylık nominal ve reel (bugünün parasıyla) kâr; tedarikçi bazında marj</li>
+  <li>Excel'e aktarma; yalnız yetkili kişiler görür</li></ul></div>
+</div>
+
+<div class="ozellik ters">
+  <div class="gorsel"><div class="tel kucuk"><img src="/ekran/ozet.webp" alt="Günün özeti" loading="lazy" width="600" height="1229"></div><div class="tel kucuk"><img src="/ekran/cari-risk.webp" alt="Cari risk" loading="lazy" width="600" height="1229"></div></div>
+  <div><span class="etiket">📊 Günün özeti · 📒 cari</span><h3>Sabah tek ekran: müdahale gereken ne var?</h3>
+  <p>ERP'ye geçmeyen belge, alınmamış yedek, sayım farkı, gelmeyen sipariş, işlenmemiş tahsilat — yalnız sorun varsa görünür.</p>
+  <ul><li>Cari ekstresi, vade raporu, ödeme alışkanlığına göre risk</li>
+  <li>Teslimat farkı: siparişle gelen mal arasındaki fark e-postayla</li>
+  <li>Sunucu bekçisi: aktarım durursa ya da yedek alınmazsa e-posta</li></ul></div>
+</div>
+
+<div class="izgara">
+  <div class="kart"><h3>🕐 Mesai</h3><p>Kasadaki değişen QR + konumla giriş-çıkış, vardiya planı, izin, puantaj ve fazla mesai.</p></div>
+  <div class="kart"><h3>🎨 Konsept temalar</h3><p>Personelin seveceği temalar: oyun, uzay, retro, sosyal medya… Renk, simge ve başlıklarla.</p></div>
+  <div class="kart"><h3>🔐 Yetkiler</h3><p>Fiyatı, stoğu, maliyeti kim görür; kim indirim etiketi basar, kim ERP'ye belge gönderir — tek tek.</p></div>
+</div>
+
+<h2 class="bolum" id="nasil">Nasıl çalışır?</h2>
+<p class="alt">Mevcut ERP'niz yerinde kalır. KRT Saha onun yanında, telefonlarda çalışır.</p>
+<div class="adimlar">
+  <div class="kart"><h3>ERP bağlantısı</h3><p>ERP bilgisayarına küçük bir aktarım programı kurulur. Ürünler, fiyatlar, cariler ve hareketler düzenli olarak uygulamaya gelir; irsaliyeler ve gerekli stok kartları kontrollü olarak ERP'ye yazılır.</p></div>
+  <div class="kart"><h3>Kullanıcılar ve yetkiler</h3><p>Yönetici her personele kullanıcı açar ve yetkilerini seçer. Kasiyer yalnız kasa, depocu yalnız hazırlama görür.</p></div>
+  <div class="kart"><h3>Telefonlar</h3><p>Personel Play Store'dan indirir ya da tarayıcıdan açar, giriş yapar. Güncellemeler kendiliğinden gelir.</p></div>
+</div>
+
+<h2 class="bolum">Güvenlik ve süreklilik</h2>
+<div class="izgara" style="padding-top:12px">
+  <div class="kart"><h3>📶 Kayıp yok</h3><p>Her kayıt önce telefona yazılır; sunucuda gerçekten görüldüğü doğrulanınca kuyruktan çıkar. Aynı kayıt iki kez gelirse çift yazılmaz.</p></div>
+  <div class="kart"><h3>🗄️ Yedek</h3><p>Uygulama verisi her gün yedeklenir; ERP veri tabanının gece yedeği de takip edilir, alınmazsa haber verilir.</p></div>
+  <div class="kart"><h3>🛡️ ERP'ye saygı</h3><p>ERP'ye yalnız irsaliye ve gerekli stok kartı yazılır, işlem tek parça (ya hep ya hiç). Tahsilat ve plasiyer kayıtları ERP'ye dokunmaz.</p></div>
+  <div class="kart"><h3>🔑 Gizlilik</h3><p>Maliyet ve kâr yetkisiz telefona hiç gönderilmez. Oturumlar yönetici panelinden tek tuşla kapatılır.</p></div>
+</div>
+
+<h2 class="bolum">Sık sorulanlar</h2>
+<details><summary>Hangi ERP ile çalışıyor?</summary><p>Bugün ERP12 (SQL Server) ile tam entegre çalışıyor. Başka ERP'ler için aktarım programı uyarlanabilir; bize yazın.</p></details>
+<details><summary>İnternet giderse ne olur?</summary><p>Sayım, mal giriş, plasiyer siparişi ve hazırlama telefonda devam eder. Kayıtlar telefonda bekler, internet gelince kendiliğinden gönderilir.</p></details>
+<details><summary>iPhone'da çalışıyor mu?</summary><p>Evet. Android'de Play Store'dan, iPhone'da Safari'den ana ekrana eklenerek kullanılır. Bilgisayardan tarayıcıyla da açılır.</p></details>
+<details><summary>Yazıcı gerekiyor mu?</summary><p>Etiket ve makbuz için mağazadaki mevcut yazıcılar kullanılır (A4, Zebra etiket, termal fiş). Yazıcının bağlı olduğu bilgisayara küçük bir baskı programı kurulur; telefondan gönderilen iş oradan basılır.</p></details>
+<details><summary>Personel eğitimi ne kadar sürer?</summary><p>Ekranlar tek iş için tasarlandı: okut, adet yaz, kaydet. Çoğu personel ilk gün kullanır. Ayrıntılı <a href="/rehber.html">kullanım rehberi</a> burada.</p></details>
+<details><summary>Verilerimiz nerede duruyor?</summary><p>Almanya'daki veri merkezinde (Hetzner) kiralık sunucuda, şifreli bağlantıyla; her gece yedeklenir. Ayrıntılar <a href="/gizlilik.html">gizlilik politikasında</a>.</p></details>
+
+<section class="son" id="iletisim">
+  <div><h2>Kendi mağazanızda görmek ister misiniz?</h2><p>Kısa bir görüşmede ihtiyacınızı dinleyelim, demo hesabı açalım.</p></div>
+  <a class="btn" href="mailto:info@krtsaha.com?subject=KRT%20Saha%20demo%20talebi">✉️ info@krtsaha.com</a>
+</section>
+<p class="not">Ekran görüntüleri deneme verisiyle hazırlanmıştır.</p>
+</main>
+<footer><div class="kap"><span>© 2026 KRT Saha · Murat Pastane Bakliyat Ltd. Şti. · Isparta</span><span><a href="/rehber.html">Kullanım rehberi</a> · <a href="/kurulum.html">Kurulum</a> · <a href="/gizlilik.html">Gizlilik</a> · <a href="mailto:info@krtsaha.com">info@krtsaha.com</a></span></div></footer>
 </body></html>
