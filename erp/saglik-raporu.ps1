@@ -66,14 +66,19 @@ try {
     $satisAile = "(FT.AD LIKE N'%Sat' + NCHAR(305) + NCHAR(351) + N'%' OR FT.AD LIKE N'%SATI' + NCHAR(350) + N'%' OR f.FIS_TURU IN (11, 12, 35, 36))"
     $kasaMi = "(ISNULL(f.CARI, 0) = COALESCE((SELECT TOP 1 VARSAYILANCARI FROM dbo.FIRMASABITLERI), -1) OR (f.CARI IS NULL AND f.FIS_TURU IN (11, 12, 35, 36)) OR f.FIS_TURU = 11)"
     $g = "(CASE WHEN f.FIS_TURU IN (5, 6, 7, 8, 36) AND ISNULL(d.FATRALANDIRILMIS_IRSALIYEMI, 0) = 1 THEN 0 ELSE FT.GIRIS END)"
+    # Belge satirindaki birim carpani (koli = 24 adet gibi): miktar ve birim maliyet ana birime (adet / kg) cevrilir.
+    $carp = "(CASE WHEN ISNULL(d.CARPAN, 0) > 0.0001 AND ISNULL(d.CARPAN, 0) < 100000 THEN CAST(d.CARPAN AS float) ELSE 1 END)"
     Calistir @"
 IF OBJECT_ID('tempdb..#kdv') IS NOT NULL DROP TABLE #kdv;
-SELECT s.ID AS STOK, CAST(ISNULL(v.KDV_PAREKENDE, 0) AS float) AS KDV, s.KOD, s.AD INTO #kdv FROM dbo.STOK s LEFT JOIN dbo.STOK_VERGI v ON v.ID = s.STOK_VERGI;
+-- Mal olmayan kartlar (fiyat farki, iskonto, nakliye, kargo) haric tutulur: kar hesabini bozuyorlardi.
+SELECT s.ID AS STOK, CAST(ISNULL(v.KDV_PAREKENDE, 0) AS float) AS KDV, s.KOD, s.AD INTO #kdv FROM dbo.STOK s LEFT JOIN dbo.STOK_VERGI v ON v.ID = s.STOK_VERGI
+WHERE NOT (s.AD LIKE N'%FIYAT FARK%' OR s.AD LIKE N'%F' + NCHAR(304) + N'YAT FARK%' OR s.AD LIKE N'%ISKONTO%' OR s.AD LIKE N'%' + NCHAR(304) + N'SKONTO%'
+           OR s.AD LIKE N'%NAKL%YE%' OR s.AD LIKE N'%NAVLUN%' OR s.AD LIKE N'%KARGO BEDEL%');
 CREATE CLUSTERED INDEX i ON #kdv (STOK);
 IF OBJECT_ID('tempdb..#sat') IS NOT NULL DROP TABLE #sat;
 SELECT d.STOK, CAST(f.FIS_TARIHI AS date) AS GUN,
        CASE WHEN $kasaMi THEN 1 ELSE 0 END AS KASA,
-       -$g * CAST(d.MIKTAR_FIS AS float) AS MIKTAR,
+       -$g * CAST(d.MIKTAR_FIS AS float) * $carp AS MIKTAR,
        -$g * CASE WHEN ISNULL(d.TOPLAM_KDV_MATRAHI, 0) <> 0 THEN CAST(d.TOPLAM_KDV_MATRAHI AS float)
                   ELSE CAST(d.MIKTAR_FIS AS float) * CAST(ISNULL(d.FIYAT, 0) AS float) / (1 + k.KDV / 100.0) END AS TUTAR
 INTO #sat
@@ -88,10 +93,12 @@ CREATE CLUSTERED INDEX i ON #sat (STOK, GUN);
     Yaz "Alislar okunuyor..."
     Calistir @"
 IF OBJECT_ID('tempdb..#alis') IS NOT NULL DROP TABLE #alis;
-SELECT d.STOK, f.FIS_TARIHI AS TARIH, d.ID AS DID, CAST(d.TOPLAM_KDV_MATRAHI AS float) / CAST(d.MIKTAR_FIS AS float) AS MALIYET, ISNULL(c.AD, '') AS CARI
+SELECT d.STOK, f.FIS_TARIHI AS TARIH, d.ID AS DID, CAST(d.TOPLAM_KDV_MATRAHI AS float) / (CAST(d.MIKTAR_FIS AS float) * $carp) AS MALIYET, ISNULL(c.AD, '') AS CARI
 INTO #alis
-FROM dbo.FIS f JOIN dbo.FIS_DETAY d ON d.FIS = f.ID LEFT JOIN dbo.CARI c ON c.ID = f.CARI
+FROM dbo.FIS f JOIN dbo.FIS_DETAY d ON d.FIS = f.ID LEFT JOIN dbo.CARI c ON c.ID = f.CARI JOIN #kdv k ON k.STOK = d.STOK
 WHERE f.FIS_TURU IN (1, 5) AND ISNULL(f.AKTIF, 1) = 1 AND d.MIKTAR_FIS > 0 AND ISNULL(d.TOPLAM_KDV_MATRAHI, 0) > 0;
+-- Bedelsiz / sembolik fiyatli alis satirlari (urunun ortalama alisinin %20'sinden ucuz) maliyet sayilmaz.
+DELETE a FROM #alis a JOIN (SELECT STOK, AVG(MALIYET) AS ORT FROM #alis GROUP BY STOK) o ON o.STOK = a.STOK WHERE a.MALIYET < o.ORT * 0.2;
 CREATE CLUSTERED INDEX i ON #alis (STOK, TARIH);
 IF OBJECT_ID('tempdb..#son') IS NOT NULL DROP TABLE #son;
 IF OBJECT_ID('tempdb..#sira') IS NOT NULL DROP TABLE #sira;
@@ -139,22 +146,22 @@ UPDATE a SET MALIYET = COALESCE(
 FROM #ay a;
 "@
         $oz = (Tablo @"
-SELECT SUM(T90) AS CIRO, SUM(K90) AS KASA, SUM(CASE WHEN MALIYET IS NOT NULL THEN T90 ELSE 0 END) AS CIRO_M,
-       SUM(CASE WHEN MALIYET IS NOT NULL THEN M90 * MALIYET ELSE 0 END) AS MAL,
-       COUNT(DISTINCT CASE WHEN M90 <> 0 THEN STOK END) AS URUN
-FROM #ay
+SELECT SUM(T90) AS CIRO, SUM(K90) AS KASA, SUM(CIRO_M) AS CIRO_M, SUM(MAL) AS MAL, COUNT(*) AS URUN FROM (
+  SELECT STOK, SUM(T90) AS T90, SUM(K90) AS K90, SUM(CASE WHEN MALIYET IS NOT NULL THEN T90 ELSE 0 END) AS CIRO_M,
+         SUM(CASE WHEN MALIYET IS NOT NULL THEN M90 * MALIYET ELSE 0 END) AS MAL
+  FROM #ay GROUP BY STOK HAVING SUM(M90) > 0 AND SUM(T90) > 0) u
 "@).Rows[0]
         $veri.ozet = [ordered]@{ ciro = D $oz.CIRO; kasa = D $oz.KASA; ciroMaliyetli = D $oz.CIRO_M; maliyet = D $oz.MAL; urun = [int]$oz.URUN }
         $aylar = @((Tablo @"
 SELECT CONVERT(char(7), AY, 120) AS AY, SUM(TUTAR) AS CIRO, SUM(CASE WHEN MALIYET IS NOT NULL THEN TUTAR ELSE 0 END) AS CIRO_M,
        SUM(CASE WHEN MALIYET IS NOT NULL THEN MIKTAR * MALIYET ELSE 0 END) AS MAL
-FROM #ay GROUP BY AY ORDER BY AY
+FROM #ay WHERE MIKTAR > 0 AND TUTAR > 0 GROUP BY AY ORDER BY AY
 "@).Rows | ForEach-Object { ,@((M $_.AY), (D $_.CIRO), (D $_.CIRO_M), (D $_.MAL)) })
         $veri.aylar = $aylar
         # En cok kar getiren ve en cok ciro yapan dusuk marjli urunler
         $urunler = @((Tablo @"
 SELECT TOP 400 k.KOD, k.AD, SUM(a.M90) AS M90, SUM(a.T90) AS T90, SUM(CASE WHEN a.MALIYET IS NOT NULL THEN a.M90 * a.MALIYET END) AS MAL
-FROM #ay a JOIN #kdv k ON k.STOK = a.STOK GROUP BY k.KOD, k.AD HAVING SUM(a.T90) > 0 ORDER BY SUM(a.T90) DESC
+FROM #ay a JOIN #kdv k ON k.STOK = a.STOK GROUP BY k.KOD, k.AD HAVING SUM(a.T90) > 0 AND SUM(a.M90) > 0 ORDER BY SUM(a.T90) DESC
 "@).Rows | ForEach-Object { ,@((M $_.KOD), (M $_.AD), (D $_.M90), (D $_.T90), (D $_.MAL)) })
         $veri.urunler = $urunler
     } catch { [void]$hatalar.Add("Ozet: " + $_.Exception.Message); Yaz "HATA ozet: $($_.Exception.Message)" }

@@ -145,7 +145,8 @@ var VERI = /*VERI*/null;
   }
   h += '<div class="son"><div><h3>KRT Saha bunları her gün kendisi izler.</h3><p>Alışın altına düşen fiyat, güncellenmeyen etiket, satılmayan stok ve kasa sapmaları sabah tek ekranda. Sayım, mal kabul, etiket, plasiyer ve kasa tahsilatı da aynı uygulamada.</p></div><a href="https://krtsaha.com">krtsaha.com</a></div>';
   h += '<ul class="notlar"><li>Bütün tutarlar KDV hariçtir. Veriler ERP veri tabanından yalnız okunarak alındı; ERP\'ye hiçbir şey yazılmadı.</li>' +
-    '<li>Maliyet: ürünün satıldığı ayda geçerli son net alış fiyatı (satır ve dip iskontoları düşülmüş). Alışı hiç olmayan ürünlerin kârı hesaplanmadı.</li>' +
+    '<li>Maliyet: ürünün satıldığı ayda geçerli son net alış fiyatı (satır ve dip iskontoları düşülmüş), koli/paket alımları adede çevrilerek. Alışı hiç olmayan ürünlerin kârı hesaplanmadı; bedelsiz gelen satırlar maliyet sayılmadı.</li>' +
+    '<li>Fiyat farkı, iskonto, nakliye gibi mal olmayan kartlar ve yalnız iadesi olan (o dönemde net satışı olmayan) ürünler hesaba katılmadı.</li>' +
     '<li>"Gözden kaçan tutar" tahminidir: son 30 günün satış hızı ile bugünkü fiyat ve maliyet farkından hesaplanır; satılmayan stoğun değer kaybı için aylık %' + sy(V.enflasyon) + ' kullanıldı.</li></ul>';
   if((V.hatalar || []).length) h += '<section class="hata"><h2>Hesaplanamayan bölümler</h2><ul>' + V.hatalar.map(function(e){ return '<li>' + esc(e) + '</li>'; }).join('') + '</ul></section>';
   el.innerHTML = h;
