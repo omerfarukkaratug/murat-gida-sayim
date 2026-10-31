@@ -1,0 +1,154 @@
+<!doctype html>
+<html lang="tr"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Mağaza Sağlık Raporu — KRT Saha</title>
+<style>
+  :root{--bg:#f6f6fb;--panel:#fff;--ink:#12152c;--muted:#5b6078;--line:#e3e4ee;--mor:#5546ea;--yesil:#14a35f;--kirmizi:#d42f2f;--turuncu:#c76a00}
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.55 -apple-system,"Segoe UI",Roboto,Helvetica,Arial,sans-serif}
+  .kap{max-width:980px;margin:0 auto;padding:28px 22px 60px}
+  .ust{display:flex;justify-content:space-between;align-items:flex-start;gap:16px;flex-wrap:wrap;border-bottom:2px solid var(--ink);padding-bottom:14px}
+  .ust h1{margin:0;font-size:30px;letter-spacing:-.8px}
+  .ust .alt{color:var(--muted);font-size:14px}
+  .marka{font-weight:800;font-size:18px;text-align:right}.marka i{font-style:normal;color:var(--mor)}
+  .manset{margin:24px 0;background:linear-gradient(135deg,#2b2170,#5546ea);color:#fff;border-radius:20px;padding:26px 28px}
+  .manset .b{font-size:13px;text-transform:uppercase;letter-spacing:.08em;opacity:.85;font-weight:700}
+  .manset .d{font-size:clamp(34px,6vw,52px);font-weight:800;letter-spacing:-1px;line-height:1.1;margin:6px 0}
+  .manset .a{opacity:.9;max-width:640px}
+  .uclu{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-top:18px}
+  .uclu div{background:rgba(255,255,255,.12);border-radius:14px;padding:12px 14px}
+  .uclu b{display:block;font-size:22px}.uclu span{font-size:13px;opacity:.9}
+  .kutular{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin:18px 0}
+  .kutu{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:12px 14px}
+  .kutu .b{font-size:11.5px;font-weight:800;color:var(--muted);text-transform:uppercase;letter-spacing:.05em}
+  .kutu .d{font-size:22px;font-weight:800;margin-top:2px}
+  .kutu .a{font-size:12.5px;color:var(--muted)}
+  section{background:var(--panel);border:1px solid var(--line);border-radius:18px;padding:20px 22px;margin:16px 0;break-inside:avoid-page}
+  section h2{margin:0 0 4px;font-size:21px;letter-spacing:-.4px;display:flex;justify-content:space-between;gap:10px;align-items:baseline;flex-wrap:wrap}
+  section h2 small{font-size:15px;font-weight:800}
+  .ac{color:var(--muted);margin:0 0 12px;font-size:14px}
+  table{width:100%;border-collapse:collapse;font-size:13.5px}
+  th{font-size:11px;text-transform:uppercase;letter-spacing:.04em;color:var(--muted);text-align:right;padding:6px 6px;border-bottom:1.5px solid var(--line);white-space:nowrap}
+  td{padding:6px;border-bottom:1px solid var(--line);text-align:right;white-space:nowrap;font-variant-numeric:tabular-nums}
+  th:first-child,td:first-child{text-align:left;white-space:normal}
+  td:first-child small{display:block;color:var(--muted);font-size:11.5px}
+  .k{color:var(--kirmizi);font-weight:700}.y{color:var(--yesil);font-weight:700}.t{color:var(--turuncu);font-weight:700}
+  .bos{color:var(--muted);font-style:italic;padding:8px 0}
+  .cubuklar{display:flex;align-items:flex-end;gap:10px;height:170px;margin:10px 0 4px;padding-top:10px}
+  .cubuklar div{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:flex-end;height:100%;font-size:12px;color:var(--muted)}
+  .cubuklar i{display:block;width:100%;max-width:70px;background:var(--mor);border-radius:8px 8px 0 0;min-height:2px}
+  .cubuklar b{color:var(--ink);font-size:12px;margin-bottom:3px}
+  .son{background:var(--ink);color:#fff;border-radius:18px;padding:22px 24px;margin-top:22px;display:flex;justify-content:space-between;gap:16px;flex-wrap:wrap;align-items:center}
+  .son h3{margin:0 0 4px;font-size:20px}.son p{margin:0;opacity:.85}
+  .son a{background:#fff;color:var(--ink);text-decoration:none;font-weight:800;padding:11px 18px;border-radius:12px}
+  .notlar{font-size:12.5px;color:var(--muted);margin-top:16px}
+  .notlar li{margin:3px 0}
+  .hata{border-color:#f0c4c4;background:#fff6f6}
+  .yazdir{position:fixed;right:18px;bottom:18px;background:var(--mor);color:#fff;border:0;border-radius:12px;padding:12px 16px;font-weight:800;font-size:14px;cursor:pointer;box-shadow:0 10px 24px -8px rgba(85,70,234,.6)}
+  @media (max-width:720px){.uclu,.kutular{grid-template-columns:1fr 1fr}.tablo{overflow-x:auto}}
+  @media print{
+    body{background:#fff;font-size:12px}.kap{padding:0}.yazdir{display:none}
+    section{border-color:#ccc}.manset{-webkit-print-color-adjust:exact;print-color-adjust:exact}
+    .son{-webkit-print-color-adjust:exact;print-color-adjust:exact}
+    @page{size:A4;margin:12mm}
+  }
+</style></head>
+<body>
+<div class="kap" id="rapor">Rapor yükleniyor…</div>
+<button class="yazdir" onclick="window.print()">🖨️ PDF olarak kaydet</button>
+<script>
+var VERI = /*VERI*/null;
+(function(){
+  var V = VERI, el = document.getElementById('rapor');
+  if(!V){ el.innerHTML = '<p>Rapor verisi yok. Bu dosya saglik-raporu.ps1 ile doldurulur.</p>'; return; }
+  function esc(s){ return String(s == null ? '' : s).replace(/[&<>"']/g, function(c){ return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]; }); }
+  function tl(v, o){ if(v == null || !isFinite(v)) return '—'; return Number(v).toLocaleString('tr-TR', { minimumFractionDigits: o || 0, maximumFractionDigits: o || 0 }) + ' ₺'; }
+  function sy(v){ if(v == null || !isFinite(v)) return '—'; return Number(v).toLocaleString('tr-TR', { maximumFractionDigits: 1 }); }
+  function yz(v){ if(v == null || !isFinite(v)) return '—'; var s = Math.abs(v * 100).toLocaleString('tr-TR', { minimumFractionDigits: 1, maximumFractionDigits: 1 }); return (v < 0 ? '−' : '') + '%' + s; }
+  var AY = ['Ocak','Şubat','Mart','Nisan','Mayıs','Haziran','Temmuz','Ağustos','Eylül','Ekim','Kasım','Aralık'];
+  var enf = (V.enflasyon || 0) / 100;
+
+  // Tahmini aylık kaçak
+  var altinda = (V.altinda || []).map(function(r){ return { kod: r[0], ad: r[1], satis: r[2], alis: r[3], tarih: r[4], cari: r[5], m30: r[6] || 0, stok: r[7], zarar: Math.max(0, (r[3] - r[2]) * (r[6] || 0)) }; });
+  var geride = (V.geride || []).map(function(r){ return { kod: r[0], ad: r[1], satis: r[2], onceki: r[3], alis: r[4], tarih: r[5], degisim: r[6], cari: r[7], m30: r[8] || 0, kacak: Math.max(0, (r[4] - r[3]) * (r[8] || 0)) }; });
+  var oluD = V.olu ? V.olu.deger || 0 : 0;
+  var k1 = altinda.reduce(function(t, x){ return t + x.zarar; }, 0);
+  var k2 = geride.reduce(function(t, x){ return t + x.kacak; }, 0);
+  var k3 = oluD * enf;
+  var toplam = k1 + k2 + k3;
+
+  var h = '<div class="ust"><div><h1>Mağaza Sağlık Raporu</h1><div class="alt">' + esc(V.firma || 'Mağaza') + ' · ' + esc(V.olusturma) + ' · ERP12 (' + esc(V.veritabani) + ')</div></div><div class="marka">KRT <i>Saha</i><div class="alt" style="font-weight:400">krtsaha.com</div></div></div>';
+  h += '<div class="manset"><div class="b">Her ay gözden kaçan tahmini tutar</div><div class="d">' + tl(toplam) + '</div>' +
+    '<div class="a">ERP kayıtlarınızdan hesaplandı. Aşağıdaki ürün listeleri bu tutarın nereden geldiğini gösteriyor; çoğu bir fiyat güncellemesiyle düzelir.</div>' +
+    '<div class="uclu"><div><b>' + tl(k1) + '</b><span>Alış fiyatının altında satış — ' + altinda.length + ' ürün</span></div>' +
+    '<div><b>' + tl(k2) + '</b><span>Alışı artıp fiyatı güncellenmeyen — ' + geride.length + ' ürün</span></div>' +
+    '<div><b>' + tl(k3) + '</b><span>Satılmayan stokta eriyen para (aylık %' + sy(V.enflasyon) + ')</span></div></div></div>';
+
+  // Özet
+  if(V.ozet){
+    var o = V.ozet, kar = o.ciroMaliyetli - o.maliyet, marj = o.ciroMaliyetli > 0 ? kar / o.ciroMaliyetli : null;
+    h += '<div class="kutular"><div class="kutu"><div class="b">Son 90 gün ciro</div><div class="d">' + tl(o.ciro) + '</div><div class="a">KDV hariç</div></div>' +
+      '<div class="kutu"><div class="b">Brüt kâr</div><div class="d ' + (kar < 0 ? 'k' : 'y') + '">' + tl(kar) + '</div><div class="a">Marj ' + yz(marj) + '</div></div>' +
+      '<div class="kutu"><div class="b">Kasa / firma</div><div class="d">' + yz(o.ciro > 0 ? o.kasa / o.ciro : null) + '</div><div class="a">cironun kasadan gelen payı</div></div>' +
+      '<div class="kutu"><div class="b">Satılan ürün çeşidi</div><div class="d">' + sy(o.urun) + '</div><div class="a">son 90 günde</div></div></div>';
+  }
+  // Aylık eğilim
+  if(V.aylar && V.aylar.length){
+    var ay = V.aylar.map(function(r){ var kar = r[2] - r[3]; return { ay: r[0], ciro: r[1], kar: kar, marj: r[2] > 0 ? kar / r[2] : null }; });
+    var mx = Math.max.apply(null, ay.map(function(a){ return Math.max(a.kar, 1); }));
+    h += '<section><h2>Aylık brüt kâr</h2><p class="ac">Son altı ay; son ay henüz bitmedi. Ciro enflasyonla büyürken marjın düşmesi, fiyatların maliyete yetişmediğini gösterir.</p>' +
+      '<div class="cubuklar">' + ay.map(function(a){ return '<div><b>' + yz(a.marj) + '</b><i style="height:' + Math.max(2, Math.round(Math.max(a.kar, 0) / mx * 130)) + 'px"></i>' + AY[Number(a.ay.slice(5)) - 1].slice(0, 3) + ' ' + a.ay.slice(2, 4) + '</div>'; }).join('') + '</div>' +
+      '<div class="tablo"><table><tr><th>Ay</th><th>Ciro</th><th>Brüt kâr</th><th>Marj</th></tr>' + ay.map(function(a){ return '<tr><td>' + AY[Number(a.ay.slice(5)) - 1] + ' ' + a.ay.slice(0, 4) + '</td><td>' + tl(a.ciro) + '</td><td class="' + (a.kar < 0 ? 'k' : '') + '">' + tl(a.kar) + '</td><td>' + yz(a.marj) + '</td></tr>'; }).join('') + '</table></div></section>';
+  }
+  // 1) Alışın altında
+  h += '<section><h2>🔻 Alış fiyatının altında satılan ürünler <small class="k">' + tl(k1) + ' / ay</small></h2>' +
+    '<p class="ac">Bugünkü raf fiyatı, ürünün en son alış fiyatından (iskontolar düşülmüş, KDV hariç) düşük. Her satışta zarar ediliyor. Aylık zarar = son 30 günde satılan × fark.</p>' +
+    (altinda.length ? '<div class="tablo"><table><tr><th>Ürün</th><th>Raf fiyatı</th><th>Son alış</th><th>Fark</th><th>30 günde satılan</th><th>Aylık zarar</th></tr>' +
+      altinda.slice(0, 40).map(function(x){ return '<tr><td>' + esc(x.ad) + '<small>' + esc(x.kod) + ' · ' + esc(x.cari) + ' · ' + esc(x.tarih) + '</small></td><td>' + tl(x.satis, 2) + '</td><td>' + tl(x.alis, 2) + '</td><td class="k">' + tl(x.satis - x.alis, 2) + '</td><td>' + sy(x.m30) + '</td><td class="k">' + tl(x.zarar) + '</td></tr>'; }).join('') + '</table></div>' +
+      (altinda.length > 40 ? '<p class="ac">… ve ' + (altinda.length - 40) + ' ürün daha.</p>' : '')
+      : '<div class="bos">Alışın altında satılan ürün yok. 👍</div>') + '</section>';
+  // 2) Fiyatı güncellenmeyen
+  h += '<section><h2>📉 Alışı arttı, satış fiyatı güncellenmedi <small class="t">' + tl(k2) + ' / ay</small></h2>' +
+    '<p class="ac">Son alış bir öncekinden en az %3 pahalı geldi ama raf fiyatı o tarihten beri değişmedi. Hâlâ kârlı görünse de marj eriyor. Aylık kaçak = son 30 günde satılan × alıştaki artış.</p>' +
+    (geride.length ? '<div class="tablo"><table><tr><th>Ürün</th><th>Önceki alış</th><th>Son alış</th><th>Artış</th><th>Raf fiyatı</th><th>Son fiyat değişimi</th><th>Aylık kaçak</th></tr>' +
+      geride.slice(0, 40).map(function(x){ return '<tr><td>' + esc(x.ad) + '<small>' + esc(x.kod) + ' · ' + esc(x.cari) + ' · alış ' + esc(x.tarih) + '</small></td><td>' + tl(x.onceki, 2) + '</td><td>' + tl(x.alis, 2) + '</td><td class="t">' + yz(x.onceki > 0 ? x.alis / x.onceki - 1 : null) + '</td><td>' + tl(x.satis, 2) + '</td><td>' + esc(x.degisim || 'kayıt yok') + '</td><td class="t">' + tl(x.kacak) + '</td></tr>'; }).join('') + '</table></div>' +
+      (geride.length > 40 ? '<p class="ac">… ve ' + (geride.length - 40) + ' ürün daha.</p>' : '')
+      : '<div class="bos">Bu durumda ürün yok. 👍</div>') + '</section>';
+  // 3) Satılmayan stok
+  if(V.olu){
+    h += '<section><h2>💤 90 gündür satılmayan stok <small>' + tl(V.olu.deger) + '</small></h2>' +
+      '<p class="ac">' + sy(V.olu.adet) + ' ürün stokta duruyor ama 90 gündür hiç satılmadı. Bu para rafta bekliyor; enflasyonda her ay değer kaybediyor (aylık ≈ ' + tl(k3) + '). İndirim, iade ya da raf yerini değiştirmek düşünülebilir.</p>' +
+      ((V.olu.liste || []).length ? '<div class="tablo"><table><tr><th>Ürün</th><th>Stok</th><th>Son alış</th><th>Bağlı para</th><th>Son satış</th></tr>' +
+        V.olu.liste.slice(0, 30).map(function(r){ return '<tr><td>' + esc(r[1]) + '<small>' + esc(r[0]) + '</small></td><td>' + sy(r[2]) + '</td><td>' + tl(r[3], 2) + '</td><td>' + tl(r[4]) + '</td><td>' + esc(r[5] || '6 aydan eski') + '</td></tr>'; }).join('') + '</table></div>' : '<div class="bos">Yok. 👍</div>') + '</section>';
+  }
+  // 4) Ürün grupları
+  if(V.urunler && V.urunler.length){
+    var u = V.urunler.filter(function(r){ return r[4] != null && r[3] > 0; }).map(function(r){ var kar = r[3] - r[4]; return { kod: r[0], ad: r[1], m: r[2], ciro: r[3], kar: kar, marj: kar / r[3] }; });
+    var kazandiran = u.slice().sort(function(a, b){ return b.kar - a.kar; }).slice(0, 12);
+    var surum = u.filter(function(x){ return x.marj < 0.08; }).sort(function(a, b){ return b.ciro - a.ciro; }).slice(0, 12);
+    var tablo = function(l, renk){ return l.length ? '<div class="tablo"><table><tr><th>Ürün</th><th>90 gün satış</th><th>Ciro</th><th>Brüt kâr</th><th>Marj</th></tr>' + l.map(function(x){ return '<tr><td>' + esc(x.ad) + '<small>' + esc(x.kod) + '</small></td><td>' + sy(x.m) + '</td><td>' + tl(x.ciro) + '</td><td class="' + (x.kar < 0 ? 'k' : renk) + '">' + tl(x.kar) + '</td><td>' + yz(x.marj) + '</td></tr>'; }).join('') + '</table></div>' : '<div class="bos">Yok.</div>'; };
+    h += '<section><h2>⭐ Para kazandıran ürünler</h2><p class="ac">Son 90 günde en çok brüt kâr bırakan ürünler. Rafta ve stokta hiç eksik olmamalı.</p>' + tablo(kazandiran, 'y') + '</section>';
+    h += '<section><h2>🔁 Çok satan ama az kazandıran (sürüm ürünleri)</h2><p class="ac">Ciroda üst sıralarda, marjı %8\'in altında. Müşteriyi çeker ama kâr bırakmaz; fiyat ya da alış şartları gözden geçirilmeli.</p>' + tablo(surum, '') + '</section>';
+  }
+  // 5) Kasa iptalleri
+  if(V.iptal){
+    var ip = V.iptal, sat = 0, satT = 0, fis = 0, fisT = 0;
+    (ip.kisiler || []).forEach(function(k){ sat += k[1]; satT += k[2] || 0; fis += k[3]; fisT += k[4] || 0; });
+    h += '<section><h2>🧾 Kasa iptalleri — son 30 gün</h2><p class="ac">' + sy(ip.fisSayisi) + ' kasa fişine karşılık <b>' + sy(sat) + '</b> satır iptali (' + tl(satT) + ') ve <b>' + sy(fis) + '</b> fiş iptali (' + tl(fisT) + '). ' +
+      (ip.fisSayisi > 0 ? 'Her 100 fişte ' + sy(sat / ip.fisSayisi * 100) + ' satır iptali. ' : '') + 'Çoğu yanlış okutma ya da müşterinin vazgeçmesidir; bir kasiyerde ötekilerden belirgin fazlaysa bakmaya değer.</p>' +
+      ((ip.kisiler || []).length ? '<div class="tablo"><table><tr><th>Kasiyer</th><th>Satır iptali</th><th>Tutarı</th><th>Fiş iptali</th><th>Tutarı</th></tr>' +
+        ip.kisiler.slice().sort(function(a, b){ return (b[2] + b[4]) - (a[2] + a[4]); }).map(function(k){ return '<tr><td>' + esc(k[0]) + '</td><td>' + sy(k[1]) + '</td><td>' + tl(k[2]) + '</td><td>' + sy(k[3]) + '</td><td>' + tl(k[4]) + '</td></tr>'; }).join('') + '</table></div>' : '<div class="bos">Kayıt yok.</div>');
+    if((ip.saatler || []).length){
+      var smx = Math.max.apply(null, ip.saatler.map(function(s){ return s[1]; }));
+      h += '<p class="ac" style="margin-top:14px">Saatlere göre iptal sayısı</p><div class="cubuklar" style="height:110px">' + ip.saatler.map(function(s){ return '<div><b>' + s[1] + '</b><i style="height:' + Math.max(2, Math.round(s[1] / smx * 80)) + 'px;background:#c76a00"></i>' + s[0] + '</div>'; }).join('') + '</div>';
+    }
+    h += '</section>';
+  }
+  h += '<div class="son"><div><h3>KRT Saha bunları her gün kendisi izler.</h3><p>Alışın altına düşen fiyat, güncellenmeyen etiket, satılmayan stok ve kasa sapmaları sabah tek ekranda. Sayım, mal kabul, etiket, plasiyer ve kasa tahsilatı da aynı uygulamada.</p></div><a href="https://krtsaha.com">krtsaha.com</a></div>';
+  h += '<ul class="notlar"><li>Bütün tutarlar KDV hariçtir. Veriler ERP veri tabanından yalnız okunarak alındı; ERP\'ye hiçbir şey yazılmadı.</li>' +
+    '<li>Maliyet: ürünün satıldığı ayda geçerli son net alış fiyatı (satır ve dip iskontoları düşülmüş). Alışı hiç olmayan ürünlerin kârı hesaplanmadı.</li>' +
+    '<li>"Gözden kaçan tutar" tahminidir: son 30 günün satış hızı ile bugünkü fiyat ve maliyet farkından hesaplanır; satılmayan stoğun değer kaybı için aylık %' + sy(V.enflasyon) + ' kullanıldı.</li></ul>';
+  if((V.hatalar || []).length) h += '<section class="hata"><h2>Hesaplanamayan bölümler</h2><ul>' + V.hatalar.map(function(e){ return '<li>' + esc(e) + '</li>'; }).join('') + '</ul></section>';
+  el.innerHTML = h;
+})();
+</script>
+</body></html>
