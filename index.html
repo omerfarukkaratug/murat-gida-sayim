@@ -590,7 +590,7 @@
   <header style="border:none; padding:0 0 16px; background:transparent; display:flex; align-items:flex-start; justify-content:space-between;">
     <div>
       <h1><img src="logo-header.png" alt="Murat Gıda" style="height:30px; width:auto; display:block;"></h1>
-      <div class="sub"><img src="icon.svg" alt="" style="width:15px;height:15px;vertical-align:-3px;margin-right:5px;">KRT Saha · Murat Gıda • offline • Android • build 283</div>
+      <div class="sub"><img src="icon.svg" alt="" style="width:15px;height:15px;vertical-align:-3px;margin-right:5px;">KRT Saha · Murat Gıda • offline • Android • build 284</div>
     </div>
     <button type="button" id="themeToggleBtn" title="Tema seç" style="background:var(--panel2); border:1.5px solid var(--line); color:var(--text); width:34px; height:34px; border-radius:50%; font-size:15px; padding:0; display:flex; align-items:center; justify-content:center; flex-shrink:0;">🎨</button>
   </header>
@@ -4205,6 +4205,7 @@
       requestAnimationFrame(function(){ nativeLoop(detector); });
     }
     var zoomBtn = IOS_CIHAZ ? kameraZoomDugmesi(stream, videoEl) : null;
+    surekliNetle(stream);
     loadBarcodeDetector().then(function(BarcodeDetector){
       if(stopped) return;
       nativeLoop(new BarcodeDetector({ formats: BARCODE_FORMATS }));
@@ -4235,6 +4236,19 @@
         if(zoomBtn && zoomBtn.parentNode) zoomBtn.parentNode.removeChild(zoomBtn);
       }
     };
+  }
+
+  // SÜREKLİ NETLEME (build 284): bazı Android telefonlar (özellikle Samsung)
+  // tarayıcıda kamerayı sabit/tek seferlik netlemeyle açıyor; barkoda yaklaşınca
+  // görüntünün netleşmesi gecikiyor ve ilk okuma geç geliyor. Telefon destekliyorsa
+  // sürekli netleme açılır; desteklemiyorsa hiçbir şey değişmez.
+  function surekliNetle(stream){
+    try {
+      var track = stream.getVideoTracks()[0];
+      var caps = track && track.getCapabilities ? track.getCapabilities() : null;
+      if(!caps || !caps.focusMode || caps.focusMode.indexOf('continuous') < 0) return;
+      track.applyConstraints({ advanced: [{ focusMode: 'continuous' }] }).catch(function(){});
+    } catch(e){}
   }
 
   // YAKINLAŞTIRMA (iPhone): Pro model iPhone'lar yakından NETLEME YAPAMAZ —
