@@ -4502,9 +4502,9 @@
       // Satıra dokununca barkod büyük çizgili olarak açılır — kasada okutmak için (build 283).
       return '<div class="item" data-bkgoster="' + escapeHtml(r.barcode) + '" style="cursor:pointer;">' +
         '<div class="info"><div class="name">' + escapeHtml(r.name) + '</div>' +
-        '<div class="meta">' + escapeHtml(r.barcode) + (r.stockCode ? (' · ' + escapeHtml(r.stockCode)) : '') + (canSeeStock() ? ' · ' + stokHtml : '') + '</div></div>' +
-        '<div style="text-align:right; flex-shrink:0;">' + fiyatHtml + (fiyatHtml ? '<br>' : '') + kdvHtml +
-          '<br><button type="button" class="bkBtn" data-bkgoster="' + escapeHtml(r.barcode) + '" style="margin:6px 0 0;">▌▍▌ Barkod</button></div>' +
+        '<div class="meta">' + escapeHtml(r.barcode) + (r.stockCode ? (' · ' + escapeHtml(r.stockCode)) : '') + (canSeeStock() ? ' · ' + stokHtml : '') +
+          '<button type="button" class="bkBtn" data-bkgoster="' + escapeHtml(r.barcode) + '">▌▍▌ Barkod</button></div></div>' +
+        '<div style="text-align:right; flex-shrink:0;">' + fiyatHtml + (fiyatHtml ? '<br>' : '') + kdvHtml + '</div>' +
       '</div>';
     }).join('');
   }
