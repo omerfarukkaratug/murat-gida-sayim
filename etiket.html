@@ -566,6 +566,7 @@
       <div id="topluBicim" class="gizli" style="margin-bottom:10px; padding:8px 10px; border:1px dashed var(--line); border-radius:12px;">
         <div style="font-size:12.5px; font-weight:800; margin-bottom:6px;">Listedeki hepsini şuna çevir:</div>
         <div class="bicimSec" style="margin:0;"><button type="button" data-tb="zebra" class="etk">🏷️ Etiket</button><button type="button" data-tb="a6">A6</button><button type="button" data-tb="a5">A5</button><button type="button" data-tb="a4">A4</button><button type="button" data-tb="a3">A3</button></div>
+        <button type="button" id="topluBirlestir" class="gizli ana" style="width:100%; margin-top:8px; font-size:13px; text-align:left;"></button>
         <div id="topluInd" class="gizli" style="margin-top:8px; display:flex; flex-wrap:wrap; gap:6px; align-items:center;"><span style="font-size:12.5px; font-weight:800;">İndirim:</span>
           <button type="button" data-ti="kaldir" style="padding:6px 10px; font-size:12.5px;">🚫 İndirimi kaldır (normal etiket)</button>
           <button type="button" data-ti="bitis" style="padding:6px 10px; font-size:12.5px;">📅 Bitiş tarihini değiştir</button></div>
@@ -1628,6 +1629,9 @@
     if(!IS_NO) sonBasilanCiz();
     $('topluBicim').classList.toggle('gizli', durum.liste.filter(function(u){ return !u.basildi; }).length < 2);
     $('topluInd').classList.toggle('gizli', !durum.liste.some(function(u){ return !u.basildi && u.indirim; }));
+    var bAday = birlestirAdaylari(), bN = bAday.reduce(function(t, g){ return t + g.uyeler.length; }, 0);
+    $('topluBirlestir').classList.toggle('gizli', !bAday.length || !yetkiVar(IS_YETKI.grup));
+    if(bAday.length) $('topluBirlestir').innerHTML = '🧩 Aynı fiyatlı çeşitleri tek etikette birleştir: <b>' + bN + ' etiket → ' + bAday.length + '</b>';
     hizliCiz();
     // Yazılmakta olan kutu varsa önce bırakılır: değişikliği kaydolur, sonra liste yeniden çizilir.
     var odak = document.activeElement;
@@ -1751,6 +1755,55 @@
     if(!window.confirm('Listedeki ' + l.length + ' ürünün hepsi "' + ad + '" olarak değişsin mi?\n\n(Dökme kartı, koli afişi ve boy listesi gibi özel taslaklar da değişir.)')) return;
     l.forEach(function(u){ u.bicim = f; });
     kaydet(); listeCiz(); ciz(); toast(l.length + ' ürün ' + ad + ' yapıldı');
+  });
+  // ---- Listede aynı fiyatlı çeşitleri birleştir (build 289) ----
+  // Toplu eklenen (ERP grubu, indirim listesi, fiyatı değişenler) aynı fiyatlı çeşitler ayrı ayrı basılmasın:
+  // biri kalır, öbürleri onun çeşidi olur. Ölçüt "tek etikette topla" ile aynı: fiyat birebir, aynı ambalaj, adın ilk
+  // sözcüğü (marka) ve net miktar aynı, üretim yeri çelişmiyor. Daha önce birlikte basılmış (kayıtlı) çeşitler de birleşir.
+  // İndirimli ile indirimsiz, ya da farklı önceki fiyat / bitişli ürünler birleşmez.
+  function birlesebilir(u){ return !u.basildi && !u.elle && !u.grup && !!u.barkod && !KOLI[u.bicim] && !(u.boylar && u.boylar.length) && !!katalogHarita[String(u.barkod)]; }
+  function benzerMi(a, b){
+    if(Math.abs(Number(a.fiyat) - Number(b.fiyat)) > 0.004) return false;
+    if(!!a.indirim !== !!b.indirim || (a.indirim && (sayi(a.onceki) !== sayi(b.onceki) || a.bitis !== b.bitis))) return false;
+    var ka = katalogHarita[String(a.barkod)], kb = katalogHarita[String(b.barkod)];
+    var g = grupHarita && grupHarita[String(a.barkod)];
+    if(g && g === grupHarita[String(b.barkod)]) return true;     // daha önce aynı çeşitli etikette basılmışlar
+    if((Number(ka.carpan) > 1 ? Number(ka.carpan) : 1) !== (Number(kb.carpan) > 1 ? Number(kb.carpan) : 1)) return false;
+    if(ortakOnEk(sozcukler(ka.name), sozcukler(kb.name)) < 1) return false;
+    var ma = miktarBul(ka.name), mb = miktarBul(kb.name); if(ma.mik !== mb.mik || ma.birim !== mb.birim) return false;
+    if(ka.yer && kb.yer && normTr(ka.yer) !== normTr(kb.yer)) return false;
+    return normTr(ka.name) !== normTr(kb.name) || String(a.barkod) !== String(b.barkod);
+  }
+  function birlestirAdaylari(){
+    var l = durum.liste.filter(birlesebilir), alindi = {}, c = [];
+    l.forEach(function(u, i){
+      if(alindi[u.id]) return;
+      var uy = [u];
+      for(var j = i + 1; j < l.length; j++){ var v = l[j]; if(!alindi[v.id] && benzerMi(u, v) && uy.every(function(x){ return String(x.barkod) !== String(v.barkod); })) uy.push(v); }
+      if(uy.length > 1){ uy.forEach(function(x){ alindi[x.id] = true; }); c.push({ ana: u, uyeler: uy }); }
+    });
+    return c;
+  }
+  $('topluBirlestir').addEventListener('click', function(e){
+    e.stopPropagation();
+    if(!yetkiVar(IS_YETKI.grup)){ toast('Çeşitli etiket yapma yetkin yok', 'uyari'); return; }
+    var c = birlestirAdaylari(); if(!c.length) return;
+    var n = c.reduce(function(t, g){ return t + g.uyeler.length; }, 0);
+    if(!window.confirm(n + ' ürün ' + c.length + ' çeşitli etikette birleşsin mi?\n\n' + c.slice(0, 8).map(function(g){ return '• ' + g.uyeler.length + ' çeşit: ' + g.uyeler.map(function(x){ return x.katalogAd || x.ad; }).slice(0, 3).join(', ') + (g.uyeler.length > 3 ? '…' : ''); }).join('\n') + (c.length > 8 ? '\n…' : ''))) return;
+    var cikan = {};
+    c.forEach(function(g){
+      var u = g.ana, uy = g.uyeler.map(function(x){ return { barkod: String(x.barkod), ad: (katalogHarita[String(x.barkod)] || {}).name || x.katalogAd || x.ad }; });
+      var kg = grupHarita && grupHarita[String(u.barkod)], hepsiKayitli = kg && uy.every(function(x){ return grupHarita[x.barkod] === kg; });
+      u.grup = uy; if(!u.katalogAd) u.katalogAd = u.ad;
+      u.ad = hepsiKayitli && uy.length === kg.uyeler.length ? kg.ad : grupAdiOner(uy);
+      u.adet = Math.max.apply(null, g.uyeler.map(function(x){ return Math.max(1, parseInt(x.adet, 10) || 1); }));
+      u.basildi = '';
+      g.uyeler.slice(1).forEach(function(x){ cikan[x.id] = true; delete acik[x.id]; });
+    });
+    durum.liste = durum.liste.filter(function(u){ return !cikan[u.id]; });
+    benzerOnbellek = {};
+    kaydet(); listeCiz(); ciz();
+    toast(n + ' ürün ' + c.length + ' etikette birleşti — etiket adlarını kontrol et');
   });
   // Toplu indirim: süresi biten indirimi bütün listeden kaldır ya da bitiş tarihini topluca uzat (build 287).
   $('topluInd').addEventListener('click', function(e){
