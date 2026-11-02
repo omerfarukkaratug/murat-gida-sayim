@@ -425,7 +425,8 @@
     var r = S.rapor, O = r && r.veri ? r.veri.oneri : null;
     var h = '<div class="cipler"><button type="button" data-oalt="fiyat"' + (oAlt === 'fiyat' ? ' class="on"' : '') + '>💰 Doğru fiyat</button><button type="button" data-oalt="sepet"' + (oAlt === 'sepet' ? ' class="on"' : '') + '>🧺 Fiş tutarını artır</button></div>';
     if(!O){ $('icerik').innerHTML = h + '<div class="kart"><div style="font-weight:800;">Öneriler henüz hazırlanmamış</div><div class="ipucu" style="margin-top:6px;">ERP bilgisayarındaki <b>saglik-raporu.ps1</b> yeni sürümüyle çalışınca gelir (rapor: ' + esc(r ? r.zaman : '—') + '). 🩺 Sağlık sekmesinden "Yeniden hazırlat" diyebilirsin.</div></div>'; return; }
-    h += '<div class="ipucu" style="margin-bottom:8px;">Rapor: <b>' + esc(r.zaman) + '</b> · ERP verisi · tutarlar KDV hariç, raf fiyatları KDV dahil</div>';
+    h += '<div class="ipucu" style="margin-bottom:8px;">Rapor: <b>' + esc(r.zaman) + '</b> · ERP verisi · tutarlar KDV hariç, raf fiyatları KDV dahil' +
+      ((O.poset || []).length ? ' · alışveriş poşeti hesaba katılmadı (' + esc(O.poset.slice(0, 3).join(', ')) + (O.poset.length > 3 ? '…' : '') + ')' : '') + '</div>';
     var hatalar = (r.veri.hatalar || []).filter(function(x){ return /^Oneriler/.test(x); });
     if(hatalar.length) h += '<div class="kart uyari" style="font-size:13px;">' + hatalar.map(esc).join('<br>') + '</div>';
     $('icerik').innerHTML = h + (oAlt === 'fiyat' ? oFiyatHtml(O) : oSepetHtml(O));

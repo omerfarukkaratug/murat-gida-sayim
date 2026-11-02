@@ -476,7 +476,17 @@ ORDER BY x.ONCE - x.T30 DESC
     $veri.oneri = [ordered]@{}
     try {
         Yaz "9a) Oneriler - kasa fisleri..."
+        # Alisveris posetini hesaba katma: neredeyse her fiste var; eslestirmeleri, "musteri ceken" ve kasa onu listelerini
+        # bozuyordu. Adinda POSET / TORBA gecen ve raf fiyati 3 TL'ye kadar olan ya da KASA / ALISVERIS / TASIMA poseti olan
+        # kartlar. Cop poseti, buzdolabi poseti gibi gercek urunler (pahali ya da COP/BUZDOLABI/DONDURUCU gecen) kalir.
         Calistir @"
+IF OBJECT_ID('tempdb..#poset') IS NOT NULL DROP TABLE #poset;
+SELECT k.STOK INTO #poset FROM #kdv k LEFT JOIN #fiyat p ON p.STOK = k.STOK
+WHERE (k.AD LIKE N'%PO' + NCHAR(350) + N'ET%' OR k.AD LIKE N'%POSET%' OR k.AD LIKE N'%TORBA%')
+  AND NOT (k.AD LIKE N'%' + NCHAR(199) + NCHAR(214) + N'P%' OR k.AD LIKE N'%COP %' OR k.AD LIKE N'%COP PO%' OR k.AD LIKE N'%BUZDOLAB%' OR k.AD LIKE N'%DONDURUCU%'
+           OR k.AD LIKE N'%K' + NCHAR(304) + N'L' + NCHAR(304) + N'TL%' OR k.AD LIKE N'%KILITLI%' OR k.AD LIKE N'%FIRIN%' OR k.AD LIKE N'%BEBEK%')
+  AND (ISNULL(p.FIYAT, 0) <= 3 OR k.AD LIKE N'%KASA%' OR k.AD LIKE N'%ALI' + NCHAR(350) + N'VER%' OR k.AD LIKE N'%ALISVERIS%' OR k.AD LIKE N'%TA' + NCHAR(350) + N'IMA%' OR k.AD LIKE N'%TASIMA%');
+CREATE CLUSTERED INDEX i ON #poset (STOK);
 IF OBJECT_ID('tempdb..#fd') IS NOT NULL DROP TABLE #fd;
 SELECT f.ID AS FIS, d.STOK,
        SUM(-$g * CAST(d.MIKTAR_FIS AS float) * $carp) AS MIKTAR,
@@ -485,7 +495,7 @@ SELECT f.ID AS FIS, d.STOK,
 INTO #fd
 FROM dbo.FIS f JOIN dbo.FIS_DETAY d ON d.FIS = f.ID JOIN dbo.FIS_TURU FT ON FT.ID = f.FIS_TURU JOIN #kdv k ON k.STOK = d.STOK
 WHERE f.FIS_TARIHI >= DATEADD(day, -60, CAST(GETDATE() AS date)) AND ISNULL(f.AKTIF, 1) = 1 AND f.FIS_TURU <> 18 AND $satisAile AND $g <> 0
-  AND EXISTS (SELECT 1 FROM dbo.FIS_POS p WHERE p.FIS = f.ID)
+  AND EXISTS (SELECT 1 FROM dbo.FIS_POS p WHERE p.FIS = f.ID) AND NOT EXISTS (SELECT 1 FROM #poset ps WHERE ps.STOK = d.STOK)
 GROUP BY f.ID, d.STOK HAVING SUM(-$g * CAST(d.MIKTAR_FIS AS float)) > 0;
 CREATE CLUSTERED INDEX i ON #fd (FIS, STOK);
 IF OBJECT_ID('tempdb..#fs') IS NOT NULL DROP TABLE #fs;
@@ -496,6 +506,7 @@ CREATE CLUSTERED INDEX i ON #pen (STOK);
 "@
         $fo = (Tablo "SELECT COUNT(*) AS N, AVG(TUTAR) AS ORT, AVG(CAST(KALEM AS float)) AS KALEM, SUM(CASE WHEN KALEM = 1 THEN 1 ELSE 0 END) AS TEK FROM #fs").Rows[0]
         if ((D $fo.KALEM) -gt 150) { throw "Kasa belgeleri fis fis degil (belge basina $(D $fo.KALEM) kalem) - sepet incelemesi yapilamadi" }
+        $veri.oneri.poset = @((Tablo "SELECT TOP 10 k.AD FROM #poset ps JOIN #kdv k ON k.STOK = ps.STOK ORDER BY k.AD").Rows | ForEach-Object { M $_.AD })
         $veri.oneri.fis = [ordered]@{ n = I $fo.N; ort = D $fo.ORT; kalem = D $fo.KALEM; tek = I $fo.TEK; gun = 60 }
         $veri.oneri.dagilim = @((Tablo @"
 SELECT CASE WHEN KALEM = 1 THEN '1' WHEN KALEM = 2 THEN '2' WHEN KALEM <= 4 THEN '3-4' WHEN KALEM <= 9 THEN '5-9' ELSE '10+' END AS K,
@@ -518,7 +529,7 @@ INTO #fu
 FROM #kdv k JOIN #fiyat p ON p.STOK = k.STOK JOIN #son s ON s.STOK = k.STOK JOIN dbo.STOK s2 ON s2.ID = k.STOK
 LEFT JOIN dbo.STOK_GRUP g ON g.ID = s2.STOK_GRUP LEFT JOIN #pen pn ON pn.STOK = k.STOK
 WHERE s.MALIYET > 0 AND p.FIYAT > 0;
-DELETE FROM #fu WHERE M30 <= 0;
+DELETE FROM #fu WHERE M30 <= 0 OR STOK IN (SELECT STOK FROM #poset);
 UPDATE f SET GMARJ = x.GM FROM #fu f JOIN (SELECT DISTINCT GID, PERCENTILE_CONT(0.5) WITHIN GROUP (ORDER BY MARJ) OVER (PARTITION BY GID) AS GM FROM #fu WHERE MARJ BETWEEN -0.5 AND 0.9) x ON x.GID = f.GID;
 UPDATE f SET SIRA = x.R FROM #fu f JOIN (SELECT STOK, ROW_NUMBER() OVER (ORDER BY FISN DESC, M30 DESC) AS R FROM #fu) x ON x.STOK = f.STOK;
 "@
