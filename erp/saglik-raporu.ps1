@@ -10,6 +10,8 @@
 #    4) 90 gundur satilmayan stok ve bagli para
 #    5) Kasa iptalleri (son 30 gun) kasiyer bazinda
 #    6) Son 6 ayin aylik ciro / kar egilimi
+#    7) Sermaye: stok degeri (hizli/yavas/olu), musteri alacaklari, tedarikci borclari, nakit dongusu
+#    8) Her ayda kari en cok dusuren urunler (dusuk marjli ayin nedeni)
 #  Rapor KRT Saha'ya da gonderilir: uygulamada Karlilik -> Saglik sekmesinde gorunur (038_saglik_raporu.sql).
 #  -Gorev ile (SAGLIK-RAPORU-GOREV.bat 30 dakikada bir calistirir): rapor yalniz uygulamadan istenmisse
 #  ya da son rapor 20 saatten eskiyse hazirlanir; pencere/tarayici acilmaz.
@@ -51,8 +53,9 @@ function Tablo($sql, $sn = 600) {
 function Calistir($sql, $sn = 600) { $cmd = $bag.CreateCommand(); $cmd.CommandText = $sql; $cmd.CommandTimeout = $sn; [void]$cmd.ExecuteNonQuery() }
 function D($v) { if ($v -is [DBNull] -or $v -eq $null) { return $null }; return [Math]::Round([double]$v, 2) }
 function M($v) { if ($v -is [DBNull] -or $v -eq $null) { return "" }; return ([string]$v).Trim() }
+function T($v) { if ($v -is [DBNull] -or $v -eq $null) { return "" }; return ([datetime]$v).ToString("dd.MM.yyyy") }
 
-$veri = [ordered]@{ surum = "1"; olusturma = (Get-Date).ToString("yyyy-MM-dd HH:mm"); firma = ""; veritabani = ""; enflasyon = $AylikEnflasyon; hatalar = @() }
+$veri = [ordered]@{ surum = "2"; olusturma = (Get-Date).ToString("yyyy-MM-dd HH:mm"); firma = ""; veritabani = ""; enflasyon = $AylikEnflasyon; hatalar = @() }
 $hatalar = New-Object System.Collections.ArrayList
 
 try {
@@ -96,7 +99,7 @@ WHERE NOT (s.AD LIKE N'%FIYAT FARK%' OR s.AD LIKE N'%F' + NCHAR(304) + N'YAT FAR
 CREATE CLUSTERED INDEX i ON #kdv (STOK);
 IF OBJECT_ID('tempdb..#sat') IS NOT NULL DROP TABLE #sat;
 SELECT d.STOK, CAST(f.FIS_TARIHI AS date) AS GUN,
-       CASE WHEN $kasaMi THEN 1 ELSE 0 END AS KASA,
+       CASE WHEN $kasaMi THEN 1 ELSE 0 END AS KASA, k.KDV AS KDV,
        -$g * CAST(d.MIKTAR_FIS AS float) * $carp AS MIKTAR,
        -$g * CASE WHEN ISNULL(d.TOPLAM_KDV_MATRAHI, 0) <> 0 THEN CAST(d.TOPLAM_KDV_MATRAHI AS float)
                   ELSE CAST(d.MIKTAR_FIS AS float) * CAST(ISNULL(d.FIYAT, 0) AS float) / (1 + k.KDV / 100.0) END AS TUTAR
@@ -262,6 +265,86 @@ FROM dbo.FIS_POS_IPTAL WHERE TARIH >= DATEADD(day, -30, GETDATE()) GROUP BY PERS
         }
         $veri.iptal = [ordered]@{ fisSayisi = $fisSay; kisiler = $kisiler; saatler = $saatler }
     } catch { [void]$hatalar.Add("Kasa iptalleri: " + $_.Exception.Message); Yaz "HATA iptal: $($_.Exception.Message)" }
+
+    # ---- 6) Sermaye: para nerede bagli? (stok + musteri alacagi - tedarikci borcu) ----
+    try {
+        Yaz "6) Sermaye..."
+        $son90 = "DATEADD(day, -90, CAST(GETDATE() AS date))"
+        Calistir @"
+IF OBJECT_ID('tempdb..#sd') IS NOT NULL DROP TABLE #sd;
+SELECT st.STOK, k.KOD, k.AD, st.MIKTAR, s.MALIYET,
+       (SELECT MAX(x.GUN) FROM #sat x WHERE x.STOK = st.STOK AND x.MIKTAR > 0) AS SON_SATIS,
+       ISNULL((SELECT SUM(x.MIKTAR) FROM #sat x WHERE x.STOK = st.STOK AND x.GUN >= $son90), 0) AS M90
+INTO #sd
+FROM #stok st JOIN #kdv k ON k.STOK = st.STOK LEFT JOIN #son s ON s.STOK = st.STOK;
+"@
+        $sk = (Tablo @"
+SELECT
+  SUM(CASE WHEN MIKTAR > 0 AND MALIYET IS NOT NULL THEN MIKTAR * MALIYET ELSE 0 END) AS DEGER,
+  SUM(CASE WHEN MIKTAR > 0 AND MALIYET IS NOT NULL AND SON_SATIS >= DATEADD(day, -30, CAST(GETDATE() AS date)) THEN MIKTAR * MALIYET ELSE 0 END) AS HIZLI,
+  SUM(CASE WHEN MIKTAR > 0 AND MALIYET IS NOT NULL AND SON_SATIS < DATEADD(day, -30, CAST(GETDATE() AS date)) AND SON_SATIS >= $son90 THEN MIKTAR * MALIYET ELSE 0 END) AS YAVAS,
+  SUM(CASE WHEN MIKTAR > 0 AND MALIYET IS NOT NULL AND (SON_SATIS IS NULL OR SON_SATIS < $son90) THEN MIKTAR * MALIYET ELSE 0 END) AS OLU,
+  SUM(CASE WHEN MIKTAR > 0 THEN 1 ELSE 0 END) AS CESIT,
+  SUM(CASE WHEN MIKTAR > 0 AND MALIYET IS NULL THEN 1 ELSE 0 END) AS MALIYETSIZ,
+  SUM(CASE WHEN MIKTAR < 0 THEN 1 ELSE 0 END) AS EKSI
+FROM #sd
+"@).Rows[0]
+        $stokBuyuk = @((Tablo @"
+SELECT TOP 25 KOD, AD, MIKTAR, MALIYET, MIKTAR * MALIYET AS DEGER, M90, SON_SATIS
+FROM #sd WHERE MIKTAR > 0 AND MALIYET IS NOT NULL ORDER BY MIKTAR * MALIYET DESC
+"@).Rows | ForEach-Object { ,@((M $_.KOD), (M $_.AD), (D $_.MIKTAR), (D $_.MALIYET), (D $_.DEGER), (D $_.M90), (T $_.SON_SATIS)) })
+        # Satilan malin maliyeti (90 gun) ve firma satislari (KDV dahil) - gun hesaplari icin
+        $sm = (Tablo @"
+SELECT SUM(CASE WHEN a.MALIYET IS NOT NULL THEN a.M90 * a.MALIYET ELSE 0 END) AS SMM,
+       (SELECT SUM(x.TUTAR * (1 + x.KDV / 100.0)) FROM #sat x WHERE x.KASA = 0 AND x.GUN >= $son90) AS FIRMA_KDVLI
+FROM #ay a
+"@).Rows[0]
+        $alis90 = (Tablo @"
+SELECT SUM(CAST(d.TOPLAM_KDV_MATRAHI AS float) * (1 + k.KDV / 100.0)) AS ALIS
+FROM dbo.FIS f JOIN dbo.FIS_DETAY d ON d.FIS = f.ID JOIN dbo.FIS_TURU FT ON FT.ID = f.FIS_TURU JOIN #kdv k ON k.STOK = d.STOK
+WHERE f.FIS_TURU IN (1, 5) AND ISNULL(f.AKTIF, 1) = 1 AND f.FIS_TARIHI >= DATEADD(day, -90, GETDATE()) AND $g <> 0 AND d.MIKTAR_FIS > 0
+"@).Rows[0].ALIS
+        # Cari bakiyeler: + cari bize borclu (alacagimiz), - biz cariye borcluyuz. Kasa (perakende) carisi haric.
+        Calistir @"
+IF OBJECT_ID('tempdb..#cb') IS NOT NULL DROP TABLE #cb;
+SELECT c.ID, c.KOD, c.AD, CAST(b.BAKIYE AS float) AS BAKIYE INTO #cb
+FROM dbo.CARI_BAKIYELER b JOIN dbo.CARI c ON c.ID = b.ID
+WHERE b.DOVIZ_AD = 'TRY' AND ABS(b.BAKIYE) >= 1 AND c.ID <> COALESCE((SELECT TOP 1 VARSAYILANCARI FROM dbo.FIRMASABITLERI), -1);
+IF OBJECT_ID('tempdb..#ch') IS NOT NULL DROP TABLE #ch;
+SELECT f.CARI, MAX(f.FIS_TARIHI) AS SON FROM dbo.FIS f WHERE f.CARI IN (SELECT ID FROM #cb) AND ISNULL(f.AKTIF, 1) = 1 GROUP BY f.CARI;
+"@
+        $cs = (Tablo @"
+SELECT SUM(CASE WHEN b.BAKIYE > 0 THEN b.BAKIYE ELSE 0 END) AS ALACAK, SUM(CASE WHEN b.BAKIYE > 0 THEN 1 ELSE 0 END) AS ALACAK_N,
+       SUM(CASE WHEN b.BAKIYE < 0 THEN -b.BAKIYE ELSE 0 END) AS BORC, SUM(CASE WHEN b.BAKIYE < 0 THEN 1 ELSE 0 END) AS BORC_N,
+       SUM(CASE WHEN b.BAKIYE > 0 AND (h.SON IS NULL OR h.SON < DATEADD(day, -180, GETDATE())) THEN b.BAKIYE ELSE 0 END) AS RISKLI,
+       SUM(CASE WHEN b.BAKIYE > 0 AND (h.SON IS NULL OR h.SON < DATEADD(day, -180, GETDATE())) THEN 1 ELSE 0 END) AS RISKLI_N
+FROM #cb b LEFT JOIN #ch h ON h.CARI = b.ID
+"@).Rows[0]
+        $alacaklar = @((Tablo "SELECT TOP 25 b.KOD, b.AD, b.BAKIYE, h.SON FROM #cb b LEFT JOIN #ch h ON h.CARI = b.ID WHERE b.BAKIYE > 0 ORDER BY b.BAKIYE DESC").Rows |
+            ForEach-Object { ,@((M $_.KOD), (M $_.AD), (D $_.BAKIYE), (T $_.SON)) })
+        $borclar = @((Tablo "SELECT TOP 25 b.KOD, b.AD, -b.BAKIYE AS BORC, h.SON FROM #cb b LEFT JOIN #ch h ON h.CARI = b.ID WHERE b.BAKIYE < 0 ORDER BY b.BAKIYE ASC").Rows |
+            ForEach-Object { ,@((M $_.KOD), (M $_.AD), (D $_.BORC), (T $_.SON)) })
+        $veri.sermaye = [ordered]@{
+            stok = [ordered]@{ deger = D $sk.DEGER; hizli = D $sk.HIZLI; yavas = D $sk.YAVAS; olu = D $sk.OLU; cesit = [int]$sk.CESIT; maliyetsiz = [int]$sk.MALIYETSIZ; eksi = [int]$sk.EKSI; buyuk = $stokBuyuk }
+            smm90 = D $sm.SMM; firmaSatis90 = D $sm.FIRMA_KDVLI; alis90 = D $alis90
+            alacak = D $cs.ALACAK; alacakN = [int]$cs.ALACAK_N; riskli = D $cs.RISKLI; riskliN = [int]$cs.RISKLI_N
+            borc = D $cs.BORC; borcN = [int]$cs.BORC_N
+            alacaklar = $alacaklar; borclar = $borclar
+        }
+    } catch { [void]$hatalar.Add("Sermaye: " + $_.Exception.Message); Yaz "HATA sermaye: $($_.Exception.Message)" }
+
+    # ---- 7) Aylik incelemede kari en cok dusuren urunler (her ay ilk 8) ----
+    try {
+        Yaz "7) Aylarin incelemesi..."
+        $veri.ayZarar = @((Tablo @"
+SELECT AY, KOD, AD, MIKTAR, TUTAR, MAL FROM (
+  SELECT CONVERT(char(7), a.AY, 120) AS AY, k.KOD, k.AD, a.MIKTAR, a.TUTAR, a.MIKTAR * a.MALIYET AS MAL,
+         ROW_NUMBER() OVER (PARTITION BY a.AY ORDER BY a.MIKTAR * a.MALIYET - a.TUTAR DESC) AS R
+  FROM #ay a JOIN #kdv k ON k.STOK = a.STOK
+  WHERE a.MALIYET IS NOT NULL AND a.MIKTAR > 0 AND a.MIKTAR * a.MALIYET > a.TUTAR) x
+WHERE R <= 8 ORDER BY AY, R
+"@).Rows | ForEach-Object { ,@((M $_.AY), (M $_.KOD), (M $_.AD), (D $_.MIKTAR), (D $_.TUTAR), (D $_.MAL)) })
+    } catch { [void]$hatalar.Add("Ay incelemesi: " + $_.Exception.Message); Yaz "HATA ay: $($_.Exception.Message)" }
 
 } catch {
     [void]$hatalar.Add("Genel: " + $_.Exception.Message); Yaz "HATA: $($_.Exception.Message)"

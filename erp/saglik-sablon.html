@@ -54,6 +54,33 @@
     .son{-webkit-print-color-adjust:exact;print-color-adjust:exact}
     @page{size:A4;margin:12mm}
   }
+  .kisaca{border-left:5px solid var(--mor)}
+  .kisaca p{margin:6px 0;font-size:15.5px}
+  .isler{margin:0;padding-left:22px}
+  .isler li{padding:9px 0;border-bottom:1px solid var(--line)}
+  .isler li:last-child{border-bottom:0}
+  .isler a{color:inherit;text-decoration:none;display:block}
+  .isler span{display:block;font-size:13px;color:var(--muted);margin-top:2px;font-weight:700}
+  .buyuk{font-size:clamp(30px,5vw,42px);font-weight:800;letter-spacing:-1px;margin:6px 0 12px}
+  .buyuk span{display:block;font-size:13px;font-weight:700;color:var(--muted);letter-spacing:0}
+  .serit{display:flex;height:22px;border-radius:11px;overflow:hidden;background:var(--line)}
+  .serit i{display:block;height:100%}
+  .lejant{display:flex;flex-wrap:wrap;gap:6px 16px;font-size:12.5px;color:var(--muted);margin:8px 0 14px}
+  .lejant i{display:inline-block;width:10px;height:10px;border-radius:3px;margin-right:5px;vertical-align:-1px}
+  table.hesap td{font-size:14px}
+  table.hesap tr.ic td{color:var(--muted);font-size:13px}
+  table.hesap tr.ic td:first-child{padding-left:22px}
+  table.hesap tr.top td{font-weight:800;font-size:15px;border-top:2px solid var(--ink);border-bottom:0}
+  .zaman{display:flex;flex-direction:column;gap:8px;margin:10px 0}
+  .zaman div{display:grid;grid-template-columns:150px 1fr 70px;align-items:center;gap:8px;font-size:13px}
+  .zaman i{display:block;height:14px;border-radius:7px;min-width:3px}
+  .zaman b{text-align:right}
+  .not{font-size:14px;margin:8px 0 0}
+  .inceleme{margin-top:14px;background:#fff6f6;border:1px solid #f0c4c4;border-radius:14px;padding:12px 14px;font-size:14px}
+  .inceleme .tablo{margin-top:8px}
+  .liste{margin:0;padding-left:20px}.liste li{margin:6px 0}
+  .terimler dl{margin:0}.terimler dt{font-weight:800;margin-top:10px}.terimler dd{margin:2px 0 0;color:var(--muted);font-size:14px}
+  @media (max-width:720px){.zaman div{grid-template-columns:110px 1fr 58px}}
 </style></head>
 <body>
 <div class="kap" id="rapor">Rapor yükleniyor…</div>
@@ -68,73 +95,175 @@ var ICERDE = /*ICERDE*/false;   // uygulamanın içinde (Kârlılık → Sağlı
   function esc(s){ return String(s == null ? '' : s).replace(/[&<>"']/g, function(c){ return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]; }); }
   function tl(v, o){ if(v == null || !isFinite(v)) return '—'; return Number(v).toLocaleString('tr-TR', { minimumFractionDigits: o || 0, maximumFractionDigits: o || 0 }) + ' ₺'; }
   function sy(v){ if(v == null || !isFinite(v)) return '—'; return Number(v).toLocaleString('tr-TR', { maximumFractionDigits: 1 }); }
+  function gn(v){ if(v == null || !isFinite(v)) return '—'; return Math.round(v).toLocaleString('tr-TR') + ' gün'; }
   function yz(v){ if(v == null || !isFinite(v)) return '—'; var s = Math.abs(v * 100).toLocaleString('tr-TR', { minimumFractionDigits: 1, maximumFractionDigits: 1 }); return (v < 0 ? '−' : '') + '%' + s; }
+  function bol(a, b){ return (a != null && b) ? a / b : null; }
   var AY = ['Ocak','Şubat','Mart','Nisan','Mayıs','Haziran','Temmuz','Ağustos','Eylül','Ekim','Kasım','Aralık'];
+  function ayAd(a, kisa){ var n = AY[Number(String(a).slice(5)) - 1] || a; return (kisa ? n.slice(0, 3) + ' ' + String(a).slice(2, 4) : n + ' ' + String(a).slice(0, 4)); }
   var enf = (V.enflasyon || 0) / 100;
 
-  // Tahmini aylık kaçak
+  // ---------- Hesaplar ----------
   var altinda = (V.altinda || []).map(function(r){ return { kod: r[0], ad: r[1], satis: r[2], alis: r[3], tarih: r[4], cari: r[5], m30: r[6] || 0, stok: r[7], zarar: Math.max(0, (r[3] - r[2]) * (r[6] || 0)) }; });
   var geride = (V.geride || []).map(function(r){ return { kod: r[0], ad: r[1], satis: r[2], onceki: r[3], alis: r[4], tarih: r[5], degisim: r[6], cari: r[7], m30: r[8] || 0, kacak: Math.max(0, (r[4] - r[3]) * (r[8] || 0)) }; });
   var oluD = V.olu ? V.olu.deger || 0 : 0;
   var k1 = altinda.reduce(function(t, x){ return t + x.zarar; }, 0);
   var k2 = geride.reduce(function(t, x){ return t + x.kacak; }, 0);
   var k3 = oluD * enf;
-  var toplam = k1 + k2 + k3;
+  var o = V.ozet || null;
+  var kar90 = o ? o.ciroMaliyetli - o.maliyet : null, marj90 = o && o.ciroMaliyetli > 0 ? kar90 / o.ciroMaliyetli : null;
+  var aylikKar = kar90 != null ? kar90 / 3 : null;
 
+  // Sermaye
+  var S = V.sermaye || null, SM = null;
+  if(S){
+    SM = {
+      stok: S.stok ? S.stok.deger || 0 : 0, alacak: S.alacak || 0, borc: S.borc || 0,
+      dio: S.smm90 > 0 && S.stok ? (S.stok.deger || 0) / (S.smm90 / 90) : null,
+      dso: S.firmaSatis90 > 0 ? (S.alacak || 0) / (S.firmaSatis90 / 90) : null,
+      dpo: S.alis90 > 0 ? (S.borc || 0) / (S.alis90 / 90) : null
+    };
+    SM.isletme = SM.stok + SM.alacak - SM.borc;
+    SM.getiri = aylikKar != null && SM.isletme > 0 ? aylikKar / SM.isletme : null;
+    SM.dongu = SM.dio != null ? SM.dio + (SM.dso || 0) - (SM.dpo || 0) : null;
+    SM.gunlukSmm = S.smm90 > 0 ? S.smm90 / 90 : null;
+  }
+
+  // Aylar: marjı ortancanın belirgin altında kalan (bitmiş) ay = "inceleme gerektiren ay"
+  var aylar = (V.aylar || []).map(function(r){ var kar = r[2] - r[3]; return { ay: r[0], ciro: r[1], kar: kar, marj: r[2] > 0 ? kar / r[2] : null }; });
+  var buAy = aylar.length ? aylar[aylar.length - 1].ay : '';
+  var bitmis = aylar.filter(function(a){ return a.ay !== buAy && a.marj != null; }).map(function(a){ return a.marj; }).sort(function(a, b){ return a - b; });
+  var ortanca = bitmis.length ? bitmis[Math.floor(bitmis.length / 2)] : null;
+  aylar.forEach(function(a){ a.tuhaf = ortanca != null && a.ay !== buAy && a.marj != null && a.marj < ortanca - 0.04; });
+  var ayZarar = {}; (V.ayZarar || []).forEach(function(r){ (ayZarar[r[0]] = ayZarar[r[0]] || []).push({ kod: r[1], ad: r[2], m: r[3], ciro: r[4], mal: r[5] }); });
+
+  // ---------- Yapılacaklar (tutara göre sıralı) ----------
+  var isler = [];
+  if(k1 > 0) isler.push({ t: k1, a: '#altinda', m: '<b>' + altinda.length + ' ürünün raf fiyatını yükseltin.</b> Alış fiyatının altında satılıyorlar; her satışta zarar var.', e: 'Aylık ≈ ' + tl(k1) + ' zarar' });
+  if(k2 > 0) isler.push({ t: k2, a: '#geride', m: '<b>' + geride.length + ' ürünün fiyatını yeni alışa göre güncelleyin.</b> Alışları %3\'ten fazla arttı, raf fiyatı yerinde sayıyor.', e: 'Aylık ≈ ' + tl(k2) + ' kaçak' });
+  if(S && S.riskli > 0) isler.push({ t: S.riskli * 0.05, a: '#alacak', m: '<b>' + sy(S.riskliN) + ' müşteriden toplam ' + tl(S.riskli) + ' tahsil edilmeli.</b> 6 aydır hiç hareketleri yok; alacak eskidikçe tahsili zorlaşır.', e: tl(S.riskli) + ' bekleyen alacak' });
+  if(oluD > 0) isler.push({ t: k3, a: '#olu', m: '<b>' + tl(oluD) + ' değerindeki satılmayan stoğu paraya çevirin.</b> 90 gündür hiç satılmamış ' + sy(V.olu.adet) + ' ürün: indirim, tedarikçiye iade ya da raf yeri değişikliği.', e: 'Aylık ≈ ' + tl(k3) + ' değer kaybı' });
+  if(SM && SM.dio != null && SM.dio > 45 && SM.gunlukSmm) isler.push({ t: SM.gunlukSmm * 10 * enf, a: '#sermaye', m: '<b>Stok ' + gn(SM.dio) + 'lük — siparişleri küçültün.</b> Stok 10 gün kısalırsa yaklaşık ' + tl(SM.gunlukSmm * 10) + ' nakit serbest kalır.', e: '10 gün = ' + tl(SM.gunlukSmm * 10) });
+  if(SM && SM.getiri != null && SM.getiri < enf) isler.push({ t: Math.max(0, (enf - SM.getiri) * SM.isletme), a: '#sermaye', m: '<b>İşletmeye bağlı para enflasyonun gerisinde kalıyor.</b> Brüt kâr bağlı paranın ayda ' + yz(SM.getiri) + '\'i, enflasyon ' + yz(enf) + '.', e: 'Fark ≈ ' + tl((enf - SM.getiri) * SM.isletme) + ' / ay' });
+  aylar.filter(function(a){ return a.tuhaf; }).forEach(function(a){ isler.push({ t: 0, a: '#aylar', m: '<b>' + ayAd(a.ay) + ' marjı (' + yz(a.marj) + ') diğer aylardan çok düşük.</b> Aylık tablonun altında o ay kârı en çok düşüren ürünler var; çoğu zaman yanlış girilmiş bir alış fiyatıdır.', e: 'Kontrol edin' }); });
+  if(S && S.stok && S.stok.eksi > 0) isler.push({ t: 0, a: '#kalite', m: '<b>' + sy(S.stok.eksi) + ' üründe stok eksi görünüyor.</b> Sayım ya da mal girişi eksik; stok değeri ve sipariş önerileri bundan etkilenir.', e: 'Veri düzeltme' });
+  isler.sort(function(a, b){ return b.t - a.t; });
+
+  // ---------- Çizim ----------
   var h = '<div class="ust"><div><h1>Mağaza Sağlık Raporu</h1><div class="alt">' + esc(V.firma || 'Mağaza') + ' · ' + esc(V.olusturma) + ' · ERP12 (' + esc(V.veritabani) + ')</div></div><div class="marka">KRT <i>Saha</i><div class="alt" style="font-weight:400">krtsaha.com</div></div></div>';
-  h += '<div class="manset"><div class="b">Her ay gözden kaçan tahmini tutar</div><div class="d">' + tl(toplam) + '</div>' +
-    '<div class="a">ERP kayıtlarınızdan hesaplandı. Aşağıdaki ürün listeleri bu tutarın nereden geldiğini gösteriyor; çoğu bir fiyat güncellemesiyle düzelir.</div>' +
+
+  // Kısaca
+  var kisa = [];
+  if(o) kisa.push('Son 90 günde <b>' + tl(o.ciro) + '</b> satış yaptınız (KDV hariç) ve bunun <b>' + tl(kar90) + '</b>\'si brüt kâr kaldı — her 100 ₺\'lik satıştan <b>' + sy(marj90 * 100) + ' ₺</b>. Bu, ayda ortalama <b>' + tl(aylikKar) + '</b> brüt kâr demek.');
+  if(SM) kisa.push('İşletmede şu an <b>' + tl(SM.isletme) + '</b> kendi paranız bağlı: ' + tl(SM.stok) + ' stok + ' + tl(SM.alacak) + ' müşteri alacağı − ' + tl(SM.borc) + ' tedarikçi borcu.' + (SM.getiri != null ? ' Brüt kâr bu paranın ayda <b>' + yz(SM.getiri) + '</b>\'i (' + (SM.getiri >= enf ? 'enflasyonun üstünde' : 'enflasyonun <span class="k">altında</span>') + ').' : ''));
+  if(k1 + k2 > 0) kisa.push('Fiyatlardan kaynaklanan kaçak ayda yaklaşık <b class="k">' + tl(k1 + k2) + '</b>; çoğu raf fiyatı güncellenerek hemen düzelir.');
+  if(kisa.length) h += '<section class="kisaca"><h2>Kısaca</h2>' + kisa.map(function(x){ return '<p>' + x + '</p>'; }).join('') + '</section>';
+
+  h += '<div class="manset"><div class="b">Fiyatlardan her ay kaçan tahmini tutar</div><div class="d">' + tl(k1 + k2) + '</div>' +
+    '<div class="a">ERP kayıtlarınızdan hesaplandı. Son 30 günün satış hızıyla, bugünkü raf fiyatı ile son alış fiyatı arasındaki farktan bulunur.</div>' +
     '<div class="uclu"><div><b>' + tl(k1) + '</b><span>Alış fiyatının altında satış — ' + altinda.length + ' ürün</span></div>' +
     '<div><b>' + tl(k2) + '</b><span>Alışı artıp fiyatı güncellenmeyen — ' + geride.length + ' ürün</span></div>' +
-    '<div><b>' + tl(k3) + '</b><span>Satılmayan stokta eriyen para (aylık %' + sy(V.enflasyon) + ')</span></div></div></div>';
+    '<div><b>' + tl(k3) + '</b><span>Ayrıca: satılmayan stokta eriyen para (aylık %' + sy(V.enflasyon) + ' varsayımıyla)</span></div></div></div>';
 
-  // Özet
-  if(V.ozet){
-    var o = V.ozet, kar = o.ciroMaliyetli - o.maliyet, marj = o.ciroMaliyetli > 0 ? kar / o.ciroMaliyetli : null;
-    h += '<div class="kutular"><div class="kutu"><div class="b">Son 90 gün ciro</div><div class="d">' + tl(o.ciro) + '</div><div class="a">KDV hariç</div></div>' +
-      '<div class="kutu"><div class="b">Brüt kâr</div><div class="d ' + (kar < 0 ? 'k' : 'y') + '">' + tl(kar) + '</div><div class="a">Marj ' + yz(marj) + '</div></div>' +
-      '<div class="kutu"><div class="b">Kasa / firma</div><div class="d">' + yz(o.ciro > 0 ? o.kasa / o.ciro : null) + '</div><div class="a">cironun kasadan gelen payı</div></div>' +
+  // Yapılacaklar
+  if(isler.length) h += '<section id="isler"><h2>✅ Bu ay yapılacaklar</h2><p class="ac">Etkisi en büyük olandan başlayarak. Ayrıntısı için satıra dokunun.</p><ol class="isler">' +
+    isler.map(function(x){ return '<li><a href="' + x.a + '">' + x.m + '</a><span>' + x.e + '</span></li>'; }).join('') + '</ol></section>';
+
+  // Özet kutuları
+  if(o){
+    h += '<div class="kutular"><div class="kutu"><div class="b">Son 90 gün satış</div><div class="d">' + tl(o.ciro) + '</div><div class="a">KDV hariç · kasa ' + yz(o.ciro > 0 ? o.kasa / o.ciro : null) + '</div></div>' +
+      '<div class="kutu"><div class="b">Brüt kâr (90 gün)</div><div class="d ' + (kar90 < 0 ? 'k' : 'y') + '">' + tl(kar90) + '</div><div class="a">Marj ' + yz(marj90) + '</div></div>' +
+      '<div class="kutu"><div class="b">Aylık ortalama kâr</div><div class="d">' + tl(aylikKar) + '</div><div class="a">giderler düşülmeden</div></div>' +
       '<div class="kutu"><div class="b">Satılan ürün çeşidi</div><div class="d">' + sy(o.urun) + '</div><div class="a">son 90 günde</div></div></div>';
   }
-  // Aylık eğilim
-  if(V.aylar && V.aylar.length){
-    var ay = V.aylar.map(function(r){ var kar = r[2] - r[3]; return { ay: r[0], ciro: r[1], kar: kar, marj: r[2] > 0 ? kar / r[2] : null }; });
-    var mx = Math.max.apply(null, ay.map(function(a){ return Math.max(a.kar, 1); }));
-    h += '<section><h2>Aylık brüt kâr</h2><p class="ac">Son altı ay; son ay henüz bitmedi. Ciro enflasyonla büyürken marjın düşmesi, fiyatların maliyete yetişmediğini gösterir.</p>' +
-      '<div class="cubuklar">' + ay.map(function(a){ return '<div><b>' + yz(a.marj) + '</b><i style="height:' + Math.max(2, Math.round(Math.max(a.kar, 0) / mx * 130)) + 'px"></i>' + AY[Number(a.ay.slice(5)) - 1].slice(0, 3) + ' ' + a.ay.slice(2, 4) + '</div>'; }).join('') + '</div>' +
-      '<div class="tablo"><table><tr><th>Ay</th><th>Ciro</th><th>Brüt kâr</th><th>Marj</th></tr>' + ay.map(function(a){ return '<tr><td>' + AY[Number(a.ay.slice(5)) - 1] + ' ' + a.ay.slice(0, 4) + '</td><td>' + tl(a.ciro) + '</td><td class="' + (a.kar < 0 ? 'k' : '') + '">' + tl(a.kar) + '</td><td>' + yz(a.marj) + '</td></tr>'; }).join('') + '</table></div></section>';
+
+  // Sermaye
+  if(SM){
+    var st = S.stok || {}, top = Math.max(1, (st.hizli || 0) + (st.yavas || 0) + (st.olu || 0) + SM.alacak);
+    var p = function(v){ return Math.max(0, v || 0) / top * 100; };
+    h += '<section id="sermaye"><h2>💼 Sermaye — paranız nerede duruyor?</h2>' +
+      '<p class="ac">İşletmenin günlük döngüsüne bağlanmış para: rafta/depoda duran mal ve müşterilerin size borcu; tedarikçilerin size verdiği vade bunun bir kısmını karşılar. Kasa, banka, demirbaş ve kredi bu hesaba dahil değil.</p>' +
+      '<div class="buyuk">' + tl(SM.isletme) + '<span>işletmede bağlı kendi paranız</span></div>' +
+      '<div class="serit"><i style="width:' + p(st.hizli) + '%;background:var(--yesil)"></i><i style="width:' + p(st.yavas) + '%;background:var(--turuncu)"></i><i style="width:' + p(st.olu) + '%;background:var(--kirmizi)"></i><i style="width:' + p(SM.alacak) + '%;background:var(--mor)"></i></div>' +
+      '<div class="lejant"><span><i style="background:var(--yesil)"></i>Hızlı dönen stok</span><span><i style="background:var(--turuncu)"></i>Yavaş stok</span><span><i style="background:var(--kirmizi)"></i>Satılmayan stok</span><span><i style="background:var(--mor)"></i>Müşteri alacağı</span></div>' +
+      '<div class="tablo"><table class="hesap">' +
+        '<tr><td>📦 Stok (son alış fiyatıyla)<small>' + sy(st.cesit) + ' çeşit ürün stokta</small></td><td>' + tl(SM.stok) + '</td></tr>' +
+        '<tr class="ic"><td>son 30 günde satılmış (hızlı dönen)</td><td>' + tl(st.hizli) + '</td></tr>' +
+        '<tr class="ic"><td>30–90 gün arası satılmış (yavaş)</td><td class="t">' + tl(st.yavas) + '</td></tr>' +
+        '<tr class="ic"><td>90 gündür hiç satılmamış</td><td class="k">' + tl(st.olu) + '</td></tr>' +
+        '<tr><td>➕ Müşterilerin size borcu (alacak)<small>' + sy(S.alacakN) + ' cari · perakende kasa hariç</small></td><td>' + tl(SM.alacak) + '</td></tr>' +
+        '<tr><td>➖ Sizin tedarikçilere borcunuz<small>' + sy(S.borcN) + ' cari</small></td><td>−' + tl(SM.borc) + '</td></tr>' +
+        '<tr class="top"><td>= İşletmede bağlı kendi paranız</td><td>' + tl(SM.isletme) + '</td></tr>' +
+      '</table></div>';
+    if(SM.getiri != null) h += '<div class="kutular" style="margin-top:14px"><div class="kutu"><div class="b">Sermaye getirisi</div><div class="d ' + (SM.getiri < enf ? 'k' : 'y') + '">' + yz(SM.getiri) + ' / ay</div><div class="a">aylık brüt kâr ÷ bağlı para · yılda ≈ ' + yz(SM.getiri * 12) + '</div></div>' +
+      '<div class="kutu"><div class="b">Enflasyon</div><div class="d">' + yz(enf) + ' / ay</div><div class="a">' + (SM.getiri >= enf ? 'paranız enflasyonun üstünde kazanıyor' : 'paranız enflasyonun gerisinde') + '</div></div>' +
+      '<div class="kutu"><div class="b">Stok kaç günlük?</div><div class="d">' + gn(SM.dio) + '</div><div class="a">bugünkü satış hızıyla</div></div>' +
+      '<div class="kutu"><div class="b">1 günlük stok</div><div class="d">' + tl(SM.gunlukSmm) + '</div><div class="a">stok 1 gün kısalırsa çıkan nakit</div></div></div>';
+    // Nakit döngüsü
+    if(SM.dio != null){
+      var dg = Math.max(SM.dio + (SM.dso || 0), SM.dpo || 0, 1), w = function(v){ return Math.max(0, v || 0) / dg * 100; };
+      h += '<h3 style="margin:18px 0 6px">⏱️ Nakit döngüsü: paranız kaç gün içeride kalıyor?</h3>' +
+        '<p class="ac">Malı aldığınız günden, satıp parasını tahsil ettiğiniz güne kadar geçen süre. Tedarikçiye ödemeyi ne kadar geç yaparsanız bu sürenin o kadarını onların parası karşılar.</p>' +
+        '<div class="zaman"><div><span>Mal rafta bekliyor</span><i style="width:' + w(SM.dio) + '%;background:var(--turuncu)"></i><b>' + gn(SM.dio) + '</b></div>' +
+        (SM.dso != null ? '<div><span>Firmalar ödüyor</span><i style="margin-left:' + w(SM.dio) + '%;width:' + w(SM.dso) + '%;background:var(--mor)"></i><b>' + gn(SM.dso) + '</b></div>' : '') +
+        (SM.dpo != null ? '<div><span>Siz tedarikçiye ödüyorsunuz</span><i style="width:' + w(SM.dpo) + '%;background:#8a8fa8"></i><b>' + gn(SM.dpo) + '</b></div>' : '') + '</div>' +
+        '<p class="not">Sonuç: her lira ortalama <b>' + gn(SM.dongu) + '</b> sizin cebinizden finanse ediliyor' + (SM.dongu < 0 ? ' — eksi çıkması, tedarikçi vadesinin satışlardan uzun olduğu anlamına gelir; iyi bir durum.' : '. Bu süre kısaldıkça aynı işi daha az parayla döndürürsünüz.') +
+        ' <span class="ac">(Firma tahsilat süresi yalnız firma satışlarına göre; kasa satışı peşin sayılır.)</span></p>';
+    }
+    h += '</section>';
+    // En çok para bağlanan ürünler
+    if((st.buyuk || []).length) h += '<section><h2>📦 En çok para bağlanan ürünler</h2><p class="ac">Stok değeri en yüksek ürünler. "Kaç günlük" bugünkü satış hızıyla stoğun ne zaman biteceğini gösterir; 60 günü aşanlarda sipariş küçültülebilir.</p>' +
+      '<div class="tablo"><table><tr><th>Ürün</th><th>Stok</th><th>Son alış</th><th>Bağlı para</th><th>90 gün satış</th><th>Kaç günlük</th></tr>' +
+      st.buyuk.map(function(r){ var gun = r[5] > 0 ? r[2] / (r[5] / 90) : null; return '<tr><td>' + esc(r[1]) + '<small>' + esc(r[0]) + (r[6] ? ' · son satış ' + esc(r[6]) : ' · 6 aydır satış yok') + '</small></td><td>' + sy(r[2]) + '</td><td>' + tl(r[3], 2) + '</td><td>' + tl(r[4]) + '</td><td>' + sy(r[5]) + '</td><td class="' + (gun == null || gun > 120 ? 'k' : gun > 60 ? 't' : '') + '">' + (gun == null ? 'satış yok' : gn(gun)) + '</td></tr>'; }).join('') + '</table></div></section>';
+    // Alacaklar / borçlar
+    var cariTablo = function(l, alacak){ return l.length ? '<div class="tablo"><table><tr><th>Cari</th><th>' + (alacak ? 'Size borcu' : 'Borcunuz') + '</th><th>Son hareket</th></tr>' + l.map(function(r){ var eski = alacak && (!r[3] || gunOnce(r[3]) > 180); return '<tr><td>' + esc(r[1]) + '<small>' + esc(r[0]) + '</small></td><td class="' + (eski ? 'k' : '') + '">' + tl(r[2]) + '</td><td class="' + (eski ? 'k' : '') + '">' + esc(r[3] || 'yok') + (eski ? ' ⚠️' : '') + '</td></tr>'; }).join('') + '</table></div>' : '<div class="bos">Yok.</div>'; };
+    h += '<section id="alacak"><h2>🧾 Müşteri alacakları <small>' + tl(SM.alacak) + '</small></h2><p class="ac">Size borcu olan firmalar (veresiye). ' + (S.riskli > 0 ? '<b class="k">' + sy(S.riskliN) + ' carinin 6 aydır hiç hareketi yok: ' + tl(S.riskli) + '.</b> Bunlar ⚠️ ile işaretli; tahsil edilmeleri öncelikli.' : '6 aydır hareketsiz alacak yok. 👍') + (SM.dso != null ? ' Firmalar ortalama <b>' + gn(SM.dso) + '</b>da ödüyor.' : '') + '</p>' + cariTablo(S.alacaklar || [], true) + '</section>';
+    h += '<section id="borc"><h2>🏭 Tedarikçi borçları <small>' + tl(SM.borc) + '</small></h2><p class="ac">Sizin ödemeniz gereken tutarlar. Tedarikçi vadesi işletmenin bedava kredisidir' + (SM.dpo != null ? '; ortalama <b>' + gn(SM.dpo) + '</b>da ödüyorsunuz' : '') + '.</p>' + cariTablo(S.borclar || [], false) + '</section>';
   }
-  // 1) Alışın altında
-  h += '<section><h2>🔻 Alış fiyatının altında satılan ürünler <small class="k">' + tl(k1) + ' / ay</small></h2>' +
+
+  // Aylık eğilim + düşük ayın nedeni
+  if(aylar.length){
+    var mx = Math.max.apply(null, aylar.map(function(a){ return Math.max(a.kar, 1); }));
+    h += '<section id="aylar"><h2>📅 Aylık brüt kâr</h2><p class="ac">Son altı ay; son ay henüz bitmedi. Ciro enflasyonla büyürken marjın düşmesi, fiyatların maliyete yetişmediğini gösterir. Kırmızı ay: marjı diğer ayların belirgin altında.</p>' +
+      '<div class="cubuklar">' + aylar.map(function(a){ return '<div><b class="' + (a.tuhaf ? 'k' : '') + '">' + yz(a.marj) + '</b><i style="height:' + Math.max(2, Math.round(Math.max(a.kar, 0) / mx * 130)) + 'px' + (a.tuhaf ? ';background:var(--kirmizi)' : a.ay === buAy ? ';opacity:.45' : '') + '"></i>' + ayAd(a.ay, true) + '</div>'; }).join('') + '</div>' +
+      '<div class="tablo"><table><tr><th>Ay</th><th>Satış</th><th>Brüt kâr</th><th>Marj</th></tr>' + aylar.map(function(a){ return '<tr><td>' + ayAd(a.ay) + (a.ay === buAy ? ' <small>devam ediyor</small>' : '') + '</td><td>' + tl(a.ciro) + '</td><td class="' + (a.kar < 0 ? 'k' : '') + '">' + tl(a.kar) + '</td><td class="' + (a.tuhaf ? 'k' : '') + '">' + yz(a.marj) + '</td></tr>'; }).join('') + '</table></div>';
+    aylar.filter(function(a){ return a.tuhaf; }).forEach(function(a){
+      var l = ayZarar[a.ay] || [];
+      h += '<div class="inceleme"><b>🔎 ' + ayAd(a.ay) + ' neden düşük?</b> O ay maliyetin satıştan fazla çıktığı ürünler. Bir üründe zarar çok büyükse alış fiyatı ERP\'ye yanlış (ör. koli fiyatı adet fiyatı yerine) girilmiş olabilir; kontrol edip düzeltin.' +
+        (l.length ? '<div class="tablo"><table><tr><th>Ürün</th><th>Satılan</th><th>Satış</th><th>Maliyet</th><th>Fark</th></tr>' + l.map(function(x){ return '<tr><td>' + esc(x.ad) + '<small>' + esc(x.kod) + '</small></td><td>' + sy(x.m) + '</td><td>' + tl(x.ciro) + '</td><td>' + tl(x.mal) + '</td><td class="k">' + tl(x.ciro - x.mal) + '</td></tr>'; }).join('') + '</table></div>' : '<div class="bos">Bu ay için ürün ayrıntısı yok (rapor eski sürümle hazırlanmış).</div>') + '</div>';
+    });
+    h += '</section>';
+  }
+  // Alışın altında
+  h += '<section id="altinda"><h2>🔻 Alış fiyatının altında satılan ürünler <small class="k">' + tl(k1) + ' / ay</small></h2>' +
     '<p class="ac">Bugünkü raf fiyatı, ürünün en son alış fiyatından (iskontolar düşülmüş, KDV hariç) düşük. Her satışta zarar ediliyor. Aylık zarar = son 30 günde satılan × fark.</p>' +
     (altinda.length ? '<div class="tablo"><table><tr><th>Ürün</th><th>Raf fiyatı</th><th>Son alış</th><th>Fark</th><th>30 günde satılan</th><th>Aylık zarar</th></tr>' +
       altinda.slice(0, 40).map(function(x){ return '<tr><td>' + esc(x.ad) + '<small>' + esc(x.kod) + ' · ' + esc(x.cari) + ' · ' + esc(x.tarih) + '</small></td><td>' + tl(x.satis, 2) + '</td><td>' + tl(x.alis, 2) + '</td><td class="k">' + tl(x.satis - x.alis, 2) + '</td><td>' + sy(x.m30) + '</td><td class="k">' + tl(x.zarar) + '</td></tr>'; }).join('') + '</table></div>' +
-      (altinda.length > 40 ? '<p class="ac">… ve ' + (altinda.length - 40) + ' ürün daha.</p>' : '')
+      (altinda.length > 40 ? '<p class="ac">… ve ' + (altinda.length - 40) + ' ürün daha' + (altinda.length >= 200 ? ' (liste en fazla 200 ürün gösterir)' : '') + '.</p>' : '')
       : '<div class="bos">Alışın altında satılan ürün yok. 👍</div>') + '</section>';
-  // 2) Fiyatı güncellenmeyen
-  h += '<section><h2>📉 Alışı arttı, satış fiyatı güncellenmedi <small class="t">' + tl(k2) + ' / ay</small></h2>' +
+  // Fiyatı güncellenmeyen
+  h += '<section id="geride"><h2>📉 Alışı arttı, satış fiyatı güncellenmedi <small class="t">' + tl(k2) + ' / ay</small></h2>' +
     '<p class="ac">Son alış bir öncekinden en az %3 pahalı geldi ama raf fiyatı o tarihten beri değişmedi. Hâlâ kârlı görünse de marj eriyor. Aylık kaçak = son 30 günde satılan × alıştaki artış.</p>' +
     (geride.length ? '<div class="tablo"><table><tr><th>Ürün</th><th>Önceki alış</th><th>Son alış</th><th>Artış</th><th>Raf fiyatı</th><th>Son fiyat değişimi</th><th>Aylık kaçak</th></tr>' +
       geride.slice(0, 40).map(function(x){ return '<tr><td>' + esc(x.ad) + '<small>' + esc(x.kod) + ' · ' + esc(x.cari) + ' · alış ' + esc(x.tarih) + '</small></td><td>' + tl(x.onceki, 2) + '</td><td>' + tl(x.alis, 2) + '</td><td class="t">' + yz(x.onceki > 0 ? x.alis / x.onceki - 1 : null) + '</td><td>' + tl(x.satis, 2) + '</td><td>' + esc(x.degisim || 'kayıt yok') + '</td><td class="t">' + tl(x.kacak) + '</td></tr>'; }).join('') + '</table></div>' +
       (geride.length > 40 ? '<p class="ac">… ve ' + (geride.length - 40) + ' ürün daha.</p>' : '')
       : '<div class="bos">Bu durumda ürün yok. 👍</div>') + '</section>';
-  // 3) Satılmayan stok
+  // Satılmayan stok
   if(V.olu){
-    h += '<section><h2>💤 90 gündür satılmayan stok <small>' + tl(V.olu.deger) + '</small></h2>' +
-      '<p class="ac">' + sy(V.olu.adet) + ' ürün stokta duruyor ama 90 gündür hiç satılmadı. Bu para rafta bekliyor; enflasyonda her ay değer kaybediyor (aylık ≈ ' + tl(k3) + '). İndirim, iade ya da raf yerini değiştirmek düşünülebilir.</p>' +
+    h += '<section id="olu"><h2>💤 90 gündür satılmayan stok <small>' + tl(V.olu.deger) + '</small></h2>' +
+      '<p class="ac">' + sy(V.olu.adet) + ' ürün stokta duruyor ama 90 gündür hiç satılmadı. Bu para rafta bekliyor; enflasyonda her ay değer kaybediyor (aylık ≈ ' + tl(k3) + '). İndirim, tedarikçiye iade ya da raf yerini değiştirmek düşünülebilir.</p>' +
       ((V.olu.liste || []).length ? '<div class="tablo"><table><tr><th>Ürün</th><th>Stok</th><th>Son alış</th><th>Bağlı para</th><th>Son satış</th></tr>' +
         V.olu.liste.slice(0, 30).map(function(r){ return '<tr><td>' + esc(r[1]) + '<small>' + esc(r[0]) + '</small></td><td>' + sy(r[2]) + '</td><td>' + tl(r[3], 2) + '</td><td>' + tl(r[4]) + '</td><td>' + esc(r[5] || '6 aydan eski') + '</td></tr>'; }).join('') + '</table></div>' : '<div class="bos">Yok. 👍</div>') + '</section>';
   }
-  // 4) Ürün grupları
+  // Ürün grupları
   if(V.urunler && V.urunler.length){
     var u = V.urunler.filter(function(r){ return r[4] != null && r[3] > 0; }).map(function(r){ var kar = r[3] - r[4]; return { kod: r[0], ad: r[1], m: r[2], ciro: r[3], kar: kar, marj: kar / r[3] }; });
     var kazandiran = u.slice().sort(function(a, b){ return b.kar - a.kar; }).slice(0, 12);
     var surum = u.filter(function(x){ return x.marj < 0.08; }).sort(function(a, b){ return b.ciro - a.ciro; }).slice(0, 12);
-    var tablo = function(l, renk){ return l.length ? '<div class="tablo"><table><tr><th>Ürün</th><th>90 gün satış</th><th>Ciro</th><th>Brüt kâr</th><th>Marj</th></tr>' + l.map(function(x){ return '<tr><td>' + esc(x.ad) + '<small>' + esc(x.kod) + '</small></td><td>' + sy(x.m) + '</td><td>' + tl(x.ciro) + '</td><td class="' + (x.kar < 0 ? 'k' : renk) + '">' + tl(x.kar) + '</td><td>' + yz(x.marj) + '</td></tr>'; }).join('') + '</table></div>' : '<div class="bos">Yok.</div>'; };
+    var tablo = function(l, renk){ return l.length ? '<div class="tablo"><table><tr><th>Ürün</th><th>90 gün satış</th><th>Satış tutarı</th><th>Brüt kâr</th><th>Marj</th></tr>' + l.map(function(x){ return '<tr><td>' + esc(x.ad) + '<small>' + esc(x.kod) + '</small></td><td>' + sy(x.m) + '</td><td>' + tl(x.ciro) + '</td><td class="' + (x.kar < 0 ? 'k' : renk) + '">' + tl(x.kar) + '</td><td>' + yz(x.marj) + '</td></tr>'; }).join('') + '</table></div>' : '<div class="bos">Yok.</div>'; };
     h += '<section><h2>⭐ Para kazandıran ürünler</h2><p class="ac">Son 90 günde en çok brüt kâr bırakan ürünler. Rafta ve stokta hiç eksik olmamalı.</p>' + tablo(kazandiran, 'y') + '</section>';
-    h += '<section><h2>🔁 Çok satan ama az kazandıran (sürüm ürünleri)</h2><p class="ac">Ciroda üst sıralarda, marjı %8\'in altında. Müşteriyi çeker ama kâr bırakmaz; fiyat ya da alış şartları gözden geçirilmeli.</p>' + tablo(surum, '') + '</section>';
+    h += '<section><h2>🔁 Çok satan ama az kazandıran (sürüm ürünleri)</h2><p class="ac">Satışta üst sıralarda, marjı %8\'in altında. Müşteriyi çeker ama kâr bırakmaz; fiyat ya da alış şartları gözden geçirilmeli.</p>' + tablo(surum, '') + '</section>';
   }
-  // 5) Kasa iptalleri
+  // Kasa iptalleri
   if(V.iptal){
     var ip = V.iptal, sat = 0, satT = 0, fis = 0, fisT = 0;
     (ip.kisiler || []).forEach(function(k){ sat += k[1]; satT += k[2] || 0; fis += k[3]; fisT += k[4] || 0; });
@@ -148,13 +277,33 @@ var ICERDE = /*ICERDE*/false;   // uygulamanın içinde (Kârlılık → Sağlı
     }
     h += '</section>';
   }
+  // Veri kalitesi
+  var kal = [];
+  if(S && S.stok){
+    if(S.stok.eksi) kal.push('<b>' + sy(S.stok.eksi) + ' üründe stok eksi.</b> Satıldığı halde girişi yapılmamış ya da sayımı eksik. Bu ürünler stok değerine katılmadı.');
+    if(S.stok.maliyetsiz) kal.push('<b>' + sy(S.stok.maliyetsiz) + ' ürün stokta ama hiç alış kaydı yok.</b> Değerleri bilinmediği için stok toplamına girmedi.');
+  }
+  if(o && o.ciro > 0 && o.ciroMaliyetli < o.ciro) kal.push('Satışların <b>' + yz(1 - o.ciroMaliyetli / o.ciro) + '</b>\'i alış kaydı olmayan ürünlerden; bu kısmın kârı hesaplanamadı.');
+  if(kal.length) h += '<section id="kalite"><h2>🧹 Veri kalitesi</h2><p class="ac">Rakamların doğruluğu ERP\'deki kayıtlara bağlı. Bunlar düzeldikçe rapor daha kesin olur.</p><ul class="liste">' + kal.map(function(x){ return '<li>' + x + '</li>'; }).join('') + '</ul></section>';
+  // Terimler
+  h += '<section class="terimler"><h2>📖 Terimler</h2><dl>' +
+    '<dt>Brüt kâr</dt><dd>Satış tutarı − satılan malın alış maliyeti. Kira, maaş, elektrik gibi giderler düşülmemiştir.</dd>' +
+    '<dt>Marj</dt><dd>Brüt kârın satışa oranı. %15 marj: 100 ₺\'lik satışta 15 ₺ brüt kâr.</dd>' +
+    '<dt>Bağlı para (işletme sermayesi)</dt><dd>Stok + müşterilerin size borcu − sizin tedarikçilere borcunuz. İşin dönmesi için cebinizden içeride tuttuğunuz para.</dd>' +
+    '<dt>Sermaye getirisi</dt><dd>Aylık brüt kârın bağlı paraya oranı. Enflasyonun altındaysa, para işletmede durdukça reel olarak küçülüyor demektir.</dd>' +
+    '<dt>Stok kaç günlük</dt><dd>Bugünkü satış hızıyla, yeni mal gelmezse stoğun kaç günde biteceği. Market için genelde 20–40 gün yeterlidir.</dd>' +
+    '<dt>Nakit döngüsü</dt><dd>Stok günü + müşteri tahsilat günü − tedarikçi ödeme günü. Kısaldıkça aynı ciroyu daha az parayla yaparsınız.</dd></dl></section>';
   if(!ICERDE) h += '<div class="son"><div><h3>KRT Saha bunları her gün kendisi izler.</h3><p>Alışın altına düşen fiyat, güncellenmeyen etiket, satılmayan stok ve kasa sapmaları sabah tek ekranda. Sayım, mal kabul, etiket, plasiyer ve kasa tahsilatı da aynı uygulamada.</p></div><a href="https://krtsaha.com">krtsaha.com</a></div>';
-  h += '<ul class="notlar"><li>Bütün tutarlar KDV hariçtir. Veriler ERP veri tabanından yalnız okunarak alındı; ERP\'ye hiçbir şey yazılmadı.</li>' +
+  h += '<ul class="notlar"><li>Satış, maliyet ve kâr tutarları KDV hariçtir; cari bakiyeler ERP\'deki gibi (KDV dahil) alınmıştır. Veriler ERP veri tabanından yalnız okunarak alındı; ERP\'ye hiçbir şey yazılmadı.</li>' +
     '<li>Maliyet: ürünün satıldığı ayda geçerli son net alış fiyatı (satır ve dip iskontoları düşülmüş), koli/paket alımları adede çevrilerek. Alışı hiç olmayan ürünlerin kârı hesaplanmadı; bedelsiz gelen satırlar maliyet sayılmadı.</li>' +
     '<li>Fiyat farkı, iskonto, nakliye gibi mal olmayan kartlar ve yalnız iadesi olan (o dönemde net satışı olmayan) ürünler hesaba katılmadı.</li>' +
-    '<li>"Gözden kaçan tutar" tahminidir: son 30 günün satış hızı ile bugünkü fiyat ve maliyet farkından hesaplanır; satılmayan stoğun değer kaybı için aylık %' + sy(V.enflasyon) + ' kullanıldı.</li></ul>';
+    '<li>Stok değeri: stoktaki miktar × son net alış fiyatı. Sermaye hesabına kasa, banka, demirbaş ve krediler dahil değildir.</li>' +
+    '<li>"Kaçan tutar" tahminidir: son 30 günün satış hızı ile bugünkü fiyat ve maliyet farkından hesaplanır; satılmayan stoğun değer kaybı için aylık %' + sy(V.enflasyon) + ' kullanıldı.</li></ul>';
   if((V.hatalar || []).length) h += '<section class="hata"><h2>Hesaplanamayan bölümler</h2><ul>' + V.hatalar.map(function(e){ return '<li>' + esc(e) + '</li>'; }).join('') + '</ul></section>';
   el.innerHTML = h;
+
+  function gunOnce(t){ var p = String(t).split('.'); if(p.length !== 3) return 9999; return (Date.now() - new Date(+p[2], +p[1] - 1, +p[0]).getTime()) / 86400000; }
 })();
 </script>
-</body></html>
+</body>
+</html>
