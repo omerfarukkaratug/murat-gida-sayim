@@ -76,6 +76,11 @@ function doGet(e) {
     if (!etiketYetki(k.auth)) return etiketRed(k.auth, P.callback);
     return etiketAyarGetir(P.callback);
   }
+  if (P.action === 'etiket_indirimler') {
+    k = kapi('indirimli etiket okuma'); if (!k.ok) return kimlikRed(k, P.callback);
+    if (!etiketYetki(k.auth)) return etiketRed(k.auth, P.callback);
+    return etiketIndirimlerGetir(P.callback);
+  }
   if (P.action === 'etiket_kuyruk') {
     k = kapi('etiket kuyruğu okuma'); if (!k.ok) return kimlikRed(k, P.callback);
     if (!etiketYetki(k.auth)) return etiketRed(k.auth, P.callback);
@@ -838,6 +843,33 @@ function etiketBaskiKaydi(satirlar, gonderen) {
   var fazla = sheet.getLastRow() - 1 - ETIKET_KAYIT_SINIR;
   if (fazla > 0) sheet.deleteRows(2, fazla);
   return jsonCikti({ status: 'ok', kaydedilen: rows.length });
+}
+
+// Rafta İNDİRİM etiketi duran ürünler: baskı kaydında bir ürünün (ya da çeşitli etiketin) EN SON basılan
+// etiketi indirimliyse listelenir. Sonradan normal etiketi basılınca kendiliğinden listeden düşer.
+// Satır: [barkod(lar), ad, fiyat, önceki fiyat, bitiş (YYYY-MM-DD), biçim, basılma zamanı, kim, fiyat tarihi]
+function etiketIndirimlerGetir(callback) {
+  var sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(ETIKET_KAYIT_SEKME);
+  var son = sheet ? sheet.getLastRow() : 0, enSon = {}, sira = [];
+  if (son >= 2) {
+    var v = sheet.getRange(2, 1, son - 1, 12).getValues();
+    for (var i = 0; i < v.length; i++) {
+      var b = String(v[i][2] || '').trim(); if (!b) continue;
+      if (/^deneme/i.test(String(v[i][11] || ''))) continue;
+      if (!(b in enSon)) sira.push(b);
+      enSon[b] = v[i];
+    }
+  }
+  var sinir = new Date(Date.now() - 120 * 86400000), sinirT = Utilities.formatDate(sinir, fiyatTz(), 'yyyy-MM-dd');
+  var liste = [];
+  sira.forEach(function (b) {
+    var x = enSon[b]; if (String(x[7]) !== 'EVET') return;
+    var bitis = String(x[9] || '').trim();
+    if (bitis && bitis < sinirT) return;   // 4 aydan eski bitişler: rafta kalmadığı varsayılır
+    liste.push([b, String(x[3] || ''), String(x[4] || ''), String(x[8] || ''), bitis, String(x[6] || ''), String(x[0] || ''), String(x[1] || ''), String(x[5] || '')]);
+  });
+  liste.reverse();   // en son basılan önce
+  return outJson({ status: 'ok', liste: liste.slice(0, 800), bugun: Utilities.formatDate(new Date(), fiyatTz(), 'yyyy-MM-dd') }, callback);
 }
 
 // ---- TELEFONDAN YAZICIYA BASKI ----
