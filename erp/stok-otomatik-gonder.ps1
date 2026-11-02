@@ -359,6 +359,31 @@ ORDER BY f.FIS_TARIHI DESC, f.ID, d.ID
     }
 
     # ---------------------------------------------------------------
+    # INDIRIM GRUPLARI (STOK_INSERT): ERP'de suresi bitince fiyati kendiliginden geri donen "insert" kampanyalari.
+    # Devam eden ve son 30 gunde biten gruplar gonderilir; etiket ekrani bunlari toplu basar. Hata verirse gerisi etkilenmez.
+    # ---------------------------------------------------------------
+    try {
+        $insRows = @(Invoke-Sqlcmd -ServerInstance $SqlServer -Database $Database -QueryTimeout 120 -Query @"
+SELECT i.INSERT_NO, ISNULL(i.AD, '') AS AD, i.BASLANGIC, i.BITIS,
+       COALESCE(NULLIF(LTRIM(RTRIM(i.BARKOD)), ''), (SELECT TOP 1 bb.BARKOD FROM dbo.STOK_BARKOD_BIRIM bb WHERE bb.STOK = i.STOK AND ISNULL(bb.CARPAN, 1) <= 1)) AS BARKOD,
+       i.FIYAT, i.YENI_FIYAT, i.INSERT_DONUS_FIYATI, ISNULL(i.ACIKLAMA, '') AS ACIKLAMA
+FROM dbo.STOK_INSERT i
+WHERE i.BITIS >= DATEADD(day, -30, GETDATE()) AND i.BASLANGIC <= DATEADD(day, 30, GETDATE())
+ORDER BY i.BASLANGIC DESC, i.INSERT_NO, i.ID
+"@)
+        $sayi = { param($v) if ($v -is [System.DBNull] -or $v -eq $null) { $null } else { [Math]::Round([double]$v, 2) } }
+        $tarih = { param($v) if ($v -is [System.DBNull] -or $v -eq $null) { '' } else { ([datetime]$v).ToString('yyyy-MM-dd HH:mm') } }
+        $insSatir = @($insRows | Where-Object { $_.BARKOD -isnot [System.DBNull] -and [string]$_.BARKOD } | ForEach-Object {
+            [PSCustomObject]@{ no = [string]$_.INSERT_NO; ad = [string]$_.AD; bas = (& $tarih $_.BASLANGIC); bit = (& $tarih $_.BITIS); b = ([string]$_.BARKOD).Trim()
+                f = (& $sayi $_.FIYAT); y = (& $sayi $_.YENI_FIYAT); d = (& $sayi $_.INSERT_DONUS_FIYATI); a = [string]$_.ACIKLAMA } })
+        $insJson = ConvertTo-Json -InputObject $insSatir -Depth 3 -Compress
+        Yaz-Log "Indirim gruplari (STOK_INSERT): $($insSatir.Count) satir. Sunucuya gonderiliyor..."
+        [void](Gonder-Sheets ('{"type":"insert_bulk",' + $ErpAnahtarJson + '"satirlar":' + $insJson + '}') "indirim grubu satiri" $insSatir.Count)
+    } catch {
+        Yaz-Log "UYARI: Indirim gruplari gonderilemedi: $($_.Exception.Message) (katalog ve cari etkilenmedi)"
+    }
+
+    # ---------------------------------------------------------------
     # CARI (tedarikci/musteri) listesi + bakiye
     # ---------------------------------------------------------------
     Yaz-Log "Basliyor: cari listesi ve bakiyeler cekiliyor..."

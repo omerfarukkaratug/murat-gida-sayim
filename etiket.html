@@ -1306,7 +1306,7 @@
     }
     if(sessiz) return;
     if(durum.hizli) durum.liste[0].bicim = 'zebra';      // hızlı etiket: raf etiketi olarak doğrudan yazıcıya
-    var kpNot = kampanyaUygula(durum.liste[0]);
+    var kpNot = insertUygula(durum.liste[0]) || kampanyaUygula(durum.liste[0]);
     kaydet(); listeCiz(); ciz();
     if(kpNot) toast(kpNot.metin, kpNot.tur); else toast('Eklendi: ' + u.ad);
     if(durum.hizli) hizliPlanla();
@@ -3174,6 +3174,22 @@
   // Sunucudaki baskı kaydından: bir ürünün EN SON basılan etiketi İNDİRİM ise burada görünür. Süresi biten ya da
   // ERP'de fiyatı eski haline dönen ürün tek dokunuşla NORMAL etiketle listeye eklenir; devam edenler toplu tekrar basılır.
   var ind = { liste: null, yukleniyor: false, secili: {}, hata: '' };
+  // ERP12 indirim grupları (STOK_INSERT). Son alınan hali bu cihazda saklanır: internet yokken de okutulan ürün tanınır.
+  var INSERT_ANAHTAR = 'mkEtiketInsert_v1', insertHarita = {};
+  ind.insert = oku(INSERT_ANAHTAR) || [];
+  function simdiDk(){ var d = new Date(); return bugun() + ' ' + ('0' + d.getHours()).slice(-2) + ':' + ('0' + d.getMinutes()).slice(-2); }
+  function insertDurum(g){ var n = simdiDk(); return g.bitis && g.bitis < n ? 'bitti' : g.bas && g.bas > n ? 'bekliyor' : 'aktif'; }
+  function insertHaritaKur(){ insertHarita = {}; (ind.insert || []).forEach(function(g){ if(insertDurum(g) !== 'aktif') return; g.satirlar.forEach(function(x){ insertHarita[String(x[0])] = { g: g, x: x }; }); }); }
+  insertHaritaKur();
+  // Okutulan ürün açık bir ERP indirim grubundaysa ve fiyatı gerçekten düşmüşse İNDİRİM etiketi olur (eski fiyat ERP'deki).
+  function insertUygula(yu){
+    if(!yu || yu.elle || !yu.barkod || yu.grup || yu.indirim) return null;
+    var h = insertHarita[String(yu.barkod)]; if(!h || insertDurum(h.g) !== 'aktif') return null;
+    var eski = Number(h.x[1]) || 0;
+    if(!(eski > yu.fiyat + 0.004)) return { metin: 'Eklendi: ' + yu.ad + ' — "' + h.g.ad + '" grubunda ama fiyatı düşmemiş görünüyor, normal etiket', tur: 'uyari' };
+    yu.indirim = true; yu.onceki = String(eski).replace('.', ','); yu.bitis = String(h.g.bitis).slice(0, 10); if(h.g.bas) yu.tarih = String(h.g.bas).slice(0, 10);
+    return { metin: '🏷️ İNDİRİM (' + h.g.ad + '): ' + para(eski) + ' → ' + para(yu.fiyat) + ' ₺ · bitiş ' + tarihTr(yu.bitis), tur: '' };
+  }
   function indDurum(r){
     // r: [barkod(lar), ad, fiyat, önceki, bitiş, biçim, zaman, kim, fiyat tarihi]
     var b0 = String(r[0]).split(',')[0], k = katalogHarita[b0], f = k ? sayi(k.price) : NaN, onc = sayi(r[3]), b = bugun();
@@ -3190,6 +3206,7 @@
     sunucuSor({ action: 'etiket_indirimler' }, function(hata, veri){
       ind.yukleniyor = false;
       if(hata || !veri || veri.status !== 'ok' || !Array.isArray(veri.liste)){ ind.hata = aktarHata(veri, hata); indCiz(); return; }
+      if(Array.isArray(veri.insertler)){ ind.insert = veri.insertler; yaz(INSERT_ANAHTAR, ind.insert); insertHaritaKur(); }
       ind.liste = veri.liste; ind.secili = {};
       ind.liste.forEach(function(r){ ind.secili[r[0]] = true; });
       indCiz();
@@ -3199,13 +3216,15 @@
     var ic = $('indIc'), oz = $('indOzet'); if(!ic) return;
     if(ind.liste){
       var bitN = ind.liste.filter(function(r){ return indDurum(r).grup === 'bitti'; }).length;
-      oz.innerHTML = '(' + ind.liste.length + (bitN ? ' · <b style="color:var(--red);">' + bitN + ' süresi bitti</b>' : '') + ')';
+      var gA = (ind.insert || []).filter(function(g){ return insertDurum(g) === 'aktif'; }).length;
+      oz.innerHTML = '(' + ind.liste.length + (bitN ? ' · <b style="color:var(--red);">' + bitN + ' süresi bitti</b>' : '') + (gA ? ' · ' + gA + ' ERP grubu açık' : '') + ')';
     }
     if(ic.classList.contains('gizli')) return;
     if(ind.yukleniyor){ ic.innerHTML = '<div class="ipucu">Yükleniyor…</div>'; return; }
     if(ind.hata){ ic.innerHTML = '<div class="ipucu" style="color:var(--red);">Alınamadı: ' + esc(ind.hata) + '</div><button type="button" data-ind="yenile" style="margin-top:6px;">Tekrar dene</button>'; return; }
     if(!ind.liste){ ic.innerHTML = ''; return; }
-    if(!ind.liste.length){ ic.innerHTML = '<div class="ipucu">Rafta indirimli etiket görünmüyor. İNDİRİM etiketi basılınca burada listelenir; normal etiketi basılınca düşer.</div>'; return; }
+    var erp = insertHtml();
+    if(!ind.liste.length){ ic.innerHTML = erp + '<div class="ipucu" style="margin-top:10px;">Rafta indirimli etiket görünmüyor. İNDİRİM etiketi basılınca burada listelenir; normal etiketi basılınca düşer.</div><button type="button" data-ind="yenile" class="baglanti" style="margin-top:10px;">↻ Yenile</button>'; return; }
     var gruplar = { bitti: [], devam: [] };
     ind.liste.forEach(function(r){ var d = indDurum(r); gruplar[d.grup].push({ r: r, d: d }); });
     var satir = function(x){
@@ -3224,10 +3243,50 @@
         '<div style="max-height:320px; overflow:auto; border:1px solid var(--line); border-radius:12px; padding:0 8px;">' + l.map(satir).join('') + '</div>' +
         '<div class="satir" style="margin-top:8px;">' + dugmeler.map(function(d){ return '<button type="button" data-ind="' + d[0] + '" data-g="' + ad + '"' + (d[2] ? ' class="ana"' : '') + ' style="flex:1; font-size:13px;">' + d[1] + ' (' + n + ')</button>'; }).join('') + '</div></div>';
     };
-    ic.innerHTML = '<div class="ipucu">Baskı kaydına göre rafta İNDİRİM etiketi duran ürünler (son etiketi indirimli basılanlar). Seçip toplu olarak listeye ekle; biçimi listede toplu değiştirebilirsin.</div>' +
+    ic.innerHTML = erp + '<div style="margin-top:14px; padding-top:10px; border-top:1px solid var(--line); font-weight:800; font-size:14px;">🧾 Basılmış indirimli etiketler</div><div class="ipucu">Baskı kaydına göre rafta İNDİRİM etiketi duran ürünler (son etiketi indirimli basılanlar). Seçip toplu olarak listeye ekle; biçimi listede toplu değiştirebilirsin.</div>' +
       blok('bitti', gruplar.bitti, '⛔ Süresi biten / fiyatı geri dönen', 'Raftaki İNDİRİM etiketi artık yanlış. Normal etiket basılmalı (yönetmelik: süresi biten indirim rafta kalmamalı).', [['normal', 'Normal etiketle ekle', true]]) +
       blok('devam', gruplar.devam, '🟢 Devam eden indirimler', 'Etiketi düşen, yıpranan ya da basılmayan varsa aynı bilgilerle tekrar basılır.', [['tekrar', 'İndirimli tekrar ekle', true], ['normal', 'İndirimi kaldırıp ekle', false]]) +
       '<button type="button" data-ind="yenile" class="baglanti" style="margin-top:10px;">↻ Yenile</button>';
+  }
+  // ERP indirim grupları: açık olan İNDİRİM etiketiyle, biten NORMAL etiketle topluca listeye eklenir.
+  function insertSatirDurum(x){ var k = katalogHarita[String(x[0])], f = k ? sayi(k.price) : NaN; return { k: k, f: f, yok: !k || isNaN(f) || f <= 0, dustu: !isNaN(f) && x[1] > f + 0.004, dondu: !isNaN(f) && x[1] > 0 && f >= x[1] - 0.004 }; }
+  function insertHtml(){
+    var l = (ind.insert || []).filter(function(g){ return g.satirlar && g.satirlar.length; });
+    if(!l.length) return '<div class="ipucu">ERP\'den indirim grubu (insert) gelmedi. ERP bilgisayarındaki aktarım programı yeni sürümle çalışınca burada görünür.</div>';
+    var AD = { aktif: '🟢 Açık', bekliyor: '🕓 Başlamadı', bitti: '⛔ Bitti' };
+    return '<div style="font-weight:800; font-size:14px;">📦 ERP indirim grupları</div><div class="ipucu" style="margin-bottom:4px;">ERP\'de gruba eklediğiniz ürünler. Açık grubun ürünü okutulunca da kendiliğinden İNDİRİM etiketi olur.</div>' +
+      l.map(function(g, gi){
+        var d = insertDurum(g), sd = g.satirlar.map(insertSatirDurum);
+        var dusen = sd.filter(function(x){ return x.dustu; }).length, donen = sd.filter(function(x){ return x.dondu; }).length, yok = sd.filter(function(x){ return x.yok; }).length;
+        var not = d === 'aktif' ? dusen + ' üründe fiyat düşmüş' + (g.satirlar.length - dusen - yok > 0 ? ' · <b style="color:var(--amber);">' + (g.satirlar.length - dusen - yok) + ' üründe katalog fiyatı henüz düşmemiş</b>' : '')
+          : d === 'bitti' ? donen + ' üründe fiyat geri döndü' + (g.satirlar.length - donen - yok > 0 ? ' · <b style="color:var(--amber);">' + (g.satirlar.length - donen - yok) + ' ürün hâlâ indirimli fiyatta</b>' : '') : 'Fiyatlar ' + tarihTr(String(g.bas).slice(0, 10)) + ' günü düşecek';
+        var dug = d === 'aktif' ? '<button type="button" class="ana" data-ins="indirim" data-gi="' + gi + '" style="flex:1; font-size:13px;">İNDİRİM etiketiyle ekle (' + dusen + ')</button>'
+          : d === 'bitti' ? '<button type="button" class="ana" data-ins="normal" data-gi="' + gi + '" style="flex:1; font-size:13px;">Normal etiketle ekle (' + (g.satirlar.length - yok) + ')</button>' : '';
+        return '<div style="border:1px solid var(--line); border-radius:12px; padding:8px 10px; margin-top:8px;' + (d === 'bitti' ? ' border-color:var(--red);' : '') + '">' +
+          '<div style="display:flex; justify-content:space-between; gap:8px;"><b style="font-size:14px;">' + esc(g.ad || ('Grup ' + g.no)) + '</b><span style="font-size:12px; font-weight:800; white-space:nowrap;">' + AD[d] + '</span></div>' +
+          '<div class="ipucu">' + esc(String(g.bas).replace(/^(\d{4})-(\d{2})-(\d{2})/, '$3.$2.$1')) + ' → ' + esc(String(g.bitis).replace(/^(\d{4})-(\d{2})-(\d{2})/, '$3.$2.$1')) + ' · ' + g.satirlar.length + ' ürün<br>' + not + '</div>' +
+          '<details style="margin-top:4px;"><summary style="cursor:pointer; font-size:12.5px; color:var(--muted);">Ürünler</summary>' + g.satirlar.map(function(x, i){ var s2 = sd[i];
+            return '<div style="font-size:12.5px; padding:3px 0; border-bottom:1px solid var(--line);">' + esc(s2.k ? s2.k.name : x[0]) + ' · <s>' + para(x[1]) + '</s> → ' + para(x[2]) + ' ₺' + (s2.yok ? ' · <b style="color:var(--red);">katalogda yok</b>' : ' · şimdi <b>' + para(s2.f) + '</b>') + '</div>'; }).join('') + '</details>' +
+          (dug ? '<div class="satir" style="margin-top:6px;">' + dug + '</div>' : '') + '</div>';
+      }).join('');
+  }
+  function insertEkle(g, tur){
+    if(tur === 'indirim' && !yt('etiket_indirim')){ toast('İndirim etiketi basma yetkin yok', 'uyari'); return; }
+    var say = { ok: 0, var: 0, atla: 0 };
+    g.satirlar.forEach(function(x){
+      var s2 = insertSatirDurum(x), b = String(x[0]);
+      if(s2.yok || (tur === 'indirim' && !s2.dustu)){ say.atla++; return; }
+      if(listedeMi(b)){ say.var++; return; }
+      var k = s2.k, ind2 = tur === 'indirim';
+      urunEkle({ barkod: b, ad: k.name, fiyat: s2.f, elle: false, ft: k.ft || '', of: k.of || '', erpYer: k.yer || '',
+        tartili: b.indexOf('29') === 0 || String(k.birim || '').toLowerCase() === 'kg',
+        indirim: ind2, onceki: ind2 ? String(x[1]).replace('.', ',') : '', bitis: ind2 ? String(g.bitis).slice(0, 10) : '' }, true);
+      if(ind2 && g.bas) durum.liste[0].tarih = String(g.bas).slice(0, 10);
+      say.ok++;
+    });
+    kaydet(); listeCiz(); ciz();
+    toast(say.ok + ' ürün listeye eklendi' + (say.var ? ', ' + say.var + ' zaten listedeydi' : '') + (say.atla ? ', ' + say.atla + ' atlandı (' + (tur === 'indirim' ? 'fiyatı düşmemiş / ' : '') + 'katalogda yok)' : ''), say.ok ? '' : 'uyari');
+    if(say.ok) sekmeAc('urun');
   }
   // r kaydını listeye ekler. indirimli: aynı indirim bilgisiyle (fiyat hâlâ düşükse); değilse güncel fiyatla normal etiket.
   function indEkle(r, indirimli){
@@ -3262,6 +3321,8 @@
     if(!ic.classList.contains('gizli') && (!ind.liste || Date.now() - (ind.zaman || 0) > 60000)){ ind.zaman = Date.now(); indYukle(); } else indCiz();
   });
   $('indIc').addEventListener('click', function(e){
+    var bi = e.target.closest('button[data-ins]');
+    if(bi){ var g = (ind.insert || []).filter(function(x){ return x.satirlar && x.satirlar.length; })[+bi.getAttribute('data-gi')]; if(g) insertEkle(g, bi.getAttribute('data-ins')); return; }
     var b = e.target.closest('button[data-ind]'); if(!b) return;
     var t = b.getAttribute('data-ind');
     if(t === 'yenile'){ ind.zaman = Date.now(); indYukle(); return; }

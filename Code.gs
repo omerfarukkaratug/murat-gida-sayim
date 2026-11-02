@@ -538,6 +538,36 @@ function iadeBulkKaydet(fisler) {
   tabloyuDegistir(sheet, IADE_BASLIK, rows);
   return jsonCikti({ status: 'ok', saved: rows.length });
 }
+// ---- ERP12 indirim grupları (STOK_INSERT: "insert" kampanyaları) ----
+// ERP'de bir gruba eklenen ürünlerin fiyatı başlangıçta YENI_FIYAT olur, bitişte INSERT_DONUS_FIYATI'na döner.
+// ERP bilgisayarı (stok-otomatik-gonder.ps1) son 30 günde biten / devam eden grupları gönderir; etiket ekranı
+// bunları "Raftaki indirimli etiketler"de toplu basar, okutulan ürünü kendiliğinden İNDİRİM etiketi yapar.
+var INSERT_SEKME = 'ErpInsert';
+var INSERT_BASLIK = ['Grup No', 'Grup', 'Başlangıç', 'Bitiş', 'Barkod', 'Eski Fiyat', 'İndirimli Fiyat', 'Dönüş Fiyatı', 'Açıklama'];
+function insertBulkKaydet(satirlar) {
+  if (!Array.isArray(satirlar)) return jsonCikti({ status: 'error', message: 'Geçersiz grup listesi' });
+  var ss = SpreadsheetApp.getActiveSpreadsheet();
+  var sheet = ss.getSheetByName(INSERT_SEKME) || ss.insertSheet(INSERT_SEKME);
+  var met = function (v, n) { return String(v == null ? '' : v).substring(0, n); };
+  var rows = satirlar.slice(0, 20000).filter(function (x) { return x && x.b; }).map(function (x) {
+    return [met(x.no, 20), met(x.ad, 80), met(x.bas, 16), met(x.bit, 16), met(x.b, 30), cleanNum(x.f), cleanNum(x.y), cleanNum(x.d), met(x.a, 80)];
+  });
+  if (sheet.getMaxRows() > 1) sheet.getRange(1, 1, sheet.getMaxRows(), 5).setNumberFormat('@');
+  tabloyuDegistir(sheet, INSERT_BASLIK, rows);
+  return jsonCikti({ status: 'ok', saved: rows.length });
+}
+// Gruplar: [{ no, ad, bas, bitis, satirlar: [[barkod, eski, indirimli, dönüş]] }], en yeni başlayan önce.
+function insertGruplari() {
+  var sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(INSERT_SEKME), g = {}, sira = [];
+  if (!sheet || sheet.getLastRow() < 2) return [];
+  sheet.getRange(2, 1, sheet.getLastRow() - 1, INSERT_BASLIK.length).getValues().forEach(function (r) {
+    var no = String(r[0] || ''), b = String(r[4] || '').trim(); if (!no || !b) return;
+    if (!g[no]) { g[no] = { no: no, ad: String(r[1] || ''), bas: String(r[2] || ''), bitis: String(r[3] || ''), satirlar: [] }; sira.push(no); }
+    g[no].satirlar.push([b, Number(r[5]) || 0, Number(r[6]) || 0, Number(r[7]) || 0]);
+  });
+  return sira.map(function (n) { return g[n]; }).sort(function (a, b) { return a.bas < b.bas ? 1 : a.bas > b.bas ? -1 : 0; });
+}
+
 // Cari eşleştirme: önce kod (boşluk/büyük-küçük harf farkı sayılmaz), kod tutmazsa birebir cari adı.
 // (Sheets bazı kodları sayıya çevirebildiği için yalnızca koda güvenilmez.)
 function iadeBekleyenGetir(cariKod, cariAd, callback) {
@@ -869,7 +899,8 @@ function etiketIndirimlerGetir(callback) {
     liste.push([b, String(x[3] || ''), String(x[4] || ''), String(x[8] || ''), bitis, String(x[6] || ''), String(x[0] || ''), String(x[1] || ''), String(x[5] || '')]);
   });
   liste.reverse();   // en son basılan önce
-  return outJson({ status: 'ok', liste: liste.slice(0, 800), bugun: Utilities.formatDate(new Date(), fiyatTz(), 'yyyy-MM-dd') }, callback);
+  var insertler = []; try { insertler = insertGruplari(); } catch (e) {}
+  return outJson({ status: 'ok', liste: liste.slice(0, 800), insertler: insertler, bugun: Utilities.formatDate(new Date(), fiyatTz(), 'yyyy-MM-dd') }, callback);
 }
 
 // ---- TELEFONDAN YAZICIYA BASKI ----
@@ -2216,7 +2247,7 @@ function doPostIsle(e) {
     // ---- KİMLİK KAPISI (bkz. GÜVENLİK bölümü) ----
     // Katalog/cari listesinin tamamını değiştirmek: ERP anahtarı ya da
     // "ayarlar" yetkili kullanıcı. Diğer her yazma: giriş yapmış kullanıcı.
-    var topluMu = data.type === 'katalog_bulk' || data.type === 'cari_bulk' || data.type === 'iade_bulk';
+    var topluMu = data.type === 'katalog_bulk' || data.type === 'cari_bulk' || data.type === 'iade_bulk' || data.type === 'insert_bulk';
     var postKapi = (topluMu && erpAnahtarDogru(data.anahtar)) ? { ok: true }
       : kimlikGerek(data.user, data.pass,
           data.type === 'katalog_bulk' ? 'katalog gönderimi' : data.type === 'cari_bulk' ? 'cari gönderimi'
@@ -2281,6 +2312,7 @@ function doPostIsle(e) {
       return kiOut;
     }
     if (data.type === 'iade_bulk') return iadeBulkKaydet(data.fisler);
+    if (data.type === 'insert_bulk') return insertBulkKaydet(data.satirlar);
     if (data.type === 'cari_bulk') {
       var cOut = saveCariBulk(data.entries || []);
       var cDegismedi = cOut.getContent().indexOf('degisiklikYok') !== -1;
