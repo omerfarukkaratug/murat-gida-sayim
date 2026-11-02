@@ -151,6 +151,11 @@
   .detay{margin-top:10px; border-top:1px dashed var(--line); padding-top:4px;}
   /* Seçim penceresi (fiyatı değişenler) */
   #secim{position:fixed; inset:0; z-index:60; background:var(--bg); display:flex; flex-direction:column;}
+  #tdeg{position:fixed; inset:0; z-index:60; background:var(--bg); display:flex; flex-direction:column;}
+  #tdegIc{flex:1; overflow-y:auto; padding:10px 14px;}
+  #tdegAlt{padding:10px 14px calc(10px + env(safe-area-inset-bottom)); background:var(--panel); border-top:1px solid var(--line); display:flex; gap:8px;}
+  #tdeg .tdAlan{border:1px solid var(--line); border-radius:12px; padding:8px 10px; margin-top:8px; background:var(--panel);}
+  #tdeg .tdAlan.degisecek{border-color:var(--accent); box-shadow:0 0 0 1px var(--accent) inset;}
   #secimUst{padding:12px 14px; background:var(--panel); border-bottom:1px solid var(--line);}
   #secimListe{flex:1; overflow-y:auto; padding:8px 12px;}
   .secSatir{display:flex; align-items:center; gap:10px; padding:10px 8px; border-bottom:1px solid var(--line); background:var(--panel);}
@@ -566,6 +571,7 @@
       <div id="topluBicim" class="gizli" style="margin-bottom:10px; padding:8px 10px; border:1px dashed var(--line); border-radius:12px;">
         <div style="font-size:12.5px; font-weight:800; margin-bottom:6px;">Listedeki hepsini şuna çevir:</div>
         <div class="bicimSec" style="margin:0;"><button type="button" data-tb="zebra" class="etk">🏷️ Etiket</button><button type="button" data-tb="a6">A6</button><button type="button" data-tb="a5">A5</button><button type="button" data-tb="a4">A4</button><button type="button" data-tb="a3">A3</button></div>
+        <button type="button" id="topluDegAc" style="width:100%; margin-top:8px; font-size:13px; text-align:left;">✏️ Toplu değiştir (biçim, adet, üretim yeri, başlık, indirim, tarih…)</button>
         <button type="button" id="topluBirlestir" class="gizli ana" style="width:100%; margin-top:8px; font-size:13px; text-align:left;"></button>
         <div id="topluInd" class="gizli" style="margin-top:8px; display:flex; flex-wrap:wrap; gap:6px; align-items:center;"><span style="font-size:12.5px; font-weight:800;">İndirim:</span>
           <button type="button" data-ti="kaldir" style="padding:6px 10px; font-size:12.5px;">🚫 İndirimi kaldır (normal etiket)</button>
@@ -629,6 +635,15 @@
     <button type="button" id="secimEkleBtn" style="flex:1;">Listeye ekle</button>
     <button type="button" class="ana" id="secimBasBtn" style="flex:1.2;">🖨️ Seçilenleri bas</button>
   </div>
+</div>
+<!-- Toplu değiştir (build 290): seçilen ürünlerde biçim, adet, üretim yeri, başlık, indirim, tarih, boşluk birlikte değişir. -->
+<div id="tdeg" class="gizli">
+  <div style="padding:12px 14px; background:var(--panel); border-bottom:1px solid var(--line);">
+    <div style="display:flex; justify-content:space-between; align-items:center; gap:8px;"><b style="font-size:16px;">✏️ Toplu değiştir</b><button type="button" id="tdegKapat" style="padding:6px 12px;">✕ Kapat</button></div>
+    <div class="ipucu" style="margin-top:4px;">Yalnızca değiştirmek istediğin alanı seç; "değiştirme" kalanlar olduğu gibi kalır.</div>
+  </div>
+  <div id="tdegIc"></div>
+  <div id="tdegAlt"><button type="button" class="ana" id="tdegUygula" style="flex:1;">Uygula</button></div>
 </div>
 <div class="cubuk gizli" id="cubuk">
   <button type="button" data-sekme="urun"><span class="sekSimge">🛒</span>Ürünler<i data-sayac="urun"></i></button>
@@ -1756,6 +1771,100 @@
     l.forEach(function(u){ u.bicim = f; });
     kaydet(); listeCiz(); ciz(); toast(l.length + ' ürün ' + ad + ' yapıldı');
   });
+  // ---------- Toplu değiştir (build 290) ----------
+  var tdeg = { secili: {} };
+  function tdSec(ad, etiket, secenekler, yetki){
+    if(yetki && !yetkiVar(yetki)) return '';
+    return '<div class="tdAlan" data-tdk="' + ad + '"><label style="margin:0 0 4px;">' + etiket + '</label><select data-td="' + ad + '"><option value="">— değiştirme —</option>' +
+      secenekler.map(function(o){ return '<option value="' + esc(o[0]) + '">' + esc(o[1]) + '</option>'; }).join('') + '</select><div data-tdek="' + ad + '"></div></div>';
+  }
+  function tdegCiz(){
+    var l = durum.liste.filter(function(u){ return !u.basildi; });
+    var n = l.filter(function(u){ return tdeg.secili[u.id]; }).length;
+    $('tdegIc').innerHTML =
+      '<div class="tdAlan"><div style="display:flex; justify-content:space-between; align-items:center;"><b style="font-size:14px;">Ürünler: ' + n + ' / ' + l.length + ' seçili</b>' +
+        '<label style="display:flex; align-items:center; gap:6px; margin:0; text-transform:none; letter-spacing:0; font-size:13px;"><input type="checkbox" id="tdTumu"' + (n === l.length ? ' checked' : '') + ' style="width:20px; height:20px;">hepsi</label></div>' +
+        '<details style="margin-top:6px;"><summary style="cursor:pointer; font-size:13px; color:var(--muted);">Seçimi değiştir</summary><div style="max-height:260px; overflow:auto; margin-top:6px;">' +
+        l.map(function(u){ return '<label class="secSatir" style="text-transform:none; letter-spacing:0; margin:0;"><input type="checkbox" data-tdu="' + esc(u.id) + '"' + (tdeg.secili[u.id] ? ' checked' : '') + '><div style="flex:1; min-width:0;"><div style="font-weight:700; font-size:13.5px; color:var(--text);">' + esc(u.ad) + '</div><div class="ipucu">' + para(u.fiyat) + ' ₺ · ' + esc((BICIM[urunBicim(u)] || {}).ad || u.bicim) + (u.indirim ? ' · İNDİRİM' : '') + '</div></div></label>'; }).join('') +
+        '</div></details></div>' +
+      tdSec('bicim', 'Kâğıt / biçim', [['zebra', 'Etiket (Zebra)'], ['a6', 'A6 afiş'], ['a5', 'A5 afiş'], ['a4', 'A4 afiş'], ['a3', 'A3 afiş']], IS_YETKI.bicim) +
+      tdSec('adet', 'Kaç etiket', [['1', '1'], ['2', '2'], ['3', '3'], ['4', '4'], ['5', '5'], ['10', '10']]) +
+      tdSec('bosluk', 'Afişte üstte 2 cm boşluk', [['evet', 'Bırak'], ['hayir', 'Bırakma']]) +
+      tdSec('yer', 'Üretim yeri', [['Türkiye', 'Türkiye'], ['_yaz', 'Kendim yazacağım…'], ['_bos', 'Yalnız boş olanlara yaz…']], ALAN_YETKI.yer) +
+      tdSec('baslik', 'Üst başlık (indirimli ürünlerde İNDİRİM yazar)', BASLIKLAR.map(function(b){ return [b || '_yok', b || '(başlık yok)']; }).concat([['ozel', 'Kendim yazacağım…']]), ALAN_YETKI.baslik) +
+      tdSec('indirim', 'İndirim', [['yap', 'İndirim yap (önceki fiyat ERP grubundan / fiyat düşüşünden)'], ['kaldir', 'İndirimi kaldır (normal etiket)'], ['bitis', 'Yalnız bitiş tarihini değiştir']], ALAN_YETKI.indirim) +
+      tdSec('tarih', 'Fiyat tarihi', [['_katalog', 'Fiyatın değiştiği gün (katalogdan)'], ['_bugun', 'Bugün'], ['_yaz', 'Tarih seç…']], ALAN_YETKI.tarih) +
+      tdSec('bfKip', 'Birim fiyatı', [['_oto', 'Kendiliğinden'], ['yaz', 'Her zaman yaz'], ['yazma', 'Yazma']], ALAN_YETKI.bfKip);
+    $('tdegUygula').textContent = 'Seçili ' + n + ' üründe uygula';
+  }
+  function tdEkCiz(ad){
+    var v = ($('tdegIc').querySelector('[data-td="' + ad + '"]') || {}).value || '', ek = $('tdegIc').querySelector('[data-tdek="' + ad + '"]'), h = '';
+    if(ad === 'yer' && (v === '_yaz' || v === '_bos')) h = '<input data-tdv="yer" list="ulkeler" placeholder="ülke yaz ya da seç" style="margin-top:6px;">';
+    if(ad === 'baslik' && v === 'ozel') h = '<input data-tdv="ozel" maxlength="24" placeholder="Başlık metni" style="margin-top:6px;">';
+    if(ad === 'indirim' && (v === 'yap' || v === 'bitis')) h = '<label style="margin:6px 0 2px;">İndirim bitiş tarihi</label><input data-tdv="bitis" type="date" value="' + esc($('topluBitis').value || '') + '">';
+    if(ad === 'tarih' && v === '_yaz') h = '<input data-tdv="tarih" type="date" value="' + bugun() + '" style="margin-top:6px;">';
+    if(ek) ek.innerHTML = h;
+    var k = $('tdegIc').querySelector('[data-tdk="' + ad + '"]'); if(k) k.classList.toggle('degisecek', !!v);
+  }
+  $('topluDegAc').addEventListener('click', function(e){
+    e.stopPropagation();
+    tdeg.secili = {}; durum.liste.forEach(function(u){ if(!u.basildi) tdeg.secili[u.id] = true; });
+    tdegCiz(); $('tdeg').classList.remove('gizli');
+  });
+  $('tdegKapat').addEventListener('click', function(){ $('tdeg').classList.add('gizli'); });
+  $('tdegIc').addEventListener('change', function(e){
+    var t = e.target;
+    if(t.id === 'tdTumu'){ var v = t.checked; durum.liste.forEach(function(u){ if(!u.basildi) tdeg.secili[u.id] = v; }); var acikD = $('tdegIc').querySelector('details').open, d = tdDegerler(); tdegCiz(); tdGeriYukle(d); $('tdegIc').querySelector('details').open = acikD; return; }
+    if(t.hasAttribute('data-tdu')){ tdeg.secili[t.getAttribute('data-tdu')] = t.checked; var n = durum.liste.filter(function(u){ return !u.basildi && tdeg.secili[u.id]; }).length; $('tdegUygula').textContent = 'Seçili ' + n + ' üründe uygula'; var top = durum.liste.filter(function(u){ return !u.basildi; }).length; $('tdegIc').querySelector('b').textContent = 'Ürünler: ' + n + ' / ' + top + ' seçili'; $('tdTumu').checked = n === top; return; }
+    if(t.hasAttribute('data-td')) tdEkCiz(t.getAttribute('data-td'));
+  });
+  function tdDegerler(){ var d = {}; Array.prototype.forEach.call($('tdegIc').querySelectorAll('[data-td], [data-tdv]'), function(el){ d[(el.getAttribute('data-td') ? 'a:' + el.getAttribute('data-td') : 'v:' + el.getAttribute('data-tdv'))] = el.value; }); return d; }
+  function tdGeriYukle(d){ Object.keys(d).forEach(function(k){ if(k.indexOf('a:') === 0){ var el = $('tdegIc').querySelector('[data-td="' + k.slice(2) + '"]'); if(el){ el.value = d[k]; tdEkCiz(k.slice(2)); } } }); Object.keys(d).forEach(function(k){ if(k.indexOf('v:') === 0){ var el = $('tdegIc').querySelector('[data-tdv="' + k.slice(2) + '"]'); if(el) el.value = d[k]; } }); }
+  $('tdegUygula').addEventListener('click', function(){
+    var d = tdDegerler(), a = function(k){ return d['a:' + k] || ''; }, v = function(k){ return String(d['v:' + k] || '').trim(); };
+    var l = durum.liste.filter(function(u){ return !u.basildi && tdeg.secili[u.id]; });
+    if(!l.length){ toast('Hiç ürün seçilmedi', 'uyari'); return; }
+    var alanlar = ['bicim', 'adet', 'bosluk', 'yer', 'baslik', 'indirim', 'tarih', 'bfKip'].filter(function(k){ return a(k); });
+    if(!alanlar.length){ toast('Değişecek bir alan seç', 'uyari'); return; }
+    if((a('yer') === '_yaz' || a('yer') === '_bos') && !v('yer')){ toast('Üretim yerini yaz', 'uyari'); return; }
+    if(a('baslik') === 'ozel' && !v('ozel')){ toast('Başlık metnini yaz', 'uyari'); return; }
+    if(a('baslik') === 'ozel' && RISKLI.test(v('ozel')) && !window.confirm('"' + v('ozel') + '" indirim ya da karşılaştırma anlamı taşıyor; belgeyle kanıtlaman gerekebilir. Yine de yazılsın mı?')) return;
+    if((a('indirim') === 'yap' || a('indirim') === 'bitis') && !v('bitis')){ toast('İndirim bitiş tarihini seç', 'uyari'); return; }
+    if((a('indirim') === 'yap' || a('indirim') === 'bitis') && v('bitis') < bugun()){ toast('Bitiş tarihi geçmiş olamaz', 'hata'); return; }
+    if(a('tarih') === '_yaz' && !v('tarih')){ toast('Fiyat tarihini seç', 'uyari'); return; }
+    var not = { indYok: 0, indOk: 0, yerAtla: 0 };
+    l.forEach(function(u){
+      if(a('bicim')) u.bicim = a('bicim');
+      if(a('adet')) u.adet = parseInt(a('adet'), 10) || 1;
+      if(a('bosluk')) u.ustBosluk = a('bosluk') === 'evet';
+      if(a('yer') === 'Türkiye'){ u.yer = 'Türkiye'; u.barkodYer = false; bilgiHatirla(u); }
+      else if(a('yer') === '_yaz'){ u.yer = v('yer'); u.barkodYer = false; bilgiHatirla(u); }
+      else if(a('yer') === '_bos'){ if(String(u.yer || '').trim()) not.yerAtla++; else { u.yer = v('yer'); u.barkodYer = false; bilgiHatirla(u); } }
+      if(a('baslik')){ u.baslik = a('baslik') === '_yok' ? '' : a('baslik'); u.ozel = a('baslik') === 'ozel' ? v('ozel').toLocaleUpperCase('tr-TR') : ''; }
+      if(a('indirim') === 'kaldir'){ if(u.indirim){ u.indirim = false; u.onceki = ''; u.bitis = ''; if(u.ft) u.tarih = u.ft; } }
+      else if(a('indirim') === 'bitis'){ if(u.indirim) u.bitis = v('bitis'); }
+      else if(a('indirim') === 'yap'){
+        if(u.indirim){ u.bitis = v('bitis'); not.indOk++; }
+        else {
+          var h = !u.elle && u.barkod && insertHarita[String(u.barkod)], eski = h ? Number(h.x[1]) || 0 : 0;
+          if(h && eski > u.fiyat + 0.004){ u.indirim = true; u.onceki = String(eski).replace('.', ','); u.bitis = v('bitis'); if(h.g.bas) u.tarih = String(h.g.bas).slice(0, 10); not.indOk++; }
+          else {
+            var dz = (!u.elle && u.barkod && !u.grup) ? dususBilgisi({ ft: u.ft, of: u.of }, u.fiyat) : null;
+            if(dz){ u.indirim = true; u.onceki = String(dz.onceki).replace('.', ','); u.tarih = dz.tarih; u.bitis = v('bitis'); not.indOk++; } else not.indYok++;
+          }
+        }
+      }
+      if(a('tarih') === '_katalog'){ var k = katalogHarita[String(u.barkod)]; if(k && k.ft) u.tarih = k.ft; }
+      else if(a('tarih') === '_bugun') u.tarih = bugun();
+      else if(a('tarih') === '_yaz') u.tarih = v('tarih');
+      if(a('bfKip')) u.bfKip = a('bfKip') === '_oto' ? '' : a('bfKip');
+      u.basildi = '';
+    });
+    $('tdeg').classList.add('gizli');
+    kaydet(); listeCiz(); ciz();
+    toast(l.length + ' üründe ' + alanlar.length + ' alan değişti' + (not.indYok ? ' · ' + not.indYok + ' ürünün fiyatı düşmemiş: İNDİRİM yazılmadı' : '') + (not.yerAtla ? ' · ' + not.yerAtla + ' ürünün üretim yeri zaten dolu' : ''), not.indYok ? 'uyari' : '');
+  });
+
   // ---- Listede aynı fiyatlı çeşitleri birleştir (build 289) ----
   // Toplu eklenen (ERP grubu, indirim listesi, fiyatı değişenler) aynı fiyatlı çeşitler ayrı ayrı basılmasın:
   // biri kalır, öbürleri onun çeşidi olur. Ölçüt "tek etikette topla" ile aynı: fiyat birebir, aynı ambalaj, adın ilk
