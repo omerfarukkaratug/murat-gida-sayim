@@ -201,14 +201,15 @@
   }
 
   // ---------- Çizim ----------
-  var SEKMELER = [['ozet', '📊 Özet'], ['urunler', '🛒 Ürünler'], ['enflasyon', '📈 Enflasyon'], ['firmalar', '🏭 Firmalar'], ['tufe', '⚙️ TÜFE']];
+  var SEKMELER = [['ozet', '📊 Özet'], ['urunler', '🛒 Ürünler'], ['enflasyon', '📈 Enflasyon'], ['firmalar', '🏭 Firmalar'], ['saglik', '🩺 Sağlık'], ['tufe', '⚙️ TÜFE']];
   function sekmeCiz(){
     $('sekmeler').innerHTML = SEKMELER.map(function(s){ return '<button type="button" data-sekme="' + s[0] + '"' + (s[0] === sekme ? ' class="on"' : '') + '>' + s[1] + '</button>'; }).join('');
   }
   function kutu(b, d, a, sinif){ return '<div class="kutu"><div class="b">' + b + '</div><div class="d ' + (sinif || '') + '">' + d + '</div>' + (a ? '<div class="a">' + a + '</div>' : '') + '</div>'; }
   function ciz(){
     sekmeCiz();
-    if(!V){ return; }
+    if(sekme === 'saglik'){ saglikCiz(); return; }
+    if(!V){ if(getirHata) $('icerik').innerHTML = getirHata; return; }
     var h = '';
     if(sekme === 'ozet') h = ozetHtml();
     else if(sekme === 'urunler') h = urunlerHtml();
@@ -364,10 +365,53 @@
     $('detay').classList.remove('gizli');
   }
 
+  // ---------- 🩺 MAĞAZA SAĞLIK RAPORU ----------
+  // Rapor ERP bilgisayarında ERP12'yi yalnız okuyarak hazırlanır (erp/saglik-raporu.ps1, 30 dakikada bir bakan görev)
+  // ve veri tabanına bırakılır; burada son rapor erp/saglik-sablon.html görünümüyle gösterilir.
+  var S = null, sSablon = null, sYukleniyor = false, sSecili = '';
+  function saglikYukle(id, iste){
+    sYukleniyor = true; if(sekme === 'saglik') saglikCiz();
+    var q = { action: 'karlilik', ne: iste ? 'saglik_iste' : 'saglik' }; if(id) q.id = id;
+    istek(q, function(r){
+      sYukleniyor = false;
+      if(r.status !== 'ok'){ S = { hata: r.message || 'Rapor alınamadı' }; }
+      else { S = r; if(iste) toast('İstek gönderildi — ERP bilgisayarı 30 dakika içinde yeni raporu hazırlar'); }
+      if(sekme === 'saglik') saglikCiz();
+    });
+  }
+  function saglikCiz(){
+    if(!S && !sYukleniyor){ saglikYukle(); return; }
+    if(sYukleniyor && !S){ $('icerik').innerHTML = '<div class="bekle">Sağlık raporu getiriliyor…</div>'; return; }
+    if(S.hata){ $('icerik').innerHTML = '<div class="kart"><div class="kotu" style="font-weight:800;">Sağlık raporu alınamadı</div><div class="ipucu" style="margin-top:6px;">' + esc(S.hata) + '</div><button type="button" id="sYenidenDene" class="kucuk" style="margin-top:10px;">↻ Tekrar dene</button></div>'; return; }
+    var r = S.rapor, h = '<div class="kart" style="margin-bottom:10px;">';
+    h += '<div style="display:flex; justify-content:space-between; gap:8px; align-items:center; flex-wrap:wrap;"><div style="font-weight:800;">🩺 Mağaza Sağlık Raporu</div>' +
+      '<button type="button" id="sIste" class="kucuk"' + (sYukleniyor ? ' disabled' : '') + '>↻ Yeniden hazırlat</button></div>';
+    h += '<div class="ipucu" style="margin-top:6px;">' + (r ? 'Rapor: <b>' + esc(r.zaman) + '</b> · ' : 'Henüz rapor yok · ') + 'ERP bilgisayarında ERP12 yalnız okunarak hazırlanır, günde bir kez kendiliğinden yenilenir. Tutarlar KDV hariç.</div>';
+    if(S.istek) h += '<div class="ipucu" style="margin-top:6px; color:var(--amber); font-weight:700;">⏳ Yeniden hazırlanması istendi (' + esc(S.istek.zaman) + ') — ERP bilgisayarı açıksa 30 dakika içinde gelir.</div>';
+    if(!S.gorev) h += '<div class="ipucu" style="margin-top:6px; color:var(--red); font-weight:700;">ERP bilgisayarındaki görev hiç çalışmamış: C:\\Scripts içinde SAGLIK-RAPORU-GOREV.bat "Yönetici olarak çalıştır" ile kurulmalı.</div>';
+    if((S.liste || []).length > 1) h += '<div style="margin-top:8px;"><select id="sGecmis" style="width:100%;">' + S.liste.map(function(x){ return '<option value="' + x[0] + '"' + (r && r.id === x[0] ? ' selected' : '') + '>' + esc(x[1]) + (x === S.liste[0] ? ' (en son)' : '') + '</option>'; }).join('') + '</select></div>';
+    h += '</div>';
+    if(!r){ $('icerik').innerHTML = h + '<div class="bekle">Rapor ERP bilgisayarından gelince burada görünür.</div>'; return; }
+    $('icerik').innerHTML = h + '<iframe id="sCerceve" title="Mağaza Sağlık Raporu" style="width:100%; height:600px; border:0; border-radius:14px; background:#f6f6fb; display:block;"></iframe>';
+    var yaz = function(){
+      var f = $('sCerceve'); if(!f || !sSablon) return;
+      var json = JSON.stringify(r.veri).replace(/<\//g, '<\\/');
+      f.onload = function(){ var olc = function(){ try { f.style.height = (f.contentDocument.documentElement.scrollHeight + 10) + 'px'; } catch(e){} }; olc(); setTimeout(olc, 300); setTimeout(olc, 1200); };
+      f.srcdoc = sSablon.replace('/*VERI*/null', function(){ return json; }).replace('/*ICERDE*/false', 'true');
+    };
+    if(sSablon) yaz();
+    else fetch('erp/saglik-sablon.html', { cache: 'no-cache' }).then(function(x){ if(!x.ok) throw new Error(x.status); return x.text(); })
+      .then(function(t){ sSablon = t; yaz(); })
+      .catch(function(){ var f = $('sCerceve'); if(f) f.outerHTML = '<div class="kart kotu">Rapor görünümü indirilemedi — internete bağlanıp tekrar dene.</div>'; });
+  }
+  document.addEventListener('change', function(e){ if(e.target.id === 'sGecmis') saglikYukle(e.target.value); });
+
   // ---------- Olaylar ----------
   document.addEventListener('click', function(e){
     var t;
     if((t = e.target.closest('[data-sekme]'))){ sekme = t.getAttribute('data-sekme'); ciz(); window.scrollTo(0, 0); return; }
+    if(e.target.id === 'sIste'){ saglikYukle(null, true); return; }
+    if(e.target.id === 'sYenidenDene'){ S = null; saglikCiz(); return; }
     if((t = e.target.closest('[data-kat]'))){ filtre = t.getAttribute('data-kat'); sekme = 'urunler'; ciz(); window.scrollTo(0, 0); return; }
     if((t = e.target.closest('[data-git]'))){ sekme = t.getAttribute('data-git'); ciz(); window.scrollTo(0, 0); return; }
     if((t = e.target.closest('[data-filtre]'))){ filtre = t.getAttribute('data-filtre'); ciz(); return; }
@@ -406,11 +450,13 @@
   // Geri tuşu (index.html çağırır): önce ürün penceresi kapanır
   window.mkGeri = function(){ if(!$('detay').classList.contains('gizli')){ $('detay').classList.add('gizli'); return true; } return false; };
 
-  var getirNo = 0;
+  var getirNo = 0, getirHata = '';
+  function icerik(h){ if(sekme !== 'saglik') $('icerik').innerHTML = h; }
   function getir(){
     if(!kimlik){ $('icerik').innerHTML = '<div class="bekle">Önce uygulamada giriş yap.</div>'; return; }
     var no = ++getirNo;
-    $('icerik').innerHTML = '<div class="bekle">Rapor hazırlanıyor…<br><span class="ipucu">Bütün satışlar ve alışlar hesaplanıyor — ilk açılış 10–20 sn sürebilir, sonraki 30 dakika anında gelir.</span></div>';
+    getirHata = '';
+    icerik('<div class="bekle">Rapor hazırlanıyor…<br><span class="ipucu">Bütün satışlar ve alışlar hesaplanıyor — ilk açılış 10–20 sn sürebilir, sonraki 30 dakika anında gelir.</span></div>');
     var tur = 0;
     (function sor(){
     istek({ action: 'karlilik', ne: 'rapor', gun: $('donem').value }, function(r){
@@ -418,11 +464,11 @@
       // İlk açılışta geçmiş aylar parça parça hazırlanır (037): bitene kadar kendiliğinden tekrar sorulur.
       if(r.status === 'hazirlaniyor' && ++tur <= 20){
         var hazir = (r.toplam || 12) - (r.kalan || 0);
-        $('icerik').innerHTML = '<div class="bekle">Rapor ilk kez hazırlanıyor… <b>' + hazir + '/' + (r.toplam || 12) + ' ay</b> hazır<br><span class="ipucu">Geçmiş aylar bir kere hesaplanıp saklanıyor; bundan sonra rapor hızlı açılır.</span></div>';
+        icerik('<div class="bekle">Rapor ilk kez hazırlanıyor… <b>' + hazir + '/' + (r.toplam || 12) + ' ay</b> hazır<br><span class="ipucu">Geçmiş aylar bir kere hesaplanıp saklanıyor; bundan sonra rapor hızlı açılır.</span></div>');
         setTimeout(sor, 500); return;
       }
-      if(r.status !== 'ok'){ $('icerik').innerHTML = '<div class="kart"><div class="kotu" style="font-weight:800;">Rapor alınamadı</div><div class="ipucu" style="margin-top:6px;">' + esc(r.message || '') + '</div></div>'; return; }
-      V = r; hesapla(); ciz();
+      if(r.status !== 'ok'){ getirHata = '<div class="kart"><div class="kotu" style="font-weight:800;">Rapor alınamadı</div><div class="ipucu" style="margin-top:6px;">' + esc(r.message || '') + '</div><div class="ipucu" style="margin-top:6px;">🩺 Sağlık sekmesi bundan bağımsız çalışır.</div></div>'; icerik(getirHata); return; }
+      V = r; hesapla(); if(sekme !== 'saglik') ciz();
     });
     })();
   }

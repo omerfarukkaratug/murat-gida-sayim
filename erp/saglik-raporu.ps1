@@ -10,19 +10,38 @@
 #    4) 90 gundur satilmayan stok ve bagli para
 #    5) Kasa iptalleri (son 30 gun) kasiyer bazinda
 #    6) Son 6 ayin aylik ciro / kar egilimi
+#  Rapor KRT Saha'ya da gonderilir: uygulamada Karlilik -> Saglik sekmesinde gorunur (038_saglik_raporu.sql).
+#  -Gorev ile (SAGLIK-RAPORU-GOREV.bat 30 dakikada bir calistirir): rapor yalniz uygulamadan istenmisse
+#  ya da son rapor 20 saatten eskiyse hazirlanir; pencere/tarayici acilmaz.
 # =====================================================================
 param(
     [string]$SqlServer = "SERVER\ERP12",
     [string]$Database = "",
     [double]$AylikEnflasyon = 2.0,     # satilmayan stokta bekleyen paranin aylik deger kaybi (%)
-    [string]$Cikti = ""
+    [string]$Cikti = "",
+    [switch]$Gorev
 )
+$DbUrl = "https://wjyqempcmyrmruhdpcwk.supabase.co"
+$DbAnahtarDosyasi = "C:\Scripts\db-anahtar.txt"
+try { [Net.ServicePointManager]::SecurityProtocol = [Net.ServicePointManager]::SecurityProtocol -bor [Net.SecurityProtocolType]::Tls12 } catch {}
+function DbAnahtar { if (Test-Path $DbAnahtarDosyasi) { return (Get-Content -Path $DbAnahtarDosyasi -TotalCount 1).Trim() }; return "" }
+function DbCagir($fonksiyon, $govde, $sn = 120) {
+    $anahtar = DbAnahtar; if (-not $anahtar) { throw "db-anahtar.txt yok ($DbAnahtarDosyasi)" }
+    return Invoke-RestMethod -Uri "$DbUrl/rest/v1/rpc/$fonksiyon" -Method Post -Body ([Text.Encoding]::UTF8.GetBytes($govde)) `
+        -ContentType "application/json; charset=utf-8" -Headers @{ apikey = $anahtar } -TimeoutSec $sn -UserAgent "MK-Sayim/1.0"
+}
+function Nabiz($mesaj) { try { [void](DbCagir "erp_nabiz_yaz" (@{ p_ad = "saglik_raporu"; p_mesaj = $mesaj; p_baslangic = $null } | ConvertTo-Json -Compress) 30) } catch {} }
 $Klasor = Split-Path -Parent $MyInvocation.MyCommand.Path
 if (-not $Cikti) { $Cikti = Join-Path $Klasor "magaza-saglik-raporu.html" }
 $Sablon = Join-Path $Klasor "saglik-sablon.html"
 $Log = Join-Path $Klasor "saglik-raporu-log.txt"
 function Yaz($m) { $s = "$(Get-Date -Format 'HH:mm:ss') $m"; Write-Host $s; try { Add-Content -Path $Log -Value $s } catch {} }
 $Inv = [Globalization.CultureInfo]::InvariantCulture
+if ($Gorev) {
+    try { $g = DbCagir "saglik_gerekli" "{}" 30 } catch { Nabiz ("HATA: " + $_.Exception.Message); exit 0 }
+    if (-not $g.gerekli) { Nabiz "OK: bekliyor"; exit 0 }
+    Yaz "Gorev: rapor hazirlaniyor ($($g.neden))"
+}
 
 $bag = $null
 function Tablo($sql, $sn = 600) {
@@ -256,7 +275,16 @@ try {
     $html = $html.Replace("/*VERI*/null", $json)
     [System.IO.File]::WriteAllText($Cikti, $html, (New-Object System.Text.UTF8Encoding($true)))
     Yaz "RAPOR HAZIR: $Cikti"
-    try { Start-Process $Cikti } catch {}
+    if (-not $Gorev) { try { Start-Process $Cikti } catch {} }
 } catch { Yaz "HATA: rapor yazilamadi: $($_.Exception.Message)" }
+# KRT Saha'ya gonder (uygulamada Karlilik -> Saglik)
+if (DbAnahtar) {
+    try {
+        $govde = '{"p_veri":' + ($veri | ConvertTo-Json -Depth 8 -Compress) + '}'
+        $r = DbCagir "saglik_rapor_yaz" $govde 120
+        if ($r.status -eq "ok") { Yaz "KRT Saha'ya gonderildi (uygulamada Karlilik -> Saglik)"; Nabiz ("OK: rapor gonderildi" + $(if ($hatalar.Count) { " (" + $hatalar.Count + " bolum hatali)" } else { "" })) }
+        else { Yaz "KRT Saha'ya gonderilemedi: $($r.message)"; Nabiz ("HATA: " + $r.message) }
+    } catch { Yaz "KRT Saha'ya gonderilemedi: $($_.Exception.Message)"; Nabiz ("HATA: " + $_.Exception.Message) }
+} else { Yaz "Not: db-anahtar.txt yok, rapor yalniz bu bilgisayarda kaldi." }
 if ($hatalar.Count) { Yaz "Uyari: $($hatalar.Count) bolum hesaplanamadi (raporun sonunda yazar)." }
-Read-Host "Kapatmak icin Enter"
+if (-not $Gorev) { Read-Host "Kapatmak icin Enter" }

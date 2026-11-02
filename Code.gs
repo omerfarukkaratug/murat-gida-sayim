@@ -6371,6 +6371,18 @@ function karlilik(p, callback) {
   }
   var ayar = dbAyar();
   if (!ayar) return outJson({ status: 'error', message: 'Veri tabanı bağlantısı kapalı' }, callback);
+  // 🩺 Mağaza Sağlık Raporu (038): ERP bilgisayarı hazırlayıp bırakır; burada yalnız okunur / yeniden istenir.
+  if (ne === 'saglik' || ne === 'saglik_iste') {
+    var sr;
+    try {
+      if (ne === 'saglik_iste') dbCagir(ayar, 'saglik_istek_yaz', { p_kim: String(p.user || '').substring(0, 60) });
+      sr = dbCagir(ayar, 'saglik_rapor_oku', { p_id: p.id ? Number(p.id) : null });
+    } catch (e) {
+      var em = String(e.message || e);
+      return outJson({ status: 'error', message: /saglik_rapor_oku|saglik_istek_yaz|PGRST202/.test(em) ? 'Sağlık raporu veri tabanında kurulu değil — 038_saglik_raporu.sql çalıştırılmalı' : 'Veri tabanına ulaşılamadı: ' + em.substring(0, 150) }, callback);
+    }
+    return outJson(sr || { status: 'error', message: 'Boş cevap' }, callback);
+  }
   var gun = Math.min(Math.max(parseInt(p.gun, 10) || 90, 7), 400);
   // Katalog: stok kodu → KDV, toplam stok, güncel satış fiyatı (KDV dahil), son net alış
   var kat = {}, sh = SpreadsheetApp.getActiveSpreadsheet().getSheetByName('Katalog');
