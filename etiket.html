@@ -473,6 +473,10 @@
       <input id="sloganYazi" type="text" maxlength="28" placeholder="örn. 1987'den beri">
     </div>
 
+    <!-- İNDİRİM KAMPANYASI (build 285): yönetici bir kere açar; kampanya süresince okutulan ve
+         fiyatı kampanya başlangıcından beri DÜŞMÜŞ ürün kendiliğinden İNDİRİM etiketi olarak eklenir. -->
+    <div class="kart gizli" id="kampanyaKart"></div>
+
     <div class="kart">
       <div class="kartBaslik">Ürün ekle</div>
       <div class="satir">
@@ -873,6 +877,7 @@
     katalogKur(r);
     kuyrukYukle();
     if(!IS_NO){ bilgiCek(); grupCek(); katalogTazele(); ayarCek(); }
+    kampanyaCiz();
   });
   // Listedeki ürünlerin fiyatı her zaman katalogdaki fiyattır. Katalog yenilendiyse fark burada kapanır.
   // Döner: fiyatı güncellenen ürün sayısı.
@@ -1291,8 +1296,9 @@
     }
     if(sessiz) return;
     if(durum.hizli) durum.liste[0].bicim = 'zebra';      // hızlı etiket: raf etiketi olarak doğrudan yazıcıya
+    var kpNot = kampanyaUygula(durum.liste[0]);
     kaydet(); listeCiz(); ciz();
-    toast('Eklendi: ' + u.ad);
+    if(kpNot) toast(kpNot.metin, kpNot.tur); else toast('Eklendi: ' + u.ad);
     if(durum.hizli) hizliPlanla();
   }
   if(!YONETICI) $('elleBtn').classList.add('yetkiGizli');
@@ -3011,7 +3017,7 @@
   // ---------- Ortak ayarlar: Zebra ölçüleri, logo, yazı… bütün cihazlarda aynı ----------
   // Ayar yetkisi olan değiştirince sunucuya yazılır; herkes açılışta sunucudakini alır.
   var AYAR_ALAN = ['kesim', 'logo', 'bosluk', 'a4diz', 'slogan'], ayarSon = '', ayarZ = null, ayarGeldi = false;
-  function ayarOzet(){ var o = { zebra: durum.zebra }; AYAR_ALAN.forEach(function(k){ o[k] = durum[k]; }); return o; }
+  function ayarOzet(){ var o = { zebra: durum.zebra, kampanya: durum.kampanya || null }; AYAR_ALAN.forEach(function(k){ o[k] = durum[k]; }); return o; }
   function ayarCek(){
     if(IS_NO || !navigator.onLine) return;
     sunucuSor({ action: 'etiket_ayar' }, function(hata, veri){
@@ -3030,8 +3036,9 @@
       if(a){
         AYAR_ALAN.forEach(function(k){ if(a[k] !== undefined) durum[k] = k === 'slogan' ? String(a[k]) : !!a[k]; });
         if(a.zebra) Object.keys(ZEBRA_VARSAYILAN).forEach(function(k){ if(a.zebra[k] !== undefined) durum.zebra[k] = a.zebra[k]; });
+        if('kampanya' in a) durum.kampanya = a.kampanya || null;   // eski sunucu göndermez: bu telefondaki kalır
         ayarSon = JSON.stringify(ayarOzet());
-        kaydet(); bicimCiz(); ciz(); yazdirCiz();
+        kaydet(); bicimCiz(); ciz(); yazdirCiz(); kampanyaCiz();
       } else if(yt('etiket_ayar') && JSON.stringify(durum.zebra) !== JSON.stringify(ZEBRA_VARSAYILAN)) ayarGonder(true);   // ilk kurulum: ayarlanmış cihaz sunucuya yazar
     });
   }
@@ -3046,6 +3053,80 @@
         body: JSON.stringify({ type: 'etiket_ayar', ayar: ayarOzet(), user: k.user, pass: k.pass, kaynak: 'telefon: ' + (kullanici.name || '?') }) }).catch(function(){ ayarSon = ''; });
     }, hemen ? 0 : 1500);
   }
+  // ---------- İNDİRİM KAMPANYASI ----------
+  // Yönetici (etiket ayarı + indirim yetkisi) ad, başlangıç ve bitiş tarihini BİR KERE girer; bütün
+  // telefonlara gider. Kampanya süresince okutulan ürünün fiyatı başlangıçtan beri DÜŞMÜŞSE etiket
+  // kendiliğinden İNDİRİM olur (önceki fiyat = sistemdeki indirimden önceki en düşük fiyat, bitiş =
+  // kampanya bitişi). Fiyatı düşmemiş ürüne İNDİRİM yazılmaz (yönetmelik); normal etiket olarak eklenir.
+  var kampanyaDuzen = false;
+  function kampanyaYetki(){ return yt('etiket_indirim') && yt('etiket_ayar'); }
+  function aktifKampanya(){
+    var k = durum.kampanya, b = bugun();
+    return (k && k.bas && k.bitis && k.bas <= b && b <= k.bitis) ? k : null;
+  }
+  function kampanyaUygula(yu){
+    var kp = aktifKampanya();
+    if(!kp || !yu || yu.elle || !yu.barkod || yu.grup || yu.indirim) return null;
+    var dz = dususBilgisi({ ft: yu.ft, of: yu.of }, yu.fiyat);
+    if(dz && dz.tarih >= kp.bas){
+      yu.indirim = true; yu.onceki = String(dz.onceki).replace('.', ','); yu.tarih = dz.tarih; yu.bitis = kp.bitis;
+      return { metin: '🏷️ İNDİRİM: ' + para(dz.onceki) + ' → ' + para(yu.fiyat) + ' ₺ — ' + yu.ad, tur: '' };
+    }
+    return { metin: 'Eklendi: ' + yu.ad + ' — fiyatı kampanya başlangıcından (' + tarihTr(kp.bas) + ') beri düşmemiş, normal etiket', tur: 'uyari' };
+  }
+  function kampanyaCiz(){
+    var el = $('kampanyaKart'); if(!el) return;
+    var k = durum.kampanya, kp = aktifKampanya(), yetki = kampanyaYetki(), b = bugun();
+    if(!kp && !yetki){ el.classList.add('gizli'); return; }
+    el.classList.remove('gizli');
+    if(kampanyaDuzen && yetki){
+      var v = k || {};
+      el.style.border = '2px solid var(--amber)';
+      el.innerHTML = '<div class="kartBaslik">🏷️ İndirim kampanyası</div>' +
+        '<div class="ipucu" style="margin-bottom:8px;">Önce fiyatları ERP\'de düşür. Burada bir kere tarihleri gir; kampanya süresince okutulan ve fiyatı başlangıçtan beri düşen ürün <b>kendiliğinden İNDİRİM</b> etiketi olarak eklenir. Bütün telefonlarda geçerli.</div>' +
+        '<label for="kpAd">Kampanya adı</label><input id="kpAd" type="text" maxlength="40" placeholder="Örn. Züccaciye indirimi" value="' + esc(v.ad || '') + '">' +
+        '<div class="satir" style="margin-top:8px;">' +
+          '<div style="flex:1;"><label for="kpBas">Fiyatların düştüğü gün</label><input id="kpBas" type="date" value="' + esc(v.bas || b) + '"></div>' +
+          '<div style="flex:1;"><label for="kpBitis">İndirim bitişi</label><input id="kpBitis" type="date" value="' + esc(v.bitis || '') + '"></div>' +
+        '</div>' +
+        '<div class="satir" style="margin-top:10px;">' +
+          '<button type="button" class="ana" id="kpKaydet" style="flex:2;">' + (k ? 'Kaydet' : 'Kampanyayı başlat') + '</button>' +
+          '<button type="button" id="kpVazgec" style="flex:1;">Vazgeç</button>' +
+        '</div>' +
+        (k ? '<button type="button" id="kpBitir" class="baglanti" style="color:var(--red); margin-top:8px;">Kampanyayı bitir</button>' : '');
+      return;
+    }
+    if(kp){
+      el.style.border = '2px solid var(--green)';
+      el.innerHTML = '<div class="kartBaslik"><span>🏷️ ' + esc(kp.ad || 'İndirim kampanyası') + ' açık</span>' +
+          (yetki ? '<button type="button" id="kpDuzenle" style="font-size:12.5px; padding:6px 12px;">Düzenle</button>' : '') + '</div>' +
+        '<div class="ipucu">' + tarihTr(kp.bas) + ' – ' + tarihTr(kp.bitis) + '. Okuttuğun ürünün fiyatı kampanya başlangıcından beri düştüyse <b>İNDİRİM</b> etiketi kendiliğinden hazırlanır; düşmediyse normal etiket eklenir.</div>';
+      return;
+    }
+    el.style.border = '';
+    el.innerHTML = '<button type="button" id="kpDuzenle" style="width:100%; display:flex; justify-content:space-between; align-items:center;"><span>🏷️ İndirim kampanyası başlat' +
+      (k && k.bitis && k.bitis < b ? ' <span class="ipucu">(son kampanya bitti: ' + tarihTr(k.bitis) + ')</span>' : (k && k.bas > b ? ' <span class="ipucu">(başlangıç: ' + tarihTr(k.bas) + ')</span>' : '')) + '</span><span>▼</span></button>';
+  }
+  document.addEventListener('click', function(e){
+    var t = e.target.closest && e.target.closest('#kpDuzenle, #kpVazgec, #kpKaydet, #kpBitir'); if(!t) return;
+    if(!kampanyaYetki()){ toast('Bu işlem için yetkin yok', 'uyari'); return; }
+    if(t.id === 'kpDuzenle'){ kampanyaDuzen = true; kampanyaCiz(); return; }
+    if(t.id === 'kpVazgec'){ kampanyaDuzen = false; kampanyaCiz(); return; }
+    if(t.id === 'kpBitir'){
+      if(!confirm('Kampanya bütün telefonlarda bitirilsin mi? Basılmış etiketler değişmez.')) return;
+      durum.kampanya = null; kampanyaDuzen = false; kaydet(); ayarGonder(true); kampanyaCiz(); toast('Kampanya bitirildi'); return;
+    }
+    var ad = $('kpAd').value.trim(), bas = $('kpBas').value, bitis = $('kpBitis').value;
+    if(!bas){ toast('Fiyatların düştüğü günü seç', 'uyari'); $('kpBas').focus(); return; }
+    if(!bitis){ toast('İndirim bitiş tarihini seç', 'uyari'); $('kpBitis').focus(); return; }
+    if(bitis < bas){ toast('Bitiş, başlangıçtan önce olamaz', 'uyari'); return; }
+    if(bitis < bugun()){ toast('Bitiş tarihi geçmiş', 'uyari'); return; }
+    if(gunFarki(bugun(), bas) > INDIRIM_PENCERE_GUN){ toast('Başlangıç en fazla ' + INDIRIM_PENCERE_GUN + ' gün önce olabilir', 'uyari'); return; }
+    durum.kampanya = { ad: ad.slice(0, 40), bas: bas, bitis: bitis };
+    kampanyaDuzen = false; kaydet(); ayarGonder(true); kampanyaCiz();
+    toast(aktifKampanya() ? 'Kampanya açıldı — okutulan ürünler kendiliğinden indirimli eklenir' : 'Kampanya kaydedildi — başlangıç: ' + tarihTr(bas));
+  });
+
   function bicimCiz(){
     Array.prototype.forEach.call(document.querySelectorAll('#bicimSecim button'), function(b){ b.classList.toggle('aktif', b.getAttribute('data-bicim') === durum.bicim); });
     $('bicimAciklama').textContent = BICIM[durum.bicim].aciklama;

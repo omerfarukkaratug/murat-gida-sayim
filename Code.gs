@@ -752,6 +752,14 @@ function etiketAyarKaydet(ayar, gonderen) {
   t.zebra = {};
   ['w', 'h', 'kw', 'kh', 'kx', 'ky', 'ox', 'oy'].forEach(function (k) { var n = Number(z[k]); if (isFinite(n) && n >= -30 && n <= 300) t.zebra[k] = n; });
   t.zebra.cerceve = !!z.cerceve;
+  // İndirim kampanyası (build 285): {ad, bas, bitis} ya da null (bitirildi). Eski telefon alanı hiç
+  // göndermezse sunucudaki kampanya korunur (yoksa eski sürümlü bir telefon kampanyayı silerdi).
+  var eskiAyar = {}; try { eskiAyar = JSON.parse(PropertiesService.getScriptProperties().getProperty(ETIKET_AYAR_OZELLIK) || '{}') || {}; } catch (e) { eskiAyar = {}; }
+  if (ayar.kampanya === undefined) { if ('kampanya' in eskiAyar) t.kampanya = eskiAyar.kampanya; }
+  else if (ayar.kampanya && typeof ayar.kampanya === 'object') {
+    var kp = ayar.kampanya, gun = /^\d{4}-\d{2}-\d{2}$/;
+    t.kampanya = (gun.test(kp.bas) && gun.test(kp.bitis) && kp.bitis >= kp.bas) ? { ad: String(kp.ad || '').substring(0, 40), bas: kp.bas, bitis: kp.bitis } : (eskiAyar.kampanya || null);
+  } else t.kampanya = null;
   t.zaman = Utilities.formatDate(new Date(), fiyatTz(), 'dd.MM.yyyy HH:mm'); t.kullanici = String(gonderen || '').substring(0, 60);
   PropertiesService.getScriptProperties().setProperty(ETIKET_AYAR_OZELLIK, JSON.stringify(t));
   gunlukYaz('etiket_ayar', t.kullanici, 'Etiket ayarları değişti', false);
