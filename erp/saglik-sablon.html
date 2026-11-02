@@ -110,7 +110,11 @@ var ICERDE = /*ICERDE*/false;   // uygulamanın içinde (Kârlılık → Sağlı
   var k2 = geride.reduce(function(t, x){ return t + x.kacak; }, 0);
   var k3 = oluD * enf;
   var o = V.ozet || null;
-  var kar90 = o ? o.ciroMaliyetli - o.maliyet : null, marj90 = o && o.ciroMaliyetli > 0 ? kar90 / o.ciroMaliyetli : null;
+  // Tedarikçi fiyat farkı / iskonto belgeleri: ürüne dağıtılamaz ama kârdır; geldiği ayın ve dönemin kârına eklenir.
+  var FF = V.fiyatFarki || null, ff90 = FF ? FF.son90 || 0 : 0, ffAy = {};
+  if(FF) (FF.aylar || []).forEach(function(r){ ffAy[r[0]] = r[1] || 0; });
+  var malKar90 = o ? o.ciroMaliyetli - o.maliyet : null;
+  var kar90 = o ? malKar90 + ff90 : null, marj90 = o && o.ciroMaliyetli > 0 ? kar90 / o.ciroMaliyetli : null;
   var aylikKar = kar90 != null ? kar90 / 3 : null;
 
   // Sermaye
@@ -129,11 +133,12 @@ var ICERDE = /*ICERDE*/false;   // uygulamanın içinde (Kârlılık → Sağlı
   }
 
   // Aylar: marjı ortancanın belirgin altında kalan (bitmiş) ay = "inceleme gerektiren ay"
-  var aylar = (V.aylar || []).map(function(r){ var kar = r[2] - r[3]; return { ay: r[0], ciro: r[1], kar: kar, marj: r[2] > 0 ? kar / r[2] : null }; });
+  var aylar = (V.aylar || []).map(function(r){ var ff = ffAy[r[0]] || 0, kar = r[2] - r[3] + ff; return { ay: r[0], ciro: r[1], kar: kar, ff: ff, marj: r[2] > 0 ? kar / r[2] : null, malMarj: r[2] > 0 ? (r[2] - r[3]) / r[2] : null }; });
   var buAy = aylar.length ? aylar[aylar.length - 1].ay : '';
-  var bitmis = aylar.filter(function(a){ return a.ay !== buAy && a.marj != null; }).map(function(a){ return a.marj; }).sort(function(a, b){ return a - b; });
+  // Karşılaştırma malın kendi marjıyla yapılır (fiyat farkı geldiği ayı şişirip öteki ayları "düşük" göstermesin).
+  var bitmis = aylar.filter(function(a){ return a.ay !== buAy && a.malMarj != null; }).map(function(a){ return a.malMarj; }).sort(function(a, b){ return a - b; });
   var ortanca = bitmis.length ? bitmis[Math.floor(bitmis.length / 2)] : null;
-  aylar.forEach(function(a){ a.tuhaf = ortanca != null && a.ay !== buAy && a.marj != null && a.marj < ortanca - 0.04; });
+  aylar.forEach(function(a){ a.tuhaf = ortanca != null && a.ay !== buAy && a.malMarj != null && a.malMarj < ortanca - 0.05; });
   var ayZarar = {}; (V.ayZarar || []).forEach(function(r){ (ayZarar[r[0]] = ayZarar[r[0]] || []).push({ kod: r[1], ad: r[2], m: r[3], ciro: r[4], mal: r[5] }); });
 
   // ---------- Yapılacaklar (tutara göre sıralı) ----------
@@ -153,7 +158,7 @@ var ICERDE = /*ICERDE*/false;   // uygulamanın içinde (Kârlılık → Sağlı
 
   // Kısaca
   var kisa = [];
-  if(o) kisa.push('Son 90 günde <b>' + tl(o.ciro) + '</b> satış yaptınız (KDV hariç) ve bunun <b>' + tl(kar90) + '</b>\'si brüt kâr kaldı — her 100 ₺\'lik satıştan <b>' + sy(marj90 * 100) + ' ₺</b>. Bu, ayda ortalama <b>' + tl(aylikKar) + '</b> brüt kâr demek.');
+  if(o) kisa.push('Son 90 günde <b>' + tl(o.ciro) + '</b> satış yaptınız (KDV hariç) ve bunun <b>' + tl(kar90) + '</b>\'si brüt kâr kaldı' + (ff90 ? ' (' + tl(ff90) + ' tedarikçi fiyat farkı dahil)' : '') + ' — her 100 ₺\'lik satıştan <b>' + sy(marj90 * 100) + ' ₺</b>. Bu, ayda ortalama <b>' + tl(aylikKar) + '</b> brüt kâr demek.');
   if(SM) kisa.push('İşletmede şu an <b>' + tl(SM.isletme) + '</b> kendi paranız bağlı: ' + tl(SM.stok) + ' stok + ' + tl(SM.alacak) + ' müşteri alacağı − ' + tl(SM.borc) + ' tedarikçi borcu.' + (SM.getiri != null ? ' Brüt kâr bu paranın ayda <b>' + yz(SM.getiri) + '</b>\'i (' + (SM.getiri >= enf ? 'enflasyonun üstünde' : 'enflasyonun <span class="k">altında</span>') + ').' : ''));
   if(k1 + k2 > 0) kisa.push('Fiyatlardan kaynaklanan kaçak ayda yaklaşık <b class="k">' + tl(k1 + k2) + '</b>; çoğu raf fiyatı güncellenerek hemen düzelir.');
   if(kisa.length) h += '<section class="kisaca"><h2>Kısaca</h2>' + kisa.map(function(x){ return '<p>' + x + '</p>'; }).join('') + '</section>';
@@ -171,7 +176,7 @@ var ICERDE = /*ICERDE*/false;   // uygulamanın içinde (Kârlılık → Sağlı
   // Özet kutuları
   if(o){
     h += '<div class="kutular"><div class="kutu"><div class="b">Son 90 gün satış</div><div class="d">' + tl(o.ciro) + '</div><div class="a">KDV hariç · kasa ' + yz(o.ciro > 0 ? o.kasa / o.ciro : null) + '</div></div>' +
-      '<div class="kutu"><div class="b">Brüt kâr (90 gün)</div><div class="d ' + (kar90 < 0 ? 'k' : 'y') + '">' + tl(kar90) + '</div><div class="a">Marj ' + yz(marj90) + '</div></div>' +
+      '<div class="kutu"><div class="b">Brüt kâr (90 gün)</div><div class="d ' + (kar90 < 0 ? 'k' : 'y') + '">' + tl(kar90) + '</div><div class="a">Marj ' + yz(marj90) + (ff90 ? ' · fiyat farkı ' + tl(ff90) + ' dahil' : '') + '</div></div>' +
       '<div class="kutu"><div class="b">Aylık ortalama kâr</div><div class="d">' + tl(aylikKar) + '</div><div class="a">giderler düşülmeden</div></div>' +
       '<div class="kutu"><div class="b">Satılan ürün çeşidi</div><div class="d">' + sy(o.urun) + '</div><div class="a">son 90 günde</div></div></div>';
   }
@@ -225,13 +230,23 @@ var ICERDE = /*ICERDE*/false;   // uygulamanın içinde (Kârlılık → Sağlı
     var mx = Math.max.apply(null, aylar.map(function(a){ return Math.max(a.kar, 1); }));
     h += '<section id="aylar"><h2>📅 Aylık brüt kâr</h2><p class="ac">Son altı ay; son ay henüz bitmedi. Ciro enflasyonla büyürken marjın düşmesi, fiyatların maliyete yetişmediğini gösterir. Kırmızı ay: marjı diğer ayların belirgin altında.</p>' +
       '<div class="cubuklar">' + aylar.map(function(a){ return '<div><b class="' + (a.tuhaf ? 'k' : '') + '">' + yz(a.marj) + '</b><i style="height:' + Math.max(2, Math.round(Math.max(a.kar, 0) / mx * 130)) + 'px' + (a.tuhaf ? ';background:var(--kirmizi)' : a.ay === buAy ? ';opacity:.45' : '') + '"></i>' + ayAd(a.ay, true) + '</div>'; }).join('') + '</div>' +
-      '<div class="tablo"><table><tr><th>Ay</th><th>Satış</th><th>Brüt kâr</th><th>Marj</th></tr>' + aylar.map(function(a){ return '<tr><td>' + ayAd(a.ay) + (a.ay === buAy ? ' <small>devam ediyor</small>' : '') + '</td><td>' + tl(a.ciro) + '</td><td class="' + (a.kar < 0 ? 'k' : '') + '">' + tl(a.kar) + '</td><td class="' + (a.tuhaf ? 'k' : '') + '">' + yz(a.marj) + '</td></tr>'; }).join('') + '</table></div>';
+      '<div class="tablo"><table><tr><th>Ay</th><th>Satış</th>' + (FF ? '<th>Fiyat farkı</th>' : '') + '<th>Brüt kâr</th><th>Marj</th></tr>' + aylar.map(function(a){ return '<tr><td>' + ayAd(a.ay) + (a.ay === buAy ? ' <small>devam ediyor</small>' : '') + '</td><td>' + tl(a.ciro) + '</td>' + (FF ? '<td class="' + (a.ff > 0 ? 'y' : a.ff < 0 ? 'k' : '') + '">' + (a.ff ? tl(a.ff) : '—') + '</td>' : '') + '<td class="' + (a.kar < 0 ? 'k' : '') + '">' + tl(a.kar) + '</td><td class="' + (a.tuhaf ? 'k' : '') + '">' + yz(a.marj) + '</td></tr>'; }).join('') + '</table></div>' +
+      (FF ? '<p class="ac" style="margin-top:8px">Brüt kâra tedarikçilerden gelen fiyat farkı / iskonto belgeleri dahildir; belgenin kesildiği aya yazılır. Zararına yapılan bir satışın fiyat farkı sonraki ayda gelirse, satış ayı düşük, fiyat farkı ayı yüksek görünür.</p>' : '');
     aylar.filter(function(a){ return a.tuhaf; }).forEach(function(a){
       var l = ayZarar[a.ay] || [];
-      h += '<div class="inceleme"><b>🔎 ' + ayAd(a.ay) + ' neden düşük?</b> O ay maliyetin satıştan fazla çıktığı ürünler. Bir üründe zarar çok büyükse alış fiyatı ERP\'ye yanlış (ör. koli fiyatı adet fiyatı yerine) girilmiş olabilir; kontrol edip düzeltin.' +
+      var sonraFf = aylar.filter(function(x){ return x.ay > a.ay && x.ff > 0; }).sort(function(x, y){ return y.ff - x.ff; })[0];
+      h += '<div class="inceleme"><b>🔎 ' + ayAd(a.ay) + ' neden düşük?</b>' + (sonraFf ? ' <b class="y">' + ayAd(sonraFf.ay) + ' ayında ' + tl(sonraFf.ff) + ' fiyat farkı gelmiş; bu ayın zararının karşılığı olabilir.</b>' : '') + ' O ay maliyetin satıştan fazla çıktığı ürünler. Bir üründe zarar çok büyükse alış fiyatı ERP\'ye yanlış (ör. koli fiyatı adet fiyatı yerine) girilmiş olabilir; kontrol edip düzeltin.' +
         (l.length ? '<div class="tablo"><table><tr><th>Ürün</th><th>Satılan</th><th>Satış</th><th>Maliyet</th><th>Fark</th></tr>' + l.map(function(x){ return '<tr><td>' + esc(x.ad) + '<small>' + esc(x.kod) + '</small></td><td>' + sy(x.m) + '</td><td>' + tl(x.ciro) + '</td><td>' + tl(x.mal) + '</td><td class="k">' + tl(x.ciro - x.mal) + '</td></tr>'; }).join('') + '</table></div>' : '<div class="bos">Bu ay için ürün ayrıntısı yok (rapor eski sürümle hazırlanmış).</div>') + '</div>';
     });
     h += '</section>';
+  }
+  // Tedarikçi destekleri
+  if(FF && (FF.cariler || []).length){
+    var ffTop = (FF.aylar || []).reduce(function(t, r){ return t + (r[1] || 0); }, 0);
+    h += '<section id="destek"><h2>🤝 Tedarikçi fiyat farkı / iskonto <small class="' + (ffTop < 0 ? 'k' : 'y') + '">' + tl(ffTop) + '</small></h2>' +
+      '<p class="ac">Son altı ayda firmalarla yapılan fiyat farkı ve iskonto belgeleri (KDV hariç). Hangi ürüne ait olduğu belli olmadığı için ürün kârlarına değil, ayın toplam kârına eklenir. Eksi tutar: tedarikçinin size kestiği fiyat farkı.</p>' +
+      '<div class="tablo"><table><tr><th>Firma</th><th>Tutar</th><th>Belge satırı</th><th>Son belge</th></tr>' +
+      FF.cariler.map(function(r){ return '<tr><td>' + esc(r[0] || '(cari yok)') + '</td><td class="' + (r[1] < 0 ? 'k' : 'y') + '">' + tl(r[1]) + '</td><td>' + sy(r[2]) + '</td><td>' + esc(r[3]) + '</td></tr>'; }).join('') + '</table></div></section>';
   }
   // Alışın altında
   h += '<section id="altinda"><h2>🔻 Alış fiyatının altında satılan ürünler <small class="k">' + tl(k1) + ' / ay</small></h2>' +
@@ -287,7 +302,7 @@ var ICERDE = /*ICERDE*/false;   // uygulamanın içinde (Kârlılık → Sağlı
   if(kal.length) h += '<section id="kalite"><h2>🧹 Veri kalitesi</h2><p class="ac">Rakamların doğruluğu ERP\'deki kayıtlara bağlı. Bunlar düzeldikçe rapor daha kesin olur.</p><ul class="liste">' + kal.map(function(x){ return '<li>' + x + '</li>'; }).join('') + '</ul></section>';
   // Terimler
   h += '<section class="terimler"><h2>📖 Terimler</h2><dl>' +
-    '<dt>Brüt kâr</dt><dd>Satış tutarı − satılan malın alış maliyeti. Kira, maaş, elektrik gibi giderler düşülmemiştir.</dd>' +
+    '<dt>Brüt kâr</dt><dd>Satış tutarı − satılan malın alış maliyeti + tedarikçilerden gelen fiyat farkı / iskonto. Kira, maaş, elektrik gibi giderler düşülmemiştir.</dd>' +
     '<dt>Marj</dt><dd>Brüt kârın satışa oranı. %15 marj: 100 ₺\'lik satışta 15 ₺ brüt kâr.</dd>' +
     '<dt>Bağlı para (işletme sermayesi)</dt><dd>Stok + müşterilerin size borcu − sizin tedarikçilere borcunuz. İşin dönmesi için cebinizden içeride tuttuğunuz para.</dd>' +
     '<dt>Sermaye getirisi</dt><dd>Aylık brüt kârın bağlı paraya oranı. Enflasyonun altındaysa, para işletmede durdukça reel olarak küçülüyor demektir.</dd>' +
@@ -296,7 +311,7 @@ var ICERDE = /*ICERDE*/false;   // uygulamanın içinde (Kârlılık → Sağlı
   if(!ICERDE) h += '<div class="son"><div><h3>KRT Saha bunları her gün kendisi izler.</h3><p>Alışın altına düşen fiyat, güncellenmeyen etiket, satılmayan stok ve kasa sapmaları sabah tek ekranda. Sayım, mal kabul, etiket, plasiyer ve kasa tahsilatı da aynı uygulamada.</p></div><a href="https://krtsaha.com">krtsaha.com</a></div>';
   h += '<ul class="notlar"><li>Satış, maliyet ve kâr tutarları KDV hariçtir; cari bakiyeler ERP\'deki gibi (KDV dahil) alınmıştır. Veriler ERP veri tabanından yalnız okunarak alındı; ERP\'ye hiçbir şey yazılmadı.</li>' +
     '<li>Maliyet: ürünün satıldığı ayda geçerli son net alış fiyatı (satır ve dip iskontoları düşülmüş), koli/paket alımları adede çevrilerek. Alışı hiç olmayan ürünlerin kârı hesaplanmadı; bedelsiz gelen satırlar maliyet sayılmadı.</li>' +
-    '<li>Fiyat farkı, iskonto, nakliye gibi mal olmayan kartlar ve yalnız iadesi olan (o dönemde net satışı olmayan) ürünler hesaba katılmadı.</li>' +
+    '<li>Fiyat farkı ve iskonto belgeleri ürün kârlarına değil, ayın ve dönemin toplam brüt kârına ayrı satır olarak eklendi. Nakliye gibi mal olmayan kartlar ve yalnız iadesi olan (o dönemde net satışı olmayan) ürünler hesaba katılmadı.</li>' +
     '<li>Stok değeri: stoktaki miktar × son net alış fiyatı. Sermaye hesabına kasa, banka, demirbaş ve krediler dahil değildir.</li>' +
     '<li>"Kaçan tutar" tahminidir: son 30 günün satış hızı ile bugünkü fiyat ve maliyet farkından hesaplanır; satılmayan stoğun değer kaybı için aylık %' + sy(V.enflasyon) + ' kullanıldı.</li></ul>';
   if((V.hatalar || []).length) h += '<section class="hata"><h2>Hesaplanamayan bölümler</h2><ul>' + V.hatalar.map(function(e){ return '<li>' + esc(e) + '</li>'; }).join('') + '</ul></section>';

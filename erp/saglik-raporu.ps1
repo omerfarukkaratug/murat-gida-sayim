@@ -266,6 +266,30 @@ FROM dbo.FIS_POS_IPTAL WHERE TARIH >= DATEADD(day, -30, GETDATE()) GROUP BY PERS
         $veri.iptal = [ordered]@{ fisSayisi = $fisSay; kisiler = $kisiler; saatler = $saatler }
     } catch { [void]$hatalar.Add("Kasa iptalleri: " + $_.Exception.Message); Yaz "HATA iptal: $($_.Exception.Message)" }
 
+    # ---- 5b) Fiyat farki / iskonto belgeleri (tedarikci destegi) ----
+    # Mal olmayan "fiyat farki" ve "iskonto" kartlarina yazilan belge satirlari. Urun karina katilmaz (hangi urune ait
+    # oldugu bilinmez) ama sirketin karidir: aylik ve donem karina AYRI satir olarak eklenir, firma bazinda gosterilir.
+    # Isaret: mali cikis yonundeki belge (bizim kestigimiz fiyat farki faturasi, alistan iade) = gelir;
+    # giris yonundeki (tedarikcinin bize kestigi fiyat farki) = gider.
+    try {
+        Yaz "5b) Fiyat farki / iskonto belgeleri..."
+        Calistir @"
+IF OBJECT_ID('tempdb..#ff') IS NOT NULL DROP TABLE #ff;
+SELECT CAST(f.FIS_TARIHI AS date) AS GUN, f.CARI, ISNULL(c.AD, '') AS CARI_AD, FT.AD AS TUR,
+       -$g * CAST(ISNULL(d.TOPLAM_KDV_MATRAHI, 0) AS float) AS TUTAR
+INTO #ff
+FROM dbo.FIS f JOIN dbo.FIS_DETAY d ON d.FIS = f.ID JOIN dbo.FIS_TURU FT ON FT.ID = f.FIS_TURU JOIN dbo.STOK s ON s.ID = d.STOK
+LEFT JOIN dbo.CARI c ON c.ID = f.CARI
+WHERE f.FIS_TARIHI >= DATEADD(month, DATEDIFF(month, 0, GETDATE()) - 6, 0) AND ISNULL(f.AKTIF, 1) = 1 AND f.FIS_TURU <> 18 AND $g <> 0
+  AND (s.AD LIKE N'%FIYAT FARK%' OR s.AD LIKE N'%F' + NCHAR(304) + N'YAT FARK%' OR s.AD LIKE N'%ISKONTO%' OR s.AD LIKE N'%' + NCHAR(304) + N'SKONTO%');
+"@
+        $ffAy = @((Tablo "SELECT CONVERT(char(7), DATEADD(month, DATEDIFF(month, 0, GUN), 0), 120) AS AY, SUM(TUTAR) AS T FROM #ff GROUP BY DATEADD(month, DATEDIFF(month, 0, GUN), 0) ORDER BY 1").Rows | ForEach-Object { ,@((M $_.AY), (D $_.T)) })
+        $ff90 = (Tablo "SELECT SUM(TUTAR) AS T FROM #ff WHERE GUN >= DATEADD(day, -90, CAST(GETDATE() AS date))").Rows[0].T
+        $ffCari = @((Tablo "SELECT TOP 20 CARI_AD, SUM(TUTAR) AS T, COUNT(*) AS N, MAX(GUN) AS SON FROM #ff GROUP BY CARI_AD HAVING ABS(SUM(TUTAR)) >= 1 ORDER BY ABS(SUM(TUTAR)) DESC").Rows |
+            ForEach-Object { ,@((M $_.CARI_AD), (D $_.T), [int]$_.N, $(if ($_.SON -is [DBNull]) { "" } else { ([datetime]$_.SON).ToString("dd.MM.yyyy") })) })
+        $veri.fiyatFarki = [ordered]@{ son90 = D $ff90; aylar = $ffAy; cariler = $ffCari }
+    } catch { [void]$hatalar.Add("Fiyat farki: " + $_.Exception.Message); Yaz "HATA fiyat farki: $($_.Exception.Message)" }
+
     # ---- 6) Sermaye: para nerede bagli? (stok + musteri alacagi - tedarikci borcu) ----
     try {
         Yaz "6) Sermaye..."
