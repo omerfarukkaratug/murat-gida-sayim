@@ -138,7 +138,8 @@ var ICERDE = /*ICERDE*/false;   // uygulamanın içinde (Kârlılık → Sağlı
   // Karşılaştırma malın kendi marjıyla yapılır (fiyat farkı geldiği ayı şişirip öteki ayları "düşük" göstermesin).
   var bitmis = aylar.filter(function(a){ return a.ay !== buAy && a.malMarj != null; }).map(function(a){ return a.malMarj; }).sort(function(a, b){ return a - b; });
   var ortanca = bitmis.length ? bitmis[Math.floor(bitmis.length / 2)] : null;
-  aylar.forEach(function(a){ a.tuhaf = ortanca != null && a.ay !== buAy && a.malMarj != null && a.malMarj < ortanca - 0.05; });
+  // Düşük ay: hem malın kendi marjı hem fiyat farkı eklenmiş marj düşük olmalı (fiyat farkı aynı ay zararı kapattıysa sorun yok).
+  aylar.forEach(function(a){ a.tuhaf = ortanca != null && a.ay !== buAy && a.malMarj != null && a.malMarj < ortanca - 0.05 && a.marj != null && a.marj < ortanca - 0.05; });
   var ayZarar = {}; (V.ayZarar || []).forEach(function(r){ (ayZarar[r[0]] = ayZarar[r[0]] || []).push({ kod: r[1], ad: r[2], m: r[3], ciro: r[4], mal: r[5] }); });
 
   // ---------- Yapılacaklar (tutara göre sıralı) ----------
