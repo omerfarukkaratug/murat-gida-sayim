@@ -6392,6 +6392,8 @@ function karlilik(p, callback) {
   var v;
   try { v = dbCagir(ayar, 'karlilik_veri', { p_gun: gun, p_kdv: kdv }); }
   catch (e) { return outJson({ status: 'error', message: 'Veri tabanına ulaşılamadı: ' + String(e.message || e).substring(0, 150) }, callback); }
+  // 037: aylık önbellek ilk kez dolduruluyorsa rapor parça parça hazırlanır; uygulama kendiliğinden tekrar sorar.
+  if (v && v.status === 'hazirlaniyor') return outJson({ status: 'hazirlaniyor', kalan: v.kalan, toplam: v.toplam, message: v.message }, callback);
   if (!v || v.status !== 'ok') return outJson({ status: 'error', message: (v && v.message) || 'Rapor hazırlanamadı (035_karlilik.sql çalıştırıldı mı?)' }, callback);
   // Ürünlere katalogdan: [17 stok, 18 güncel satış fiyatı (KDV hariç), 19 katalogda var mı]
   (v.urunler || []).forEach(function (r) {

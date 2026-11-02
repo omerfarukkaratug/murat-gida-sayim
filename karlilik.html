@@ -411,11 +411,20 @@
     if(!kimlik){ $('icerik').innerHTML = '<div class="bekle">Önce uygulamada giriş yap.</div>'; return; }
     var no = ++getirNo;
     $('icerik').innerHTML = '<div class="bekle">Rapor hazırlanıyor…<br><span class="ipucu">Bütün satışlar ve alışlar hesaplanıyor — ilk açılış 10–20 sn sürebilir, sonraki 30 dakika anında gelir.</span></div>';
+    var tur = 0;
+    (function sor(){
     istek({ action: 'karlilik', ne: 'rapor', gun: $('donem').value }, function(r){
       if(no !== getirNo) return;
+      // İlk açılışta geçmiş aylar parça parça hazırlanır (037): bitene kadar kendiliğinden tekrar sorulur.
+      if(r.status === 'hazirlaniyor' && ++tur <= 20){
+        var hazir = (r.toplam || 12) - (r.kalan || 0);
+        $('icerik').innerHTML = '<div class="bekle">Rapor ilk kez hazırlanıyor… <b>' + hazir + '/' + (r.toplam || 12) + ' ay</b> hazır<br><span class="ipucu">Geçmiş aylar bir kere hesaplanıp saklanıyor; bundan sonra rapor hızlı açılır.</span></div>';
+        setTimeout(sor, 500); return;
+      }
       if(r.status !== 'ok'){ $('icerik').innerHTML = '<div class="kart"><div class="kotu" style="font-weight:800;">Rapor alınamadı</div><div class="ipucu" style="margin-top:6px;">' + esc(r.message || '') + '</div></div>'; return; }
       V = r; hesapla(); ciz();
     });
+    })();
   }
   sekmeCiz();
   getir();
