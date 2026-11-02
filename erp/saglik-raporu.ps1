@@ -61,7 +61,7 @@ function M($v) { if ($v -is [DBNull] -or $v -eq $null) { return "" }; return ([s
 function I($v) { if ($v -is [DBNull] -or $v -eq $null) { return 0 }; return [int]$v }
 function T($v) { if ($v -is [DBNull] -or $v -eq $null) { return "" }; return ([datetime]$v).ToString("dd.MM.yyyy") }
 
-$veri = [ordered]@{ surum = "6"; olusturma = (Get-Date).ToString("yyyy-MM-dd HH:mm"); firma = ""; veritabani = ""; enflasyon = $AylikEnflasyon; hatalar = @() }
+$veri = [ordered]@{ surum = "7"; olusturma = (Get-Date).ToString("yyyy-MM-dd HH:mm"); firma = ""; veritabani = ""; enflasyon = $AylikEnflasyon; hatalar = @() }
 $hatalar = New-Object System.Collections.ArrayList
 
 try {
@@ -596,22 +596,111 @@ ORDER BY M30 DESC
         Yaz "9c) Oneriler - birlikte alinanlar..."
         $nf = I (Tablo "SELECT COUNT(*) AS N FROM #fs").Rows[0].N
         if ($nf -gt 0) {
+            # En cok fiste gecen 400 urunun butun ikilileri (#ct): eslestirme, ortak urun ve ikame hesaplari buradan.
             Calistir @"
 IF OBJECT_ID('tempdb..#top') IS NOT NULL DROP TABLE #top;
-SELECT TOP 400 STOK, FISN INTO #top FROM #pen ORDER BY FISN DESC;
+SELECT TOP 400 p.STOK, p.FISN, ISNULL(s.STOK_GRUP, 0) AS GID INTO #top FROM #pen p JOIN dbo.STOK s ON s.ID = p.STOK ORDER BY p.FISN DESC;
 CREATE CLUSTERED INDEX i ON #top (STOK);
-"@
+IF OBJECT_ID('tempdb..#ct') IS NOT NULL DROP TABLE #ct;
+SELECT a.STOK AS A, b.STOK AS B, COUNT(*) AS N INTO #ct
+FROM #fd a JOIN #fd b ON b.FIS = a.FIS AND b.STOK > a.STOK JOIN #top t1 ON t1.STOK = a.STOK JOIN #top t2 ON t2.STOK = b.STOK
+GROUP BY a.STOK, b.STOK;
+CREATE CLUSTERED INDEX i ON #ct (A, B);
+"@ 900
+            $veri.oneri.nf = $nf
             $veri.oneri.ciftler = @((Tablo @"
-SELECT TOP 150 ka.KOD AS AK, ka.AD AS AA, kb.KOD AS BK, kb.AD AS BA, x.N, ta.FISN AS NA, tb.FISN AS NB,
-       CAST(x.N AS float) * $nf / (CAST(ta.FISN AS float) * tb.FISN) AS LIFT
-FROM (SELECT a.STOK AS A, b.STOK AS B, COUNT(*) AS N FROM #fd a JOIN #fd b ON b.FIS = a.FIS AND b.STOK > a.STOK
-      JOIN #top t1 ON t1.STOK = a.STOK JOIN #top t2 ON t2.STOK = b.STOK GROUP BY a.STOK, b.STOK HAVING COUNT(*) >= 12) x
-JOIN #top ta ON ta.STOK = x.A JOIN #top tb ON tb.STOK = x.B JOIN #kdv ka ON ka.STOK = x.A JOIN #kdv kb ON kb.STOK = x.B
-WHERE CAST(x.N AS float) * $nf / (CAST(ta.FISN AS float) * tb.FISN) >= 1.5
+SELECT TOP 200 ka.KOD AS AK, ka.AD AS AA, kb.KOD AS BK, kb.AD AS BA, x.N, ta.FISN AS NA, tb.FISN AS NB,
+       CAST(x.N AS float) * $nf / (CAST(ta.FISN AS float) * tb.FISN) AS LIFT, CASE WHEN ta.GID = tb.GID AND ta.GID <> 0 THEN 1 ELSE 0 END AS AYNI
+FROM #ct x JOIN #top ta ON ta.STOK = x.A JOIN #top tb ON tb.STOK = x.B JOIN #kdv ka ON ka.STOK = x.A JOIN #kdv kb ON kb.STOK = x.B
+WHERE x.N >= 12 AND CAST(x.N AS float) * $nf / (CAST(ta.FISN AS float) * tb.FISN) >= 1.5
 ORDER BY x.N * LOG(CAST(x.N AS float) * $nf / (CAST(ta.FISN AS float) * tb.FISN)) DESC
-"@ 900).Rows | ForEach-Object { ,@((M $_.AK), (M $_.AA), (M $_.BK), (M $_.BA), (I $_.N), (I $_.NA), (I $_.NB), [Math]::Round([double]$_.LIFT, 2)) })
+"@ 900).Rows | ForEach-Object { ,@((M $_.AK), (M $_.AA), (M $_.BK), (M $_.BA), (I $_.N), (I $_.NA), (I $_.NB), [Math]::Round([double]$_.LIFT, 2), (I $_.AYNI)) })
+            # Ortaklar: en cok fiste gecen 100 urunun her biri icin en guclu 6 ortak (kampanya urununun yanina ne konmali)
+            $veri.oneri.ortaklar = @((Tablo @"
+WITH c AS (SELECT A, B, N FROM #ct UNION ALL SELECT B, A, N FROM #ct),
+     l AS (SELECT c.A, c.B, c.N, CAST(c.N AS float) * $nf / (CAST(ta.FISN AS float) * tb.FISN) AS LIFT
+           FROM c JOIN #top ta ON ta.STOK = c.A JOIN #top tb ON tb.STOK = c.B
+           WHERE c.N >= 8 AND c.A IN (SELECT TOP 100 STOK FROM #top ORDER BY FISN DESC)),
+     r AS (SELECT l.*, ROW_NUMBER() OVER (PARTITION BY l.A ORDER BY l.N * LOG(l.LIFT) DESC) AS R FROM l WHERE l.LIFT > 1.2)
+SELECT ka.KOD AS AK, kb.KOD AS BK, r.N, r.LIFT FROM r JOIN #kdv ka ON ka.STOK = r.A JOIN #kdv kb ON kb.STOK = r.B WHERE r.R <= 6
+"@ 900).Rows | ForEach-Object { ,@((M $_.AK), (M $_.BK), (I $_.N), [Math]::Round([double]$_.LIFT, 2)) })
+            # Ikame: ayni urun grubunda, ikisi de cok satildigi halde ayni fiste beklenenden cok az goruluyor -> birbirinin yerine aliniyor
+            $veri.oneri.ikame = @((Tablo @"
+SELECT TOP 60 ka.KOD AS AK, ka.AD AS AA, kb.KOD AS BK, kb.AD AS BA, ISNULL(x.N, 0) AS N, CAST(ta.FISN AS float) * tb.FISN / $nf AS BEK, ta.FISN AS NA, tb.FISN AS NB
+FROM #top ta JOIN #top tb ON tb.STOK > ta.STOK AND tb.GID = ta.GID AND ta.GID <> 0
+LEFT JOIN #ct x ON x.A = ta.STOK AND x.B = tb.STOK JOIN #kdv ka ON ka.STOK = ta.STOK JOIN #kdv kb ON kb.STOK = tb.STOK
+WHERE CAST(ta.FISN AS float) * tb.FISN / $nf >= 15 AND ISNULL(x.N, 0) < 0.4 * CAST(ta.FISN AS float) * tb.FISN / $nf
+ORDER BY CAST(ta.FISN AS float) * tb.FISN / $nf - ISNULL(x.N, 0) DESC
+"@ 900).Rows | ForEach-Object { ,@((M $_.AK), (M $_.AA), (M $_.BK), (M $_.BA), (I $_.N), [Math]::Round([double]$_.BEK, 1), (I $_.NA), (I $_.NB)) })
+            # Urun sozlugu: bu listelerde gecen ve en cok fiste gecen 700 urunun fiyat / alis / marj / grup bilgisi
+            $veri.oneri.urun = @((Tablo "SELECT TOP 700 $alan FROM #fu WHERE FISN > 0 ORDER BY SIRA").Rows | ForEach-Object { & $sat $_ })
         }
     } catch { [void]$hatalar.Add("Oneriler (birlikte alinanlar): " + $_.Exception.Message); Yaz "HATA oneri cift: $($_.Exception.Message)" }
+
+    # ---- 9d) Fiyat duyarliligi (esneklik): fiyati degisen urunde kasa satisi ne kadar degisti? ----
+    # Son 150 gunde (en az 28 gun once) perakende fiyati %3-%60 degisen, oncesinde ve sonrasinda 28 gun baska degisiklik
+    # olmayan urunler: once / sonra 28 gunluk kasa satis adedi. Esneklik = adetteki % degisim / fiyattaki % degisim.
+    try {
+        Yaz "9d) Oneriler - fiyat duyarliligi..."
+        Calistir @"
+IF OBJECT_ID('tempdb..#pd') IS NOT NULL DROP TABLE #pd;
+DECLARE @liste int = (SELECT TOP 1 STOK_FIYAT_AD FROM dbo.STOK_STOK_BIRIM_DEGISIM WHERE TARIH >= DATEADD(day, -365, GETDATE()) GROUP BY STOK_FIYAT_AD ORDER BY COUNT(*) DESC);
+SELECT ssb.STOK, CAST(dg.TARIH AS date) AS T, CAST(dg.ESKI_FIYAT AS float) AS PO, CAST(dg.FIYAT AS float) AS PN
+INTO #pd
+FROM dbo.STOK_STOK_BIRIM_DEGISIM dg JOIN dbo.STOK_STOK_BIRIM ssb ON ssb.ID = dg.STOK_STOK_BIRIM
+WHERE dg.STOK_FIYAT_AD = @liste AND dg.ESKI_FIYAT > 0 AND dg.FIYAT > 0 AND ISNULL(ssb.CARPAN, 1) <= 1
+  AND ABS(dg.FIYAT / dg.ESKI_FIYAT - 1) BETWEEN 0.03 AND 0.6
+  AND dg.TARIH >= DATEADD(day, -150, GETDATE()) AND dg.TARIH < DATEADD(day, -28, GETDATE())
+  AND ssb.STOK IN (SELECT STOK FROM #kdv);
+DELETE p FROM #pd p WHERE EXISTS (SELECT 1 FROM #pd q WHERE q.STOK = p.STOK AND q.T <> p.T AND ABS(DATEDIFF(day, q.T, p.T)) < 28);
+IF OBJECT_ID('tempdb..#es') IS NOT NULL DROP TABLE #es;
+SELECT p.STOK, p.T, p.PO, p.PN,
+       ISNULL((SELECT SUM(x.MIKTAR) FROM #sat x WHERE x.STOK = p.STOK AND x.KASA = 1 AND x.GUN >= DATEADD(day, -28, p.T) AND x.GUN < p.T), 0) AS QB,
+       ISNULL((SELECT SUM(x.MIKTAR) FROM #sat x WHERE x.STOK = p.STOK AND x.KASA = 1 AND x.GUN >= p.T AND x.GUN < DATEADD(day, 28, p.T)), 0) AS QA,
+       CAST(NULL AS float) AS E
+INTO #es FROM #pd p WHERE p.T >= DATEADD(day, 28, (SELECT MIN(GUN) FROM #sat));
+DELETE FROM #es WHERE QB < 15;
+UPDATE #es SET E = ((QA - QB) / QB) / ((PN - PO) / PO);
+UPDATE #es SET E = CASE WHEN E < -6 THEN -6 WHEN E > 3 THEN 3 ELSE E END;
+"@ 600
+        $eg = (Tablo "SELECT COUNT(*) AS N, (SELECT DISTINCT PERCENTILE_CONT(0.5) WITHIN GROUP (ORDER BY E) OVER () FROM #es) AS MED, SUM(CASE WHEN PN > PO THEN 1 ELSE 0 END) AS ART FROM #es").Rows[0]
+        $veri.oneri.esneklik = [ordered]@{
+            n = I $eg.N; medyan = $(if ($eg.MED -is [DBNull]) { $null } else { [Math]::Round([double]$eg.MED, 2) }); artis = I $eg.ART
+            gruplar = @((Tablo @"
+SELECT g.AD AS GRUP, COUNT(*) AS N, MAX(x.MED) AS MED FROM (
+  SELECT ISNULL(s.STOK_GRUP, 0) AS GID, PERCENTILE_CONT(0.5) WITHIN GROUP (ORDER BY e.E) OVER (PARTITION BY ISNULL(s.STOK_GRUP, 0)) AS MED
+  FROM #es e JOIN dbo.STOK s ON s.ID = e.STOK) x LEFT JOIN dbo.STOK_GRUP g ON g.ID = x.GID
+GROUP BY g.AD HAVING COUNT(*) >= 5 ORDER BY COUNT(*) DESC
+"@).Rows | ForEach-Object { ,@((M $_.GRUP), (I $_.N), [Math]::Round([double]$_.MED, 2)) })
+            ornek = @((Tablo "SELECT TOP 40 k.KOD, k.AD, e.T, e.PO, e.PN, e.QB, e.QA, e.E FROM #es e JOIN #kdv k ON k.STOK = e.STOK ORDER BY e.QB DESC").Rows |
+                ForEach-Object { ,@((M $_.KOD), (M $_.AD), (T $_.T), (D $_.PO), (D $_.PN), (D $_.QB), (D $_.QA), [Math]::Round([double]$_.E, 2)) })
+        }
+    } catch { [void]$hatalar.Add("Oneriler (fiyat duyarliligi): " + $_.Exception.Message); Yaz "HATA oneri esneklik: $($_.Exception.Message)" }
+
+    # ---- 9e) Reyon karnesi: ERP urun grubu bazinda ciro, kar, musteri payi, stok ----
+    try {
+        Yaz "9e) Oneriler - reyon karnesi..."
+        $grp = [ordered]@{}
+        foreach ($r in (Tablo @"
+SELECT ISNULL(g.AD, '(grupsuz)') AS GRUP, COUNT(DISTINCT a.STOK) AS URUN, SUM(a.T90) AS CIRO,
+       SUM(CASE WHEN a.MALIYET IS NOT NULL THEN a.T90 - a.M90 * a.MALIYET ELSE 0 END) AS KAR, SUM(CASE WHEN a.MALIYET IS NOT NULL THEN a.T90 ELSE 0 END) AS CIROM
+FROM #ay a JOIN dbo.STOK s ON s.ID = a.STOK LEFT JOIN dbo.STOK_GRUP g ON g.ID = s.STOK_GRUP
+WHERE a.M90 > 0 GROUP BY ISNULL(g.AD, '(grupsuz)') HAVING SUM(a.T90) > 0
+"@).Rows) { $grp[(M $r.GRUP)] = [ordered]@{ urun = I $r.URUN; ciro = D $r.CIRO; kar = D $r.KAR; ciroM = D $r.CIROM; fis = 0; stok = 0; olu = 0; cesit = 0 } }
+        try {
+            foreach ($r in (Tablo "SELECT ISNULL(g.AD, '(grupsuz)') AS GRUP, COUNT(DISTINCT f.FIS) AS N FROM #fd f JOIN dbo.STOK s ON s.ID = f.STOK LEFT JOIN dbo.STOK_GRUP g ON g.ID = s.STOK_GRUP GROUP BY ISNULL(g.AD, '(grupsuz)')").Rows) { if ($grp.Contains((M $r.GRUP))) { $grp[(M $r.GRUP)].fis = I $r.N } }
+        } catch {}
+        try {
+            foreach ($r in (Tablo @"
+SELECT ISNULL(g.AD, '(grupsuz)') AS GRUP, SUM(CASE WHEN d.MIKTAR > 0 AND d.MALIYET IS NOT NULL THEN d.MIKTAR * d.MALIYET ELSE 0 END) AS STOK,
+       SUM(CASE WHEN d.MIKTAR > 0 AND d.MALIYET IS NOT NULL AND (d.SON_SATIS IS NULL OR d.SON_SATIS < DATEADD(day, -90, CAST(GETDATE() AS date))) THEN d.MIKTAR * d.MALIYET ELSE 0 END) AS OLU,
+       SUM(CASE WHEN d.MIKTAR > 0 THEN 1 ELSE 0 END) AS CESIT
+FROM #sd d JOIN dbo.STOK s ON s.ID = d.STOK LEFT JOIN dbo.STOK_GRUP g ON g.ID = s.STOK_GRUP GROUP BY ISNULL(g.AD, '(grupsuz)')
+"@).Rows) { $k = M $r.GRUP; if (-not $grp.Contains($k)) { $grp[$k] = [ordered]@{ urun = 0; ciro = 0; kar = 0; ciroM = 0; fis = 0; stok = 0; olu = 0; cesit = 0 } }; $grp[$k].stok = D $r.STOK; $grp[$k].olu = D $r.OLU; $grp[$k].cesit = I $r.CESIT }
+        } catch {}
+        $veri.oneri.gruplar = @($grp.Keys | ForEach-Object { $x = $grp[$_]; ,@($_, $x.urun, $x.ciro, $x.kar, $x.ciroM, $x.fis, $x.stok, $x.olu, $x.cesit) })
+    } catch { [void]$hatalar.Add("Oneriler (reyon karnesi): " + $_.Exception.Message); Yaz "HATA oneri reyon: $($_.Exception.Message)" }
+
 
 } catch {
     [void]$hatalar.Add("Genel: " + $_.Exception.Message); Yaz "HATA: $($_.Exception.Message)"

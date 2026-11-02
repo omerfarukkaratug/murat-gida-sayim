@@ -469,13 +469,14 @@
     if(sYukleniyor && !S){ $('icerik').innerHTML = '<div class="bekle">Öneriler getiriliyor…</div>'; return; }
     if(S.hata){ $('icerik').innerHTML = '<div class="kart"><div class="kotu" style="font-weight:800;">Öneriler alınamadı</div><div class="ipucu" style="margin-top:6px;">' + esc(S.hata) + '</div><button type="button" id="sYenidenDene" class="kucuk" style="margin-top:10px;">↻ Tekrar dene</button></div>'; return; }
     var r = S.rapor, O = r && r.veri ? r.veri.oneri : null;
-    var h = '<div class="cipler"><button type="button" data-oalt="fiyat"' + (oAlt === 'fiyat' ? ' class="on"' : '') + '>💰 Doğru fiyat</button><button type="button" data-oalt="sepet"' + (oAlt === 'sepet' ? ' class="on"' : '') + '>🧺 Fiş tutarını artır</button></div>';
+    var h = '<div class="cipler">' + [['fiyat', '💰 Doğru fiyat'], ['kampanya', '🎯 Kampanya bütçesi'], ['sepet', '🧺 Fiş tutarı'], ['yerlesim', '🔀 Yerleşim'], ['reyon', '🏬 Reyon karnesi']].map(function(x){
+      return '<button type="button" data-oalt="' + x[0] + '"' + (oAlt === x[0] ? ' class="on"' : '') + '>' + x[1] + '</button>'; }).join('') + '</div>';
     if(!O){ $('icerik').innerHTML = h + '<div class="kart"><div style="font-weight:800;">Öneriler henüz hazırlanmamış</div><div class="ipucu" style="margin-top:6px;">ERP bilgisayarındaki <b>saglik-raporu.ps1</b> yeni sürümüyle çalışınca gelir (rapor: ' + esc(r ? r.zaman : '—') + '). 🩺 Sağlık sekmesinden "Yeniden hazırlat" diyebilirsin.</div></div>'; return; }
     h += '<div class="ipucu" style="margin-bottom:8px;">Rapor: <b>' + esc(r.zaman) + '</b> · ERP verisi · tutarlar KDV hariç, raf fiyatları KDV dahil' +
       ((O.poset || []).length ? ' · alışveriş poşeti hesaba katılmadı (' + esc(O.poset.slice(0, 3).join(', ')) + (O.poset.length > 3 ? '…' : '') + ')' : '') + '</div>';
     var hatalar = (r.veri.hatalar || []).filter(function(x){ return /^Oneriler/.test(x); });
     if(hatalar.length) h += '<div class="kart uyari" style="font-size:13px;">' + hatalar.map(esc).join('<br>') + '</div>';
-    $('icerik').innerHTML = h + (oAlt === 'fiyat' ? oFiyatHtml(O) : oSepetHtml(O));
+    $('icerik').innerHTML = h + (oAlt === 'fiyat' ? oFiyatHtml(O) + oEsneklikHtml(O) : oAlt === 'kampanya' ? oKampanyaHtml(O) : oAlt === 'yerlesim' ? oYerlesimHtml(O) : oAlt === 'reyon' ? oReyonHtml(O) : oSepetHtml(O));
   }
   function oFiyatHtml(O){
     var kvi = (O.kvi || []).map(oUrun), h = '';
@@ -557,6 +558,174 @@
       '• Ayrıntılı büyüme planı ve tahmini kazanç: 🩺 Sağlık sekmesinde "Büyüme planı".</div></div>';
     return h;
   }
+
+  // ---------- Öneriler 2 (build 294): kampanya bütçesi, yerleşim, reyon karnesi, fiyat duyarlılığı ----------
+  function asagiFiyat(p){ if(!(p > 0)) return p; var v = p < 100 ? Math.floor(p + 0.1 + 1e-9) - 0.1 : Math.floor((p + 0.1 + 1e-9) / 10) * 10 - 0.1; if(v <= 0) v = Math.floor(p * 10) / 10; return Math.round(v * 100) / 100; }
+  function oSozluk(O){ var m = {}; (O.urun || []).concat(O.kvi || [], O.firsat || [], O.oneCikar || [], O.kasaOnu || [], O.kurus || []).forEach(function(r){ if(!m[r[0]]) m[r[0]] = oUrun(r); }); return m; }
+  function oMarjGenel(){ var z = S && S.rapor && S.rapor.veri && S.rapor.veri.ozet; return z && z.ciroMaliyetli > 0 ? Math.max(0.05, (z.ciroMaliyetli - z.maliyet) / z.ciroMaliyetli) : 0.2; }
+  // Fiyat duyarlılığı: kendi satışlarınızdan. Grubun ortancası (en az 5 değişiklik), yoksa genel ortanca, yoksa −1,2.
+  function oEsneklik(O, grup){
+    var E = O.esneklik || {}, g = (E.gruplar || []).filter(function(x){ return x[0] === grup; })[0];
+    var e = g ? g[2] : (E.medyan != null ? E.medyan : -1.2);
+    return Math.max(-4, Math.min(-0.3, e));       // ters işaretli ya da aşırı değerler sınırlanır (fiyat düşünce satış artar varsayımı)
+  }
+  function oFonlar(O){
+    var firsat = (O.firsat || []).map(oUrun).map(function(u){
+      var hedef = Math.max(0.12, Math.min(0.40, u.gm || 0)), brut = u.alis / (1 - hedef) * (1 + u.kdv / 100);
+      u.yeni = guzelFiyat(Math.min(brut, u.fiyat * 1.15)); u.yeniMarj = (u.yeni / (1 + u.kdv / 100) - u.alis) / (u.yeni / (1 + u.kdv / 100));
+      u.etki = u.m30 * (u.yeni - u.fiyat) / (1 + u.kdv / 100); return u;
+    }).filter(function(u){ return u.yeni > u.fiyat + 0.004 && u.etki > 0; }).sort(function(a, b){ return b.etki - a.etki; });
+    var kurus = (O.kurus || []).map(oUrun).map(function(u){ u.yeni = guzelFiyat(u.fiyat); u.etki = u.m30 * (u.yeni - u.fiyat) / (1 + u.kdv / 100); return u; }).filter(function(u){ return u.yeni > u.fiyat; });
+    return { firsat: firsat, kurus: kurus, top: firsat.reduce(function(t, u){ return t + u.etki; }, 0) + kurus.reduce(function(t, u){ return t + u.etki; }, 0) };
+  }
+  function oOrtaklar(O, kod, soz){
+    return (O.ortaklar || []).filter(function(x){ return x[0] === kod; }).map(function(x){ var b = soz[x[1]]; return { kod: x[1], ad: b ? b.ad : x[1], n: x[2], lift: x[3], marj: b ? b.marj : null, gm: b ? b.gm : null, fisn: b ? b.fisn : null }; });
+  }
+
+  // ---- 🎯 Kampanya bütçesi: temel ürünü maliyetine (gerekirse zararına) sat, müşteri çek; kaybı yavaş ürünlerden karşıla ----
+  var oKmp = { butce: 30000, derinlik: 'maliyet', adet: 15, cikar: {} };
+  var DERINLIK = [['marj5', 'Maliyet + %5 (kârlı kampanya)', 0.05], ['maliyet', 'Maliyetine (kâr yok)', 0], ['zarar5', 'Maliyetin %5 altı (zararına)', -0.05], ['zarar10', 'Maliyetin %10 altı (zararına)', -0.10]];
+  function oKampanyaHesap(O){
+    var d = (DERINLIK.filter(function(x){ return x[0] === oKmp.derinlik; })[0] || DERINLIK[1])[2], soz = oSozluk(O);
+    var aday = (O.kvi || []).map(oUrun).filter(function(u){ return u.sira <= 150 && u.alis > 0 && u.fiyat > 0 && u.m30 > 0; });
+    var zatenUcuz = [], l = [];
+    aday.forEach(function(u){
+      var net0 = u.fiyat / (1 + u.kdv / 100);
+      if(u.marj <= Math.max(d, 0) + 0.03){ zatenUcuz.push(u); return; }   // zaten maliyetine yakın: bütçesiz duyurulur
+      var yeni = asagiFiyat(u.alis * (1 + d) * (1 + u.kdv / 100)); if(!(yeni < u.fiyat - 0.004)) return;
+      var net1 = yeni / (1 + u.kdv / 100), dp = yeni / u.fiyat - 1, e = oEsneklik(O, u.grup), artis = Math.max(0, Math.min(1.5, e * dp));
+      var q1 = u.m30 * (1 + artis), kar0 = u.m30 * (net0 - u.alis), kar1 = q1 * (net1 - u.alis);
+      l.push({ u: u, yeni: yeni, dp: dp, e: e, artis: artis, q1: q1, maliyet: Math.max(0, kar0 - kar1), yeniMarj: (net1 - u.alis) / net1, zarar: net1 < u.alis - 0.004,
+        ortak: oOrtaklar(O, u.kod, soz).filter(function(o){ return o.marj != null && o.marj >= Math.max(0.15, (o.gm || 0)); }).slice(0, 3) });
+    });
+    // Seçim: müşteri çekme gücü (fiş sayısı) / aylık maliyet en yüksekten, bütçe ve ürün sayısı dolana kadar
+    l.sort(function(a, b){ return (b.u.fisn / Math.max(b.maliyet, 50)) - (a.u.fisn / Math.max(a.maliyet, 50)); });
+    var secilen = [], harcanan = 0;
+    l.forEach(function(x){ if(oKmp.cikar[x.u.kod]) return; if(secilen.length >= oKmp.adet) return; if(harcanan + x.maliyet > oKmp.butce) return; secilen.push(x); harcanan += x.maliyet; });
+    return { secilen: secilen, harcanan: harcanan, aday: l, zatenUcuz: zatenUcuz, d: d };
+  }
+  function oKampanyaHtml(O){
+    var F = O.fis || {}, mm = oMarjGenel(), K = oKampanyaHesap(O), fon = oFonlar(O);
+    var fisNet = F.ort || 0, fisKar = fisNet * mm;
+    var fisAy = K.secilen.reduce(function(t, x){ return t + x.u.fisn / 2; }, 0);   // fiş sayısı 60 günlük → aylık
+    var gerekFis = fisKar > 0 ? K.harcanan / fisKar : null, net = fon.top - K.harcanan;
+    var h = '<div class="kart"><div class="kartBaslik">🎯 Kampanya bütçesi nasıl çalışır?</div><div class="ipucu" style="font-size:13px;">' +
+      'Müşteriyi markete getiren, fiyatını herkesin bildiği temel ürünleri (ekmek, süt, yağ, şeker, çay…) <b>maliyetine ya da gerekirse biraz altına</b> çekersiniz. ' +
+      'Müşteri bu ürün için gelir, sepetini sizde doldurur. Kaybı iki yerden karşılarsınız: (1) gelen yeni müşterinin sepetindeki diğer ürünlerin kârı, ' +
+      '(2) müşterinin fiyatını takip etmediği yavaş ürünlerdeki küçük fiyat ayarları. Aşağıdaki plan bütçenize göre <b>en çok müşteri çeken / en az maliyetli</b> ürünleri seçer.</div></div>';
+    h += '<div class="kart"><div class="kartBaslik">Ayarlar</div><div class="kutular" style="margin:0;">' +
+      '<div><label class="ipucu" style="font-weight:800;">Aylık kampanya bütçesi (₺)</label><input id="kmpButce" type="number" inputmode="numeric" min="0" step="1000" value="' + oKmp.butce + '"></div>' +
+      '<div><label class="ipucu" style="font-weight:800;">Kampanya fiyatı</label><select id="kmpDerinlik">' + DERINLIK.map(function(x){ return '<option value="' + x[0] + '"' + (x[0] === oKmp.derinlik ? ' selected' : '') + '>' + x[1] + '</option>'; }).join('') + '</select></div>' +
+      '<div><label class="ipucu" style="font-weight:800;">En fazla ürün</label><select id="kmpAdet">' + [5, 10, 15, 20, 30].map(function(n){ return '<option' + (n === oKmp.adet ? ' selected' : '') + '>' + n + '</option>'; }).join('') + '</select></div></div>' +
+      (K.d < 0 ? '<div class="ipucu uyari" style="margin-top:8px; font-weight:700;">⚖️ Zararına satış: seçili ürünleri birden çok kez alış fiyatının altında satıp bunu reklamda öne çıkarmak TTK 55/1-a-6\'ya göre haksız rekabet sayılabilir. Kısa süreli tutun, "maliyetine" seçeneğini tercih edin; emin değilseniz avukatınıza danışın.</div>' : '') + '</div>';
+    h += '<div class="kutular">' + kutu('Bütçe kullanımı', tl(K.harcanan) + '/ay', 'bütçe ' + tl(oKmp.butce) + ' · ' + K.secilen.length + ' ürün', K.harcanan > 0 ? 'uyari' : '') +
+      kutu('Kampanya ürünlü fiş', sayi(fisAy, 0) + '/ay', 'bu ürünler bugün ayda bu kadar fişte geçiyor') +
+      kutu('Kendini ödemesi için', gerekFis == null ? '—' : sayi(gerekFis, 0) + ' fiş/ay', 'yeni müşteri fişi (ort. fiş ' + tl(fisNet) + ' × marj ' + yuzde(mm) + ')' + (gerekFis ? ' · günde ' + sayi(gerekFis / 30, 0) : '')) +
+      kutu('Fiyat ayarlarından fon', tl(fon.top) + '/ay', 'yavaş ürün + fiyat sonu (Doğru fiyat sekmesi)', 'iyi') +
+      kutu('Net', (net >= 0 ? '+' : '−') + tl(Math.abs(net)) + '/ay', net >= 0 ? 'yeni müşteri gelmese bile kampanya fonla karşılanıyor' : 'farkı yeni müşterinin sepeti karşılamalı', net >= 0 ? 'iyi' : 'kotu') + '</div>';
+    if(!K.secilen.length) h += '<div class="kart ipucu">Bu bütçeyle seçilebilecek ürün yok — bütçeyi artırın ya da "maliyet + %5" seçin.</div>';
+    else h += '<div class="kart"><div class="kartBaslik"><span>📋 Kampanya planı</span><button type="button" id="kmpCsv" class="kucuk">📥 Excel</button></div><div class="ipucu" style="margin-bottom:8px;">Beklenen adet artışı kendi satışlarınızdan ölçülen fiyat duyarlılığıyla hesaplandı (Doğru fiyat → Fiyat duyarlılığı). <b>Yanına koy</b>: bu ürünü alanların sık aldığı, marjı yüksek ürünler — kampanya ürününün kaybını onlar karşılar. Bir ürünü plandan çıkarmak için ✕.</div>' +
+      oTablo(['Ürün', 'Şimdi → kampanya', 'Marj', 'Adet/ay', 'Maliyet/ay', ''], K.secilen.map(function(x){ var u = x.u;
+        return '<tr><td>' + esc(u.ad) + '<div class="ipucu">' + esc(u.kod) + ' · ' + sayi(u.fisn / 2, 0) + ' fiş/ay' + (u.grup ? ' · ' + esc(u.grup) : '') + '</div>' +
+          (x.ortak.length ? '<div class="ipucu" style="color:var(--green); font-weight:700;">↳ Yanına koy: ' + x.ortak.map(function(o){ return esc(o.ad) + ' (' + yuzde(o.marj) + ', ' + sayi(o.lift, 1) + ' kat)'; }).join(' · ') + '</div>' : '') + '</td>' +
+          '<td>' + tl(u.fiyat, 2) + '<br><b class="' + (x.zarar ? 'kotu' : 'iyi') + '">' + tl(x.yeni, 2) + '</b><div class="ipucu">' + yuzde(x.dp, true) + '</div></td>' +
+          '<td>' + yuzde(u.marj) + '<br><span class="' + (x.zarar ? 'kotu' : '') + '">' + yuzde(x.yeniMarj) + '</span></td>' +
+          '<td>' + sayi(u.m30, 0) + '<br><b>' + sayi(x.q1, 0) + '</b><div class="ipucu">' + yuzde(x.artis, true) + '</div></td>' +
+          '<td class="uyari">' + tl(x.maliyet) + '</td><td><button type="button" class="kucuk" data-kmpcikar="' + esc(u.kod) + '">✕</button></td></tr>'; })) +
+      (Object.keys(oKmp.cikar).length ? '<button type="button" class="kucuk" id="kmpSifirla" style="margin-top:8px;">Çıkarılanları geri al (' + Object.keys(oKmp.cikar).length + ')</button>' : '') + '</div>';
+    if(K.zatenUcuz.length) h += '<div class="kart"><div class="kartBaslik">📣 Zaten ucuz — bütçesiz duyurun</div><div class="ipucu" style="margin-bottom:8px;">Bu müşteri çeken ürünlerin marjı zaten maliyete yakın. Fiyat indirmeye gerek yok: raf etiketinde, kapıda ve WhatsApp/Instagram\'da "en uygun fiyat" diye öne çıkarın.</div>' +
+      oTablo(['Ürün', 'Raf', 'Marj', 'Fiş/ay'], K.zatenUcuz.slice(0, 15).map(function(u){ return '<tr>' + oAd(u) + '<td>' + tl(u.fiyat, 2) + '</td><td>' + yuzde(u.marj) + '</td><td>' + sayi(u.fisn / 2, 0) + '</td></tr>'; })) + '</div>';
+    h += '<div class="kart"><div class="kartBaslik">✅ Kampanyayı uygularken</div><div class="ipucu" style="font-size:13px;">' +
+      '1) Kampanya ürününü mağazanın <b>arka tarafına</b> koyun: müşteri giderken öbür reyonların önünden geçer.<br>' +
+      '2) "Yanına koy" ürünlerini kampanya ürününün hemen yanına ya da karşısına dizin.<br>' +
+      '3) 2–4 hafta sürsün; ürünleri dönüşümlü değiştirin (hep aynı ürün zararına kalmasın).<br>' +
+      '4) Kampanyadan önceki ve sonraki 2 haftanın fiş sayısını ve ortalama fişi karşılaştırın (Fiş tutarı sekmesi). Fiş sayısı "kendini ödemesi için" kutusundaki kadar artmadıysa ürünleri değiştirin.<br>' +
+      '5) Fonlama için Doğru fiyat sekmesindeki fiyat ayarlarını aynı hafta yapın; etiketleri Etiket ekranından toplu basın.</div></div>';
+    return h;
+  }
+
+  // ---- 🔀 Yerleşim: neyi neyin yanına koymalı, hangi ürünler birbirinin yerine alınıyor ----
+  function oYerlesimHtml(O){
+    var soz = oSozluk(O), h = '';
+    var c = (O.ciftler || []).map(function(x){ var a = soz[x[0]], b = soz[x[2]]; return { ak: x[0], aa: x[1], bk: x[2], ba: x[3], n: x[4], na: x[5], nb: x[6], lift: x[7], ayni: x[8] === 1, am: a ? a.marj : null, bm: b ? b.marj : null, ag: a ? a.grup : '', bg: b ? b.grup : '' }; });
+    var tasi = c.filter(function(x){ return !x.ayni; }), ayni = c.filter(function(x){ return x.ayni; });
+    h += '<div class="kart"><div class="kartBaslik">🔀 Yer değiştir: farklı reyondaki ama birlikte alınan ürünler</div><div class="ipucu" style="margin-bottom:8px;">Bu ikililer farklı ürün gruplarında, büyük ihtimalle farklı reyonlarda duruyor; ama müşteri onları aynı fişte normalden kat kat sık alıyor. Birini öbürünün yanına (ya da bir kolisini / küçük standını yanına) taşıyın. <b>Marjı yüksek olanı</b> taşımak daha çok kazandırır.</div>' +
+      (tasi.length ? oTablo(['İkili', 'Birlikte', 'Bağ', 'Taşı'], tasi.slice(0, oHepsi.tasi ? 200 : 25).map(function(x){
+        var tasinan = (x.bm || 0) >= (x.am || 0) ? { ad: x.ba, m: x.bm, hedef: x.aa } : { ad: x.aa, m: x.am, hedef: x.ba };
+        return '<tr><td><b>' + esc(x.aa) + '</b><div class="ipucu">' + esc(x.ag || '') + (x.am != null ? ' · marj ' + yuzde(x.am) : '') + '</div>+ <b>' + esc(x.ba) + '</b><div class="ipucu">' + esc(x.bg || '') + (x.bm != null ? ' · marj ' + yuzde(x.bm) : '') + '</div></td>' +
+          '<td>' + sayi(x.n, 0) + ' fiş<div class="ipucu">' + yuzde(x.n / x.na) + ' / ' + yuzde(x.n / x.nb) + '</div></td><td class="iyi">' + sayi(x.lift, 1) + ' kat</td>' +
+          '<td style="white-space:normal; text-align:left; font-family:var(--sans); font-size:12px;"><b>' + esc(tasinan.ad) + '</b> → ' + esc(tasinan.hedef) + ' yanına</td></tr>'; })) + oDevam('tasi', tasi, 25) : '<div class="ipucu">Belirgin ikili yok.</div>') + '</div>';
+    if(ayni.length) h += '<div class="kart"><div class="kartBaslik">🧩 Aynı grupta birlikte alınanlar</div><div class="ipucu" style="margin-bottom:8px;">Bunlar zaten aynı reyonda olmalı; yan yana durduklarından emin olun, "ikisi birlikte" fiyatı deneyin.</div>' +
+      oTablo(['İkili', 'Birlikte', 'Bağ'], ayni.slice(0, 15).map(function(x){ return '<tr><td>' + esc(x.aa) + '<br>+ ' + esc(x.ba) + '</td><td>' + sayi(x.n, 0) + ' fiş</td><td class="iyi">' + sayi(x.lift, 1) + ' kat</td></tr>'; })) + '</div>';
+    // Müşteri çekenin yanına ne?
+    var kvi = (O.kvi || []).map(oUrun).slice(0, 30), satir = [];
+    kvi.forEach(function(u){ var o = oOrtaklar(O, u.kod, soz).sort(function(a, b){ return (b.marj || 0) * b.lift - (a.marj || 0) * a.lift; }).slice(0, 3); if(o.length) satir.push({ u: u, o: o }); });
+    if(satir.length) h += '<div class="kart"><div class="kartBaslik">🧲 Müşteri çeken ürünün yanına ne konmalı?</div><div class="ipucu" style="margin-bottom:8px;">En çok fişte geçen ürünler ve onları alanların sık aldığı ürünler (marjı yüksek olan önce). Bu ürünleri müşteri çekenin rafına, uç rafa ya da karşısına koyun.</div>' +
+      oTablo(['Müşteri çeken', 'Yanına koy'], satir.map(function(x){ return '<tr><td><b>' + esc(x.u.ad) + '</b><div class="ipucu">' + sayi(x.u.fisn / 2, 0) + ' fiş/ay · marj ' + yuzde(x.u.marj) + '</div></td><td style="white-space:normal; text-align:left; font-family:var(--sans); font-size:12.5px;">' +
+        x.o.map(function(o){ return '<div>• <b>' + esc(o.ad) + '</b> <span class="ipucu">' + (o.marj != null ? 'marj ' + yuzde(o.marj) + ' · ' : '') + sayi(o.lift, 1) + ' kat</span></div>'; }).join('') + '</td></tr>'; })) + '</div>';
+    // İkame
+    var ik = O.ikame || [];
+    if(ik.length) h += '<div class="kart"><div class="kartBaslik">⚔️ Birbirinin yerine alınan ürünler (ikame)</div><div class="ipucu" style="margin-bottom:8px;">Aynı grupta, ikisi de çok satıyor ama aynı fişte neredeyse hiç birlikte görülmüyor: müşteri ya birini ya öbürünü alıyor. Raf yerini ve fiyatı <b>marjı yüksek olanın</b> lehine kullanın: o göz hizasına, öbürü bir alta. Marjı düşük olan çok satıyorsa fiyatlarını yaklaştırın; ikisinden biri az satıyorsa çeşidi azaltıp stok bağlamayın.</div>' +
+      oTablo(['Ürünler', 'Birlikte', 'Beklenen', 'Öne çıkar'], ik.slice(0, oHepsi.ikame ? 100 : 20).map(function(x){ var a = soz[x[0]], b = soz[x[2]], kazanan = a && b ? ((a.marj || 0) >= (b.marj || 0) ? a : b) : null;
+        return '<tr><td>' + esc(x[1]) + (a ? ' <span class="ipucu">(' + yuzde(a.marj) + ')</span>' : '') + '<br>vs ' + esc(x[3]) + (b ? ' <span class="ipucu">(' + yuzde(b.marj) + ')</span>' : '') + '</td><td>' + sayi(x[4], 0) + '</td><td>' + sayi(x[5], 0) + '</td><td style="white-space:normal; text-align:left; font-family:var(--sans); font-size:12px;">' + (kazanan ? '<b class="iyi">' + esc(kazanan.ad) + '</b>' : '—') + '</td></tr>'; })) + oDevam('ikame', ik, 20) + '</div>';
+    return h;
+  }
+
+  // ---- 🏬 Reyon karnesi: her ürün grubu ne getiriyor, ne bağlıyor ----
+  function oReyonHtml(O){
+    var g = (O.gruplar || []).map(function(x){ return { ad: x[0], urun: x[1], ciro: x[2] || 0, kar: x[3] || 0, ciroM: x[4] || 0, fis: x[5] || 0, stok: x[6] || 0, olu: x[7] || 0, cesit: x[8] || 0 }; }).filter(function(x){ return x.ciro > 0 || x.stok > 0; });
+    if(!g.length) return '<div class="kart ipucu">Reyon bilgisi bu raporda yok — saglik-raporu.ps1 yeni sürümüyle gelir.</div>';
+    var tc = g.reduce(function(t, x){ return t + x.ciro; }, 0), tk = g.reduce(function(t, x){ return t + x.kar; }, 0), ts = g.reduce(function(t, x){ return t + x.stok; }, 0), nf = (O.fis || {}).n || O.nf || 0;
+    g.forEach(function(x){
+      x.marj = x.ciroM > 0 ? x.kar / x.ciroM : null; x.kp = tk > 0 ? x.kar / tk : 0; x.sp = ts > 0 ? x.stok / ts : 0; x.fp = nf ? x.fis / nf : null;
+      x.getiri = x.stok > 0 ? (x.kar / 3) / x.stok : null;              // aylık kâr / bağlı stok
+      x.gun = x.ciroM > 0 && x.marj != null ? x.stok / ((x.ciroM - x.kar) / 90) : null;   // stok kaç günlük (maliyetle)
+      x.not = [];
+      if(x.fp != null && x.fp > 0.25 && x.marj != null && x.marj < 0.15) x.not.push(['u', 'Müşteri çeken reyon, marj ince — kampanyalar burada, kârı başka reyondan alın']);
+      if(x.marj != null && x.marj > 0.30 && x.fp != null && x.fp < 0.08) x.not.push(['y', 'Kârlı ama az uğranıyor — görünür yere, kasa yoluna yaklaştırın']);
+      if(x.sp > x.kp * 2 && x.stok > ts * 0.03) x.not.push(['k', 'Kâra göre çok stok bağlıyor — çeşidi ve siparişi azaltın']);
+      if(x.stok > 0 && x.olu / x.stok > 0.35) x.not.push(['k', 'Stoğun ' + yuzde(x.olu / x.stok) + '\'i 90 gündür satılmıyor']);
+      if(x.kp > x.sp * 2 && x.kp > 0.05) x.not.push(['y', 'Bağladığı paraya göre çok kazandırıyor — yer ve çeşit artırılabilir']);
+    });
+    g.sort(function(a, b){ return b.kar - a.kar; });
+    return '<div class="kart"><div class="kartBaslik">🏬 Reyon karnesi <span class="ipucu">son 90 gün · ERP ürün grubu</span></div><div class="ipucu" style="margin-bottom:8px;">Her reyonun kârdaki payı ile bağladığı stok payını karşılaştırın: kârdan az pay alıp çok stok bağlayan reyon küçülmeli, az stokla çok kazandıran büyümeli. <b>Uğrayan fiş</b>: kasa fişlerinin yüzde kaçında o reyondan ürün var.</div>' +
+      oTablo(['Reyon', 'Ciro', 'Kâr', 'Marj', 'Kâr payı', 'Stok payı', 'Uğrayan fiş', 'Stok günü'], g.map(function(x){
+        return '<tr><td><b>' + esc(x.ad) + '</b><div class="ipucu">' + sayi(x.urun, 0) + ' satılan · ' + sayi(x.cesit, 0) + ' stokta</div>' + x.not.map(function(n){ return '<span class="etk ' + n[0] + '">' + esc(n[1]) + '</span>'; }).join('') + '</td>' +
+          '<td>' + tl(x.ciro) + '</td><td class="' + renk(x.kar) + '">' + tl(x.kar) + '</td><td>' + yuzde(x.marj) + '</td><td>' + yuzde(x.kp) + '</td><td class="' + (x.sp > x.kp * 2 ? 'kotu' : '') + '">' + yuzde(x.sp) + '</td>' +
+          '<td>' + (x.fp == null ? '—' : yuzde(x.fp)) + '</td><td>' + (x.gun == null || !isFinite(x.gun) ? '—' : sayi(x.gun, 0)) + '</td></tr>'; })) + '</div>';
+  }
+
+  // ---- 📉 Fiyat duyarlılığı (Doğru fiyat sekmesinin altında) ----
+  function oEsneklikHtml(O){
+    var E = O.esneklik; if(!E || !E.n) return '';
+    var yorum = function(e){ return e == null ? '' : e > -0.5 ? 'fiyata az duyarlı' : e > -1.5 ? 'orta' : 'fiyata çok duyarlı'; };
+    return '<div class="kart"><div class="kartBaslik">📉 Fiyat duyarlılığı <span class="ipucu">kendi satışlarınızdan</span></div><div class="ipucu" style="margin-bottom:8px;">Son 5 ayda fiyatı değişen ' + sayi(E.n, 0) + ' üründe, değişiklikten önceki ve sonraki 28 günün kasa satışı karşılaştırıldı. ' +
+      '<b>−1</b>: fiyat %10 artınca satış %10 düşüyor. <b>0\'a yakın</b>: müşteri fiyata bakmıyor — fiyat artışı kâra geçer. <b>−2 ve altı</b>: çok duyarlı — kampanya burada işe yarar. Genel ortanca: <b>' + sayi(E.medyan, 2) + '</b> (' + yorum(E.medyan) + '). Mevsim ve enflasyon etkisi ayıklanmadı; tek tek ürün değil, grup ortancası daha güvenilir.</div>' +
+      ((E.gruplar || []).length ? oTablo(['Reyon', 'Değişiklik', 'Duyarlılık', ''], E.gruplar.map(function(x){ return '<tr><td>' + esc(x[0] || '(grupsuz)') + '</td><td>' + sayi(x[1], 0) + '</td><td class="' + (x[2] > -0.5 ? 'iyi' : x[2] < -1.5 ? 'uyari' : '') + '">' + sayi(x[2], 2) + '</td><td style="font-family:var(--sans); font-size:12px;">' + yorum(x[2]) + '</td></tr>'; })) : '') +
+      ((E.ornek || []).length ? '<details style="margin-top:8px;"><summary class="ipucu" style="cursor:pointer;">Örnek fiyat değişiklikleri (' + E.ornek.length + ')</summary>' + oTablo(['Ürün', 'Fiyat', 'Adet (28 gün)', 'Duyarlılık'], E.ornek.map(function(x){ return '<tr><td>' + esc(x[1]) + '<div class="ipucu">' + esc(x[2]) + '</div></td><td>' + tl(x[3], 2) + ' → ' + tl(x[4], 2) + '</td><td>' + sayi(x[5], 0) + ' → ' + sayi(x[6], 0) + '</td><td>' + sayi(x[7], 2) + '</td></tr>'; })) + '</details>' : '') + '</div>';
+  }
+
+  try { var kk = JSON.parse(localStorage.getItem('krKampanya') || 'null'); if(kk){ oKmp.butce = Number(kk.butce) || oKmp.butce; oKmp.derinlik = kk.derinlik || oKmp.derinlik; oKmp.adet = Number(kk.adet) || oKmp.adet; } } catch(e){}
+  function kmpKaydet(){ try { localStorage.setItem('krKampanya', JSON.stringify({ butce: oKmp.butce, derinlik: oKmp.derinlik, adet: oKmp.adet })); } catch(e){} }
+  document.addEventListener('change', function(e){
+    var id = e.target.id;
+    if(id === 'kmpButce'){ oKmp.butce = Math.max(0, Number(e.target.value) || 0); kmpKaydet(); oneriCiz(); }
+    else if(id === 'kmpDerinlik'){ oKmp.derinlik = e.target.value; kmpKaydet(); oneriCiz(); }
+    else if(id === 'kmpAdet'){ oKmp.adet = Number(e.target.value) || 15; kmpKaydet(); oneriCiz(); }
+  });
+  document.addEventListener('click', function(e){
+    var t = e.target.closest && e.target.closest('[data-kmpcikar]');
+    if(t){ oKmp.cikar[t.getAttribute('data-kmpcikar')] = true; oneriCiz(); return; }
+    if(e.target.id === 'kmpSifirla'){ oKmp.cikar = {}; oneriCiz(); return; }
+    if(e.target.id === 'kmpCsv'){
+      var O = S && S.rapor && S.rapor.veri && S.rapor.veri.oneri; if(!O) return;
+      var K = oKampanyaHesap(O), n = function(v, o){ return v == null || !isFinite(v) ? '' : Number(v).toFixed(o == null ? 2 : o).replace('.', ','); };
+      var satir = [['Stok Kodu', 'Ürün', 'Grup', 'Şimdiki Fiyat', 'Kampanya Fiyatı', 'Son Net Alış', 'Şimdiki Marj %', 'Kampanya Marjı %', 'Adet/ay şimdi', 'Adet/ay beklenen', 'Aylık Maliyet', 'Fiş/ay', 'Yanına Koy']];
+      K.secilen.forEach(function(x){ satir.push([x.u.kod, x.u.ad, x.u.grup, n(x.u.fiyat), n(x.yeni), n(x.u.alis), n(x.u.marj * 100, 1), n(x.yeniMarj * 100, 1), n(x.u.m30, 0), n(x.q1, 0), n(x.maliyet, 0), n(x.u.fisn / 2, 0), x.ortak.map(function(o){ return o.ad; }).join(' / ')]); });
+      var csv = '﻿' + satir.map(function(r){ return r.map(function(c){ c = String(c == null ? '' : c); return /[;"\n]/.test(c) ? '"' + c.replace(/"/g, '""') + '"' : c; }).join(';'); }).join('\r\n');
+      var a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([csv], { type: 'text/csv;charset=utf-8' })); a.download = 'kampanya-plani.csv'; document.body.appendChild(a); a.click(); setTimeout(function(){ URL.revokeObjectURL(a.href); a.remove(); }, 1000);
+    }
+  });
 
   // ---------- Olaylar ----------
   document.addEventListener('click', function(e){
