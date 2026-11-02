@@ -14,6 +14,8 @@
 #       ve aylik sermaye hareketi (alis ile stoga giren, satisla cikan para; sermaye artti mi azaldi mi)
 #    9) Buyume: tukenen cok satanlar, sepet, musteri trafigi (gun/saat), yukselen/dusen urunler,
 #       alimi azalan firma musterileri, cironun %80'ini yapan urunler -> rapordaki "Buyume plani"
+#   10) Oneriler (uygulamada Karlilik -> Oneriler): musteri ceken urunler, kar firsati, fiyat sonu,
+#       sepet dagilimi, birlikte alinanlar, kasa onu adaylari, one cikarilacaklar
 #    8) Her ayda kari en cok dusuren urunler (dusuk marjli ayin nedeni)
 #  Rapor KRT Saha'ya da gonderilir: uygulamada Karlilik -> Saglik sekmesinde gorunur (038_saglik_raporu.sql).
 #  -Gorev ile (SAGLIK-RAPORU-GOREV.bat 30 dakikada bir calistirir): rapor yalniz uygulamadan istenmisse
@@ -59,7 +61,7 @@ function M($v) { if ($v -is [DBNull] -or $v -eq $null) { return "" }; return ([s
 function I($v) { if ($v -is [DBNull] -or $v -eq $null) { return 0 }; return [int]$v }
 function T($v) { if ($v -is [DBNull] -or $v -eq $null) { return "" }; return ([datetime]$v).ToString("dd.MM.yyyy") }
 
-$veri = [ordered]@{ surum = "4"; olusturma = (Get-Date).ToString("yyyy-MM-dd HH:mm"); firma = ""; veritabani = ""; enflasyon = $AylikEnflasyon; hatalar = @() }
+$veri = [ordered]@{ surum = "5"; olusturma = (Get-Date).ToString("yyyy-MM-dd HH:mm"); firma = ""; veritabani = ""; enflasyon = $AylikEnflasyon; hatalar = @() }
 $hatalar = New-Object System.Collections.ArrayList
 
 try {
@@ -468,6 +470,102 @@ ORDER BY x.ONCE - x.T30 DESC
         $fs = (Tablo "SELECT COUNT(DISTINCT CARI) AS N, SUM(TUTAR) AS T FROM #sat WHERE KASA = 0 AND CARI IS NOT NULL AND GUN >= $s30").Rows[0]
         $veri.buyume.firmaN = I $fs.N; $veri.buyume.firma30 = D $fs.T
     } catch { [void]$hatalar.Add("Buyume (firmalar): " + $_.Exception.Message); Yaz "HATA buyume firma: $($_.Exception.Message)" }
+
+    # ---- 9) Oneriler (Karlilik -> Oneriler): dogru fiyatlandirma ve fis tutarini artirma ----
+    # Kasa fisleri (FIS_POS'a bagli belgeler) son 60 gun: her fiste hangi urunler birlikte alinmis.
+    $veri.oneri = [ordered]@{}
+    try {
+        Yaz "9a) Oneriler - kasa fisleri..."
+        Calistir @"
+IF OBJECT_ID('tempdb..#fd') IS NOT NULL DROP TABLE #fd;
+SELECT f.ID AS FIS, d.STOK,
+       SUM(-$g * CAST(d.MIKTAR_FIS AS float) * $carp) AS MIKTAR,
+       SUM(-$g * CASE WHEN ISNULL(d.TOPLAM_KDV_MATRAHI, 0) <> 0 THEN CAST(d.TOPLAM_KDV_MATRAHI AS float)
+                     ELSE CAST(d.MIKTAR_FIS AS float) * CAST(ISNULL(d.FIYAT, 0) AS float) / (1 + k.KDV / 100.0) END) AS TUTAR
+INTO #fd
+FROM dbo.FIS f JOIN dbo.FIS_DETAY d ON d.FIS = f.ID JOIN dbo.FIS_TURU FT ON FT.ID = f.FIS_TURU JOIN #kdv k ON k.STOK = d.STOK
+WHERE f.FIS_TARIHI >= DATEADD(day, -60, CAST(GETDATE() AS date)) AND ISNULL(f.AKTIF, 1) = 1 AND f.FIS_TURU <> 18 AND $satisAile AND $g <> 0
+  AND EXISTS (SELECT 1 FROM dbo.FIS_POS p WHERE p.FIS = f.ID)
+GROUP BY f.ID, d.STOK HAVING SUM(-$g * CAST(d.MIKTAR_FIS AS float)) > 0;
+CREATE CLUSTERED INDEX i ON #fd (FIS, STOK);
+IF OBJECT_ID('tempdb..#fs') IS NOT NULL DROP TABLE #fs;
+SELECT FIS, COUNT(*) AS KALEM, SUM(TUTAR) AS TUTAR INTO #fs FROM #fd GROUP BY FIS;
+IF OBJECT_ID('tempdb..#pen') IS NOT NULL DROP TABLE #pen;
+SELECT STOK, COUNT(*) AS FISN, SUM(MIKTAR) AS M60, SUM(TUTAR) AS T60 INTO #pen FROM #fd GROUP BY STOK;
+CREATE CLUSTERED INDEX i ON #pen (STOK);
+"@
+        $fo = (Tablo "SELECT COUNT(*) AS N, AVG(TUTAR) AS ORT, AVG(CAST(KALEM AS float)) AS KALEM, SUM(CASE WHEN KALEM = 1 THEN 1 ELSE 0 END) AS TEK FROM #fs").Rows[0]
+        if ((D $fo.KALEM) -gt 150) { throw "Kasa belgeleri fis fis degil (belge basina $(D $fo.KALEM) kalem) - sepet incelemesi yapilamadi" }
+        $veri.oneri.fis = [ordered]@{ n = I $fo.N; ort = D $fo.ORT; kalem = D $fo.KALEM; tek = I $fo.TEK; gun = 60 }
+        $veri.oneri.dagilim = @((Tablo @"
+SELECT CASE WHEN KALEM = 1 THEN '1' WHEN KALEM = 2 THEN '2' WHEN KALEM <= 4 THEN '3-4' WHEN KALEM <= 9 THEN '5-9' ELSE '10+' END AS K,
+       COUNT(*) AS N, AVG(TUTAR) AS ORT, SUM(TUTAR) AS TOP
+FROM #fs GROUP BY CASE WHEN KALEM = 1 THEN '1' WHEN KALEM = 2 THEN '2' WHEN KALEM <= 4 THEN '3-4' WHEN KALEM <= 9 THEN '5-9' ELSE '10+' END
+"@).Rows | ForEach-Object { ,@((M $_.K), (I $_.N), (D $_.ORT), (D $_.TOP)) })
+    } catch { [void]$hatalar.Add("Oneriler (fis): " + $_.Exception.Message); Yaz "HATA oneri fis: $($_.Exception.Message)" }
+
+    try {
+        Yaz "9b) Oneriler - fiyatlandirma..."
+        # Urun grubu (ERP STOK_GRUP) ve gruptaki satilan urunlerin ortanca marji: hedef fiyat icin olcu.
+        Calistir @"
+IF OBJECT_ID('tempdb..#fu') IS NOT NULL DROP TABLE #fu;
+SELECT k.STOK, k.KOD, k.AD, ISNULL(g.AD, '') AS GRUP, ISNULL(s2.STOK_GRUP, 0) AS GID, k.KDV, p.FIYAT, s.MALIYET AS ALIS,
+       (p.FIYAT / (1 + k.KDV / 100.0) - s.MALIYET) / NULLIF(p.FIYAT / (1 + k.KDV / 100.0), 0) AS MARJ,
+       ISNULL(pn.FISN, 0) AS FISN,
+       ISNULL((SELECT SUM(x.MIKTAR) FROM #sat x WHERE x.STOK = k.STOK AND x.GUN >= DATEADD(day, -30, CAST(GETDATE() AS date))), 0) AS M30,
+       CAST(0 AS float) AS GMARJ, 0 AS SIRA
+INTO #fu
+FROM #kdv k JOIN #fiyat p ON p.STOK = k.STOK JOIN #son s ON s.STOK = k.STOK JOIN dbo.STOK s2 ON s2.ID = k.STOK
+LEFT JOIN dbo.STOK_GRUP g ON g.ID = s2.STOK_GRUP LEFT JOIN #pen pn ON pn.STOK = k.STOK
+WHERE s.MALIYET > 0 AND p.FIYAT > 0;
+DELETE FROM #fu WHERE M30 <= 0;
+UPDATE f SET GMARJ = x.GM FROM #fu f JOIN (SELECT DISTINCT GID, PERCENTILE_CONT(0.5) WITHIN GROUP (ORDER BY MARJ) OVER (PARTITION BY GID) AS GM FROM #fu WHERE MARJ BETWEEN -0.5 AND 0.9) x ON x.GID = f.GID;
+UPDATE f SET SIRA = x.R FROM #fu f JOIN (SELECT STOK, ROW_NUMBER() OVER (ORDER BY FISN DESC, M30 DESC) AS R FROM #fu) x ON x.STOK = f.STOK;
+"@
+        $alan = "KOD, AD, GRUP, KDV, FIYAT, ALIS, MARJ, GMARJ, FISN, M30, SIRA"
+        $sat = { param($r) ,@((M $r.KOD), (M $r.AD), (M $r.GRUP), (D $r.KDV), (D $r.FIYAT), (D $r.ALIS), [Math]::Round([double]$(if ($r.MARJ -is [DBNull]) { 0 } else { $r.MARJ }), 4), [Math]::Round([double]$(if ($r.GMARJ -is [DBNull]) { 0 } else { $r.GMARJ }), 4), (I $r.FISN), (D $r.M30), (I $r.SIRA)) }
+        # Musteri ceken urunler: en cok fiste gecen 150 urun (fiyati herkesin bildigi urunler)
+        $veri.oneri.kvi = @((Tablo "SELECT TOP 150 $alan FROM #fu WHERE FISN > 0 ORDER BY SIRA").Rows | ForEach-Object { & $sat $_ })
+        # Kar firsati: cok fiste gecmeyen (ilk 300 disi), marji grubunun belirgin altinda kalan urunler
+        $veri.oneri.firsat = @((Tablo "SELECT TOP 120 $alan FROM #fu WHERE SIRA > 300 AND M30 >= 3 AND MARJ >= 0 AND MARJ < GMARJ - 0.05 AND MARJ < 0.25 ORDER BY M30 * ALIS * (GMARJ - MARJ) DESC").Rows | ForEach-Object { & $sat $_ })
+        # One cikarilacaklar: marji grubunun ustunde, az fiste gecen urunler (gorunur yere konursa kar getirir)
+        $veri.oneri.oneCikar = @((Tablo "SELECT TOP 40 $alan FROM #fu WHERE SIRA > 300 AND MARJ >= GMARJ + 0.05 AND MARJ < 0.8 AND M30 >= 2 ORDER BY M30 * FIYAT / (1 + KDV / 100.0) * MARJ DESC").Rows | ForEach-Object { & $sat $_ })
+        # Kasa onu adaylari: ucuz (KDV dahil 40 TL'ye kadar), marji yuksek, sik alinan, fiste 1-2 adet
+        $veri.oneri.kasaOnu = @((Tablo @"
+SELECT TOP 30 $alan FROM #fu f
+WHERE f.FIYAT <= 40 AND f.MARJ >= 0.25 AND f.FISN >= 20
+  AND (SELECT AVG(x.MIKTAR) FROM #fd x WHERE x.STOK = f.STOK) <= 2.5
+ORDER BY f.FISN * f.MARJ DESC
+"@).Rows | ForEach-Object { & $sat $_ })
+        # Fiyat sonu: kurusu ,90 / ,95 / ,99 / ,50 / ,00 / ,25 / ,75 olmayan cok satanlar
+        $veri.oneri.kurus = @((Tablo @"
+SELECT TOP 40 $alan FROM #fu
+WHERE CAST(ROUND(FIYAT * 100, 0) AS int) % 100 NOT IN (0, 25, 50, 75, 90, 95, 99) AND FIYAT >= 5
+ORDER BY M30 DESC
+"@).Rows | ForEach-Object { & $sat $_ })
+        $veri.oneri.kurusN = I (Tablo "SELECT COUNT(*) AS N FROM #fu WHERE CAST(ROUND(FIYAT * 100, 0) AS int) % 100 NOT IN (0, 25, 50, 75, 90, 95, 99) AND FIYAT >= 5").Rows[0].N
+    } catch { [void]$hatalar.Add("Oneriler (fiyat): " + $_.Exception.Message); Yaz "HATA oneri fiyat: $($_.Exception.Message)" }
+
+    try {
+        Yaz "9c) Oneriler - birlikte alinanlar..."
+        $nf = I (Tablo "SELECT COUNT(*) AS N FROM #fs").Rows[0].N
+        if ($nf -gt 0) {
+            Calistir @"
+IF OBJECT_ID('tempdb..#top') IS NOT NULL DROP TABLE #top;
+SELECT TOP 400 STOK, FISN INTO #top FROM #pen ORDER BY FISN DESC;
+CREATE CLUSTERED INDEX i ON #top (STOK);
+"@
+            $veri.oneri.ciftler = @((Tablo @"
+SELECT TOP 150 ka.KOD AS AK, ka.AD AS AA, kb.KOD AS BK, kb.AD AS BA, x.N, ta.FISN AS NA, tb.FISN AS NB,
+       CAST(x.N AS float) * $nf / (CAST(ta.FISN AS float) * tb.FISN) AS LIFT
+FROM (SELECT a.STOK AS A, b.STOK AS B, COUNT(*) AS N FROM #fd a JOIN #fd b ON b.FIS = a.FIS AND b.STOK > a.STOK
+      JOIN #top t1 ON t1.STOK = a.STOK JOIN #top t2 ON t2.STOK = b.STOK GROUP BY a.STOK, b.STOK HAVING COUNT(*) >= 12) x
+JOIN #top ta ON ta.STOK = x.A JOIN #top tb ON tb.STOK = x.B JOIN #kdv ka ON ka.STOK = x.A JOIN #kdv kb ON kb.STOK = x.B
+WHERE CAST(x.N AS float) * $nf / (CAST(ta.FISN AS float) * tb.FISN) >= 1.5
+ORDER BY x.N * LOG(CAST(x.N AS float) * $nf / (CAST(ta.FISN AS float) * tb.FISN)) DESC
+"@ 900).Rows | ForEach-Object { ,@((M $_.AK), (M $_.AA), (M $_.BK), (M $_.BA), (I $_.N), (I $_.NA), (I $_.NB), [Math]::Round([double]$_.LIFT, 2)) })
+        }
+    } catch { [void]$hatalar.Add("Oneriler (birlikte alinanlar): " + $_.Exception.Message); Yaz "HATA oneri cift: $($_.Exception.Message)" }
 
 } catch {
     [void]$hatalar.Add("Genel: " + $_.Exception.Message); Yaz "HATA: $($_.Exception.Message)"

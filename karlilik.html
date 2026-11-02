@@ -201,7 +201,7 @@
   }
 
   // ---------- Çizim ----------
-  var SEKMELER = [['ozet', '📊 Özet'], ['urunler', '🛒 Ürünler'], ['enflasyon', '📈 Enflasyon'], ['firmalar', '🏭 Firmalar'], ['saglik', '🩺 Sağlık'], ['tufe', '⚙️ TÜFE']];
+  var SEKMELER = [['ozet', '📊 Özet'], ['urunler', '🛒 Ürünler'], ['enflasyon', '📈 Enflasyon'], ['firmalar', '🏭 Firmalar'], ['oneri', '💡 Öneriler'], ['saglik', '🩺 Sağlık'], ['tufe', '⚙️ TÜFE']];
   function sekmeCiz(){
     $('sekmeler').innerHTML = SEKMELER.map(function(s){ return '<button type="button" data-sekme="' + s[0] + '"' + (s[0] === sekme ? ' class="on"' : '') + '>' + s[1] + '</button>'; }).join('');
   }
@@ -209,6 +209,7 @@
   function ciz(){
     sekmeCiz();
     if(sekme === 'saglik'){ saglikCiz(); return; }
+    if(sekme === 'oneri'){ oneriCiz(); return; }
     if(!V){ if(getirHata) $('icerik').innerHTML = getirHata; return; }
     var h = '';
     if(sekme === 'ozet') h = ozetHtml();
@@ -370,13 +371,14 @@
   // ve veri tabanına bırakılır; burada son rapor erp/saglik-sablon.html görünümüyle gösterilir.
   var S = null, sSablon = null, sYukleniyor = false, sSecili = '';
   function saglikYukle(id, iste){
-    sYukleniyor = true; if(sekme === 'saglik') saglikCiz();
+    sYukleniyor = true; if(sekme === 'saglik') saglikCiz(); if(sekme === 'oneri') oneriCiz();
     var q = { action: 'karlilik', ne: iste ? 'saglik_iste' : 'saglik' }; if(id) q.id = id;
     istek(q, function(r){
       sYukleniyor = false;
       if(r.status !== 'ok'){ S = { hata: r.message || 'Rapor alınamadı' }; }
       else { S = r; if(iste) toast('İstek gönderildi — ERP bilgisayarı 30 dakika içinde yeni raporu hazırlar'); }
       if(sekme === 'saglik') saglikCiz();
+      if(sekme === 'oneri') oneriCiz();
     });
   }
   function saglikCiz(){
@@ -406,11 +408,116 @@
   }
   document.addEventListener('change', function(e){ if(e.target.id === 'sGecmis') saglikYukle(e.target.value); });
 
+  // ---------- 💡 ÖNERİLER: doğru fiyatlandırma ve fiş tutarını artırma ----------
+  // Veri Sağlık raporuyla birlikte ERP bilgisayarında hazırlanır (saglik-raporu.ps1, bölüm 9): kasa fişleri (son 60 gün),
+  // raf fiyatı, son net alış ve ürün grubunun (ERP stok grubu) ortanca marjı. Burada öneriye çevrilir.
+  var oAlt = 'fiyat', oHepsi = {};
+  // Psikolojik fiyat: 100 ₺ altı ,90 ile, üstü 9,90 ile biter; hep yukarı yuvarlanır.
+  function guzelFiyat(p){ if(!(p > 0)) return p; var v = p < 100 ? Math.ceil(p - 0.9 - 1e-9) + 0.9 : Math.ceil((p + 0.1 - 1e-9) / 10) * 10 - 0.1; if(v < p - 1e-9) v += p < 100 ? 1 : 10; return Math.round(v * 100) / 100; }
+  function oUrun(r){ return { kod: r[0], ad: r[1], grup: r[2], kdv: r[3] || 0, fiyat: r[4], alis: r[5], marj: r[6], gm: r[7], fisn: r[8], m30: r[9], sira: r[10] }; }
+  function oTablo(bas, satirlar){ return '<div class="tablo"><table><tr>' + bas.map(function(b){ return '<th>' + b + '</th>'; }).join('') + '</tr>' + satirlar.join('') + '</table></div>'; }
+  function oAd(u, ek){ return '<td>' + esc(u.ad) + '<div class="ipucu">' + esc(u.kod) + (u.grup ? ' · ' + esc(u.grup) : '') + (ek ? ' · ' + ek : '') + '</div></td>'; }
+  function oDevam(ad, l, n){ return l.length > n && !oHepsi[ad] ? '<button type="button" class="kucuk" data-ohep="' + ad + '" style="margin-top:8px;">Tümünü göster (' + l.length + ')</button>' : ''; }
+  function oneriCiz(){
+    if(!S && !sYukleniyor){ saglikYukle(); return; }
+    if(sYukleniyor && !S){ $('icerik').innerHTML = '<div class="bekle">Öneriler getiriliyor…</div>'; return; }
+    if(S.hata){ $('icerik').innerHTML = '<div class="kart"><div class="kotu" style="font-weight:800;">Öneriler alınamadı</div><div class="ipucu" style="margin-top:6px;">' + esc(S.hata) + '</div><button type="button" id="sYenidenDene" class="kucuk" style="margin-top:10px;">↻ Tekrar dene</button></div>'; return; }
+    var r = S.rapor, O = r && r.veri ? r.veri.oneri : null;
+    var h = '<div class="cipler"><button type="button" data-oalt="fiyat"' + (oAlt === 'fiyat' ? ' class="on"' : '') + '>💰 Doğru fiyat</button><button type="button" data-oalt="sepet"' + (oAlt === 'sepet' ? ' class="on"' : '') + '>🧺 Fiş tutarını artır</button></div>';
+    if(!O){ $('icerik').innerHTML = h + '<div class="kart"><div style="font-weight:800;">Öneriler henüz hazırlanmamış</div><div class="ipucu" style="margin-top:6px;">ERP bilgisayarındaki <b>saglik-raporu.ps1</b> yeni sürümüyle çalışınca gelir (rapor: ' + esc(r ? r.zaman : '—') + '). 🩺 Sağlık sekmesinden "Yeniden hazırlat" diyebilirsin.</div></div>'; return; }
+    h += '<div class="ipucu" style="margin-bottom:8px;">Rapor: <b>' + esc(r.zaman) + '</b> · ERP verisi · tutarlar KDV hariç, raf fiyatları KDV dahil</div>';
+    var hatalar = (r.veri.hatalar || []).filter(function(x){ return /^Oneriler/.test(x); });
+    if(hatalar.length) h += '<div class="kart uyari" style="font-size:13px;">' + hatalar.map(esc).join('<br>') + '</div>';
+    $('icerik').innerHTML = h + (oAlt === 'fiyat' ? oFiyatHtml(O) : oSepetHtml(O));
+  }
+  function oFiyatHtml(O){
+    var kvi = (O.kvi || []).map(oUrun), h = '';
+    // Kâr fırsatı: hedef marj = ürün grubunun ortanca marjı (%12–%40); artış bir seferde en fazla %15.
+    var firsat = (O.firsat || []).map(oUrun).map(function(u){
+      var hedef = Math.max(0.12, Math.min(0.40, u.gm || 0)), brut = u.alis / (1 - hedef) * (1 + u.kdv / 100);
+      u.yeni = guzelFiyat(Math.min(brut, u.fiyat * 1.15)); u.yeniMarj = (u.yeni / (1 + u.kdv / 100) - u.alis) / (u.yeni / (1 + u.kdv / 100));
+      u.etki = u.m30 * (u.yeni - u.fiyat) / (1 + u.kdv / 100); return u;
+    }).filter(function(u){ return u.yeni > u.fiyat + 0.004 && u.etki > 0; }).sort(function(a, b){ return b.etki - a.etki; });
+    var kurus = (O.kurus || []).map(oUrun).map(function(u){ u.yeni = guzelFiyat(u.fiyat); u.etki = u.m30 * (u.yeni - u.fiyat) / (1 + u.kdv / 100); return u; }).filter(function(u){ return u.yeni > u.fiyat; });
+    var pahali = kvi.filter(function(u){ return u.sira <= 100 && u.marj > Math.max((u.gm || 0) + 0.10, 0.35); });
+    var ince = kvi.filter(function(u){ return u.sira <= 100 && u.marj < 0.06; });
+    var fTop = firsat.reduce(function(t, u){ return t + u.etki; }, 0), kTop = kurus.reduce(function(t, u){ return t + u.etki; }, 0);
+    h += '<div class="kutular">' + kutu('Fiyat artışıyla ek kâr', tl(fTop) + '/ay', firsat.length + ' üründe, satış adedi aynı kalırsa', 'iyi') +
+      kutu('Fiyat sonu düzeltme', tl(kTop) + '/ay', (O.kurusN || kurus.length) + ' üründe kuruşlu fiyat') +
+      kutu('Müşteri çeken ürün', sayi(kvi.length, 0), 'en çok fişte geçenler') + kutu('Pahalı görünebilir', sayi(pahali.length, 0), 'müşteri çeken üründe yüksek marj', pahali.length ? 'uyari' : '') + '</div>';
+    h += '<div class="kart"><div class="kartBaslik">📐 Kural: müşteriyi çekenle kazan, kârı yavaştan al</div><div class="ipucu" style="font-size:13px;">' +
+      '1) <b>Müşteri çeken ürünlerde</b> (ekmek, süt, yağ, şeker, çay, deterjan gibi her fişte olanlar) rakipten pahalı olmayın: müşteri marketi bunlarla tartar.<br>' +
+      '2) <b>Kârı yavaş ürünlerden</b> alın: baharat, sos, kuruyemiş, züccaciye, temizlik yan ürünleri. Müşteri bunların fiyatını bilmez.<br>' +
+      '3) <b>Fiyatı ,90 ile bitirin</b>: 12,37 yerine 12,90 — müşteri farkı görmez, kâr artar.<br>' +
+      '4) Fiyatı bir seferde %15\'ten fazla artırmayın; gerekiyorsa iki adımda yapın.</div></div>';
+    // Müşteri çeken
+    var n1 = oHepsi.kvi ? kvi.length : 25;
+    h += '<div class="kart"><div class="kartBaslik">🧲 Müşteri çeken ürünler <span class="ipucu">son 60 gün</span></div><div class="ipucu" style="margin-bottom:8px;">En çok fişte geçen ürünler. Fiyatları rakiple aynı ya da ucuz olmalı; <b class="uyari">turuncu</b> marj müşteriye pahalı gelebilir — rakibe bakın. <b class="iyi">Yeşil</b> marjı ince olanları "ucuz ürün" olarak duyurun.</div>' +
+      oTablo(['Ürün', 'Fiş', 'Raf', 'Marj', 'Grup ort.'], kvi.slice(0, n1).map(function(u){
+        var c = pahali.indexOf(u) !== -1 ? 'uyari' : ince.indexOf(u) !== -1 ? 'iyi' : '';
+        return '<tr>' + oAd(u) + '<td>' + sayi(u.fisn, 0) + (O.fis && O.fis.n ? '<div class="ipucu">' + yuzde(u.fisn / O.fis.n) + '</div>' : '') + '</td><td>' + tl(u.fiyat, 2) + '</td><td class="' + c + '">' + yuzde(u.marj) + '</td><td>' + yuzde(u.gm) + '</td></tr>'; })) +
+      oDevam('kvi', kvi, 25) + '</div>';
+    // Kâr fırsatı
+    var n2 = oHepsi.firsat ? firsat.length : 25;
+    h += '<div class="kart"><div class="kartBaslik">💰 Fiyatı artırılabilir <span class="iyi">' + tl(fTop) + '/ay</span></div><div class="ipucu" style="margin-bottom:8px;">Çok fişte geçmeyen (müşterinin fiyatını takip etmediği) ama marjı kendi grubunun ortancasının altında kalan ürünler. Önerilen fiyat: grubun marjına göre, en fazla %15 artış, ,90 ile biter. Ek kâr: son 30 günün satış adediyle.</div>' +
+      (firsat.length ? oTablo(['Ürün', 'Şimdi', 'Öneri', 'Marj', 'Ek kâr/ay'], firsat.slice(0, n2).map(function(u){
+        return '<tr>' + oAd(u, sayi(u.m30, 0) + ' adet/ay') + '<td>' + tl(u.fiyat, 2) + '</td><td class="iyi"><b>' + tl(u.yeni, 2) + '</b></td><td>' + yuzde(u.marj) + ' → ' + yuzde(u.yeniMarj) + '<div class="ipucu">grup ' + yuzde(u.gm) + '</div></td><td class="iyi">' + tl(u.etki) + '</td></tr>'; })) : '<div class="ipucu">Bu durumda ürün yok. 👍</div>') +
+      oDevam('firsat', firsat, 25) + '</div>';
+    // Pahalı görünen
+    if(pahali.length) h += '<div class="kart"><div class="kartBaslik">⚠️ Müşteri çeken ama marjı yüksek</div><div class="ipucu" style="margin-bottom:8px;">Bu ürünler çok fişte geçiyor; fiyatı rakipten yüksekse müşteri "bu market pahalı" der ve sepetin tamamını başka yerde doldurur. Rakip fiyatına bakın; pahalıysanız grubun marjına yaklaştırın.</div>' +
+      oTablo(['Ürün', 'Raf', 'Marj', 'Grup ort.', 'Grup marjıyla fiyat'], pahali.map(function(u){ var p2 = guzelFiyat(u.alis / (1 - Math.max(0.12, Math.min(0.4, u.gm || 0))) * (1 + u.kdv / 100)); return '<tr>' + oAd(u, sayi(u.fisn, 0) + ' fiş') + '<td>' + tl(u.fiyat, 2) + '</td><td class="uyari">' + yuzde(u.marj) + '</td><td>' + yuzde(u.gm) + '</td><td>' + (p2 < u.fiyat ? tl(p2, 2) : '—') + '</td></tr>'; })) + '</div>';
+    // Kuruş
+    if(kurus.length){ var n3 = oHepsi.kurus ? kurus.length : 15;
+      h += '<div class="kart"><div class="kartBaslik">🔢 Fiyat sonunu düzelt <span class="iyi">' + tl(kTop) + '/ay</span></div><div class="ipucu" style="margin-bottom:8px;">' + sayi(O.kurusN || kurus.length, 0) + ' satılan üründe fiyat ,90 / ,95 / ,50 gibi bitmiyor. Yukarı yuvarlamak fark edilmez, kâra geçer. En çok satanlar:</div>' +
+        oTablo(['Ürün', 'Şimdi', 'Öneri', 'Ek kâr/ay'], kurus.slice(0, n3).map(function(u){ return '<tr>' + oAd(u, sayi(u.m30, 0) + ' adet/ay') + '<td>' + tl(u.fiyat, 2) + '</td><td class="iyi">' + tl(u.yeni, 2) + '</td><td class="iyi">' + tl(u.etki) + '</td></tr>'; })) + oDevam('kurus', kurus, 15) + '</div>'; }
+    return h;
+  }
+  function oSepetHtml(O){
+    var F = O.fis || null, h = '';
+    if(!F){ return '<div class="kart">Kasa fişi bilgisi yok — ' + esc(((S.rapor.veri.hatalar || []).filter(function(x){ return /fis/.test(x); })[0]) || 'rapor eski sürümle hazırlanmış') + '</div>'; }
+    var gunFis = F.n / (F.gun || 60), tekOran = F.n ? F.tek / F.n : 0;
+    var ko = (O.kasaOnu || []).map(oUrun), koOrtNet = ko.length ? ko.reduce(function(t, u){ return t + u.fiyat / (1 + u.kdv / 100); }, 0) / ko.length : 0, koMarj = ko.length ? ko.reduce(function(t, u){ return t + u.marj; }, 0) / ko.length : 0;
+    var koEtki = gunFis * 30 * 0.1 * koOrtNet * koMarj;   // her 10 fişten birine bir kasa önü ürünü
+    h += '<div class="kutular">' + kutu('Günde fiş', sayi(gunFis, 0), 'son ' + (F.gun || 60) + ' gün, kasa') + kutu('Ortalama fiş', tl(F.ort, 2), 'KDV hariç · ' + sayi(F.kalem, 1) + ' çeşit ürün') +
+      kutu('Tek ürünlü fiş', yuzde(tekOran), sayi(F.tek, 0) + ' fiş — en büyük fırsat', tekOran > 0.3 ? 'uyari' : '') +
+      kutu('Kasa önüyle ek kâr', tl(koEtki) + '/ay', 'her 10 fişten birine 1 kasa önü ürünü', 'iyi') +
+      kutu('Fiş 5 ₺ büyürse', tl(gunFis * 30 * 5 * 0.2) + '/ay', 'fiş başına 5 ₺ (KDV hariç) daha · %20 marjla ek kâr', 'iyi') + '</div>';
+    // Dağılım
+    var sira = ['1', '2', '3-4', '5-9', '10+'], dg = {}; (O.dagilim || []).forEach(function(x){ dg[x[0]] = x; });
+    var mx = Math.max.apply(null, sira.map(function(k){ return dg[k] ? dg[k][1] : 0; }).concat([1]));
+    h += '<div class="kart"><div class="kartBaslik">🧾 Fişler kaç çeşit ürünle çıkıyor?</div>' +
+      oTablo(['Ürün çeşidi', 'Fiş', '', 'Ort. tutar'], sira.filter(function(k){ return dg[k]; }).map(function(k){ var x = dg[k]; return '<tr><td>' + k + ' çeşit</td><td>' + sayi(x[1], 0) + '<div class="ipucu">' + yuzde(x[1] / F.n) + '</div></td><td style="width:35%;"><span class="cubuk" style="width:' + Math.max(2, Math.round(x[1] / mx * 100)) + '%;"></span></td><td>' + tl(x[2], 2) + '</td></tr>'; })) +
+      '<div class="ipucu" style="margin-top:8px;">Tek ürünle çıkan müşteri genelde ekmek, sigara, su gibi hızlı alışveriştir. Kasaya giden yol ve kasa önü bu müşterinin ikinci ürünü için tek şanstır.</div></div>';
+    // Birlikte alınanlar
+    var c = O.ciftler || [], n1 = oHepsi.cift ? c.length : 20;
+    h += '<div class="kart"><div class="kartBaslik">🤝 Birlikte alınan ürünler</div><div class="ipucu" style="margin-bottom:8px;">Aynı fişte normalden çok daha sık birlikte görülen ürünler. <b>Yan yana ya da karşılıklı koyun</b>, birinin rafına öbürünün küçük afişini asın, "ikisi birlikte" kampanyası yapın. Biri tükenirse öbürünün satışı da düşer.</div>' +
+      (c.length ? oTablo(['Ürünler', 'Birlikte', 'Bağ'], c.slice(0, n1).map(function(x){
+        return '<tr><td><b>' + esc(x[1]) + '</b><br>+ ' + esc(x[3]) + '<div class="ipucu">' + esc(x[1].split(' ')[0]) + ' alanların ' + yuzde(x[4] / x[5]) + '\'i öbürünü de alıyor</div></td><td>' + sayi(x[4], 0) + ' fiş</td><td class="iyi">' + sayi(x[7], 1) + ' kat</td></tr>'; })) : '<div class="ipucu">Belirgin birliktelik bulunamadı.</div>') +
+      oDevam('cift', c, 20) + '</div>';
+    // Kasa önü
+    if(ko.length) h += '<div class="kart"><div class="kartBaslik">🛒 Kasa önüne konacak ürünler</div><div class="ipucu" style="margin-bottom:8px;">Ucuz (40 ₺\'ye kadar), marjı yüksek, sık ve birer ikişer alınan ürünler: düşünmeden sepete eklenir. Kasa bandının yanında ve kasaya giden yolda olsunlar; ara ara yerlerini değiştirin.</div>' +
+      oTablo(['Ürün', 'Raf', 'Marj', 'Fiş'], ko.map(function(u){ return '<tr>' + oAd(u) + '<td>' + tl(u.fiyat, 2) + '</td><td class="iyi">' + yuzde(u.marj) + '</td><td>' + sayi(u.fisn, 0) + '</td></tr>'; })) + '</div>';
+    // Öne çıkar
+    var oc = (O.oneCikar || []).map(oUrun);
+    if(oc.length) h += '<div class="kart"><div class="kartBaslik">⭐ Öne çıkarın (az satan ama çok kazandıran)</div><div class="ipucu" style="margin-bottom:8px;">Marjı kendi grubunun belirgin üstünde ama az fişte geçiyor. Göz hizasına, raf başına (uç rafa) ya da birlikte alındığı ürünün yanına koyun; her satış ortalamadan fazla kâr bırakır.</div>' +
+      oTablo(['Ürün', 'Raf', 'Marj', 'Grup ort.', 'Ay satış'], oc.map(function(u){ return '<tr>' + oAd(u) + '<td>' + tl(u.fiyat, 2) + '</td><td class="iyi">' + yuzde(u.marj) + '</td><td>' + yuzde(u.gm) + '</td><td>' + sayi(u.m30, 0) + '</td></tr>'; })) + '</div>';
+    h += '<div class="kart"><div class="kartBaslik">📋 Fişi büyütmek için kısa liste</div><div class="ipucu" style="font-size:13px;">' +
+      '• Kasa önü: yukarıdaki ürünler, kasa başına 8–12 çeşit, haftada bir yer değişikliği.<br>' +
+      '• Birlikte alınanları yan yana koyun; tamamlayıcı ürünü (makarna yanında salça, çay yanında şeker) aynı rafa.<br>' +
+      '• "2. ürüne %50" ya da "3 al 2 öde" yalnız marjı yüksek ürünlerde.<br>' +
+      '• Kasiyer bir öneri cümlesi söylesin: "Yanına ekmek / su ister misiniz?"<br>' +
+      '• Çok satanlar asla tükenmesin: rafta olmayan ürün, sepetin tamamını kaybettirir.<br>' +
+      '• Ayrıntılı büyüme planı ve tahmini kazanç: 🩺 Sağlık sekmesinde "Büyüme planı".</div></div>';
+    return h;
+  }
+
   // ---------- Olaylar ----------
   document.addEventListener('click', function(e){
     var t;
     if((t = e.target.closest('[data-sekme]'))){ sekme = t.getAttribute('data-sekme'); ciz(); window.scrollTo(0, 0); return; }
     if(e.target.id === 'sIste'){ saglikYukle(null, true); return; }
+    if((t = e.target.closest('[data-oalt]'))){ oAlt = t.getAttribute('data-oalt'); oneriCiz(); window.scrollTo(0, 0); return; }
+    if((t = e.target.closest('[data-ohep]'))){ oHepsi[t.getAttribute('data-ohep')] = true; oneriCiz(); return; }
     if(e.target.id === 'sYenidenDene'){ S = null; saglikCiz(); return; }
     if((t = e.target.closest('[data-kat]'))){ filtre = t.getAttribute('data-kat'); sekme = 'urunler'; ciz(); window.scrollTo(0, 0); return; }
     if((t = e.target.closest('[data-git]'))){ sekme = t.getAttribute('data-git'); ciz(); window.scrollTo(0, 0); return; }
@@ -451,7 +558,7 @@
   window.mkGeri = function(){ if(!$('detay').classList.contains('gizli')){ $('detay').classList.add('gizli'); return true; } return false; };
 
   var getirNo = 0, getirHata = '';
-  function icerik(h){ if(sekme !== 'saglik') $('icerik').innerHTML = h; }
+  function icerik(h){ if(sekme !== 'saglik' && sekme !== 'oneri') $('icerik').innerHTML = h; }
   function getir(){
     if(!kimlik){ $('icerik').innerHTML = '<div class="bekle">Önce uygulamada giriş yap.</div>'; return; }
     var no = ++getirNo;
@@ -468,7 +575,7 @@
         setTimeout(sor, 500); return;
       }
       if(r.status !== 'ok'){ getirHata = '<div class="kart"><div class="kotu" style="font-weight:800;">Rapor alınamadı</div><div class="ipucu" style="margin-top:6px;">' + esc(r.message || '') + '</div><div class="ipucu" style="margin-top:6px;">🩺 Sağlık sekmesi bundan bağımsız çalışır.</div></div>'; icerik(getirHata); return; }
-      V = r; hesapla(); if(sekme !== 'saglik') ciz();
+      V = r; hesapla(); if(sekme !== 'saglik' && sekme !== 'oneri') ciz();
     });
     })();
   }
