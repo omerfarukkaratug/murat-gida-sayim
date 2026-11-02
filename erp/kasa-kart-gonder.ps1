@@ -8,10 +8,23 @@
 #  - Once tek bir barkodla denenir; kasada okununca hepsi gonderilir.
 #  - Fiyati 0 olan kart gonderilmez (kasada 0 TL'ye satilmasin). Fiyat girilince program tekrar calistirilir.
 #  - Daha once gonderilmis kart tekrar gonderilmez.
+#  -Otomatik ile (KASA-KART-GOREV.bat 15 dakikada bir calistirir): soru sormaz, fiyati girilmis ama kasaya
+#  hic gonderilmemis butun MKS kartlarini gonderir; yalniz bir sey gonderdiginde log yazar.
 # =====================================================================
+param([switch]$Otomatik)
 $SqlServer = "SERVER\ERP12"
 $Log       = "C:\Scripts\kasa-kart-gonder-log.txt"
 function Yaz($m) { $s = "$(Get-Date -Format 'yyyy-MM-dd HH:mm:ss') - $m"; Write-Host $m; try { Add-Content -Path $Log -Value $s } catch {} }
+$DbUrl = "https://wjyqempcmyrmruhdpcwk.supabase.co"; $DbAnahtarDosyasi = "C:\Scripts\db-anahtar.txt"
+function Nabiz($mesaj) {
+    try {
+        if (-not (Test-Path $DbAnahtarDosyasi)) { return }
+        try { [Net.ServicePointManager]::SecurityProtocol = [Net.ServicePointManager]::SecurityProtocol -bor [Net.SecurityProtocolType]::Tls12 } catch {}
+        $govde = @{ p_ad = "kasa_kart"; p_mesaj = $mesaj; p_baslangic = $null } | ConvertTo-Json -Compress
+        [void](Invoke-RestMethod -Uri "$DbUrl/rest/v1/rpc/erp_nabiz_yaz" -Method Post -Body ([Text.Encoding]::UTF8.GetBytes($govde)) -ContentType "application/json; charset=utf-8" `
+            -Headers @{ apikey = (Get-Content -Path $DbAnahtarDosyasi -TotalCount 1).Trim() } -TimeoutSec 30 -UserAgent "MK-Sayim/1.0")
+    } catch {}
+}
 
 $bag = New-Object System.Data.SqlClient.SqlConnection("Server=$SqlServer;Database=master;Integrated Security=SSPI;")
 function Sql($tx, $sql, $param) {
@@ -33,25 +46,33 @@ try {
     }
     if (-not $db) { throw "Aktif ERP veri tabani bulunamadi." }
     $bag.ChangeDatabase($db)
-    Yaz "Veri tabani: $db"
+    if (-not $Otomatik) { Yaz "Veri tabani: $db" }
     if ([int](Deger $null "SELECT COUNT(*) FROM sys.tables WHERE name = 'SEQUNCES_DEGISIKLIK'" $null) -eq 0) { throw "SEQUNCES_DEGISIKLIK tablosu yok - bu ERP'de kasa defteri farkli, islem yapilmadi." }
 
-    Write-Host ""
-    Write-Host "Once TEK bir urunle deneyin: kasada okunmayan bir MKS urununun barkodunu yazin."
-    Write-Host "Kasada okundugunu gorunce programi tekrar calistirip 'HEPSI' yazin."
-    $giris = (Read-Host "Barkod ya da HEPSI").Trim()
-    if (-not $giris) { throw "Bir sey yazilmadi, islem yapilmadi." }
+    if ($Otomatik) { $giris = "HEPSI" }
+    else {
+        Write-Host ""
+        Write-Host "Once TEK bir urunle deneyin: kasada okunmayan bir MKS urununun barkodunu yazin."
+        Write-Host "Kasada okundugunu gorunce programi tekrar calistirip 'HEPSI' yazin."
+        $giris = (Read-Host "Barkod ya da HEPSI").Trim()
+        if (-not $giris) { throw "Bir sey yazilmadi, islem yapilmadi." }
+    }
 
     $filtre = "s.KOD LIKE 'MKS-%'"; $p = @{}
+    # Otomatikte yalniz kasaya hic gonderilmemis (defterde barkod "yeni" satiri olmayan) kartlara bakilir.
+    if ($Otomatik) { $filtre += " AND NOT EXISTS (SELECT 1 FROM dbo.SEQUNCES_DEGISIKLIK g WITH (NOLOCK) JOIN dbo.STOK_BARKOD b WITH (NOLOCK) ON b.ID = g.SEQUNCES JOIN dbo.STOK_STOK_BIRIM u WITH (NOLOCK) ON u.ID = b.STOK_STOK_BIRIM WHERE u.STOK = s.ID AND g.ISLEM = 1 AND g.TABLO = 'STOK_BARKOD')" }
     if ($giris -ne "HEPSI" -and $giris -ne "hepsi") { $filtre += " AND EXISTS (SELECT 1 FROM dbo.STOK_BARKOD_BIRIM bb WITH (NOLOCK) WHERE bb.STOK = s.ID AND bb.BARKOD = @b)"; $p["@b"] = $giris }
     $kartlar = Tablo $null ("SELECT s.ID, s.KOD, s.AD, (SELECT MAX(f.FIYAT) FROM dbo.STOK_STOK_BIRIM_FIYAT f WITH (NOLOCK) JOIN dbo.STOK_STOK_BIRIM u WITH (NOLOCK) ON u.ID = f.STOK_STOK_BIRIM WHERE u.STOK = s.ID) AS FIYAT FROM dbo.STOK s WITH (NOLOCK) WHERE " + $filtre + " ORDER BY s.KOD") $p
-    if ($kartlar.Rows.Count -eq 0) { throw "MKS karti bulunamadi ($giris). Barkod uygulamanin actigi (MKS-) bir karta ait olmali." }
+    if ($kartlar.Rows.Count -eq 0) {
+        if ($Otomatik) { Nabiz "OK: gonderilecek kart yok"; exit 0 }
+        throw "MKS karti bulunamadi ($giris). Barkod uygulamanin actigi (MKS-) bir karta ait olmali."
+    }
 
     $gonder = 0; $atla = 0; $zaten = 0
     foreach ($k in $kartlar.Rows) {
         $sid = [long]$k.ID; $ad = "$($k.KOD) $($k.AD)"
         $fiyat = if ($k.FIYAT -is [DBNull]) { 0 } else { [decimal]$k.FIYAT }
-        if ($fiyat -le 0) { Yaz "ATLANDI (fiyat 0 - once ERP'de fiyat girin): $ad"; $atla++; continue }
+        if ($fiyat -le 0) { if (-not $Otomatik) { Yaz "ATLANDI (fiyat 0 - once ERP'de fiyat girin): $ad" }; $atla++; continue }
         # Gonderilecek satirlar: ERP'nin yeni kartta yazdigi sirayla
         $satirlar = New-Object System.Collections.ArrayList
         [void]$satirlar.Add(@($sid, "STOK"))
@@ -79,10 +100,10 @@ try {
             Yaz ("GONDERILDI ({0} satir, fiyat {1}): {2}" -f $satirlar.Count, $fiyat, $ad); $gonder++
         } catch { try { $tx.Rollback() } catch {}; Yaz "HATA ($ad): $($_.Exception.Message)" }
     }
-    Write-Host ""
-    Yaz "OZET: gonderilen $gonder, zaten gonderilmis $zaten, atlanan $atla"
+    if (-not $Otomatik -or $gonder -gt 0) { Write-Host ""; Yaz "OZET: gonderilen $gonder, zaten gonderilmis $zaten, atlanan $atla" }
+    if ($Otomatik) { Nabiz ("OK: gonderilen $gonder, fiyat bekleyen $atla") }
     if ($gonder -gt 0) { Write-Host "Kasalar degisiklikleri birkac dakika icinde alir. Gelmezse kasa programini kapatip acin, sonra barkodu okutun." }
 } catch {
-    Yaz "HATA: $($_.Exception.Message)"
+    Yaz "HATA: $($_.Exception.Message)"; if ($Otomatik) { Nabiz ("HATA: " + $_.Exception.Message) }
 } finally { try { $bag.Close() } catch {} }
-Read-Host "Kapatmak icin Enter"
+if (-not $Otomatik) { Read-Host "Kapatmak icin Enter" }
