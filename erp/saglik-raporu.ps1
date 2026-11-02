@@ -12,6 +12,8 @@
 #    6) Son 6 ayin aylik ciro / kar egilimi
 #    7) Sermaye: stok degeri (hizli/yavas/olu), musteri alacaklari, tedarikci borclari, nakit dongusu
 #       ve aylik sermaye hareketi (alis ile stoga giren, satisla cikan para; sermaye artti mi azaldi mi)
+#    9) Buyume: tukenen cok satanlar, sepet, musteri trafigi (gun/saat), yukselen/dusen urunler,
+#       alimi azalan firma musterileri, cironun %80'ini yapan urunler -> rapordaki "Buyume plani"
 #    8) Her ayda kari en cok dusuren urunler (dusuk marjli ayin nedeni)
 #  Rapor KRT Saha'ya da gonderilir: uygulamada Karlilik -> Saglik sekmesinde gorunur (038_saglik_raporu.sql).
 #  -Gorev ile (SAGLIK-RAPORU-GOREV.bat 30 dakikada bir calistirir): rapor yalniz uygulamadan istenmisse
@@ -57,7 +59,7 @@ function M($v) { if ($v -is [DBNull] -or $v -eq $null) { return "" }; return ([s
 function I($v) { if ($v -is [DBNull] -or $v -eq $null) { return 0 }; return [int]$v }
 function T($v) { if ($v -is [DBNull] -or $v -eq $null) { return "" }; return ([datetime]$v).ToString("dd.MM.yyyy") }
 
-$veri = [ordered]@{ surum = "3"; olusturma = (Get-Date).ToString("yyyy-MM-dd HH:mm"); firma = ""; veritabani = ""; enflasyon = $AylikEnflasyon; hatalar = @() }
+$veri = [ordered]@{ surum = "4"; olusturma = (Get-Date).ToString("yyyy-MM-dd HH:mm"); firma = ""; veritabani = ""; enflasyon = $AylikEnflasyon; hatalar = @() }
 $hatalar = New-Object System.Collections.ArrayList
 
 try {
@@ -100,7 +102,7 @@ WHERE NOT (s.AD LIKE N'%FIYAT FARK%' OR s.AD LIKE N'%F' + NCHAR(304) + N'YAT FAR
            OR s.AD LIKE N'%NAKL%YE%' OR s.AD LIKE N'%NAVLUN%' OR s.AD LIKE N'%KARGO BEDEL%');
 CREATE CLUSTERED INDEX i ON #kdv (STOK);
 IF OBJECT_ID('tempdb..#sat') IS NOT NULL DROP TABLE #sat;
-SELECT d.STOK, CAST(f.FIS_TARIHI AS date) AS GUN,
+SELECT d.STOK, CAST(f.FIS_TARIHI AS date) AS GUN, f.CARI AS CARI,
        CASE WHEN $kasaMi THEN 1 ELSE 0 END AS KASA, k.KDV AS KDV,
        -$g * CAST(d.MIKTAR_FIS AS float) * $carp AS MIKTAR,
        -$g * CASE WHEN ISNULL(d.TOPLAM_KDV_MATRAHI, 0) <> 0 THEN CAST(d.TOPLAM_KDV_MATRAHI AS float)
@@ -407,6 +409,65 @@ SELECT AY, KOD, AD, MIKTAR, TUTAR, MAL FROM (
 WHERE R <= 8 ORDER BY AY, R
 "@).Rows | ForEach-Object { ,@((M $_.AY), (M $_.KOD), (M $_.AD), (D $_.MIKTAR), (D $_.TUTAR), (D $_.MAL)) })
     } catch { [void]$hatalar.Add("Ay incelemesi: " + $_.Exception.Message); Yaz "HATA ay: $($_.Exception.Message)" }
+
+    # ---- 8) Buyume plani icin veriler ----
+    $veri.buyume = [ordered]@{}
+    $s30 = "DATEADD(day, -30, CAST(GETDATE() AS date))"
+    try {
+        Yaz "8a) Buyume - tukenen cok satanlar..."
+        $veri.buyume.tukenen = @((Tablo @"
+SELECT TOP 60 k.KOD, k.AD, x.M30, x.T30, ISNULL(st.MIKTAR, 0) AS STOK, s.MALIYET
+FROM (SELECT STOK, SUM(MIKTAR) AS M30, SUM(TUTAR) AS T30 FROM #sat WHERE GUN >= $s30 GROUP BY STOK HAVING SUM(MIKTAR) > 0 AND SUM(TUTAR) > 0) x
+JOIN #kdv k ON k.STOK = x.STOK LEFT JOIN #stok st ON st.STOK = x.STOK LEFT JOIN #son s ON s.STOK = x.STOK
+WHERE ISNULL(st.MIKTAR, 0) < x.M30 / 30.0 * 3
+ORDER BY x.T30 DESC
+"@).Rows | ForEach-Object { ,@((M $_.KOD), (M $_.AD), (D $_.M30), (D $_.T30), (D $_.STOK), (D $_.MALIYET)) })
+    } catch { [void]$hatalar.Add("Buyume (tukenen): " + $_.Exception.Message); Yaz "HATA buyume tukenen: $($_.Exception.Message)" }
+    try {
+        Yaz "8b) Buyume - musteri trafigi..."
+        $veri.buyume.fisAy = @((Tablo "SELECT CONVERT(char(7), DATEADD(month, DATEDIFF(month, 0, KAPANIS_TARIHI), 0), 120) AS AY, COUNT(*) AS N FROM dbo.FIS_POS WHERE KAPANIS_TARIHI >= DATEADD(month, DATEDIFF(month, 0, GETDATE()) - 6, 0) GROUP BY DATEADD(month, DATEDIFF(month, 0, KAPANIS_TARIHI), 0) ORDER BY 1").Rows |
+            ForEach-Object { ,@((M $_.AY), (I $_.N)) })
+        $veri.buyume.kasaAy = @((Tablo "SELECT CONVERT(char(7), DATEADD(month, DATEDIFF(month, 0, GUN), 0), 120) AS AY, SUM(TUTAR) AS T FROM #sat WHERE KASA = 1 GROUP BY DATEADD(month, DATEDIFF(month, 0, GUN), 0) ORDER BY 1").Rows |
+            ForEach-Object { ,@((M $_.AY), (D $_.T)) })
+        # 1900-01-01 pazartesi: (gun farki % 7) 0 = pazartesi ... 6 = pazar
+        $veri.buyume.gun = @((Tablo "SELECT DATEDIFF(day, 0, KAPANIS_TARIHI) % 7 AS G, COUNT(*) AS N FROM dbo.FIS_POS WHERE KAPANIS_TARIHI >= DATEADD(day, -90, GETDATE()) GROUP BY DATEDIFF(day, 0, KAPANIS_TARIHI) % 7 ORDER BY 1").Rows |
+            ForEach-Object { ,@((I $_.G), (I $_.N)) })
+        $veri.buyume.saat = @((Tablo "SELECT DATEPART(hour, KAPANIS_TARIHI) AS S, COUNT(*) AS N FROM dbo.FIS_POS WHERE KAPANIS_TARIHI >= DATEADD(day, -90, GETDATE()) GROUP BY DATEPART(hour, KAPANIS_TARIHI) ORDER BY 1").Rows |
+            ForEach-Object { ,@((I $_.S), (I $_.N)) })
+    } catch { [void]$hatalar.Add("Buyume (trafik): " + $_.Exception.Message); Yaz "HATA buyume trafik: $($_.Exception.Message)" }
+    try {
+        Yaz "8c) Buyume - yukselen / dusen urunler..."
+        Calistir @"
+IF OBJECT_ID('tempdb..#ud') IS NOT NULL DROP TABLE #ud;
+SELECT STOK, SUM(CASE WHEN GUN >= $s30 THEN TUTAR ELSE 0 END) AS T30,
+       SUM(CASE WHEN GUN < $s30 AND GUN >= DATEADD(day, -90, CAST(GETDATE() AS date)) THEN TUTAR ELSE 0 END) / 2.0 AS ONCE
+INTO #ud FROM #sat GROUP BY STOK;
+"@
+        $ud = "SELECT TOP 15 k.KOD, k.AD, u.T30, u.ONCE FROM #ud u JOIN #kdv k ON k.STOK = u.STOK WHERE u.T30 >= 0 AND u.ONCE >= 0 AND (u.T30 + u.ONCE) > 1000"
+        $veri.buyume.yukselen = @((Tablo "$ud AND u.T30 > u.ONCE * 1.3 ORDER BY u.T30 - u.ONCE DESC").Rows | ForEach-Object { ,@((M $_.KOD), (M $_.AD), (D $_.T30), (D $_.ONCE)) })
+        $veri.buyume.dusen = @((Tablo "$ud AND u.T30 < u.ONCE * 0.7 ORDER BY u.ONCE - u.T30 DESC").Rows | ForEach-Object { ,@((M $_.KOD), (M $_.AD), (D $_.T30), (D $_.ONCE)) })
+        # Cironun %80'ini kac urun yapiyor (90 gun)
+        $abc = (Tablo @"
+SELECT COUNT(*) AS TUM, SUM(CASE WHEN KUM - T90 < TOPLAM * 0.8 THEN 1 ELSE 0 END) AS A FROM (
+  SELECT T90, SUM(T90) OVER (ORDER BY T90 DESC ROWS UNBOUNDED PRECEDING) AS KUM, SUM(T90) OVER () AS TOPLAM
+  FROM (SELECT STOK, SUM(T90) AS T90 FROM #ay GROUP BY STOK HAVING SUM(T90) > 0) u) x
+"@).Rows[0]
+        $veri.buyume.abc = [ordered]@{ tum = I $abc.TUM; a = I $abc.A }
+    } catch { [void]$hatalar.Add("Buyume (urunler): " + $_.Exception.Message); Yaz "HATA buyume urun: $($_.Exception.Message)" }
+    try {
+        Yaz "8d) Buyume - firma musterileri..."
+        $veri.buyume.firmalar = @((Tablo @"
+SELECT TOP 20 c.KOD, c.AD, x.T30, x.ONCE, x.SON FROM (
+  SELECT CARI, SUM(CASE WHEN GUN >= $s30 THEN TUTAR ELSE 0 END) AS T30,
+         SUM(CASE WHEN GUN < $s30 AND GUN >= DATEADD(day, -120, CAST(GETDATE() AS date)) THEN TUTAR ELSE 0 END) / 3.0 AS ONCE, MAX(GUN) AS SON
+  FROM #sat WHERE KASA = 0 AND CARI IS NOT NULL GROUP BY CARI) x
+JOIN dbo.CARI c ON c.ID = x.CARI
+WHERE x.ONCE >= 2000 AND x.T30 < x.ONCE * 0.6
+ORDER BY x.ONCE - x.T30 DESC
+"@).Rows | ForEach-Object { ,@((M $_.KOD), (M $_.AD), (D $_.T30), (D $_.ONCE), (T $_.SON)) })
+        $fs = (Tablo "SELECT COUNT(DISTINCT CARI) AS N, SUM(TUTAR) AS T FROM #sat WHERE KASA = 0 AND CARI IS NOT NULL AND GUN >= $s30").Rows[0]
+        $veri.buyume.firmaN = I $fs.N; $veri.buyume.firma30 = D $fs.T
+    } catch { [void]$hatalar.Add("Buyume (firmalar): " + $_.Exception.Message); Yaz "HATA buyume firma: $($_.Exception.Message)" }
 
 } catch {
     [void]$hatalar.Add("Genel: " + $_.Exception.Message); Yaz "HATA: $($_.Exception.Message)"

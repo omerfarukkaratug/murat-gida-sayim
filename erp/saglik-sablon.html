@@ -86,6 +86,18 @@
   .ciftler .c{display:flex;align-items:flex-end;gap:3px;width:100%;max-width:80px;justify-content:center}
   .ciftler i{display:block;flex:1;border-radius:6px 6px 0 0;min-height:2px}
   .ciftler b{font-size:11.5px;margin-bottom:3px;white-space:nowrap}
+  .bp-ust{background:linear-gradient(135deg,#0c6b45,#14a35f);color:#fff;border-radius:16px;padding:18px 20px;margin:10px 0 16px}
+  .bp-ust .d{font-size:clamp(28px,5vw,40px);font-weight:800;letter-spacing:-1px;line-height:1.15}
+  .bp-ust .a{opacity:.92;font-size:14px}
+  .faz{font-size:12px;font-weight:800;text-transform:uppercase;letter-spacing:.06em;color:var(--muted);margin:18px 0 6px}
+  .oneri{border:1px solid var(--line);border-radius:14px;padding:12px 14px;margin:8px 0}
+  .oneri .bas{display:flex;justify-content:space-between;gap:10px;align-items:baseline;flex-wrap:wrap}
+  .oneri .bas b{font-size:15.5px}.oneri .bas span{font-weight:800;color:var(--yesil);white-space:nowrap}
+  .oneri p{margin:4px 0 0;font-size:14px}
+  .oneri ul{margin:6px 0 0;padding-left:20px;font-size:14px}.oneri li{margin:2px 0}
+  .oneri small.h{display:block;color:var(--muted);font-size:12px;margin-top:4px}
+  .oneri details{margin-top:8px}.oneri summary{cursor:pointer;color:var(--mor);font-weight:700;font-size:13.5px}
+  @media print{.oneri details{display:block}.oneri details>*{display:block}.bp-ust{-webkit-print-color-adjust:exact;print-color-adjust:exact}}
   .sonuc{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin:12px 0}
   .sonuc div{border-radius:14px;padding:12px 14px;background:var(--bg)}
   .sonuc b{display:block;font-size:21px}.sonuc span{font-size:12.5px;color:var(--muted)}
@@ -190,6 +202,7 @@ var ICERDE = /*ICERDE*/false;   // uygulamanın içinde (Kârlılık → Sağlı
   if(SM) kisa.push('İşletmede şu an <b>' + tl(SM.isletme) + '</b> kendi paranız bağlı: ' + tl(SM.stok) + ' stok + ' + tl(SM.alacak) + ' müşteri alacağı − ' + tl(SM.borc) + ' tedarikçi borcu.' + (SM.getiri != null ? ' Brüt kâr bu paranın ayda <b>' + yz(SM.getiri) + '</b>\'i (' + (SM.getiri >= enf ? 'enflasyonun üstünde' : 'enflasyonun <span class="k">altında</span>') + ').' : ''));
   if(SA) kisa.push('Son ' + SA.rows.length + ' ayda <b>' + tl(SA.alis) + '</b> mal aldınız, satılan malın maliyeti <b>' + tl(SA.smm) + '</b>: stoğa ' + (SA.net >= 0 ? 'net <b class="t">' + tl(SA.net) + '</b> para bağlandı' : 'bağlı paradan <b class="y">' + tl(-SA.net) + '</b> serbest kaldı') + (SA.bas != null ? ' (stok ≈ ' + tl(SA.bas) + ' → ' + tl(SA.son) + ')' : '') + '. Aynı dönemde brüt kâr ' + tl(SA.kar) + '; kârdan nakit olarak kalan ' + (SA.nakit >= 0 ? '<b>' + tl(SA.nakit) + '</b>' : '<b class="k">' + tl(SA.nakit) + '</b> (kârdan fazlası stoğa gitti)') + '.');
   if(k1 + k2 > 0) kisa.push('Fiyatlardan kaynaklanan kaçak ayda yaklaşık <b class="k">' + tl(k1 + k2) + '</b>; çoğu raf fiyatı güncellenerek hemen düzelir.');
+  if(V.buyume && o) kisa.push('Aşağıdaki <a href="#buyume"><b>🚀 Büyüme planı</b></a> verinize göre ne yapılırsa daha çok para kazanılacağını sırayla gösteriyor.');
   if(kisa.length) h += '<section class="kisaca"><h2>Kısaca</h2>' + kisa.map(function(x){ return '<p>' + x + '</p>'; }).join('') + '</section>';
 
   h += '<div class="manset"><div class="b">Fiyatlardan her ay kaçan tahmini tutar</div><div class="d">' + tl(k1 + k2) + '</div>' +
@@ -201,6 +214,107 @@ var ICERDE = /*ICERDE*/false;   // uygulamanın içinde (Kârlılık → Sağlı
   // Yapılacaklar
   if(isler.length) h += '<section id="isler"><h2>✅ Bu ay yapılacaklar</h2><p class="ac">Etkisi en büyük olandan başlayarak. Ayrıntısı için satıra dokunun.</p><ol class="isler">' +
     isler.map(function(x){ return '<li><a href="' + x.a + '">' + x.m + '</a><span>' + x.e + '</span></li>'; }).join('') + '</ol></section>';
+
+  // ---------- Büyüme planı: daha çok para kazanmak için yapılması gerekenler ----------
+  var B = V.buyume || null;
+  if(B && o){
+    var mm = o.ciroMaliyetli > 0 ? Math.max(0.05, Math.min(0.5, malKar90 / o.ciroMaliyetli)) : 0.18;   // malın kendi marjı
+    var aylikCiro = o.ciro / 3, on = [];
+    var tbl = function(bas, satir){ return '<div class="tablo"><table><tr>' + bas.map(function(x){ return '<th>' + x + '</th>'; }).join('') + '</tr>' + satir.join('') + '</table></div>'; };
+    // 1) Tükenen çok satanlar
+    var tk = (B.tukenen || []).map(function(r){ var gunluk = r[3] / 30, marj = r[5] != null && r[3] > 0 ? (r[3] - r[2] * r[5]) / r[3] : mm; return { kod: r[0], ad: r[1], m30: r[2], t30: r[3], stok: r[4], gun: r[2] > 0 ? Math.max(0, r[4]) / (r[2] / 30) : null, gunluk: gunluk, kar: gunluk * Math.max(0, marj) }; });
+    if(tk.length){
+      var tkKar = tk.reduce(function(t, x){ return t + x.kar * 7; }, 0), yok = tk.filter(function(x){ return x.stok <= 0; }).length;
+      on.push({ f: 0, e: tkKar, b: 'Çok satan ' + tk.length + ' ürün tükeniyor — hemen sipariş verin', m: (yok ? '<b class="k">' + yok + ' tanesi şu an stokta yok.</b> ' : '') + 'Diğerlerinin stoğu 3 günlük satışı karşılamıyor. Rafta olmayan ürün satılmaz; müşteri o ürünü başka markette alır ve sepetin geri kalanını da orada doldurur.',
+        l: ['Bu listeyi her sabah kontrol edin; çok satanlarda en az 7 günlük stok tutun', 'Tedarikçiyle bu ürünler için sabit sipariş günü belirleyin'],
+        h: 'Etki: ürünlerin günlük kârı × ayda 7 gün stoksuz kalma varsayımı.',
+        d: tbl(['Ürün', '30 gün satış', 'Stok', 'Kaç günlük', 'Günlük ciro'], tk.slice(0, 20).map(function(x){ return '<tr><td>' + esc(x.ad) + '<small>' + esc(x.kod) + '</small></td><td>' + sy(x.m30) + '</td><td class="' + (x.stok <= 0 ? 'k' : 't') + '">' + sy(x.stok) + '</td><td>' + (x.gun == null ? '—' : sy(x.gun) + ' gün') + '</td><td>' + tl(x.gunluk) + '</td></tr>'; })) });
+    }
+    // 2) Fiyat kaçakları
+    if(k1 + k2 > 0) on.push({ f: 0, e: k1 + k2, b: 'Zararına ve eski fiyatla satılan ürünlerin fiyatını düzeltin', m: altinda.length + ' ürün alışın altında, ' + geride.length + ' ürün eski alışa göre fiyatlı. Ayrıntısı raporun aşağısında.', l: ['Etiket ekranından bu ürünlerin yeni fiyatlarını basın', 'Her mal kabulden sonra alışı artan ürünün fiyatını aynı gün güncelleyin'], h: 'Etki: son 30 günün satış hızıyla fark.' });
+    // 3) Kaybedilen firma müşterileri
+    var fl = (B.firmalar || []);
+    if(fl.length){
+      var fKayip = fl.reduce(function(t, r){ return t + Math.max(0, r[3] - r[2]); }, 0);
+      on.push({ f: 0, e: fKayip * mm, b: fl.length + ' firma müşterisinin alımı düştü — arayın', m: 'Bu firmalar önceki aylarda ortalama ' + tl(fl.reduce(function(t, r){ return t + r[3]; }, 0)) + '/ay alıyordu, son 30 günde ' + tl(fl.reduce(function(t, r){ return t + r[2]; }, 0)) + '. Genelde nedeni fiyat, eksik ürün ya da teslimattır; erken aranırsa geri kazanılır.',
+        l: ['Her birini bu hafta arayın: “Bir sorun mu oldu, ne eksik?”', 'Düzenli alan firmaya özel fiyat listesi ve sabit teslimat günü önerin'],
+        h: 'Etki: kaybedilen aylık alımın geri gelmesi × ortalama marj.',
+        d: tbl(['Firma', 'Önceki aylık', 'Son 30 gün', 'Son alım'], fl.map(function(r){ return '<tr><td>' + esc(r[1]) + '<small>' + esc(r[0]) + '</small></td><td>' + tl(r[3]) + '</td><td class="k">' + tl(r[2]) + '</td><td>' + esc(r[4]) + '</td></tr>'; })) });
+    }
+    // 4) Sepet büyütme
+    var fAy = {}, sepet = [];
+    (B.fisAy || []).forEach(function(r){ fAy[r[0]] = r[1]; });
+    (B.kasaAy || []).forEach(function(r){ if(fAy[r[0]] > 0 && r[0] !== buAy) sepet.push({ ay: r[0], fis: fAy[r[0]], ciro: r[1], ort: r[1] / fAy[r[0]] }); });
+    if(sepet.length){
+      var sn = sepet[sepet.length - 1], ilkS = sepet[0], artis = ilkS.ort > 0 ? sn.ort / ilkS.ort - 1 : null, fisArtis = ilkS.fis > 0 ? sn.fis / ilkS.fis - 1 : null;
+      on.push({ f: 1, e: sn.ciro * 0.05 * mm, b: 'Sepeti büyütün: fiş başına ortalama ' + tl(sn.ort, 2) + ' (KDV hariç)', m: 'Ayda ' + sy(sn.fis) + ' fiş kesiliyor. ' + (artis != null ? ayAd(ilkS.ay) + '’dan bu yana sepet ' + yz(artis) + ', fiş sayısı ' + yz(fisArtis) + ' değişti' + (fisArtis != null && fisArtis < 0 ? ' — <b class="k">müşteri sayısı azalıyor</b>' : '') + (artis != null && enf > 0 && artis < enf * (sepet.length - 1) ? ' (sepet enflasyonun gerisinde: müşteri daha az ürün alıyor)' : '') + '. ' : '') + 'Her fişe %5 daha fazla ürün eklenmesi bile kayda değer kâr demek.',
+        l: ['Kasa önüne yüksek marjlı küçük ürünler: sakız, çikolata, pil, soğuk içecek, ıslak mendil', 'Tamamlayıcıları yan yana koyun: makarna–salça, çay–şeker, kahvaltılık–ekmek', '“2. ürüne %50” ya da “3 al 2 öde” ile ortalama adedi artırın', 'Kasiyer önerisi: “Yanına ekmek / poşet su ister misiniz?”'],
+        h: 'Etki: son ayın kasa cirosu × %5 × ortalama marj.',
+        d: tbl(['Ay', 'Fiş', 'Kasa satışı', 'Ortalama sepet'], sepet.map(function(x){ return '<tr><td>' + ayAd(x.ay) + '</td><td>' + sy(x.fis) + '</td><td>' + tl(x.ciro) + '</td><td>' + tl(x.ort, 2) + '</td></tr>'; })) });
+    }
+    // 5) Gün ve saat
+    var GN = ['Pazartesi', 'Salı', 'Çarşamba', 'Perşembe', 'Cuma', 'Cumartesi', 'Pazar'];
+    if((B.gun || []).length >= 5 && (B.saat || []).length){
+      var gs = B.gun.slice().sort(function(a, b){ return a[1] - b[1]; }), gTop = B.gun.reduce(function(t, r){ return t + r[1]; }, 0);
+      var ss = B.saat.filter(function(r){ return r[1] > 0; }).sort(function(a, b){ return b[1] - a[1]; });
+      var bos = gs[0], dolu = gs[gs.length - 1], gmx = Math.max.apply(null, B.gun.map(function(r){ return r[1]; })), smx2 = Math.max.apply(null, B.saat.map(function(r){ return r[1]; }));
+      var bosPay = gTop > 0 ? bos[1] / gTop : 1 / 7;
+      on.push({ f: 1, e: sepet.length ? sepet[sepet.length - 1].ciro * bosPay * 0.15 * mm : 0, b: 'En boş gün ' + GN[bos[0]] + ', en yoğun ' + GN[dolu[0]] + ' — boş güne müşteri çekin', m: GN[bos[0]] + ' günü ' + GN[dolu[0]] + '’den ' + yz(dolu[1] > 0 ? 1 - bos[1] / dolu[1] : null) + ' daha az fiş kesiliyor. En yoğun saatler: ' + ss.slice(0, 3).map(function(r){ return r[0] + ':00'; }).join(', ') + '.',
+        l: ['“' + GN[bos[0]] + ' günü pazarı”: o güne özel meyve-sebze ya da temel gıda indirimi duyurun', 'Yoğun saatlerde tüm kasalar açık, ara saatlerde raf dolumu ve sayım', 'Kampanyayı WhatsApp grubu / Instagram ve kasa fişinin altıyla duyurun'],
+        h: 'Etki: boş günün kasa satışı %15 artarsa (son ay) × ortalama marj.',
+        d: '<p class="ac" style="margin:8px 0 0">Haftanın günleri (son 90 gün, fiş sayısı)</p><div class="cubuklar" style="height:110px">' + B.gun.map(function(r){ return '<div><b>' + sy(r[1]) + '</b><i style="height:' + Math.max(2, Math.round(r[1] / gmx * 75)) + 'px;background:' + (r[0] === bos[0] ? 'var(--turuncu)' : 'var(--mor)') + '"></i>' + GN[r[0]].slice(0, 3) + '</div>'; }).join('') + '</div>' +
+           '<p class="ac" style="margin:12px 0 0">Saatler</p><div class="cubuklar" style="height:110px;gap:3px">' + B.saat.map(function(r){ return '<div><i style="height:' + Math.max(2, Math.round(r[1] / smx2 * 85)) + 'px;background:var(--mor)"></i>' + r[0] + '</div>'; }).join('') + '</div>' });
+    }
+    // 6) Fiyat takip edilmeyen ürünlerde küçük fiyat ayarı
+    var abc = B.abc || null;
+    on.push({ f: 1, e: aylikCiro * 0.2 * 0.02, b: 'Müşterinin fiyatını takip etmediği ürünlerde fiyatı %2 artırın', m: 'Ekmek, süt, yağ, şeker, çay gibi fiyatı herkesin bildiği ürünlerde rekabetçi kalın; ama cironun yaklaşık %20’sini yapan ' + (abc && abc.tum ? sy(abc.tum - abc.a) + ' ' : '') + 'yavaş ürünün (baharat, temizlik yan ürünleri, züccaciye, kırtasiye, sos, kuruyemiş) fiyatına müşteri bakmaz. Buradaki %2, satışı düşürmeden doğrudan kâra geçer.',
+      l: ['Rakip markette 20 temel ürünün fiyatına ayda bir bakın; yalnız onları eşitleyin', 'Yavaş ürünlerde fiyatları yuvarlak ve “,90 / ,95” ile bitirin', 'Etiket kampanyası bitince fiyatların eski haline döndüğünü kontrol edin'],
+      h: 'Etki: aylık ciro × %20 (yavaş ürünlerin payı) × %2.' });
+    // 7) Yükselen / düşen ürünler
+    var yk = B.yukselen || [], ds = B.dusen || [];
+    if(yk.length || ds.length){
+      var dsKayip = ds.reduce(function(t, r){ return t + Math.max(0, r[3] - r[2]); }, 0);
+      var urTab = function(l, k){ return tbl(['Ürün', 'Önceki aylık', 'Son 30 gün', 'Değişim'], l.map(function(r){ return '<tr><td>' + esc(r[1]) + '<small>' + esc(r[0]) + '</small></td><td>' + tl(r[3]) + '</td><td>' + tl(r[2]) + '</td><td class="' + k + '">' + yz(r[3] > 0 ? r[2] / r[3] - 1 : null) + '</td></tr>'; })); };
+      on.push({ f: 1, e: dsKayip * 0.5 * mm, b: 'Satışı düşen ' + ds.length + ' ürüne bakın, yükselen ' + yk.length + ' ürünü büyütün', m: 'Satışı birden düşen ürünün nedeni çoğu zaman stoksuzluk, rafta yanlış yer, fiyat ya da rakip kampanyasıdır. Yükselen ürünler müşterinin yeni talebi: daha geniş raf ve daha çok stok hak ediyor.',
+        l: ['Düşenlerde: stok var mı, rafta mı, fiyatı rakipten pahalı mı? Tek tek bakın', 'Yükselenleri göz hizasına ve kasa yoluna taşıyın, siparişini artırın'],
+        h: 'Etki: düşen ürünlerdeki kaybın yarısı geri gelirse × ortalama marj.',
+        d: (ds.length ? '<p class="ac" style="margin:8px 0 4px"><b>Düşenler</b></p>' + urTab(ds, 'k') : '') + (yk.length ? '<p class="ac" style="margin:12px 0 4px"><b>Yükselenler</b></p>' + urTab(yk, 'y') : '') });
+    }
+    // 8) Satılmayan stoğu nakde çevir, parayı çok satanlara yatır
+    if(oluD > 0) on.push({ f: 1, e: 0, n: oluD * 0.7, b: tl(oluD) + ' satılmayan stoğu nakde çevirin, parayı çok satanlara yatırın', m: '90 gündür satılmayan ' + sy(V.olu.adet) + ' ürün rafı ve parayı tutuyor. Maliyetine bile satılsa, çıkan nakit çok satan ürünlerde dönerek kâr üretir.',
+      l: ['Tedarikçiye iade edilebilenleri iade edin', 'Kalanlar için “indirim köşesi” kurun: maliyet + %5 fiyatla', 'Boşalan rafı yükselen ve çok satan ürünlere verin'],
+      h: 'Nakit: stoğun maliyetinin yaklaşık %70’iyle elden çıkarılması varsayımı. Ayrıca stokta beklerken ayda ≈ ' + tl(k3) + ' değer kaybı önlenir.' });
+    // 9) Yeni firma müşterileri
+    if(B.firmaN > 0 && B.firma30 > 0){
+      var fOrt = B.firma30 / B.firmaN;
+      on.push({ f: 2, e: 5 * fOrt * mm, b: 'Yeni firma müşterisi kazanın: 5 firma ≈ ' + tl(5 * fOrt) + ' ek satış / ay', m: 'Son 30 günde ' + sy(B.firmaN) + ' firma ortalama ' + tl(fOrt) + ' alım yaptı. Yemekhane, okul kantini, otel, kafe, şantiye ve fabrikalar düzenli ve yüksek tutarlı alır.',
+        l: ['Isparta’daki yemekhane, otel, okul ve kafelerin listesini çıkarın; haftada 3 ziyaret', 'Firmalara özel fiyat listesi + ücretsiz teslimat (belli tutarın üstü)', 'Plasiyer ekranından sipariş alıp aynı gün teslim edin'],
+        h: 'Etki: 5 yeni firma × bugünkü ortalama firma alımı × ortalama marj.' });
+    }
+    // 10) Sermaye: fazla stoğu küçült
+    if(SM && SM.dio != null && SM.dio > 35 && SM.gunlukSmm){
+      var serbest = SM.gunlukSmm * (SM.dio - 30);
+      on.push({ f: 2, e: 0, n: serbest, b: 'Stoğu ' + gn(SM.dio) + 'den 30 güne indirin: ' + tl(serbest) + ' nakit serbest kalır', m: 'Fazla stok kâr getirmez, enflasyonda erir. Çok satanlarda sık ve küçük sipariş, yavaş ürünlerde minimum stok ile aynı ciro daha az parayla yapılır.',
+        l: ['Sipariş miktarını “son 30 günün satışı − mevcut stok” ile verin', 'Yavaş ürünlerde koli yerine adet ya da paket sipariş isteyin', 'Serbest kalan parayla peşin alım iskontosu pazarlığı yapın'],
+        h: 'Nakit: günlük satılan malın maliyeti × azalan stok günü. Bu para çok satanlarda ya da peşin iskontoda değerlendirilince ayrıca kâr getirir.' });
+    }
+    // 11) Çok satanlar: A grubu
+    if(abc && abc.a > 0) on.push({ f: 2, e: 0, b: 'Cironun %80’i ' + sy(abc.a) + ' üründen geliyor — bunlar asla tükenmemeli', m: 'Toplam ' + sy(abc.tum) + ' satılan ürünün yalnız ' + yz(abc.tum ? abc.a / abc.tum : null) + '’i işin büyük kısmını yapıyor. Raf yeri, stok ve fiyat dikkati önce bu ürünlere.',
+      l: ['Bu ürünlere göz hizası ve en iyi raf yeri', 'Haftalık sayım ve minimum stok uyarısı', 'Hiç satmayan ürünleri listeden çıkarıp yerini yeni ve yükselen ürünlere verin'], h: '' });
+
+    var BPtop = on.reduce(function(t, x){ return t + (x.e || 0); }, 0), BPnakit = on.reduce(function(t, x){ return t + (x.n || 0); }, 0);
+    var FAZ = ['🔥 Bu hafta — hemen para getirenler', '📅 Bu ay — satışı büyütenler', '🚀 3 ay — kalıcı büyüme'];
+    var bp = '<section id="buyume"><h2>🚀 Büyüme planı — daha çok para kazanmak için</h2><p class="ac">Verinize göre hazırlanmış, uygulanabilir adımlar. Her adımın yanında tahmini aylık ek brüt kâr var; nasıl hesaplandığı altında yazıyor.</p>' +
+      '<div class="bp-ust"><div class="a">Plan uygulanırsa tahmini ek brüt kâr</div><div class="d">+' + tl(BPtop) + ' / ay</div><div class="a">yılda ≈ ' + tl(BPtop * 12) + ' · bugünkü aylık brüt kâr ' + tl(aylikKar) + (aylikKar > 0 ? ' → ' + yz(BPtop / aylikKar) + ' artış' : '') + '</div>' + (BPnakit > 0 ? '<div class="a" style="margin-top:6px">Ayrıca stok tarafında bir defalık ≈ <b>' + tl(BPnakit) + '</b> nakit serbest kalır.</div>' : '') + '</div>';
+    [0, 1, 2].forEach(function(f){
+      var l = on.filter(function(x){ return x.f === f; }).sort(function(a, b){ return (b.e || 0) - (a.e || 0); });
+      if(!l.length) return;
+      bp += '<div class="faz">' + FAZ[f] + '</div>' + l.map(function(x){ return '<div class="oneri"><div class="bas"><b>' + x.b + '</b>' + (x.e > 0 ? '<span>+' + tl(x.e) + ' / ay</span>' : x.n > 0 ? '<span style="color:var(--mor)">' + tl(x.n) + ' nakit</span>' : '') + '</div><p>' + x.m + '</p>' +
+        (x.l && x.l.length ? '<ul>' + x.l.map(function(y){ return '<li>' + y + '</li>'; }).join('') + '</ul>' : '') + (x.h ? '<small class="h">' + x.h + '</small>' : '') + (x.d ? '<details><summary>Liste ve ayrıntı</summary>' + x.d + '</details>' : '') + '</div>'; }).join('');
+    });
+    bp += '<p class="ac" style="margin-top:12px">Tutarlar tahmindir ve birbirini etkileyebilir; amaç hangi işin ne kadar değerli olduğunu sıralamak. Brüt kâr, kira-maaş gibi giderler düşülmeden hesaplanır.</p></section>';
+    h += bp;
+  }
 
   // Özet kutuları
   if(o){
