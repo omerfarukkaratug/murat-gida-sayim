@@ -61,7 +61,7 @@ function M($v) { if ($v -is [DBNull] -or $v -eq $null) { return "" }; return ([s
 function I($v) { if ($v -is [DBNull] -or $v -eq $null) { return 0 }; return [int]$v }
 function T($v) { if ($v -is [DBNull] -or $v -eq $null) { return "" }; return ([datetime]$v).ToString("dd.MM.yyyy") }
 
-$veri = [ordered]@{ surum = "5"; olusturma = (Get-Date).ToString("yyyy-MM-dd HH:mm"); firma = ""; veritabani = ""; enflasyon = $AylikEnflasyon; hatalar = @() }
+$veri = [ordered]@{ surum = "6"; olusturma = (Get-Date).ToString("yyyy-MM-dd HH:mm"); firma = ""; veritabani = ""; enflasyon = $AylikEnflasyon; hatalar = @() }
 $hatalar = New-Object System.Collections.ArrayList
 
 try {
@@ -411,6 +411,41 @@ SELECT AY, KOD, AD, MIKTAR, TUTAR, MAL FROM (
 WHERE R <= 8 ORDER BY AY, R
 "@).Rows | ForEach-Object { ,@((M $_.AY), (M $_.KOD), (M $_.AD), (D $_.MIKTAR), (D $_.TUTAR), (D $_.MAL)) })
     } catch { [void]$hatalar.Add("Ay incelemesi: " + $_.Exception.Message); Yaz "HATA ay: $($_.Exception.Message)" }
+
+    # ---- 6e) Toplam sermaye hareketi: her ay sonunda musteri alacagi ve tedarikci borcu ----
+    # Bugunku cari bakiyelerden (CARI_BAKIYELER, TL) geriye dogru: ay sonu bakiyesi = bugunku bakiye - o aydan SONRAKI
+    # hareketler (FINANS_DETAY: cari borclu = +, alacakli = -). Ay sonu stok degeri (6d) ile birlikte toplam sermaye.
+    try {
+        Yaz "6e) Sermaye hareketi - cariler..."
+        Calistir @"
+IF OBJECT_ID('tempdb..#cbt') IS NOT NULL DROP TABLE #cbt;
+SELECT c.ID, CAST(SUM(b.BAKIYE) AS float) AS BAKIYE INTO #cbt
+FROM dbo.CARI_BAKIYELER b JOIN dbo.CARI c ON c.ID = b.ID
+WHERE b.DOVIZ_AD = 'TRY' AND c.ID <> COALESCE((SELECT TOP 1 VARSAYILANCARI FROM dbo.FIRMASABITLERI), -1)
+GROUP BY c.ID;
+CREATE CLUSTERED INDEX i ON #cbt (ID);
+IF OBJECT_ID('tempdb..#cm') IS NOT NULL DROP TABLE #cm;
+SELECT CARI, AY, SUM(T) AS T INTO #cm FROM (
+  SELECT FD.KART_BORCLU AS CARI, DATEADD(month, DATEDIFF(month, 0, F.TARIH), 0) AS AY, CAST(FD.TUTAR AS float) AS T
+  FROM dbo.FINANS_DETAY FD JOIN dbo.FINANS F ON F.ID = FD.FINANS JOIN dbo.DOVIZ_AD DV ON DV.ID = FD.DOVIZ_AD
+  WHERE DV.AD = 'TRY' AND F.TARIH >= DATEADD(month, DATEDIFF(month, 0, GETDATE()) - 6, 0)
+  UNION ALL
+  SELECT FD.KART_ALACAKLI, DATEADD(month, DATEDIFF(month, 0, F.TARIH), 0), -CAST(FD.TUTAR AS float)
+  FROM dbo.FINANS_DETAY FD JOIN dbo.FINANS F ON F.ID = FD.FINANS JOIN dbo.DOVIZ_AD DV ON DV.ID = FD.DOVIZ_AD
+  WHERE DV.AD = 'TRY' AND F.TARIH >= DATEADD(month, DATEDIFF(month, 0, GETDATE()) - 6, 0)
+) x WHERE CARI IN (SELECT ID FROM #cbt) GROUP BY CARI, AY;
+CREATE CLUSTERED INDEX i ON #cm (CARI, AY);
+IF OBJECT_ID('tempdb..#aylar') IS NOT NULL DROP TABLE #aylar;
+SELECT DATEADD(month, DATEDIFF(month, 0, GETDATE()) - n, 0) AS AY INTO #aylar FROM (VALUES (0),(1),(2),(3),(4),(5),(6)) v(n);
+"@
+        $veri.sermayeCari = @((Tablo @"
+SELECT CONVERT(char(7), x.AY, 120) AS AY, SUM(CASE WHEN x.BAL > 0 THEN x.BAL ELSE 0 END) AS ALACAK, SUM(CASE WHEN x.BAL < 0 THEN -x.BAL ELSE 0 END) AS BORC
+FROM (SELECT a.AY, c.ID, c.BAKIYE - ISNULL((SELECT SUM(m.T) FROM #cm m WHERE m.CARI = c.ID AND m.AY > a.AY), 0) AS BAL FROM #cbt c CROSS JOIN #aylar a) x
+GROUP BY x.AY ORDER BY x.AY
+"@ 900).Rows | ForEach-Object { ,@((M $_.AY), (D $_.ALACAK), (D $_.BORC)) })
+        $ilk = (Tablo "SELECT MIN(TARIH) AS T FROM dbo.FINANS").Rows[0].T
+        $veri.sermayeCariIlk = $(if ($ilk -is [DBNull]) { "" } else { ([datetime]$ilk).ToString("yyyy-MM") })
+    } catch { [void]$hatalar.Add("Sermaye hareketi (cari): " + $_.Exception.Message); Yaz "HATA sermaye cari ay: $($_.Exception.Message)" }
 
     # ---- 8) Buyume plani icin veriler ----
     $veri.buyume = [ordered]@{}

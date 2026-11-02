@@ -201,7 +201,7 @@
   }
 
   // ---------- Çizim ----------
-  var SEKMELER = [['ozet', '📊 Özet'], ['urunler', '🛒 Ürünler'], ['enflasyon', '📈 Enflasyon'], ['firmalar', '🏭 Firmalar'], ['oneri', '💡 Öneriler'], ['saglik', '🩺 Sağlık'], ['tufe', '⚙️ TÜFE']];
+  var SEKMELER = [['ozet', '📊 Özet'], ['urunler', '🛒 Ürünler'], ['enflasyon', '📈 Enflasyon'], ['firmalar', '🏭 Firmalar'], ['sermaye', '💼 Sermaye'], ['oneri', '💡 Öneriler'], ['saglik', '🩺 Sağlık'], ['tufe', '⚙️ TÜFE']];
   function sekmeCiz(){
     $('sekmeler').innerHTML = SEKMELER.map(function(s){ return '<button type="button" data-sekme="' + s[0] + '"' + (s[0] === sekme ? ' class="on"' : '') + '>' + s[1] + '</button>'; }).join('');
   }
@@ -210,6 +210,7 @@
     sekmeCiz();
     if(sekme === 'saglik'){ saglikCiz(); return; }
     if(sekme === 'oneri'){ oneriCiz(); return; }
+    if(sekme === 'sermaye'){ sermayeCiz(); return; }
     if(!V){ if(getirHata) $('icerik').innerHTML = getirHata; return; }
     var h = '';
     if(sekme === 'ozet') h = ozetHtml();
@@ -371,7 +372,7 @@
   // ve veri tabanına bırakılır; burada son rapor erp/saglik-sablon.html görünümüyle gösterilir.
   var S = null, sSablon = null, sYukleniyor = false, sSecili = '';
   function saglikYukle(id, iste){
-    sYukleniyor = true; if(sekme === 'saglik') saglikCiz(); if(sekme === 'oneri') oneriCiz();
+    sYukleniyor = true; if(sekme === 'saglik') saglikCiz(); if(sekme === 'oneri') oneriCiz(); if(sekme === 'sermaye') sermayeCiz();
     var q = { action: 'karlilik', ne: iste ? 'saglik_iste' : 'saglik' }; if(id) q.id = id;
     istek(q, function(r){
       sYukleniyor = false;
@@ -379,6 +380,7 @@
       else { S = r; if(iste) toast('İstek gönderildi — ERP bilgisayarı 30 dakika içinde yeni raporu hazırlar'); }
       if(sekme === 'saglik') saglikCiz();
       if(sekme === 'oneri') oneriCiz();
+      if(sekme === 'sermaye') sermayeCiz();
     });
   }
   function saglikCiz(){
@@ -407,6 +409,50 @@
       .catch(function(){ var f = $('sCerceve'); if(f) f.outerHTML = '<div class="kart kotu">Rapor görünümü indirilemedi — internete bağlanıp tekrar dene.</div>'; });
   }
   document.addEventListener('change', function(e){ if(e.target.id === 'sGecmis') saglikYukle(e.target.value); });
+
+  // ---------- 💼 SERMAYE: toplam sermaye büyüdü mü, küçüldü mü? ----------
+  // Sağlık raporuyla gelir (saglik-raporu.ps1 bölüm 6): bugünkü stok / alacak / borç ve her ay sonu için geriye doğru
+  // hesaplanan değerler. Toplam sermaye = stok + müşteri alacağı − tedarikçi borcu (kasa, banka, demirbaş, kredi hariç).
+  function aySon(a){ var A = ['Ocak','Şubat','Mart','Nisan','Mayıs','Haziran','Temmuz','Ağustos','Eylül','Ekim','Kasım','Aralık']; return (A[Number(String(a).slice(5)) - 1] || a) + ' ' + String(a).slice(0, 4); }
+  function isaretTl(v){ return v == null ? '—' : (v >= 0 ? '+' : '−') + tl(Math.abs(v)); }
+  function sermayeCiz(){
+    if(!S && !sYukleniyor){ saglikYukle(); return; }
+    if(sYukleniyor && !S){ $('icerik').innerHTML = '<div class="bekle">Sermaye getiriliyor…</div>'; return; }
+    if(S.hata){ $('icerik').innerHTML = '<div class="kart"><div class="kotu" style="font-weight:800;">Alınamadı</div><div class="ipucu" style="margin-top:6px;">' + esc(S.hata) + '</div><button type="button" id="sYenidenDene" class="kucuk" style="margin-top:10px;">↻ Tekrar dene</button></div>'; return; }
+    var r = S.rapor, R = r && r.veri, SE = R && R.sermaye;
+    if(!SE || !SE.stok){ $('icerik').innerHTML = '<div class="kart"><div style="font-weight:800;">Sermaye bilgisi henüz yok</div><div class="ipucu" style="margin-top:6px;">ERP bilgisayarındaki saglik-raporu.ps1 yeni sürümüyle çalışınca gelir (rapor: ' + esc(r ? r.zaman : '—') + '). 🩺 Sağlık sekmesinden "Yeniden hazırlat" diyebilirsin.' +
+      ((R && R.hatalar || []).filter(function(x){ return /Sermaye/.test(x); }).map(function(x){ return '<br><span class="kotu">' + esc(x) + '</span>'; }).join('')) + '</div></div>'; return; }
+    var stok = SE.stok.deger || 0, al = SE.alacak || 0, bo = SE.borc || 0, top = stok + al - bo;
+    // Ay sonu stok: bugünkü stoktan geriye (alış − satılan malın maliyeti + fire/sayım)
+    var sa = (R.sermayeAy || []).map(function(x){ return { ay: x[0], alis: x[1] || 0, smm: x[2] || 0, diger: x[3] || 0 }; }), e = stok;
+    for(var i = sa.length - 1; i >= 0; i--){ sa[i].stok = e; sa[i].net = sa[i].alis - sa[i].smm + sa[i].diger; e -= sa[i].net; }
+    var cAy = {}; (R.sermayeCari || []).forEach(function(x){ cAy[x[0]] = x; });
+    var karAy = {}, ffAy = {}; ((R.fiyatFarki || {}).aylar || []).forEach(function(x){ ffAy[x[0]] = x[1] || 0; });
+    (R.aylar || []).forEach(function(x){ karAy[x[0]] = x[2] - x[3] + (ffAy[x[0]] || 0); });
+    var satir = sa.filter(function(x){ return cAy[x.ay]; }).map(function(x){ var c = cAy[x.ay]; x.alacak = c[1] || 0; x.borc = c[2] || 0; x.toplam = x.stok + x.alacak - x.borc; x.kar = karAy[x.ay]; x.guven = !R.sermayeCariIlk || x.ay >= R.sermayeCariIlk; return x; });
+    var buAy = new Date().getFullYear() + '-' + ('0' + (new Date().getMonth() + 1)).slice(-2);
+    var h = '<div class="ipucu" style="margin-bottom:8px;">Rapor: <b>' + esc(r.zaman) + '</b> · ERP verisi · stok son net alış fiyatıyla, cari bakiyeler ERP\'deki gibi</div>';
+    h += '<div class="kutular">' + kutu('Toplam sermaye', tl(top), 'işletmede bağlı kendi paranız', top >= 0 ? '' : 'kotu') +
+      kutu('Stok', tl(stok), sayi(SE.stok.cesit, 0) + ' çeşit') + kutu('Müşteri alacağı', tl(al), sayi(SE.alacakN, 0) + ' cari' + (SE.riskli ? ' · ' + tl(SE.riskli) + ' riskli' : '')) +
+      kutu('Tedarikçi borcu', '−' + tl(bo), sayi(SE.borcN, 0) + ' cari') + '</div>';
+    if(satir.length >= 2){
+      var ilk = satir[0], son = satir[satir.length - 1], fark = son.toplam - ilk.toplam;
+      var mx = Math.max.apply(null, satir.map(function(x){ return Math.abs(x.toplam); }).concat([1]));
+      h += '<div class="kart"><div class="kartBaslik"><span>🏦 Toplam sermaye ' + (fark >= 0 ? '<span class="iyi">büyüdü</span>' : '<span class="kotu">küçüldü</span>') + '</span><span class="' + renk(fark) + '">' + isaretTl(fark) + '</span></div>' +
+        '<div class="ipucu" style="margin-bottom:8px;">' + aySon(ilk.ay) + ' sonunda ' + tl(ilk.toplam) + ' → bugün ' + tl(son.toplam) + (ilk.toplam > 0 ? ' (' + yuzde(fark / ilk.toplam, true) + ')' : '') + '. ' +
+          'Nereden: stok ' + isaretTl(son.stok - ilk.stok) + ', müşteri alacağı ' + isaretTl(son.alacak - ilk.alacak) + ', tedarikçi borcu ' + isaretTl(son.borc - ilk.borc) + ' (borç artınca sermaye azalır).</div>' +
+        '<div class="tablo"><table><tr><th>Ay sonu</th><th>Toplam</th><th></th><th>Değişim</th></tr>' +
+        satir.map(function(x, j){ var d = j ? x.toplam - satir[j - 1].toplam : null; return '<tr><td>' + aySon(x.ay) + (x.ay === buAy ? ' <span class="ipucu">bugün</span>' : '') + (x.guven ? '' : ' <span class="ipucu uyari">cari eksik olabilir</span>') + '</td><td><b>' + tl(x.toplam) + '</b></td><td style="width:30%;"><span class="cubuk" style="width:' + Math.max(2, Math.round(Math.abs(x.toplam) / mx * 100)) + '%;' + (x.toplam < 0 ? 'background:var(--red);' : '') + '"></span></td><td class="' + (d == null ? '' : renk(d)) + '">' + isaretTl(d) + '</td></tr>'; }).join('') + '</table></div></div>';
+      h += '<div class="kart"><div class="kartBaslik">Parçaları: ay sonu</div><div class="tablo"><table><tr><th>Ay sonu</th><th>Stok</th><th>Alacak</th><th>Borç</th><th>Toplam</th></tr>' +
+        satir.map(function(x){ return '<tr><td>' + aySon(x.ay) + '</td><td>' + tl(x.stok) + '</td><td>' + tl(x.alacak) + '</td><td>−' + tl(x.borc) + '</td><td><b>' + tl(x.toplam) + '</b></td></tr>'; }).join('') + '</table></div></div>';
+      // Aylık: kâr ne kadar, sermaye ne kadar değişti → aradaki fark nakde / masrafa gitti (kasa, banka, kira, maaş, çekilen para)
+      h += '<div class="kart"><div class="kartBaslik">Kâr nereye gitti?</div><div class="ipucu" style="margin-bottom:8px;">Brüt kâr sermayeyi büyütür. Masraflar (kira, maaş, elektrik), işletmeden çekilen para ve kasada / bankada biriken nakit bu hesapta görünmez: kâr ile sermaye değişimi arasındaki fark bu yollara gitmiştir.</div>' +
+        '<div class="tablo"><table><tr><th>Ay</th><th>Brüt kâr</th><th>Stoğa bağlanan</th><th>Sermaye değişimi</th><th>Nakde / masrafa</th></tr>' +
+        satir.slice(1).map(function(x, j){ var d = x.toplam - satir[j].toplam, g = x.kar != null ? x.kar - d : null; return '<tr><td>' + aySon(x.ay) + (x.ay === buAy ? ' <span class="ipucu">devam</span>' : '') + '</td><td>' + tl(x.kar) + '</td><td class="' + (x.net > 0 ? 'uyari' : 'iyi') + '">' + isaretTl(x.net) + '</td><td class="' + renk(d) + '">' + isaretTl(d) + '</td><td>' + tl(g) + '</td></tr>'; }).join('') + '</table></div></div>';
+    } else h += '<div class="kart"><div class="ipucu">Aylık toplam sermaye için ERP bilgisayarındaki saglik-raporu.ps1\'in yeni sürümü gerekiyor (cari ay sonu bakiyeleri). Şimdilik yalnız bugünkü durum görünüyor.</div></div>';
+    h += '<div class="ipucu">Ayrıntı (hızlı / yavaş stok, alacak ve borç listeleri, nakit döngüsü): 🩺 Sağlık sekmesinde "Sermaye" ve "Sermaye hareketi".</div>';
+    $('icerik').innerHTML = h;
+  }
 
   // ---------- 💡 ÖNERİLER: doğru fiyatlandırma ve fiş tutarını artırma ----------
   // Veri Sağlık raporuyla birlikte ERP bilgisayarında hazırlanır (saglik-raporu.ps1, bölüm 9): kasa fişleri (son 60 gün),
@@ -559,7 +605,8 @@
   window.mkGeri = function(){ if(!$('detay').classList.contains('gizli')){ $('detay').classList.add('gizli'); return true; } return false; };
 
   var getirNo = 0, getirHata = '';
-  function icerik(h){ if(sekme !== 'saglik' && sekme !== 'oneri') $('icerik').innerHTML = h; }
+  function raporSekmesi(){ return sekme === 'saglik' || sekme === 'oneri' || sekme === 'sermaye'; }
+  function icerik(h){ if(!raporSekmesi()) $('icerik').innerHTML = h; }
   function getir(){
     if(!kimlik){ $('icerik').innerHTML = '<div class="bekle">Önce uygulamada giriş yap.</div>'; return; }
     var no = ++getirNo;
@@ -576,7 +623,7 @@
         setTimeout(sor, 500); return;
       }
       if(r.status !== 'ok'){ getirHata = '<div class="kart"><div class="kotu" style="font-weight:800;">Rapor alınamadı</div><div class="ipucu" style="margin-top:6px;">' + esc(r.message || '') + '</div><div class="ipucu" style="margin-top:6px;">🩺 Sağlık sekmesi bundan bağımsız çalışır.</div></div>'; icerik(getirHata); return; }
-      V = r; hesapla(); if(sekme !== 'saglik' && sekme !== 'oneri') ciz();
+      V = r; hesapla(); if(!raporSekmesi()) ciz();
     });
     })();
   }
