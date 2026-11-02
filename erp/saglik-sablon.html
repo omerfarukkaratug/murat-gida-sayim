@@ -81,6 +81,15 @@
   .liste{margin:0;padding-left:20px}.liste li{margin:6px 0}
   .terimler dl{margin:0}.terimler dt{font-weight:800;margin-top:10px}.terimler dd{margin:2px 0 0;color:var(--muted);font-size:14px}
   @media (max-width:720px){.zaman div{grid-template-columns:110px 1fr 58px}}
+  .ciftler{display:flex;align-items:flex-end;gap:10px;height:190px;margin:12px 0 4px}
+  .ciftler>div{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:flex-end;height:100%;font-size:12px;color:var(--muted);min-width:0}
+  .ciftler .c{display:flex;align-items:flex-end;gap:3px;width:100%;max-width:80px;justify-content:center}
+  .ciftler i{display:block;flex:1;border-radius:6px 6px 0 0;min-height:2px}
+  .ciftler b{font-size:11.5px;margin-bottom:3px;white-space:nowrap}
+  .sonuc{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin:12px 0}
+  .sonuc div{border-radius:14px;padding:12px 14px;background:var(--bg)}
+  .sonuc b{display:block;font-size:21px}.sonuc span{font-size:12.5px;color:var(--muted)}
+  @media (max-width:720px){.sonuc{grid-template-columns:1fr}.ciftler{gap:5px}}
 </style></head>
 <body>
 <div class="kap" id="rapor">Rapor yükleniyor…</div>
@@ -119,6 +128,7 @@ var ICERDE = /*ICERDE*/false;   // uygulamanın içinde (Kârlılık → Sağlı
 
   // Sermaye
   var S = V.sermaye || null, SM = null;
+  if(S && !S.stok && S.alacak == null && S.borc == null) S = null;
   if(S){
     SM = {
       stok: S.stok ? S.stok.deger || 0 : 0, alacak: S.alacak || 0, borc: S.borc || 0,
@@ -140,6 +150,22 @@ var ICERDE = /*ICERDE*/false;   // uygulamanın içinde (Kârlılık → Sağlı
   var ortanca = bitmis.length ? bitmis[Math.floor(bitmis.length / 2)] : null;
   // Düşük ay: hem malın kendi marjı hem fiyat farkı eklenmiş marj düşük olmalı (fiyat farkı aynı ay zararı kapattıysa sorun yok).
   aylar.forEach(function(a){ a.tuhaf = ortanca != null && a.ay !== buAy && a.malMarj != null && a.malMarj < ortanca - 0.05 && a.marj != null && a.marj < ortanca - 0.05; });
+  // Sermaye hareketi: her ay alışla stoğa giren para, satışla (maliyet olarak) çıkan para.
+  // Ay sonu stok, bugünkü stok değerinden geriye doğru bu farklar düşülerek tahmin edilir.
+  var SA = null;
+  if((V.sermayeAy || []).length){
+    var karAy = {}; aylar.forEach(function(a){ karAy[a.ay] = a.kar; });
+    var sr = V.sermayeAy.map(function(r){ var al = r[1] || 0, sm = r[2] || 0, dg = r[3] || 0; return { ay: r[0], alis: al, smm: sm, diger: dg, net: al - sm + dg, kar: karAy[r[0]] != null ? karAy[r[0]] : null }; });
+    var stokSimdi = S && S.stok && S.stok.deger != null ? S.stok.deger : null;
+    if(stokSimdi != null){ var e = stokSimdi; for(var i = sr.length - 1; i >= 0; i--){ sr[i].sonStok = e; e -= sr[i].net; sr[i].basStok = e; } }
+    sr.forEach(function(x){ x.nakit = x.kar != null ? x.kar - x.net : null; });
+    var topla = function(k){ return sr.reduce(function(t, x){ return t + (x[k] || 0); }, 0); };
+    SA = { rows: sr, alis: topla('alis'), smm: topla('smm'), diger: topla('diger'), net: topla('net'), kar: topla('kar'), nakit: topla('nakit'),
+           bas: sr[0].basStok, son: stokSimdi, ilk: sr[0].ay, buAyVar: sr[sr.length - 1].ay === buAy };
+    var bitenler = sr.filter(function(x){ return x.ay !== buAy; }).slice(-3);
+    SA.son3net = bitenler.reduce(function(t, x){ return t + x.net; }, 0);
+    SA.son3kar = bitenler.reduce(function(t, x){ return t + (x.kar || 0); }, 0);
+  }
   var ayZarar = {}; (V.ayZarar || []).forEach(function(r){ (ayZarar[r[0]] = ayZarar[r[0]] || []).push({ kod: r[1], ad: r[2], m: r[3], ciro: r[4], mal: r[5] }); });
 
   // ---------- Yapılacaklar (tutara göre sıralı) ----------
@@ -150,6 +176,7 @@ var ICERDE = /*ICERDE*/false;   // uygulamanın içinde (Kârlılık → Sağlı
   if(oluD > 0) isler.push({ t: k3, a: '#olu', m: '<b>' + tl(oluD) + ' değerindeki satılmayan stoğu paraya çevirin.</b> 90 gündür hiç satılmamış ' + sy(V.olu.adet) + ' ürün: indirim, tedarikçiye iade ya da raf yeri değişikliği.', e: 'Aylık ≈ ' + tl(k3) + ' değer kaybı' });
   if(SM && SM.dio != null && SM.dio > 45 && SM.gunlukSmm) isler.push({ t: SM.gunlukSmm * 10 * enf, a: '#sermaye', m: '<b>Stok ' + gn(SM.dio) + 'lük — siparişleri küçültün.</b> Stok 10 gün kısalırsa yaklaşık ' + tl(SM.gunlukSmm * 10) + ' nakit serbest kalır.', e: '10 gün = ' + tl(SM.gunlukSmm * 10) });
   if(SM && SM.getiri != null && SM.getiri < enf) isler.push({ t: Math.max(0, (enf - SM.getiri) * SM.isletme), a: '#sermaye', m: '<b>İşletmeye bağlı para enflasyonun gerisinde kalıyor.</b> Brüt kâr bağlı paranın ayda ' + yz(SM.getiri) + '\'i, enflasyon ' + yz(enf) + '.', e: 'Fark ≈ ' + tl((enf - SM.getiri) * SM.isletme) + ' / ay' });
+  if(SA && SA.son3kar > 0 && SA.son3net > SA.son3kar * 0.5) isler.push({ t: SA.son3net * enf, a: '#sermayeAy', m: '<b>Son 3 ayda brüt kârın ' + yz(SA.son3net / SA.son3kar) + '\'i stoğa gitti.</b> Satılandan çok mal alınıyor; kâr kasaya değil rafa dönüyor. Siparişleri satış hızına göre küçültün.', e: tl(SA.son3net) + ' stoğa bağlandı' });
   aylar.filter(function(a){ return a.tuhaf; }).forEach(function(a){ isler.push({ t: 0, a: '#aylar', m: '<b>' + ayAd(a.ay) + ' marjı (' + yz(a.marj) + ') diğer aylardan çok düşük.</b> Aylık tablonun altında o ay kârı en çok düşüren ürünler var; çoğu zaman yanlış girilmiş bir alış fiyatıdır.', e: 'Kontrol edin' }); });
   if(S && S.stok && S.stok.eksi > 0) isler.push({ t: 0, a: '#kalite', m: '<b>' + sy(S.stok.eksi) + ' üründe stok eksi görünüyor.</b> Sayım ya da mal girişi eksik; stok değeri ve sipariş önerileri bundan etkilenir.', e: 'Veri düzeltme' });
   isler.sort(function(a, b){ return b.t - a.t; });
@@ -161,6 +188,7 @@ var ICERDE = /*ICERDE*/false;   // uygulamanın içinde (Kârlılık → Sağlı
   var kisa = [];
   if(o) kisa.push('Son 90 günde <b>' + tl(o.ciro) + '</b> satış yaptınız (KDV hariç) ve bunun <b>' + tl(kar90) + '</b>\'si brüt kâr kaldı' + (ff90 ? ' (' + tl(ff90) + ' tedarikçi fiyat farkı dahil)' : '') + ' — her 100 ₺\'lik satıştan <b>' + sy(marj90 * 100) + ' ₺</b>. Bu, ayda ortalama <b>' + tl(aylikKar) + '</b> brüt kâr demek.');
   if(SM) kisa.push('İşletmede şu an <b>' + tl(SM.isletme) + '</b> kendi paranız bağlı: ' + tl(SM.stok) + ' stok + ' + tl(SM.alacak) + ' müşteri alacağı − ' + tl(SM.borc) + ' tedarikçi borcu.' + (SM.getiri != null ? ' Brüt kâr bu paranın ayda <b>' + yz(SM.getiri) + '</b>\'i (' + (SM.getiri >= enf ? 'enflasyonun üstünde' : 'enflasyonun <span class="k">altında</span>') + ').' : ''));
+  if(SA) kisa.push('Son ' + SA.rows.length + ' ayda <b>' + tl(SA.alis) + '</b> mal aldınız, satılan malın maliyeti <b>' + tl(SA.smm) + '</b>: stoğa ' + (SA.net >= 0 ? 'net <b class="t">' + tl(SA.net) + '</b> para bağlandı' : 'bağlı paradan <b class="y">' + tl(-SA.net) + '</b> serbest kaldı') + (SA.bas != null ? ' (stok ≈ ' + tl(SA.bas) + ' → ' + tl(SA.son) + ')' : '') + '. Aynı dönemde brüt kâr ' + tl(SA.kar) + '; kârdan nakit olarak kalan ' + (SA.nakit >= 0 ? '<b>' + tl(SA.nakit) + '</b>' : '<b class="k">' + tl(SA.nakit) + '</b> (kârdan fazlası stoğa gitti)') + '.');
   if(k1 + k2 > 0) kisa.push('Fiyatlardan kaynaklanan kaçak ayda yaklaşık <b class="k">' + tl(k1 + k2) + '</b>; çoğu raf fiyatı güncellenerek hemen düzelir.');
   if(kisa.length) h += '<section class="kisaca"><h2>Kısaca</h2>' + kisa.map(function(x){ return '<p>' + x + '</p>'; }).join('') + '</section>';
 
@@ -224,6 +252,25 @@ var ICERDE = /*ICERDE*/false;   // uygulamanın içinde (Kârlılık → Sağlı
     var cariTablo = function(l, alacak){ return l.length ? '<div class="tablo"><table><tr><th>Cari</th><th>' + (alacak ? 'Size borcu' : 'Borcunuz') + '</th><th>Son hareket</th></tr>' + l.map(function(r){ var eski = alacak && (!r[3] || gunOnce(r[3]) > 180); return '<tr><td>' + esc(r[1]) + '<small>' + esc(r[0]) + '</small></td><td class="' + (eski ? 'k' : '') + '">' + tl(r[2]) + '</td><td class="' + (eski ? 'k' : '') + '">' + esc(r[3] || 'yok') + (eski ? ' ⚠️' : '') + '</td></tr>'; }).join('') + '</table></div>' : '<div class="bos">Yok.</div>'; };
     h += '<section id="alacak"><h2>🧾 Müşteri alacakları <small>' + tl(SM.alacak) + '</small></h2><p class="ac">Size borcu olan firmalar (veresiye). ' + (S.riskli > 0 ? '<b class="k">' + sy(S.riskliN) + ' carinin 6 aydır hiç hareketi yok: ' + tl(S.riskli) + '.</b> Bunlar ⚠️ ile işaretli; tahsil edilmeleri öncelikli.' : '6 aydır hareketsiz alacak yok. 👍') + (SM.dso != null ? ' Firmalar ortalama <b>' + gn(SM.dso) + '</b>da ödüyor.' : '') + '</p>' + cariTablo(S.alacaklar || [], true) + '</section>';
     h += '<section id="borc"><h2>🏭 Tedarikçi borçları <small>' + tl(SM.borc) + '</small></h2><p class="ac">Sizin ödemeniz gereken tutarlar. Tedarikçi vadesi işletmenin bedava kredisidir' + (SM.dpo != null ? '; ortalama <b>' + gn(SM.dpo) + '</b>da ödüyorsunuz' : '') + '.</p>' + cariTablo(S.borclar || [], false) + '</section>';
+  }
+
+  // Sermaye hareketi
+  if(SA){
+    var smx = Math.max.apply(null, SA.rows.map(function(x){ return Math.max(x.alis, x.smm, 1); }));
+    var hgt = function(v){ return Math.max(2, Math.round(Math.max(0, v) / smx * 140)); };
+    var kisaTl = function(v){ if(v == null) return '—'; var a = Math.abs(v); return (v < 0 ? '−' : '') + (a >= 1e6 ? (a / 1e6).toLocaleString('tr-TR', { maximumFractionDigits: 1 }) + ' mn' : a >= 1e3 ? Math.round(a / 1e3).toLocaleString('tr-TR') + ' bin' : Math.round(a)); };
+    h += '<section id="sermayeAy"><h2>📈 Sermaye hareketi — alış ve satışla para arttı mı, azaldı mı? <small class="' + (SA.net > 0 ? 't' : 'y') + '">' + (SA.net >= 0 ? '+' : '') + tl(SA.net) + ' stokta</small></h2>' +
+      '<p class="ac">Her ay alışla stoğa giren para (KDV hariç, iadeler düşülmüş) ile satışla stoktan çıkan malın maliyeti. Alış satılan maliyetten fazlaysa fark stoğa bağlanır, azsa stoktaki para nakde döner. Kârdan stoğa giden kısım düşülünce kalan, kasaya giren nakittir (giderlerden önce).</p>' +
+      '<div class="sonuc"><div><b>' + (SA.bas != null ? tl(SA.bas) + ' → ' + tl(SA.son) : tl(SA.net)) + '</b><span>stok değeri (' + ayAd(SA.ilk) + ' başı → bugün, tahmini)</span></div>' +
+      '<div><b class="' + (SA.net > 0 ? 't' : 'y') + '">' + (SA.net >= 0 ? '+' : '−') + tl(Math.abs(SA.net)) + '</b><span>' + (SA.net >= 0 ? 'stoğa bağlanan ek para' : 'stoktan nakde dönen para') + '</span></div>' +
+      '<div><b class="' + (SA.nakit < 0 ? 'k' : 'y') + '">' + tl(SA.nakit) + '</b><span>brüt kâr ' + tl(SA.kar) + ' − stoğa bağlanan = nakit olarak kalan</span></div></div>' +
+      '<div class="ciftler">' + SA.rows.map(function(x){ return '<div><b class="' + (x.net > 0 ? 't' : 'y') + '">' + (x.net >= 0 ? '+' : '') + kisaTl(x.net) + '</b><div class="c"><i title="Alış ' + tl(x.alis) + '" style="height:' + hgt(x.alis) + 'px;background:var(--mor)' + (x.ay === buAy ? ';opacity:.5' : '') + '"></i><i title="Satılan malın maliyeti ' + tl(x.smm) + '" style="height:' + hgt(x.smm) + 'px;background:var(--yesil)' + (x.ay === buAy ? ';opacity:.5' : '') + '"></i></div>' + ayAd(x.ay, true) + '</div>'; }).join('') + '</div>' +
+      '<div class="lejant"><span><i style="background:var(--mor)"></i>Alış (stoğa giren)</span><span><i style="background:var(--yesil)"></i>Satılan malın maliyeti (stoktan çıkan)</span><span>Üstteki sayı: stoğa net bağlanan (+) / serbest kalan (−)</span></div>' +
+      '<div class="tablo"><table><tr><th>Ay</th><th>Alış</th><th>Satılan malın maliyeti</th><th>Fire / sayım / diğer</th><th>Stoğa bağlanan</th><th>Brüt kâr</th><th>Nakit kalan</th><th>Ay sonu stok</th></tr>' +
+      SA.rows.map(function(x){ return '<tr><td>' + ayAd(x.ay) + (x.ay === buAy ? ' <small>devam ediyor</small>' : '') + '</td><td>' + tl(x.alis) + '</td><td>' + tl(x.smm) + '</td><td>' + (x.diger ? tl(x.diger) : '—') + '</td><td class="' + (x.net > 0 ? 't' : 'y') + '">' + (x.net >= 0 ? '+' : '') + tl(x.net) + '</td><td>' + tl(x.kar) + '</td><td class="' + (x.nakit != null && x.nakit < 0 ? 'k' : '') + '">' + tl(x.nakit) + '</td><td>' + tl(x.sonStok) + '</td></tr>'; }).join('') +
+      '<tr><td><b>Toplam</b></td><td><b>' + tl(SA.alis) + '</b></td><td><b>' + tl(SA.smm) + '</b></td><td><b>' + (SA.diger ? tl(SA.diger) : '—') + '</b></td><td class="' + (SA.net > 0 ? 't' : 'y') + '"><b>' + (SA.net >= 0 ? '+' : '') + tl(SA.net) + '</b></td><td><b>' + tl(SA.kar) + '</b></td><td class="' + (SA.nakit < 0 ? 'k' : '') + '"><b>' + tl(SA.nakit) + '</b></td><td></td></tr></table></div>' +
+      '<p class="not">' + (SA.net > 0 ? 'Dönemde alınan mal, satılandan <b>' + tl(SA.net) + '</b> fazla: sermayenin bu kadarı rafa/depoya bağlandı.' + (SA.kar > 0 ? ' Bu, brüt kârın <b>' + yz(SA.net / SA.kar) + '</b>\'i demek.' : '') + (enf > 0 ? ' Fiyatlar arttığı için stok değerinin bir kısmı enflasyondan gelir (aynı mal daha pahalıya alınıyor); stok günü sabitse bu normaldir.' : '') : 'Satılan malın maliyeti alıştan <b>' + tl(-SA.net) + '</b> fazla: stok eritildi, bu para nakde döndü.') + '</p>' +
+      '<p class="ac" style="margin-top:6px">Ay sonu stok tahminidir: bugünkü stok değerinden sonraki ayların hareketleri geri sarılarak bulunur. Fire/sayım/diğer: fire, sayım farkı, sarf gibi stok belgeleri (son alış fiyatıyla). Müşteri alacağı ve tedarikçi borcundaki değişim bu tabloya dahil değildir.</p></section>';
   }
 
   // Aylık eğilim + düşük ayın nedeni
@@ -308,6 +355,7 @@ var ICERDE = /*ICERDE*/false;   // uygulamanın içinde (Kârlılık → Sağlı
     '<dt>Bağlı para (işletme sermayesi)</dt><dd>Stok + müşterilerin size borcu − sizin tedarikçilere borcunuz. İşin dönmesi için cebinizden içeride tuttuğunuz para.</dd>' +
     '<dt>Sermaye getirisi</dt><dd>Aylık brüt kârın bağlı paraya oranı. Enflasyonun altındaysa, para işletmede durdukça reel olarak küçülüyor demektir.</dd>' +
     '<dt>Stok kaç günlük</dt><dd>Bugünkü satış hızıyla, yeni mal gelmezse stoğun kaç günde biteceği. Market için genelde 20–40 gün yeterlidir.</dd>' +
+    '<dt>Stoğa bağlanan para</dt><dd>Alış − satılan malın maliyeti. Artıysa kârın bir kısmı nakit yerine stok olarak duruyor; eksiyse stok eritilip nakde çevrilmiş.</dd>' +
     '<dt>Nakit döngüsü</dt><dd>Stok günü + müşteri tahsilat günü − tedarikçi ödeme günü. Kısaldıkça aynı ciroyu daha az parayla yaparsınız.</dd></dl></section>';
   if(!ICERDE) h += '<div class="son"><div><h3>KRT Saha bunları her gün kendisi izler.</h3><p>Alışın altına düşen fiyat, güncellenmeyen etiket, satılmayan stok ve kasa sapmaları sabah tek ekranda. Sayım, mal kabul, etiket, plasiyer ve kasa tahsilatı da aynı uygulamada.</p></div><a href="https://krtsaha.com">krtsaha.com</a></div>';
   h += '<ul class="notlar"><li>Satış, maliyet ve kâr tutarları KDV hariçtir; cari bakiyeler ERP\'deki gibi (KDV dahil) alınmıştır. Veriler ERP veri tabanından yalnız okunarak alındı; ERP\'ye hiçbir şey yazılmadı.</li>' +
