@@ -102,6 +102,24 @@
   #cubuk i{position:absolute; top:2px; left:calc(50% + 8px); font-style:normal; font-size:10.5px; font-weight:800; background:var(--red); color:#fff; border-radius:9px; padding:0 5px; min-width:16px; line-height:16px;}
   #cubuk i:empty{display:none;}
   .sekGizli{display:none !important;}
+  /* ---------- BİLGİSAYAR (geniş ekran, build 295) ----------
+     Ürünler: solda arama / ekleme, sağda liste. Yazdır: solda yazdır, sağda önizleme. Diğer sekmeler iki sütun.
+     Seçim ve toplu değiştir pencereleri ortada açılır. Alt sekme çubuğu geniş sayfayla aynı genişlikte. */
+  @media (min-width: 1100px){
+    #ekran{max-width:1320px; padding:16px 24px calc(96px + env(safe-area-inset-bottom));}
+    #icerik:not(.gizli){display:grid; grid-template-columns:minmax(400px, 460px) minmax(0, 1fr); column-gap:18px; align-items:start;}
+    #icerik > *{grid-column:1; min-width:0;}
+    #icerik.sek-urun > .listeKart, #icerik.sek-yazdir > #onizleKart{grid-column:2; grid-row:1 / span 40;}
+    #icerik.sek-kontrol, #icerik.sek-ayar{grid-template-columns:repeat(2, minmax(0, 1fr));}
+    #icerik.sek-kontrol > *, #icerik.sek-ayar > *{grid-column:auto;}
+    #icerik.sek-kontrol > #logoUyari, #icerik.sek-kontrol > #katalogBilgi, #icerik.sek-ayar > #logoUyari, #icerik.sek-ayar > #katalogBilgi{grid-column:1 / -1;}
+    #icerik.sek-hizli > *{grid-column:1 / -1;} #icerik.sek-hizli{grid-template-columns:minmax(0, 760px);}
+    .listeKart #liste{display:grid; grid-template-columns:repeat(auto-fill, minmax(330px, 1fr)); gap:10px;}
+    .listeKart #liste > .urun{margin-bottom:0;}
+    .cubuk > *{max-width:1320px;}
+    #secim, #tdeg{inset:4vh max(16px, calc((100vw - 820px) / 2)); border-radius:18px; box-shadow:0 20px 60px rgba(0,0,0,.35); border:1px solid var(--line); overflow:hidden;}
+    #onizleKart{position:sticky; top:12px;}
+  }
   .bicimSec{display:flex; gap:5px; flex-wrap:wrap; margin-top:8px;}
   .bicimSec button{padding:5px 11px; font-size:12.5px; font-weight:700; border-radius:999px;}
   .bicimSec button.secili{background:var(--accent); border-color:var(--accent); color:#fff;}
@@ -566,7 +584,7 @@
       <div id="hizliSon" class="ipucu">Henüz ürün okutulmadı.</div>
     </div>
 
-    <div class="kart">
+    <div class="kart listeKart">
       <div class="kartBaslik"><span>Liste <span id="listeSayi" class="ipucu"></span></span><button type="button" id="temizleBtn" style="padding:6px 10px; font-size:12px;">Listeyi boşalt</button></div>
       <div id="topluBicim" class="gizli" style="margin-bottom:10px; padding:8px 10px; border:1px dashed var(--line); border-radius:12px;">
         <div style="font-size:12.5px; font-weight:800; margin-bottom:6px;">Listedeki hepsini şuna çevir:</div>
@@ -3175,6 +3193,7 @@
     if(hizliydi && !durum.hizli && akis && !dogrulaKip) kameraKapat();
     kameraTasi(durum.hizli ? $('hizliKamYer') : null);
     durum.sekme = ad;
+    var ic0 = $('icerik'); if(ic0){ ic0.className = ic0.className.replace(/\bsek-\S+/g, '').trim(); ic0.classList.add('sek-' + ad); }
     Array.prototype.forEach.call(document.querySelectorAll('[data-sek]'), function(el){ el.classList.toggle('sekGizli', el.getAttribute('data-sek') !== ad); });
     Array.prototype.forEach.call(document.querySelectorAll('#cubuk button[data-sekme]'), function(el){ el.classList.toggle('secili', el.getAttribute('data-sekme') === ad); });
     if(ad === 'yazdir'){ yazdirCiz(); ciz(); if(navigator.onLine) baskiYukle(); }

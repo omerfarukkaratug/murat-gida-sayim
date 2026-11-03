@@ -75,6 +75,30 @@
   .tufeIzgara{display:grid; grid-template-columns:repeat(auto-fill, minmax(120px, 1fr)); gap:6px;}
   .tufeIzgara label{font-size:11.5px; font-weight:800; color:var(--muted);}
   .tufeIzgara input{padding:7px 9px; font-size:15px;}
+  /* ---------- BİLGİSAYAR (geniş ekran, build 295) ----------
+     Geniş sayfa, yapışkan sekmeler, satır üzerine gelince vurgu, ürün penceresi ortada.
+     1280 px üstünde Özet / Sermaye / Öneriler kartları iki sütuna dizilir; geniş tablolu kartlar (.genis) tam satır. */
+  @media (min-width: 1000px){
+    body{max-width:1440px; padding:16px 28px 32px;}
+    .ust{position:sticky; top:0; z-index:6; background:var(--bg); padding:6px 0; margin-bottom:6px;}
+    .ust select{flex:0 0 260px;}
+    .sekmeler{position:sticky; top:52px; z-index:5; background:var(--bg); margin:0 0 12px; padding:4px 0 8px; overflow:visible; flex-wrap:wrap;}
+    .sekmeler button{font-size:14px; padding:9px 14px;}
+    .kutular{grid-template-columns:repeat(auto-fit, minmax(190px, 1fr)); gap:10px;}
+    .kutu .d{font-size:21px;}
+    table{font-size:13.5px;}
+    tbody tr:hover td, table tr:hover td{background:var(--panel2);}
+    .urun:hover{background:var(--panel2); border-radius:10px;}
+    .detay{align-items:center;}
+    .detay .ic{border-radius:20px; max-width:760px; max-height:86vh; padding:20px 22px;}
+    #toast{max-width:520px;}
+  }
+  @media (min-width: 1280px){
+    #icerik.iki{column-count:2; column-gap:16px;}
+    #icerik.iki > *{break-inside:avoid; -webkit-column-break-inside:avoid;}
+    #icerik.iki > .kutular, #icerik.iki > .cipler, #icerik.iki > .ipucu, #icerik.iki > .genis, #icerik.iki > .bekle, #icerik.iki > iframe{column-span:all; -webkit-column-span:all;}
+    #icerik.iki > .kutular{margin-bottom:12px;}
+  }
 </style>
 </head>
 <body>
@@ -206,8 +230,10 @@
     $('sekmeler').innerHTML = SEKMELER.map(function(s){ return '<button type="button" data-sekme="' + s[0] + '"' + (s[0] === sekme ? ' class="on"' : '') + '>' + s[1] + '</button>'; }).join('');
   }
   function kutu(b, d, a, sinif){ return '<div class="kutu"><div class="b">' + b + '</div><div class="d ' + (sinif || '') + '">' + d + '</div>' + (a ? '<div class="a">' + a + '</div>' : '') + '</div>'; }
+  // Geniş ekranda iki sütun olacak sekmeler (Öneriler'in geniş tablolu alt bölümleri tek sütun kalır)
+  function ikiSutun(){ var ik = sekme === 'ozet' || sekme === 'sermaye' || (sekme === 'oneri' && (oAlt === 'fiyat' || oAlt === 'sepet' || oAlt === 'yerlesim')); $('icerik').classList.toggle('iki', !!ik); }
   function ciz(){
-    sekmeCiz();
+    sekmeCiz(); ikiSutun();
     if(sekme === 'saglik'){ saglikCiz(); return; }
     if(sekme === 'oneri'){ oneriCiz(); return; }
     if(sekme === 'sermaye'){ sermayeCiz(); return; }
@@ -465,6 +491,7 @@
   function oAd(u, ek){ return '<td>' + esc(u.ad) + '<div class="ipucu">' + esc(u.kod) + (u.grup ? ' · ' + esc(u.grup) : '') + (ek ? ' · ' + ek : '') + '</div></td>'; }
   function oDevam(ad, l, n){ return l.length > n && !oHepsi[ad] ? '<button type="button" class="kucuk" data-ohep="' + ad + '" style="margin-top:8px;">Tümünü göster (' + l.length + ')</button>' : ''; }
   function oneriCiz(){
+    if(typeof ikiSutun === 'function') ikiSutun();
     if(!S && !sYukleniyor){ saglikYukle(); return; }
     if(sYukleniyor && !S){ $('icerik').innerHTML = '<div class="bekle">Öneriler getiriliyor…</div>'; return; }
     if(S.hata){ $('icerik').innerHTML = '<div class="kart"><div class="kotu" style="font-weight:800;">Öneriler alınamadı</div><div class="ipucu" style="margin-top:6px;">' + esc(S.hata) + '</div><button type="button" id="sYenidenDene" class="kucuk" style="margin-top:10px;">↻ Tekrar dene</button></div>'; return; }
@@ -624,7 +651,7 @@
       kutu('Fiyat ayarlarından fon', tl(fon.top) + '/ay', 'yavaş ürün + fiyat sonu (Doğru fiyat sekmesi)', 'iyi') +
       kutu('Net', (net >= 0 ? '+' : '−') + tl(Math.abs(net)) + '/ay', net >= 0 ? 'yeni müşteri gelmese bile kampanya fonla karşılanıyor' : 'farkı yeni müşterinin sepeti karşılamalı', net >= 0 ? 'iyi' : 'kotu') + '</div>';
     if(!K.secilen.length) h += '<div class="kart ipucu">Bu bütçeyle seçilebilecek ürün yok — bütçeyi artırın ya da "maliyet + %5" seçin.</div>';
-    else h += '<div class="kart"><div class="kartBaslik"><span>📋 Kampanya planı</span><button type="button" id="kmpCsv" class="kucuk">📥 Excel</button></div><div class="ipucu" style="margin-bottom:8px;">Beklenen adet artışı kendi satışlarınızdan ölçülen fiyat duyarlılığıyla hesaplandı (Doğru fiyat → Fiyat duyarlılığı). <b>Yanına koy</b>: bu ürünü alanların sık aldığı, marjı yüksek ürünler — kampanya ürününün kaybını onlar karşılar. Bir ürünü plandan çıkarmak için ✕.</div>' +
+    else h += '<div class="kart genis"><div class="kartBaslik"><span>📋 Kampanya planı</span><button type="button" id="kmpCsv" class="kucuk">📥 Excel</button></div><div class="ipucu" style="margin-bottom:8px;">Beklenen adet artışı kendi satışlarınızdan ölçülen fiyat duyarlılığıyla hesaplandı (Doğru fiyat → Fiyat duyarlılığı). <b>Yanına koy</b>: bu ürünü alanların sık aldığı, marjı yüksek ürünler — kampanya ürününün kaybını onlar karşılar. Bir ürünü plandan çıkarmak için ✕.</div>' +
       oTablo(['Ürün', 'Şimdi → kampanya', 'Marj', 'Adet/ay', 'Maliyet/ay', ''], K.secilen.map(function(x){ var u = x.u;
         return '<tr><td>' + esc(u.ad) + '<div class="ipucu">' + esc(u.kod) + ' · ' + sayi(u.fisn / 2, 0) + ' fiş/ay' + (u.grup ? ' · ' + esc(u.grup) : '') + '</div>' +
           (x.ortak.length ? '<div class="ipucu" style="color:var(--green); font-weight:700;">↳ Yanına koy: ' + x.ortak.map(function(o){ return esc(o.ad) + ' (' + yuzde(o.marj) + ', ' + sayi(o.lift, 1) + ' kat)'; }).join(' · ') + '</div>' : '') + '</td>' +
@@ -649,7 +676,7 @@
     var soz = oSozluk(O), h = '';
     var c = (O.ciftler || []).map(function(x){ var a = soz[x[0]], b = soz[x[2]]; return { ak: x[0], aa: x[1], bk: x[2], ba: x[3], n: x[4], na: x[5], nb: x[6], lift: x[7], ayni: x[8] === 1, am: a ? a.marj : null, bm: b ? b.marj : null, ag: a ? a.grup : '', bg: b ? b.grup : '' }; });
     var tasi = c.filter(function(x){ return !x.ayni; }), ayni = c.filter(function(x){ return x.ayni; });
-    h += '<div class="kart"><div class="kartBaslik">🔀 Yer değiştir: farklı reyondaki ama birlikte alınan ürünler</div><div class="ipucu" style="margin-bottom:8px;">Bu ikililer farklı ürün gruplarında, büyük ihtimalle farklı reyonlarda duruyor; ama müşteri onları aynı fişte normalden kat kat sık alıyor. Birini öbürünün yanına (ya da bir kolisini / küçük standını yanına) taşıyın. <b>Marjı yüksek olanı</b> taşımak daha çok kazandırır.</div>' +
+    h += '<div class="kart genis"><div class="kartBaslik">🔀 Yer değiştir: farklı reyondaki ama birlikte alınan ürünler</div><div class="ipucu" style="margin-bottom:8px;">Bu ikililer farklı ürün gruplarında, büyük ihtimalle farklı reyonlarda duruyor; ama müşteri onları aynı fişte normalden kat kat sık alıyor. Birini öbürünün yanına (ya da bir kolisini / küçük standını yanına) taşıyın. <b>Marjı yüksek olanı</b> taşımak daha çok kazandırır.</div>' +
       (tasi.length ? oTablo(['İkili', 'Birlikte', 'Bağ', 'Taşı'], tasi.slice(0, oHepsi.tasi ? 200 : 25).map(function(x){
         var tasinan = (x.bm || 0) >= (x.am || 0) ? { ad: x.ba, m: x.bm, hedef: x.aa } : { ad: x.aa, m: x.am, hedef: x.ba };
         return '<tr><td><b>' + esc(x.aa) + '</b><div class="ipucu">' + esc(x.ag || '') + (x.am != null ? ' · marj ' + yuzde(x.am) : '') + '</div>+ <b>' + esc(x.ba) + '</b><div class="ipucu">' + esc(x.bg || '') + (x.bm != null ? ' · marj ' + yuzde(x.bm) : '') + '</div></td>' +
@@ -688,7 +715,7 @@
       if(x.kp > x.sp * 2 && x.kp > 0.05) x.not.push(['y', 'Bağladığı paraya göre çok kazandırıyor — yer ve çeşit artırılabilir']);
     });
     g.sort(function(a, b){ return b.kar - a.kar; });
-    return '<div class="kart"><div class="kartBaslik">🏬 Reyon karnesi <span class="ipucu">son 90 gün · ERP ürün grubu</span></div><div class="ipucu" style="margin-bottom:8px;">Her reyonun kârdaki payı ile bağladığı stok payını karşılaştırın: kârdan az pay alıp çok stok bağlayan reyon küçülmeli, az stokla çok kazandıran büyümeli. <b>Uğrayan fiş</b>: kasa fişlerinin yüzde kaçında o reyondan ürün var.</div>' +
+    return '<div class="kart genis"><div class="kartBaslik">🏬 Reyon karnesi <span class="ipucu">son 90 gün · ERP ürün grubu</span></div><div class="ipucu" style="margin-bottom:8px;">Her reyonun kârdaki payı ile bağladığı stok payını karşılaştırın: kârdan az pay alıp çok stok bağlayan reyon küçülmeli, az stokla çok kazandıran büyümeli. <b>Uğrayan fiş</b>: kasa fişlerinin yüzde kaçında o reyondan ürün var.</div>' +
       oTablo(['Reyon', 'Ciro', 'Kâr', 'Marj', 'Kâr payı', 'Stok payı', 'Uğrayan fiş', 'Stok günü'], g.map(function(x){
         return '<tr><td><b>' + esc(x.ad) + '</b><div class="ipucu">' + sayi(x.urun, 0) + ' satılan · ' + sayi(x.cesit, 0) + ' stokta</div>' + x.not.map(function(n){ return '<span class="etk ' + n[0] + '">' + esc(n[1]) + '</span>'; }).join('') + '</td>' +
           '<td>' + tl(x.ciro) + '</td><td class="' + renk(x.kar) + '">' + tl(x.kar) + '</td><td>' + yuzde(x.marj) + '</td><td>' + yuzde(x.kp) + '</td><td class="' + (x.sp > x.kp * 2 ? 'kotu' : '') + '">' + yuzde(x.sp) + '</td>' +

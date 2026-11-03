@@ -373,6 +373,9 @@
     .hizliGecis button{padding:7px 4px; font-size:12.5px;}
     #menuListe:not(.sutun2):not(.sutun3){grid-template-columns:1fr 1fr;}
     #adminModal{padding:28px;}
+    /* Kârlılık kendi içinde geniş düzen kurar: dış kenar boşluğu verilmez, başlık satırı ortalanır */
+    #karlilikScreen{padding-left:0 !important; padding-right:0 !important;}
+    #karlilikScreen > div:first-child{padding-left:max(16px, calc((100vw - 1440px) / 2)) !important; padding-right:max(16px, calc((100vw - 1440px) / 2)) !important;}
     #adminKart{max-width:1180px !important; max-height:calc(92 * var(--eh)) !important; padding:22px 26px !important;
       display:grid; grid-template-columns:repeat(2, minmax(0, 1fr)); column-gap:28px; align-content:start;}
     #adminKart > *{grid-column:span 1; min-width:0;}
@@ -590,7 +593,7 @@
   <header style="border:none; padding:0 0 16px; background:transparent; display:flex; align-items:flex-start; justify-content:space-between;">
     <div>
       <h1><img src="logo-header.png" alt="Murat Gıda" style="height:30px; width:auto; display:block;"></h1>
-      <div class="sub"><img src="icon.svg" alt="" style="width:15px;height:15px;vertical-align:-3px;margin-right:5px;">KRT Saha · Murat Gıda • offline • Android • build 294</div>
+      <div class="sub"><img src="icon.svg" alt="" style="width:15px;height:15px;vertical-align:-3px;margin-right:5px;">KRT Saha · Murat Gıda • offline • Android • build 295</div>
     </div>
     <button type="button" id="themeToggleBtn" title="Tema seç" style="background:var(--panel2); border:1.5px solid var(--line); color:var(--text); width:34px; height:34px; border-radius:50%; font-size:15px; padding:0; display:flex; align-items:center; justify-content:center; flex-shrink:0;">🎨</button>
   </header>
