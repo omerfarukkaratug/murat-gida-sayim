@@ -645,6 +645,57 @@ function Duzeltme() {
 }
 
 # ---------------------------------------------------------------------
+#  6) BIRLESIK ONIZLEME: butun bolumler (depo + raflar) urun urun toplanir, su anki ERP stoguyla yan yana.
+#     ERP'ye HICBIR SEY YAZMAZ. Kontrol / gondermek icin tek Excel dosyasi. (Kesin fark her gecenin kendi
+#     anina gore aktarimda hesaplanir; buradaki "su anki stok" kaba bir bakistir.)
+# ---------------------------------------------------------------------
+function Onizleme() {
+    $durum = Durum-Uzlastir (Durum-Oku)
+    $donem = Donem-Sec $durum
+    $satirlar = Okutmalar $donem
+    $sonDonem = [long]((Rpc "sayim_donemleri_ver" @{}).donemler[0][0])
+    if ($donem -eq $sonDonem) { $as = Asil-Karsilastir $satirlar; if ($as) { Uyari "Asil kayitlarla karsilastirma: $as" } }
+    $atanmis = @{}; foreach ($g in @($durum.geceler)) { foreach ($x in @($g.bolumler)) { if ($x) { $atanmis[[string]$x] = [string]$g.ad } } }
+    $esle = Eslestir $satirlar
+    $bolAd = @(Bolumler $satirlar | ForEach-Object { $_.ad })
+    $u = @{}; $esz = 0
+    foreach ($s in $satirlar) {
+        $kod = ([string]$s[1]).Trim(); $bk = ([string]$s[2]).Trim()
+        $sid = if ($kod -and $esle.ContainsKey("K:" + $kod)) { $esle["K:" + $kod] } elseif ($bk -and $esle.ContainsKey("B:" + $bk)) { $esle["B:" + $bk] } else { $null }
+        $key = if ($sid) { "S" + $sid } else { $esz++; "X:" + $kod + "|" + $bk }
+        if (-not $u.ContainsKey($key)) { $u[$key] = @{ sid = $sid; kod = $kod; bk = $bk; ad = [string]$s[3]; top = 0.0; b = @{} } }
+        $ba = if (DepoMu $s[6]) { "DEPO (" + (BolumAdi $s[6]) + ")" } else { BolumAdi $s[6] }
+        $u[$key].top += [double]$s[4]; $u[$key].b[$ba] = [double]($u[$key].b[$ba]) + [double]$s[4]
+    }
+    $ids = @($u.Values | Where-Object { $_.sid } | ForEach-Object { [long]$_.sid })
+    $bilgi = if ($ids.Count) { ErpBilgi $ids (Get-Date) } else { @{} }
+    if (-not (Test-Path $RaporKlasoru)) { New-Item -ItemType Directory -Path $RaporKlasoru | Out-Null }
+    $dosya = Join-Path $RaporKlasoru ("birlesik-onizleme-{0}.csv" -f (Get-Date -Format "yyyyMMdd-HHmm"))
+    $sb = New-Object System.Text.StringBuilder
+    [void]$sb.AppendLine("Stok Kodu;Urun;Sayilan TOPLAM;ERP stok (simdi);Fark (kaba);Fark TL (son alis);Durum;" + (($bolAd | ForEach-Object { ($_ -replace ';', ',') + $(if ($atanmis.ContainsKey(($_ -replace '^DEPO \((.*)\)$', '$1'))) { ' [yazildi]' } else { '' }) }) -join ';'))
+    $tf = 0.0; $te = 0.0
+    foreach ($x in ($u.Values | Sort-Object { $_.ad })) {
+        $erp = ''; $fark = ''; $tl = ''; $dr = "ERP'de YOK (eslesmedi)"
+        if ($x.sid -and $bilgi[[long]$x.sid]) {
+            $e = $bilgi[[long]$x.sid]; $st = 0.0; foreach ($bb in $e.barkodlar.Values) { $st += [double]$bb[4] }
+            $f = $x.top - $st; $erp = $st.ToString($Inv); $fark = $f.ToString($Inv); $tlv = [Math]::Round($f * $e.alis, 2); $tl = $tlv.ToString($Inv)
+            if ($tlv -gt 0) { $tf += $tlv } else { $te += $tlv }
+            $dr = if ($f -eq 0) { 'Tutuyor' } elseif ([Math]::Abs($tlv) -ge 1000) { 'BUYUK FARK - tekrar saydirin' } else { 'Fark var' }
+            $x.kod = $e.kod; $x.ad = $e.ad
+        }
+        $kol = ($bolAd | ForEach-Object { if ($x.b.ContainsKey($_)) { ([double]$x.b[$_]).ToString($Inv) } else { '' } }) -join ';'
+        [void]$sb.AppendLine(("{0};{1};{2};{3};{4};{5};{6};{7}" -f $x.kod, ($x.ad -replace ';', ','), $x.top.ToString($Inv), $erp, $fark, $tl, $dr, $kol))
+    }
+    [System.IO.File]::WriteAllText($dosya, "$([char]0xFEFF)" + $sb.ToString(), [System.Text.Encoding]::UTF8)
+    Baslik "Birlesik onizleme (ERP'ye yazilmadi)"
+    Write-Host "  $($u.Count) urun, $($bolAd.Count) bolum. ERP'de eslesmeyen: $(@($u.Values | Where-Object { -not $_.sid }).Count)"
+    Write-Host "  Kaba fark (su anki stoga gore): fazla $(Tl $tf), eksik $(Tl $te)"
+    Write-Host "  Dosya (her bolum ayri sutun): $dosya" -ForegroundColor Green
+    Write-Host "  Bu dosyayi kontrol icin gonderebilirsiniz." -ForegroundColor DarkGray
+    Yaz-Log "ONIZLEME donem #$donem : $($u.Count) urun, $dosya"
+}
+
+# ---------------------------------------------------------------------
 #  4) SAYILMAYANLAR: ERP'de stogu olup hic okutulmayan urunler
 # ---------------------------------------------------------------------
 function Sayilmayanlar() {
@@ -680,11 +731,12 @@ try {
         Write-Host "  2) KONTROL           (ERP'de kesinlestirdikten sonra stok sayilana esit mi)"
         Write-Host "  3) Belgeyi geri al   (kesinlestirilmemis belgeyi ERP'den siler)"
         Write-Host "  4) Sayilmayanlar     (ERP'de stogu olup hic okutulmayan urunler listesi)"
+        Write-Host "  6) Birlesik onizleme (butun bolumler urun urun tek Excel'de; ERP'ye YAZMAZ)"
         Write-Host "  5) Tek urun duzelt   (kesinlesmis bir gecede yanlis sayilan urunu simdi yeniden sayip duzeltir)"
         Write-Host "  0) Cikis"
         $s = Read-Host "  Secim"
         try {
-            switch ($s) { "1" { Gece-Aktar } "2" { Kontrol } "3" { Sil } "4" { Sayilmayanlar } "5" { Duzeltme } }
+            switch ($s) { "1" { Gece-Aktar } "2" { Kontrol } "3" { Sil } "4" { Sayilmayanlar } "5" { Duzeltme } "6" { Onizleme } }
         } catch { Hata $_.Exception.Message }
         if ($s -eq "0") { break }
     }
