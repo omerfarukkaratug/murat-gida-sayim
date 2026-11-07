@@ -593,7 +593,7 @@
   <header style="border:none; padding:0 0 16px; background:transparent; display:flex; align-items:flex-start; justify-content:space-between;">
     <div>
       <h1><img src="logo-header.png" alt="Murat Gıda" style="height:30px; width:auto; display:block;"></h1>
-      <div class="sub"><img src="icon.svg" alt="" style="width:15px;height:15px;vertical-align:-3px;margin-right:5px;">KRT Saha · Murat Gıda • offline • Android • build 297</div>
+      <div class="sub"><img src="icon.svg" alt="" style="width:15px;height:15px;vertical-align:-3px;margin-right:5px;">KRT Saha · Murat Gıda • offline • Android • build 298</div>
     </div>
     <button type="button" id="themeToggleBtn" title="Tema seç" style="background:var(--panel2); border:1.5px solid var(--line); color:var(--text); width:34px; height:34px; border-radius:50%; font-size:15px; padding:0; display:flex; align-items:center; justify-content:center; flex-shrink:0;">🎨</button>
   </header>
@@ -8546,26 +8546,72 @@
   });
 
   // ---------- CANLI DURUM ----------
-  function fetchCanliDurum(){
+  // Kim sayıyor, hangi reyonda, son okuttukları; yanlış okutma adayları (çok yüksek adet, adet 0, 3 dk içinde çift okutma).
+  // Açıkken 30 sn'de bir kendini yeniler. Bir satıra dokun → Düzelt ekranı o kişi / ürünle açılır.
+  var canliAcik = {}, canliZamanlayici = null, canliSonVeri = null;
+  function canliKutu(ic, ek){ return '<div style="background:var(--panel2); border-radius:10px; padding:9px 11px; margin-bottom:6px; font-size:12px;' + (ek || '') + '">' + ic + '</div>'; }
+  function canliCiz(){
+    var listEl2 = document.getElementById('adminCanliList'), data = canliSonVeri; if(!data) return;
+    if(!data.personeller || data.personeller.length === 0){ listEl2.innerHTML = '<div class="hint">Henüz hiç kayıt yok.</div>'; return; }
+    var aktif = data.personeller.filter(function(p){ return p.aktif; }).length, saatlik = data.personeller.reduce(function(t, p){ return t + (p.saatlik || 0); }, 0);
+    var html = '<div class="hint" style="margin:0 0 8px;">🟢 <b>' + aktif + '</b> kişi şu an sayıyor · son 1 saatte <b>' + saatlik + '</b> okutma · ' + escapeHtml(new Date().toLocaleTimeString('tr-TR', { hour: '2-digit', minute: '2-digit', second: '2-digit' })) + '</div>';
+    var dk = data.dikkat || [];
+    if(dk.length){
+      html += '<div style="font-weight:800; font-size:12px; margin:8px 0 6px; color:var(--amber);">⚠️ Kontrol et (' + dk.length + ') — dokun, Düzelt\'te aç</div>' + dk.slice(0, 15).map(function(d){
+        return canliKutu('<div style="display:flex; justify-content:space-between; gap:8px; font-weight:700;"><span style="min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">' + escapeHtml(d[3] || d[4]) + '</span><span style="font-family:var(--mono);">' + escapeHtml(fmtQty(d[5])) + '</span></div>' +
+          '<div style="color:var(--amber); margin-top:2px; font-weight:700;">' + escapeHtml(d[0]) + '</div><div style="color:var(--muted); margin-top:2px;">' + escapeHtml(d[1]) + ' · ' + escapeHtml(d[2]) + ' · ' + escapeHtml(d[6]) + '</div>', ' cursor:pointer; border-left:3px solid var(--amber);').replace('<div ', '<div data-canliara="' + escAttr(d[4] || d[3]) + '" ');
+      }).join('');
+    }
+    var ry = data.reyonlar || [];
+    if(ry.length){
+      html += '<div style="font-weight:800; font-size:12px; margin:10px 0 6px;">📍 Reyonlar</div>' + ry.map(function(r){
+        var on = r.dakikaOnce !== null && r.dakikaOnce <= 10;
+        return canliKutu('<div style="display:flex; justify-content:space-between; font-weight:700;"><span>' + escapeHtml(r.reyon) + '</span><span style="color:' + (on ? 'var(--green)' : 'var(--muted)') + ';">' + (on ? '🟢 sayılıyor' : (r.dakikaOnce !== null ? r.dakikaOnce + ' dk önce' : '')) + '</span></div>' +
+          '<div style="color:var(--muted); margin-top:3px;">' + r.okutma + ' okutma · ' + r.urun + ' ürün · ' + escapeHtml((r.kisi || []).join(', ')) + '</div>');
+      }).join('');
+    }
+    html += '<div style="font-weight:800; font-size:12px; margin:10px 0 6px;">👥 Personel — dokun, son okuttuklarını gör</div>';
+    html += data.personeller.map(function(p){
+      var durum = p.aktif ? '🟢 Şu an sayıyor' : (p.dakikaOnce !== null ? '⚪ ' + p.dakikaOnce + ' dk önce' : '⚪ Hiç veri yok');
+      var acik = !!canliAcik[p.personel];
+      var ic = '<div style="display:flex; justify-content:space-between; font-weight:700;"><span>' + (acik ? '▾ ' : '▸ ') + escapeHtml(p.personel) + '</span><span style="color:' + (p.aktif ? 'var(--green)' : 'var(--muted)') + ';">' + durum + '</span></div>' +
+        '<div style="color:var(--muted); margin-top:3px;">' + p.okutma + ' okutma · ' + p.farkliUrun + ' farklı ürün · son 1 saat ' + (p.saatlik || 0) + (p.sonReyon ? (' · ' + escapeHtml(p.sonReyon)) : '') + '</div>';
+      if(acik){
+        ic += (p.son || []).map(function(k){ return '<div style="display:flex; justify-content:space-between; gap:8px; margin-top:4px; padding-top:4px; border-top:1px dashed var(--line);"><span style="min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">' + escapeHtml(k[0]) + ' · ' + escapeHtml(k[1]) + '</span><span style="font-family:var(--mono); white-space:nowrap;">' + escapeHtml(fmtQty(k[2])) + '</span></div>'; }).join('') +
+          (hasPerm('duzelt') ? '<button type="button" data-canliduzelt="' + escAttr(p.personel) + '" style="width:100%; margin-top:8px; background:var(--panel); border:1.5px solid var(--line); color:var(--text); padding:9px; font-size:12px;">✏️ ' + escapeHtml(p.personel) + ' kayıtlarını Düzelt\'te aç</button>' : '');
+      }
+      return '<div data-canlikisi="' + escAttr(p.personel) + '" style="cursor:pointer;">' + canliKutu(ic) + '</div>';
+    }).join('');
+    listEl2.innerHTML = html;
+  }
+  function fetchCanliDurum(sessiz){
     var auth = currentAuth();
     var listEl2 = document.getElementById('adminCanliList');
-    if(!auth || !navigator.onLine){ listEl2.innerHTML = '<div class="hint">İnternet yok</div>'; return; }
-    listEl2.innerHTML = '<div class="hint">⏳ Yükleniyor…</div>';
+    if(!auth || !navigator.onLine){ if(!sessiz) listEl2.innerHTML = '<div class="hint">İnternet yok</div>'; return; }
+    if(!sessiz || !canliSonVeri) listEl2.innerHTML = '<div class="hint">⏳ Yükleniyor…</div>';
     var url = state.serverUrl || DEFAULT_SERVER_URL;
     jsonpRequestP(url, { action:'canli_durum', user:auth.user, pass:auth.pass }, function(err, data){
-      if(err){ listEl2.innerHTML = '<div class="hint" style="color:var(--red);">❌ ' + escapeHtml(err) + '</div>'; return; }
-      if(!data || data.status === 'error'){ listEl2.innerHTML = '<div class="hint" style="color:var(--red);">❌ ' + escapeHtml((data && data.message) || 'hata') + '</div>'; return; }
-      if(!data.personeller || data.personeller.length === 0){ listEl2.innerHTML = '<div class="hint">Henüz hiç kayıt yok.</div>'; return; }
-      listEl2.innerHTML = data.personeller.map(function(p){
-        var durum = p.aktif ? '🟢 Şu an sayıyor olabilir' : (p.dakikaOnce !== null ? '⚪ ' + p.dakikaOnce + ' dk önce' : '⚪ Hiç veri yok');
-        return '<div style="background:var(--panel2); border-radius:10px; padding:9px 11px; margin-bottom:6px; font-size:12px;">' +
-          '<div style="display:flex; justify-content:space-between; font-weight:700;"><span>' + escapeHtml(p.personel) + '</span><span style="color:' + (p.aktif ? 'var(--green)' : 'var(--muted)') + ';">' + durum + '</span></div>' +
-          '<div style="color:var(--muted); margin-top:3px;">' + p.okutma + ' okutma · ' + p.farkliUrun + ' farklı ürün' + (p.sonUrun ? (' · son: ' + escapeHtml(p.sonUrun)) : '') + (p.sonReyon ? (' (' + escapeHtml(p.sonReyon) + ')') : '') + '</div>' +
-        '</div>';
-      }).join('');
-    }, 20000);
+      if(err || !data || data.status === 'error'){ if(!sessiz || !canliSonVeri) listEl2.innerHTML = '<div class="hint" style="color:var(--red);">❌ ' + escapeHtml(err || (data && data.message) || 'hata') + '</div>'; return; }
+      canliSonVeri = data; canliCiz();
+    }, 30000);
+    clearInterval(canliZamanlayici);
+    canliZamanlayici = setInterval(function(){
+      var bolum = document.getElementById('adminSectionCanliDurum');
+      if(!bolum || !bolum.offsetParent || document.hidden){ clearInterval(canliZamanlayici); return; }
+      fetchCanliDurum(true);
+    }, 30000);
   }
-  document.getElementById('adminCanliRefreshBtn').addEventListener('click', fetchCanliDurum);
+  function canliDuzeltAc(q){
+    if(!hasPerm('duzelt')){ warnToast('Düzelt yetkin yok'); return; }
+    closeAdminModal(); duzeltSearchInput.value = q; duzeltScreenEl.classList.remove('hidden'); fetchDuzeltSonuclari(q);
+  }
+  document.getElementById('adminCanliList').addEventListener('click', function(e){
+    var t = e.target.closest && e.target.closest('[data-canliduzelt],[data-canliara],[data-canlikisi]'); if(!t) return;
+    if(t.hasAttribute('data-canliduzelt')){ canliDuzeltAc(t.getAttribute('data-canliduzelt')); return; }
+    if(t.hasAttribute('data-canliara')){ canliDuzeltAc(t.getAttribute('data-canliara')); return; }
+    var k = t.getAttribute('data-canlikisi'); canliAcik[k] = !canliAcik[k]; canliCiz();
+  });
+  document.getElementById('adminCanliRefreshBtn').addEventListener('click', function(){ fetchCanliDurum(false); });
 
   // ---------- SİSTEM DURUMU ----------
   // Sunucudaki 'SistemGunlugu' ve "son olay" kayıtlarını gösterir: ERP'den

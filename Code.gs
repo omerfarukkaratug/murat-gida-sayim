@@ -3250,15 +3250,27 @@ function getCanliDurum(user, pass, callback) {
   var sheet = ss.getSheetByName('Sayim');
   var HEADERS = ['Tarih', 'Saat', 'Personel', 'Ürün Adı', 'Stok Kodu', 'Barkod', 'Birim', 'Eski Stok', 'Sayılan Adet', 'Fark', 'Oturum ID', 'Kayıt ID', 'Reyon'];
   var idx = {}; HEADERS.forEach(function (h, i) { idx[h] = i; });
-  var stats = {};
+  var stats = {}, reyonlar = {}, dikkat = [], yakin = {}, simdiMs = Date.now();
   if (sheet && sheet.getLastRow() >= 2) {
     var values = sheet.getRange(2, 1, sheet.getLastRow() - 1, HEADERS.length).getValues();
     values.forEach(function (r) {
       var p = String(r[idx['Personel']] || '—');
       var tsStr = formatDateValue(r[idx['Tarih']]) + 'T' + formatTimeValue(r[idx['Saat']]);
       var ts = new Date(tsStr).getTime();
-      if (!stats[p]) stats[p] = { okutma: 0, urunler: {}, sonTs: 0, sonZaman: '', sonUrun: '', sonReyon: '' };
+      if (!stats[p]) stats[p] = { okutma: 0, urunler: {}, sonTs: 0, sonZaman: '', sonUrun: '', sonReyon: '', son: [], saatlik: 0 };
       stats[p].okutma++;
+      // Reyon özeti ve dikkat listesi (yanlış okutma adayları)
+      var ry = String(r[idx['Reyon']] || '') || '(reyonsuz)', adetR = Number(r[idx['Sayılan Adet']]) || 0, bkR = String(r[idx['Barkod']] || '');
+      var kayR = { id: String(r[idx['Kayıt ID']] || ''), p: p, ad: String(r[idx['Ürün Adı']] || ''), b: bkR, adet: adetR, reyon: ry, saat: formatTimeValue(r[idx['Saat']]), ts: ts };
+      var R = reyonlar[ry] || (reyonlar[ry] = { okutma: 0, urun: {}, kisi: {}, sonTs: 0 });
+      R.okutma++; R.urun[String(r[idx['Stok Kodu']] || '') || bkR] = 1; R.kisi[p] = 1; if (ts > R.sonTs) R.sonTs = ts;
+      if (!isNaN(ts) && simdiMs - ts < 3600000) stats[p].saatlik++;
+      stats[p].son.push(kayR); if (stats[p].son.length > 8) stats[p].son.shift();
+      if (adetR >= 300) dikkat.push(['Çok yüksek adet', kayR]);
+      else if (adetR === 0) dikkat.push(['Adet 0', kayR]);
+      var yk = p + '|' + bkR + '|' + ry, once = yakin[yk];
+      if (once && !isNaN(ts) && Math.abs(ts - once.ts) <= 180000) dikkat.push(['3 dk içinde aynı ürün 2. kez (çift okutma?)', kayR]);
+      yakin[yk] = kayR;
       var stockKey = String(r[idx['Stok Kodu']] || '') || ('B:' + String(r[idx['Barkod']] || ''));
       stats[p].urunler[stockKey] = true;
       if (!isNaN(ts) && ts >= stats[p].sonTs) {
@@ -3279,7 +3291,12 @@ function getCanliDurum(user, pass, callback) {
       dakikaOnce: dakikaOnce, aktif: dakikaOnce !== null && dakikaOnce <= 10
     };
   }).sort(function (a, b) { return (a.dakikaOnce === null ? 999999 : a.dakikaOnce) - (b.dakikaOnce === null ? 999999 : b.dakikaOnce); });
-  return outJson({ status: 'ok', personeller: personeller }, callback);
+  var reyonListe = Object.keys(reyonlar).map(function (k) {
+    var R = reyonlar[k]; return { reyon: k, okutma: R.okutma, urun: Object.keys(R.urun).length, kisi: Object.keys(R.kisi), dakikaOnce: R.sonTs ? Math.round((now - R.sonTs) / 60000) : null };
+  }).sort(function (a, b) { return (a.dakikaOnce === null ? 1e9 : a.dakikaOnce) - (b.dakikaOnce === null ? 1e9 : b.dakikaOnce); });
+  personeller.forEach(function (x) { var st = stats[x.personel]; x.son = st.son.slice().reverse().map(function (k) { return [k.saat, k.ad, k.adet, k.reyon]; }); x.saatlik = st.saatlik; });
+  dikkat.sort(function (a, b) { return (b[1].ts || 0) - (a[1].ts || 0); });
+  return outJson({ status: 'ok', personeller: personeller, reyonlar: reyonListe, dikkat: dikkat.slice(0, 60).map(function (d) { var k = d[1]; return [d[0], k.saat, k.p, k.ad, k.b, k.adet, k.reyon]; }) }, callback);
 }
 
 // ============================================================
