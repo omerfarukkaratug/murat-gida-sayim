@@ -593,7 +593,7 @@
   <header style="border:none; padding:0 0 16px; background:transparent; display:flex; align-items:flex-start; justify-content:space-between;">
     <div>
       <h1><img src="logo-header.png" alt="Murat Gıda" style="height:30px; width:auto; display:block;"></h1>
-      <div class="sub"><img src="icon.svg" alt="" style="width:15px;height:15px;vertical-align:-3px;margin-right:5px;">KRT Saha · Murat Gıda • offline • Android • build 296</div>
+      <div class="sub"><img src="icon.svg" alt="" style="width:15px;height:15px;vertical-align:-3px;margin-right:5px;">KRT Saha · Murat Gıda • offline • Android • build 297</div>
     </div>
     <button type="button" id="themeToggleBtn" title="Tema seç" style="background:var(--panel2); border:1.5px solid var(--line); color:var(--text); width:34px; height:34px; border-radius:50%; font-size:15px; padding:0; display:flex; align-items:center; justify-content:center; flex-shrink:0;">🎨</button>
   </header>
@@ -1099,6 +1099,7 @@
       <div class="hrkSekmeler hidden" id="miniSekmeler" style="margin:10px 0 0; gap:8px;">
         <button type="button" class="hrkSekme on" data-minisekme="liste" style="padding:9px 4px;"><b style="font-size:13px; font-family:inherit;">📋 Bugünkü liste</b></button>
         <button type="button" class="hrkSekme" data-minisekme="sonuc" style="padding:9px 4px;"><b style="font-size:13px; font-family:inherit;">📊 Sonuçlar</b></button>
+        <button type="button" class="hrkSekme" data-minisekme="kontrol" style="padding:9px 4px;"><b style="font-size:13px; font-family:inherit;">🔍 Bölüm kontrolü</b></button>
       </div>
     </div>
     <div id="miniBody" style="flex:1; overflow-y:auto; padding:12px 14px 90px;"></div>
@@ -5064,8 +5065,8 @@
         if(d.gun !== mini.gun){ mini.d = {}; mini.gun = d.gun; miniTaslakYaz(); }   // yeni gün: eski taslak düşer
         mini.liste = d.liste || []; mini.rapor = !!d.rapor;
       }
-      document.getElementById('miniSekmeler').classList.toggle('hidden', !mini.rapor);
-      if(mini.sekme === 'sonuc') miniSonucGetir(); else miniCiz();
+      document.getElementById('miniSekmeler').classList.toggle('hidden', !mini.rapor && !hasPerm('duzelt'));
+      if(mini.sekme === 'sonuc') miniSonucGetir(); else if(mini.sekme === 'kontrol') bkAc(); else miniCiz();
     });
   }
   function miniSonucGetir(){
@@ -5077,6 +5078,7 @@
     document.querySelectorAll('[data-minisekme]').forEach(function(b){ b.classList.toggle('on', b.getAttribute('data-minisekme') === mini.sekme); });
     var alt = document.getElementById('miniAlt'), btn = document.getElementById('miniKaydet');
     alt.classList.toggle('hidden', mini.sekme !== 'liste');
+    if(mini.sekme === 'kontrol'){ miniBodyEl.innerHTML = bkHtml(); return; }
     var n = miniBekleyenSayi(); btn.textContent = '💾 Kaydet' + (n ? ' (' + n + ' ürün)' : ''); btn.disabled = !n;
     if(mini.sekme === 'sonuc'){ miniBodyEl.innerHTML = miniSonucHtml(); return; }
     if(mini.yuk && !mini.liste){ miniBodyEl.innerHTML = '<div class="hint">⏳ Günün listesi hazırlanıyor…</div>'; return; }
@@ -5123,7 +5125,7 @@
     var t = e.target.closest && e.target.closest('[data-minikapat],[data-minisekme],#miniKamera,#miniYenile');
     if(!t) return;
     if(t.hasAttribute('data-minikapat')){ miniEl.classList.add('hidden'); return; }
-    if(t.hasAttribute('data-minisekme')){ mini.sekme = t.getAttribute('data-minisekme'); if(mini.sekme === 'sonuc') miniSonucGetir(); else miniCiz(); return; }
+    if(t.hasAttribute('data-minisekme')){ mini.sekme = t.getAttribute('data-minisekme'); if(mini.sekme === 'sonuc') miniSonucGetir(); else if(mini.sekme === 'kontrol') bkAc(); else miniCiz(); return; }
     if(t.id === 'miniKamera'){ startQuickScan(function(v){ miniBul(v); }); return; }
     if(t.id === 'miniYenile'){ mini.liste = null; miniGetir(true); }
   });
@@ -5148,6 +5150,111 @@
     });
   });
   document.getElementById('menuMiniBtn').addEventListener('click', function(){ miniAc('liste'); });
+
+  // ============================================================
+  // 🔍 BÖLÜM KONTROLÜ: bir bölüm sayıldıktan sonra o bölümün okutmalarından rastgele ürünler seçilir
+  // (çok satan / pahalı daha sık). Kontrolcü kör sayar; Karşılaştır'da okutulan toplamla kıyaslanır.
+  // ============================================================
+  var bk = { reyonlar: null, sec: {}, saat: 8, adet: 10, kid: '', liste: null, havuz: 0, d: {}, sonuc: null, yuk: false, hata: '' };
+  try { var bkT = JSON.parse(localStorage.getItem('mkBkTaslak') || 'null'); if(bkT && bkT.kid && Date.now() - bkT.z < 6 * 3600000){ bk.kid = bkT.kid; bk.liste = bkT.liste; bk.havuz = bkT.havuz; bk.d = bkT.d || {}; bk.sonuc = bkT.sonuc || null; bk.sec = bkT.sec || {}; bk.saat = bkT.saat || 8; } } catch(e){}
+  function bkTaslakYaz(){ try { localStorage.setItem('mkBkTaslak', JSON.stringify(bk.kid ? { kid: bk.kid, liste: bk.liste, havuz: bk.havuz, d: bk.d, sonuc: bk.sonuc, sec: bk.sec, saat: bk.saat, z: Date.now() } : null)); } catch(e){} }
+  function bkIstek(param, bitti){
+    var auth = currentAuth(); if(!auth){ bitti('Önce giriş yap'); return; }
+    if(!navigator.onLine){ bitti('İnternet yok'); return; }
+    jsonpRequestP(state.serverUrl || DEFAULT_SERVER_URL, Object.assign({ action: 'bolum_kontrol', user: auth.user, pass: auth.pass }, param), function(err, d){
+      if(err || !d || d.status !== 'ok') bitti(err || (d && d.message) || 'bilinmeyen hata'); else bitti(null, d);
+    }, 90000);
+  }
+  function bkAc(){ if(bk.liste){ miniCiz(); return; } bkReyonGetir(); }
+  function bkReyonGetir(){
+    bk.yuk = true; bk.hata = ''; miniCiz();
+    bkIstek({ ne: 'reyonlar', saat: bk.saat }, function(err, d){ bk.yuk = false; bk.hata = err || ''; if(d) bk.reyonlar = d.reyonlar || []; miniCiz(); });
+  }
+  function bkSaatSec(){
+    return '<select id="bkSaat" style="width:auto; padding:8px;">' + [2, 4, 8, 12, 24, 48].map(function(h){ return '<option value="' + h + '"' + (h === bk.saat ? ' selected' : '') + '>son ' + h + ' saat</option>'; }).join('') + '</select>';
+  }
+  function bkHtml(){
+    if(bk.yuk) return '<div class="hint">⏳ Yükleniyor…</div>';
+    var hata = bk.hata ? '<div class="hint" style="color:var(--red); margin:0 0 10px;">❌ ' + escapeHtml(bk.hata) + '</div>' : '';
+    if(!bk.liste){
+      var l = bk.reyonlar || [], secili = Object.keys(bk.sec).filter(function(k){ return bk.sec[k]; });
+      return hata + '<div class="hint" style="margin:0 0 10px;">Bir bölümün sayımı bitince: reyonlarını seç, rastgele ürün listesi çıkar. Kontrolcü bu ürünleri <b>yalnız o bölümde</b> sayar; okutulan toplam gösterilmez.</div>' +
+        '<div style="display:flex; gap:8px; align-items:center; margin-bottom:10px; flex-wrap:wrap;">' + bkSaatSec() +
+        '<select id="bkAdet" style="width:auto; padding:8px;">' + [5, 10, 15, 20, 30].map(function(n){ return '<option value="' + n + '"' + (n === bk.adet ? ' selected' : '') + '>' + n + ' ürün</option>'; }).join('') + '</select></div>' +
+        (l.length ? l.map(function(r){
+          var on = !!bk.sec[r[0]];
+          return '<div class="chSatir" data-bkreyon="' + escapeHtml(r[0]) + '" style="cursor:pointer;' + (on ? ' border-color:var(--accent); background:var(--panel2);' : '') + '"><div class="ust"><span>' + (on ? '☑️ ' : '⬜ ') + escapeHtml(r[0]) + '</span><span style="font-family:var(--mono); font-size:12.5px;">' + r[2] + ' ürün</span></div>' +
+            '<div class="alt"><span>' + r[1] + ' okutma · son ' + escapeHtml(new Date(r[3]).toLocaleTimeString('tr-TR', { hour: '2-digit', minute: '2-digit' })) + '</span></div></div>';
+        }).join('') : '<div class="hint">Bu sürede okutma yok. Süreyi büyüt.</div>') +
+        '<button type="button" class="btn-main" id="bkOlustur" style="margin-top:12px;"' + (secili.length ? '' : ' disabled') + '>🎲 Rastgele liste oluştur' + (secili.length ? ' (' + secili.length + ' reyon)' : '') + '</button>';
+    }
+    var reyonAd = Object.keys(bk.sec).filter(function(k){ return bk.sec[k]; }).join(', ');
+    var sonuc = {}; (bk.sonuc || []).forEach(function(x){ sonuc[x.k] = x; });
+    var html = hata + '<div class="hint" style="margin:0 0 10px;"><b>' + escapeHtml(reyonAd) + '</b> · ' + bk.liste.length + ' ürün (bölümde ' + bk.havuz + ' ürün okutulmuş)</div>';
+    if(bk.sonuc){
+      var tutan = bk.sonuc.filter(function(x){ return !x.fark; }).length, n = bk.sonuc.length;
+      html += '<div class="chOzet"><div>KONTROL<b>' + n + '</b></div><div>TUTTU<b style="color:var(--green);">' + tutan + '</b></div><div>UYUŞMADI<b style="color:' + (n - tutan ? 'var(--red)' : 'var(--green)') + ';">' + (n - tutan) + '</b></div></div>' +
+        (n - tutan ? '<div class="hint" style="margin:0 0 10px; color:var(--amber);">Uyuşmayan ürünleri bir kez daha saydırın. Okutma yanlışsa <b>Düzelt</b> ekranından düzeltin, sonra <b>Uyuşmayanları tekrar kontrol et</b>. Çok ürün uyuşmuyorsa bölümün tamamını yeniden saydırmayı düşünün.</div>' : '<div class="hint" style="margin:0 0 10px; color:var(--green);">✅ Hepsi tuttu. Bölüm tamam.</div>');
+    }
+    html += bk.liste.map(function(x){
+      var s = sonuc[x.k], v = bk.d[x.k] !== undefined ? bk.d[x.k] : '';
+      var sag = s ? (s.fark ? '<span style="color:var(--red); font-weight:800; white-space:nowrap;">❌ ' + (s.fark > 0 ? '+' : '') + escapeHtml(fmtQty(s.fark)) + '</span>' : '<span style="color:var(--green); font-weight:800;">✅</span>') :
+        '<input type="text" inputmode="decimal" data-bkm="' + escapeHtml(x.k) + '" value="' + escapeHtml(String(v).replace('.', ',')) + '" placeholder="Adet" style="width:84px; flex:none; text-align:center; font-family:var(--mono); font-weight:800; padding:8px;">';
+      return '<div class="chSatir"><div class="ust" style="align-items:center;"><span style="min-width:0;">' + escapeHtml(x.a || x.b) + '</span>' + sag + '</div>' +
+        '<div class="alt"><span>' + escapeHtml(x.b || '') + (x.kod ? ' · ' + escapeHtml(x.kod) : '') + '</span><span style="color:var(--amber); font-weight:700; white-space:nowrap;">' + escapeHtml(x.neden || '') + '</span></div>' +
+        '<div class="alt"><span>📍 ' + escapeHtml((x.reyon || []).join(', ')) + '</span></div>' +
+        (s && s.fark ? '<div class="alt"><span>okutulan ' + escapeHtml(fmtQty(s.beklenen)) + ' · kontrol ' + escapeHtml(fmtQty(s.sayilan)) + '</span></div>' : '') + '</div>';
+    }).join('');
+    var bekleyen = Object.keys(bk.d).length, hataliVar = (bk.sonuc || []).some(function(x){ return x.fark; });
+    var eksik = bk.liste.some(function(x){ return !sonuc[x.k]; });
+    if(eksik) html += '<button type="button" class="btn-main" id="bkKarsilastir" style="margin-top:12px;"' + (bekleyen ? '' : ' disabled') + '>⚖️ Karşılaştır' + (bekleyen ? ' (' + bekleyen + ' ürün)' : '') + '</button>';
+    else if(hataliVar) html += '<button type="button" class="btn-main" id="bkTekrar" style="margin-top:12px;">🔁 Uyuşmayanları tekrar kontrol et</button>';
+    html += '<button type="button" class="geriBtn" id="bkYeni" style="margin-top:10px; width:100%;">🆕 Yeni kontrol (bu listeyi kapat)</button>';
+    return html;
+  }
+  miniEl.addEventListener('click', function(e){
+    var t = e.target.closest && e.target.closest('[data-bkreyon],#bkOlustur,#bkKarsilastir,#bkTekrar,#bkYeni');
+    if(!t) return;
+    if(t.hasAttribute('data-bkreyon')){ var k = t.getAttribute('data-bkreyon'); bk.sec[k] = !bk.sec[k]; miniCiz(); return; }
+    if(t.id === 'bkOlustur'){
+      var secili = Object.keys(bk.sec).filter(function(k){ return bk.sec[k]; }); if(!secili.length) return;
+      bk.yuk = true; miniCiz();
+      bkIstek({ ne: 'liste', reyonlar: JSON.stringify(secili), saat: bk.saat, adet: bk.adet }, function(err, d){
+        bk.yuk = false; bk.hata = err || '';
+        if(d){ bk.kid = d.kid; bk.liste = d.liste || []; bk.havuz = d.urunSayisi || 0; bk.d = {}; bk.sonuc = null; bkTaslakYaz(); }
+        miniCiz();
+      });
+      return;
+    }
+    if(t.id === 'bkKarsilastir'){
+      var satirlar = Object.keys(bk.d).map(function(k){ return [k, bk.d[k]]; }); if(!satirlar.length) return;
+      t.disabled = true; t.textContent = 'Karşılaştırılıyor…';
+      bkIstek({ ne: 'kaydet', kid: bk.kid, satirlar: JSON.stringify(satirlar) }, function(err, d){
+        if(err){ bk.hata = err; miniCiz(); return; }
+        bk.hata = ''; var eski = {}; (bk.sonuc || []).forEach(function(x){ eski[x.k] = x; });
+        (d.sonuc || []).forEach(function(x){ eski[x.k] = x; delete bk.d[x.k]; });
+        bk.sonuc = Object.keys(eski).map(function(k){ return eski[k]; }); bkTaslakYaz(); miniCiz();
+      });
+      return;
+    }
+    if(t.id === 'bkTekrar'){ bk.sonuc = (bk.sonuc || []).filter(function(x){ return !x.fark; }); bkTaslakYaz(); miniCiz(); return; }
+    if(t.id === 'bkYeni'){
+      if(bk.liste && Object.keys(bk.d).length && !confirm('Girilen adetler gönderilmedi. Yine de kapatılsın mı?')) return;
+      bk.kid = ''; bk.liste = null; bk.d = {}; bk.sonuc = null; bkTaslakYaz(); bkReyonGetir();
+    }
+  });
+  miniEl.addEventListener('change', function(e){
+    if(e.target.id === 'bkSaat'){ bk.saat = Number(e.target.value) || 8; bkReyonGetir(); }
+    if(e.target.id === 'bkAdet'){ bk.adet = Number(e.target.value) || 10; }
+  });
+  miniEl.addEventListener('input', function(e){
+    var k = e.target.getAttribute && e.target.getAttribute('data-bkm'); if(!k) return;
+    var v = String(e.target.value).replace(',', '.').trim();
+    if(v === '' || isNaN(Number(v)) || Number(v) < 0) delete bk.d[k]; else bk.d[k] = Number(v);
+    bkTaslakYaz();
+    var b = document.getElementById('bkKarsilastir'), n = Object.keys(bk.d).length;
+    if(b){ b.disabled = !n; b.textContent = '⚖️ Karşılaştır' + (n ? ' (' + n + ' ürün)' : ''); }
+  });
 
   // ============================================================
   // 💵 KASA TAHSİLAT: veresiye carilerin kasada ödemesi. Tahsilat ELLE girilir, makbuz basılır.

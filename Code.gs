@@ -142,6 +142,9 @@ function doGet(e) {
   if (e.parameter && e.parameter.action === 'mini_sayim') {
     return miniSayim(e.parameter, e.parameter.callback);
   }
+  if (e.parameter && e.parameter.action === 'bolum_kontrol') {
+    return bolumKontrol(e.parameter, e.parameter.callback);
+  }
   if (e.parameter && e.parameter.action === 'yonetici_ozet') {
     return yoneticiOzet(e.parameter, e.parameter.callback);
   }
@@ -4066,6 +4069,104 @@ function miniSayim(p, callback) {
         fark === null ? null : Math.round(fark * (fiyatlar[String(r[3])] || 0) * 100) / 100];
     }).reverse();
     return outJson({ status: 'ok', satirlar: sat }, callback);
+  }
+  return outJson({ status: 'error', message: 'Bilinmeyen işlem' }, callback);
+}
+
+// ============================================================
+// 🔍 BÖLÜM KONTROLÜ: bir bölüm sayıldıktan sonra rastgele ürünler kör olarak yeniden saydırılır.
+// Liste o bölümün (seçilen reyonlar, son N saat) okutmalarından seçilir; çok satan / pahalı ürün daha sık çıkar.
+// Kontrolcü sayılan toplamı GÖRMEZ; Karşılaştır'a basınca uyuşmayanlar işaretlenir ('BolumKontrol' sekmesi).
+// Yetki: 'rapor' ya da 'duzelt'. ERP'ye yazılmaz.
+//   ne: 'reyonlar' (saat) · 'liste' (reyonlar JSON, saat, adet) · 'kaydet' (kid, satirlar: [[anahtar, sayılan]])
+// ============================================================
+var BK_BASLIK = ['Tarih', 'Saat', 'Kontrol Eden', 'Kontrol ID', 'Reyonlar', 'Ürün', 'Stok Kodu', 'Barkod', 'Okutulan (sayım)', 'Kontrol', 'Fark', 'Sonuç'];
+function bkSayimSatirlari(basMs) {
+  var sh = SpreadsheetApp.getActiveSpreadsheet().getSheetByName('Sayim'), l = [];
+  if (!sh || sh.getLastRow() < 2) return l;
+  sh.getRange(2, 1, sh.getLastRow() - 1, 13).getValues().forEach(function (r) {
+    var ts = new Date(formatDateValue(r[0]) + 'T' + formatTimeValue(r[1])).getTime();
+    if (isNaN(ts) || ts < basMs) return;
+    var kod = String(r[4] || '').trim(), bk = String(r[5] || '').trim();
+    l.push({ ts: ts, ad: String(r[3] || ''), kod: kod, bk: bk, adet: Number(r[8]) || 0, reyon: String(r[12] || '').trim() || '(reyonsuz)', anahtar: kod || ('B:' + bk) });
+  });
+  return l;
+}
+function bkToplamlar(satirlar, reyonlar) {
+  var set = {}, t = {}; reyonlar.forEach(function (r) { set[r] = true; });
+  satirlar.forEach(function (x) {
+    if (!set[x.reyon]) return;
+    var u = t[x.anahtar] || (t[x.anahtar] = { ad: x.ad, kod: x.kod, bk: x.bk, adet: 0, okutma: 0, reyon: {} });
+    u.adet += x.adet; u.okutma++; u.reyon[x.reyon] = true;
+  });
+  return t;
+}
+function bolumKontrol(p, callback) {
+  var auth = kimlikOnbellek(p.user, p.pass);
+  if (!auth.ok) return outJson({ status: 'error', kimlik: true, message: 'Giriş gerekli' }, callback);
+  if (auth.role !== 'yonetici' && auth.permissions.indexOf('rapor') === -1 && auth.permissions.indexOf('duzelt') === -1) return outJson({ status: 'error', message: 'Bu işlem için yetkin yok' }, callback);
+  var ne = String(p.ne || ''), saat = Math.max(1, Math.min(72, Number(p.saat) || 8)), basMs = Date.now() - saat * 3600000;
+  var cache = CacheService.getScriptCache();
+  if (ne === 'reyonlar') {
+    var say = {};
+    bkSayimSatirlari(basMs).forEach(function (x) { var r = say[x.reyon] || (say[x.reyon] = { n: 0, u: {}, son: 0 }); r.n++; r.u[x.anahtar] = true; if (x.ts > r.son) r.son = x.ts; });
+    var l = Object.keys(say).map(function (k) { return [k, say[k].n, Object.keys(say[k].u).length, say[k].son]; }).sort(function (a, b) { return b[3] - a[3]; });
+    return outJson({ status: 'ok', reyonlar: l }, callback);
+  }
+  if (ne === 'liste') {
+    var reyonlar; try { reyonlar = JSON.parse(String(p.reyonlar || '[]')); } catch (e) { reyonlar = []; }
+    if (!Array.isArray(reyonlar) || !reyonlar.length) return outJson({ status: 'error', message: 'Reyon seç' }, callback);
+    var adet = Math.max(3, Math.min(40, parseInt(p.adet, 10) || 10));
+    var top = bkToplamlar(bkSayimSatirlari(basMs), reyonlar), anahtarlar = Object.keys(top);
+    if (!anahtarlar.length) return outJson({ status: 'error', message: 'Bu reyonlarda son ' + saat + ' saatte okutma yok' }, callback);
+    var kat = miniKatalog(), fiyat = {}, aday = {}, ayar = dbAyar();
+    Object.keys(kat).forEach(function (b) { var u = kat[b]; if (u.kod && !fiyat[u.kod]) fiyat[u.kod] = u.fiyat; fiyat['B:' + b] = u.fiyat; });
+    if (ayar) { try { var r = dbCagir(ayar, 'mini_sayim_aday', {}); if (r && r.status === 'ok') aday = r.urunler || {}; } catch (e) { /* ağırlıksız seçilir */ } }
+    // Ağırlık: 1 + aylık satış cirosu + pahalılık + çok okutma (birden çok yerde duran ürün)
+    var havuz = anahtarlar.map(function (k) {
+      var u = top[k], f = fiyat[k] || fiyat['B:' + u.bk] || 0, s30 = Number((aday[u.kod] || [])[0]) || 0;
+      var w = 1 + Math.min(8, s30 * f / 2000) + (f >= 300 ? 2 : 0) + (u.okutma > 1 ? 1 : 0);
+      return { k: k, w: w, neden: s30 * f >= 5000 ? 'Çok satan' : f >= 300 ? 'Pahalı' : u.okutma > 1 ? 'Birden çok yerde' : 'Rastgele' };
+    });
+    var secilen = [];
+    while (secilen.length < adet && havuz.length) {
+      var toplamW = havuz.reduce(function (t, x) { return t + x.w; }, 0), r2 = Math.random() * toplamW, i = 0;
+      for (; i < havuz.length - 1; i++) { r2 -= havuz[i].w; if (r2 <= 0) break; }
+      secilen.push(havuz.splice(i, 1)[0]);
+    }
+    var kid = 'BK' + Date.now().toString(36) + Math.floor(Math.random() * 1e4).toString(36);
+    cache.put('bk_' + kid, JSON.stringify({ reyonlar: reyonlar, bas: basMs, anahtarlar: secilen.map(function (x) { return x.k; }) }), 21600);
+    return outJson({ status: 'ok', kid: kid, urunSayisi: anahtarlar.length, liste: secilen.map(function (x) {
+      var u = top[x.k]; return { k: x.k, a: u.ad, b: u.bk, kod: u.kod, reyon: Object.keys(u.reyon), neden: x.neden };
+    }) }, callback);
+  }
+  if (ne === 'kaydet') {
+    var kayit = null; try { kayit = JSON.parse(cache.get('bk_' + String(p.kid || '')) || 'null'); } catch (e) { kayit = null; }
+    if (!kayit) return outJson({ status: 'error', message: 'Kontrol listesinin süresi doldu — yeni liste oluştur' }, callback);
+    var ham; try { ham = JSON.parse(String(p.satirlar || '[]')); } catch (e) { ham = null; }
+    if (!Array.isArray(ham) || !ham.length) return outJson({ status: 'error', message: 'Adet girilmemiş' }, callback);
+    var gecerli = {}; kayit.anahtarlar.forEach(function (k) { gecerli[k] = true; });
+    // Beklenen: okutmalar ŞİMDİ yeniden toplanır (kontrol öncesi yapılan düzeltmeler de sayılır)
+    var top2 = bkToplamlar(bkSayimSatirlari(kayit.bas), kayit.reyonlar);
+    var simdi = new Date(), tarih = Utilities.formatDate(simdi, 'Europe/Istanbul', 'yyyy-MM-dd'), saatM = Utilities.formatDate(simdi, 'Europe/Istanbul', 'HH:mm:ss');
+    var sonuc = [], yaz = [];
+    ham.slice(0, 60).forEach(function (h) {
+      var k = String(h[0] || ''), m = Number(h[1]);
+      if (!gecerli[k] || !(m >= 0) || m > 1e6) return;
+      var u = top2[k] || { ad: '', kod: '', bk: '', adet: 0 }, fark = Math.round((m - u.adet) * 1000) / 1000;
+      sonuc.push({ k: k, beklenen: u.adet, sayilan: m, fark: fark });
+      yaz.push([tarih, saatM, String(p.user || ''), String(p.kid), kayit.reyonlar.join(', '), u.ad, u.kod, u.bk, u.adet, m, fark, fark ? 'UYUŞMADI' : 'Tamam']);
+    });
+    if (yaz.length) {
+      var ss = SpreadsheetApp.getActiveSpreadsheet(), sh = ss.getSheetByName('BolumKontrol');
+      if (!sh) { sh = ss.insertSheet('BolumKontrol'); sh.getRange(1, 1, 1, BK_BASLIK.length).setValues([BK_BASLIK]); }
+      var ilk = sh.getLastRow() + 1;
+      sh.getRange(ilk, 1, yaz.length, 1).setNumberFormat('@'); sh.getRange(ilk, 7, yaz.length, 2).setNumberFormat('@');
+      sh.getRange(ilk, 1, yaz.length, BK_BASLIK.length).setValues(yaz);
+      var hatali = sonuc.filter(function (x) { return x.fark; }).length;
+      gunlukYaz('bolum_kontrol', String(p.user || ''), 'Bölüm kontrolü (' + kayit.reyonlar.join(', ') + '): ' + yaz.length + ' ürün, ' + hatali + ' uyuşmadı', false);
+    }
+    return outJson({ status: 'ok', sonuc: sonuc }, callback);
   }
   return outJson({ status: 'error', message: 'Bilinmeyen işlem' }, callback);
 }
