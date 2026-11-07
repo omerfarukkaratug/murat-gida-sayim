@@ -406,6 +406,7 @@ function Gece-Aktar() {
     if (-not $ilk) { $ilk = Get-Date }
     $gun = if ($ilk.Hour -lt 6) { $ilk.Date.AddDays(-1) } else { $ilk.Date }
     $sonT = (@($durum.geceler) | ForEach-Object { [datetime]$_.T } | Sort-Object | Select-Object -Last 1)
+    if ($son) { Write-Host "  SON kapanis: depoda sayilip hicbir bolumde cikmayan urunler depo sayimiyla kapanir; istenirse hic sayilmayanlar sifirlanir." -ForegroundColor Cyan }
     Baslik "$ad"
     if ($son) {
         $kap = Sor-Tarih "  Depo sayiminin BASLADIGI an (bundan sonra depodaki mallarda ERP hareketi olmamali)" $ilk
@@ -437,6 +438,32 @@ function Gece-Aktar() {
         [void]$plan.Add(@{ sid = [long]$sid; x = $x; u = $u[$sid]; s = $s; fark = $s.hedefToplam - $s.stokToplam })
     }
 
+    # SON: hic okutulmayan ama ERP'de stogu gorunen urunler istenirse SIFIRLANIR (ancak butun bolumler bittikten sonra
+    # guvenli: daha once sifirlanirsa sayilmayi bekleyen bolumlerin satislari stogu bozar).
+    $sifirlanan = @{}
+    if ($son) {
+        $sayilan = @{}; foreach ($v in $esle.Values) { $sayilan[[long]$v] = $true }
+        $sz = @((Tablo $null "SELECT s.ID, SUM(d.MIKTAR_GIRIS - d.MIKTAR_CIKIS) AS M, ISNULL(s.SON_ALIS_FIYAT, 0) AS ALIS FROM dbo.FIS_DETAY d WITH (NOLOCK) JOIN dbo.STOK s WITH (NOLOCK) ON s.ID = d.STOK WHERE d.FATRALANDIRILMIS_IRSALIYEMI = 0 AND d.FIS_TARIHI <= @t AND d.LOKASYON = @l GROUP BY s.ID, s.SON_ALIS_FIYAT HAVING ABS(SUM(d.MIKTAR_GIRIS - d.MIKTAR_CIKIS)) > 0.0001" @{ "@t" = $T; "@l" = $script:Lokasyon }).Rows | Where-Object { -not $sayilan.ContainsKey([long]$_.ID) -and -not $u.ContainsKey([long]$_.ID) })
+        if ($sz.Count) {
+            $art = 0.0; $eks = 0.0; foreach ($x in $sz) { $tl = [double]$x.M * [double]$x.ALIS; if ($tl -gt 0) { $art += $tl } else { $eks += $tl } }
+            Write-Host ""
+            Write-Host "  Hic okutulmayan ama ERP'de stogu olan $($sz.Count) urun var (arti stok $(Tl $art), eksi stok $(Tl $eks))." -ForegroundColor Yellow
+            Write-Host "  Listesi icin once 4) Sayilmayanlar'a bakabilirsiniz. SIFIRLANIRSA bu urunlerin stogu $($T.ToString('dd.MM.yyyy HH:mm')) itibariyla 0 olur." -ForegroundColor Yellow
+            if ((Read-Host "  Bunlar da sifirlansin mi? Evet icin SIFIRLA yazin (Enter: hayir, dokunulmaz)") -ceq "SIFIRLA") {
+                $sb2 = $sz | ForEach-Object { [long]$_.ID }
+                $bilgi2 = ErpBilgi @($sb2) $T
+                foreach ($sid in $sb2) {
+                    $x = $bilgi2[[long]$sid]; if (-not $x) { continue }
+                    $uu = @{ depo = 0.0; raf = 0.0; mod = "esitle"; ad = $x.ad; barkodlar = @() }
+                    $st = Satirlar $uu @($x.barkodlar.Values) @()
+                    if (-not $st) { [void]$kartsiz.Add($sid); continue }
+                    [void]$plan.Add(@{ sid = [long]$sid; x = $x; u = $uu; s = $st; fark = $st.hedefToplam - $st.stokToplam; sifir = $true }); $sifirlanan[[long]$sid] = $true
+                }
+                Write-Host "  $($sifirlanan.Count) urun SIFIRLANMAK uzere belgeye eklendi (raporda 'SIFIRLANAN')." -ForegroundColor Yellow
+            }
+        }
+    }
+
     # DENETIMLER
     Baslik "Denetimler"
     $engel = 0
@@ -444,7 +471,7 @@ function Gece-Aktar() {
     if ($b.eslesmeyen.Count) { Uyari "$($b.eslesmeyen.Count) okutma ERP'de bir urunle eslesmedi (stok kodu / barkod ERP'de yok, ya da uygulamada acilan yeni urun). Raporda 'ESLESMEYEN'. Bu urunler belgeye GIRMEZ." }
     if ($kartsiz.Count) { Uyari "$($kartsiz.Count) urunun ERP kartinda adet barkodu yok; belgeye girmez (raporda)." }
     $hareket = @()
-    foreach ($p in (Parcala @($plan | ForEach-Object { $_.sid }) 400)) {
+    foreach ($p in (Parcala @($plan | Where-Object { -not $_.sifir } | ForEach-Object { $_.sid }) 400)) {
         $hareket += @((Tablo $null "SELECT TOP 50 d.STOK, f.BELGENO, FT.AD AS TUR, d.FIS_TARIHI, d.MIKTAR_GIRIS - d.MIKTAR_CIKIS AS M FROM dbo.FIS_DETAY d WITH (NOLOCK) JOIN dbo.FIS f WITH (NOLOCK) ON f.ID = d.FIS JOIN dbo.FIS_TURU FT ON FT.ID = f.FIS_TURU WHERE d.FATRALANDIRILMIS_IRSALIYEMI = 0 AND d.FIS_TARIHI > @k AND d.FIS_TARIHI <= @t AND d.LOKASYON = @l AND f.FIS_TURU <> 17 AND d.STOK IN ($(($p | ForEach-Object { [long]$_ }) -join ',')) ORDER BY d.FIS_TARIHI" @{ "@k" = $kap; "@t" = $T; "@l" = $script:Lokasyon }).Rows)
     }
     if ($hareket.Count) {
@@ -470,7 +497,7 @@ function Gece-Aktar() {
         $tl = $p.fark * $p.x.alis
         if ($p.fark -gt 0) { $topFazla += $p.fark; $tlFazla += $tl } elseif ($p.fark -lt 0) { $topEksik += $p.fark; $tlEksik += $tl }
         $sat = ($p.s.satirlar | ForEach-Object { "$($_.barkod)=$($_.miktar.ToString($Inv))" }) -join " "
-        [void]$csv.AppendLine(("{0};{1};{2};{3};{4};{5};{6};{7};{8};{9};{10}" -f "BELGE", $p.x.kod, ($p.x.ad -replace ';', ','), $p.u.depo.ToString($Inv), $p.u.raf.ToString($Inv), $p.s.hedefToplam.ToString($Inv), $p.s.stokToplam.ToString($Inv), $p.fark.ToString($Inv), ([Math]::Round($tl, 2)).ToString($Inv), $(if ($p.u.mod -eq 'ekle') { 'USTUNE EKLE (baska bolumde de sayildi)' } else { 'ESITLE' }), $sat))
+        [void]$csv.AppendLine(("{0};{1};{2};{3};{4};{5};{6};{7};{8};{9};{10}" -f $(if ($p.sifir) { "SIFIRLANAN (hic sayilmadi)" } else { "BELGE" }), $p.x.kod, ($p.x.ad -replace ';', ','), $p.u.depo.ToString($Inv), $p.u.raf.ToString($Inv), $p.s.hedefToplam.ToString($Inv), $p.s.stokToplam.ToString($Inv), $p.fark.ToString($Inv), ([Math]::Round($tl, 2)).ToString($Inv), $(if ($p.u.mod -eq 'ekle') { 'USTUNE EKLE (baska bolumde de sayildi)' } else { 'ESITLE' }), $sat))
     }
     foreach ($s in $b.eslesmeyen) { [void]$csv.AppendLine(("ESLESMEYEN;{0};{1};;{2};;;;;;barkod {3}, reyon {4}, {5}" -f $s[1], ([string]$s[3] -replace ';', ','), $s[4], $s[2], $s[6], $s[8])) }
     if ($son) { foreach ($s in $b.kalan) { [void]$csv.AppendLine(("HIC AKTARILMADI (bolumu yazilmadi);{0};{1};;{2};;;;;;barkod {3}, reyon {4}, {5}, {6}" -f $s[1], ([string]$s[3] -replace ';', ','), $s[4], $s[2], $s[6], (EpochTarih $s[7]).ToString('dd.MM HH:mm'), $s[8])) } }
