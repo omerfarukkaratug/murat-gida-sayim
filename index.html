@@ -593,7 +593,7 @@
   <header style="border:none; padding:0 0 16px; background:transparent; display:flex; align-items:flex-start; justify-content:space-between;">
     <div>
       <h1><img src="logo-header.png" alt="Murat Gıda" style="height:30px; width:auto; display:block;"></h1>
-      <div class="sub"><img src="icon.svg" alt="" style="width:15px;height:15px;vertical-align:-3px;margin-right:5px;">KRT Saha · Murat Gıda • offline • Android • build 295</div>
+      <div class="sub"><img src="icon.svg" alt="" style="width:15px;height:15px;vertical-align:-3px;margin-right:5px;">KRT Saha · Murat Gıda • offline • Android • build 296</div>
     </div>
     <button type="button" id="themeToggleBtn" title="Tema seç" style="background:var(--panel2); border:1.5px solid var(--line); color:var(--text); width:34px; height:34px; border-radius:50%; font-size:15px; padding:0; display:flex; align-items:center; justify-content:center; flex-shrink:0;">🎨</button>
   </header>
@@ -7163,6 +7163,13 @@
     malSiparis = { kod: '', liste: [], yukleniyor: false, sec: '', acik: false };
     malCariInputEl.value = ''; malFaturaInputEl.value = ''; malSebepSelectEl.value = '';
     malCariPickedEl.classList.add('hidden');
+    var sc = state.malSonCari;
+    if(sc && sc.tip === tip && sc.cari && Date.now() - (sc.zaman || 0) < 5 * 60 * 1000){
+      malCari = sc.cari; malCariInputEl.value = malCari.name || '';
+      if(sc.belge && MAL_BELGE[tip].indexOf(sc.belge) !== -1) malBelge = sc.belge;
+      showPickedCari();
+      toast('Son cari hazır: ' + (malCari.name || '') + ' — başka firmaysa adını yazıp değiştir', 'success', 3500);
+    }
     renderBelgeSeg();
     malStartYazi();
     document.getElementById('malHareketSetup').classList.remove('hidden');
@@ -7668,6 +7675,8 @@
     malSaveBtnEl.disabled = false;
     malSaveBtnEl.textContent = '💾 Kaydet';
     if(ok){
+      // Aynı firmadan arka arkaya mal geldiğinde: kaydedilen cari 5 dakika boyunca yeni kayıtta hazır seçili gelir (build 296)
+      if(malCari && malCari.name){ state.malSonCari = { tip: malTip, cari: malCari, belge: malBelge, zaman: Date.now() }; }
       clearMalDraft();
       var n = malItems.length;
       malItems = [];

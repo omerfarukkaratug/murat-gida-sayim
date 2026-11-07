@@ -706,7 +706,10 @@
     a4:  { ad: 'A4 afiş', w: 210, h: 297, kagit: 'A4', aciklama: 'Her ürün bir A4 sayfa (210 × 297 mm).' },
     a3:  { ad: 'A3 afiş', w: 297, h: 420, kagit: 'A3', aciklama: 'Her ürün bir A3 sayfa (297 × 420 mm). A3 basabilen yazıcı gerekir.' }
   };
-  var BASLIKLAR = ['', 'ÖNE ÇIKAN ÜRÜN', 'HAFTANIN ÜRÜNÜ', 'YENİ ÜRÜN'];
+  var BASLIKLAR = ['', 'ÖNE ÇIKAN ÜRÜN', 'HAFTANIN ÜRÜNÜ', 'YENİ ÜRÜN', '1 ALANA 1 BEDAVA', '2 ALANA 1 BEDAVA', '3 AL 2 ÖDE', '2. ÜRÜN %50'];
+  // Adet kampanyaları (ör. "1 alana 1 bedava"): gerçek bir kampanyaysa yazılabilir; kasada tanımlı olması şart (build 296).
+  var ADET_KAMPANYA = /\b\d+\s*(alana|al)\s*\d+\s*(bedava|öde|ode)\b|\d+\.\s*ürün|\d+\.\s*urun/i;
+  function adetKampanyaMi(t){ return ADET_KAMPANYA.test(String(t || '')); }
   // Yanıltıcı olabilecek sözler: indirim/karşılaştırma iddiası ispat ister.
   var RISKLI = /indirim|iskonto|ucuz|en düşük|en dusuk|kampanya|şok|sok fiyat|fırsat|firsat|bedava|piyasa/i;
   var BIRIMLER = [['g', 'g'], ['kg', 'kg'], ['ml', 'ml'], ['cl', 'cl'], ['l', 'L'], ['cm', 'cm'], ['m', 'm'], ['adet', 'adet']];
@@ -1747,8 +1750,9 @@
           '<div><label>Üst başlık</label><select data-al="baslik"' + (u.indirim ? ' disabled' : '') + '>' +
             BASLIKLAR.map(function(b){ return '<option value="' + esc(b) + '"' + (u.baslik === b ? ' selected' : '') + '>' + (b ? esc(b) : '(başlık yok)') + '</option>'; }).join('') +
             '<option value="ozel"' + (u.baslik === 'ozel' ? ' selected' : '') + '>Kendim yazacağım…</option></select></div></div>' +
+        (!u.indirim && adetKampanyaMi(baslikMetni(u)) ? '<div class="ipucu" style="margin:6px 0 0; color:var(--amber); font-weight:700;">Bu kampanyanın kasada (ERP\'de) tanımlı olduğundan emin olun: müşteri kasada etiketteki kampanyayı alamazsa yanıltıcı olur.</div>' : '') +
         (u.baslik === 'ozel' && !u.indirim ? '<label>Başlık metni</label><input data-al="ozel" maxlength="24" value="' + esc(u.ozel) + '">' +
-          (RISKLI.test(u.ozel || '') ? '<div class="uyari" style="margin:6px 0 0;">Bu söz indirim ya da fiyat karşılaştırması anlamı taşıyor. Gerçek bir indirimse aşağıdan "İndirimli satış"ı kullan; karşılaştırma iddiasını (ör. "en ucuz") belgeyle kanıtlaman gerekir.</div>' : '') : '') +
+          (RISKLI.test(u.ozel || '') && !adetKampanyaMi(u.ozel) ? '<div class="uyari" style="margin:6px 0 0;">Bu söz indirim ya da fiyat karşılaştırması anlamı taşıyor. Gerçek bir indirimse aşağıdan "İndirimli satış"ı kullan; karşılaştırma iddiasını (ör. "en ucuz") belgeyle kanıtlaman gerekir.</div>' : '') : '') +
         '<div style="display:flex; align-items:center; gap:8px; margin-top:12px;"><input data-al="indirim" type="checkbox"' + (u.indirim ? ' checked' : '') + '><span style="font-size:13.5px; font-weight:700;">İndirimli satış (etikete "İNDİRİM" yazılır)</span></div>' +
         (u.indirim ? '<div class="satir"><div><label>İndirimden önceki fiyat (₺)</label><input data-al="onceki" type="text" inputmode="decimal" value="' + esc(u.onceki) + '" placeholder="örn. 129,90"></div>' +
             '<div><label>İndirim bitiş tarihi</label><input data-al="bitis" type="date" class="' + (u.bitis ? '' : 'eksik') + '" value="' + esc(u.bitis || '') + '"></div></div>' +
@@ -1846,7 +1850,7 @@
     if(!alanlar.length){ toast('Değişecek bir alan seç', 'uyari'); return; }
     if((a('yer') === '_yaz' || a('yer') === '_bos') && !v('yer')){ toast('Üretim yerini yaz', 'uyari'); return; }
     if(a('baslik') === 'ozel' && !v('ozel')){ toast('Başlık metnini yaz', 'uyari'); return; }
-    if(a('baslik') === 'ozel' && RISKLI.test(v('ozel')) && !window.confirm('"' + v('ozel') + '" indirim ya da karşılaştırma anlamı taşıyor; belgeyle kanıtlaman gerekebilir. Yine de yazılsın mı?')) return;
+    if(a('baslik') === 'ozel' && RISKLI.test(v('ozel')) && !adetKampanyaMi(v('ozel')) && !window.confirm('"' + v('ozel') + '" indirim ya da karşılaştırma anlamı taşıyor; belgeyle kanıtlaman gerekebilir. Yine de yazılsın mı?')) return;
     if((a('indirim') === 'yap' || a('indirim') === 'bitis') && !v('bitis')){ toast('İndirim bitiş tarihini seç', 'uyari'); return; }
     if((a('indirim') === 'yap' || a('indirim') === 'bitis') && v('bitis') < bugun()){ toast('Bitiş tarihi geçmiş olamaz', 'hata'); return; }
     if(a('tarih') === '_yaz' && !v('tarih')){ toast('Fiyat tarihini seç', 'uyari'); return; }
