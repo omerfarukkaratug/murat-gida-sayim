@@ -593,7 +593,7 @@
   <header style="border:none; padding:0 0 16px; background:transparent; display:flex; align-items:flex-start; justify-content:space-between;">
     <div>
       <h1><img src="logo-header.png" alt="Murat Gıda" style="height:30px; width:auto; display:block;"></h1>
-      <div class="sub"><img src="icon.svg" alt="" style="width:15px;height:15px;vertical-align:-3px;margin-right:5px;">KRT Saha · Murat Gıda • offline • Android • build 298</div>
+      <div class="sub"><img src="icon.svg" alt="" style="width:15px;height:15px;vertical-align:-3px;margin-right:5px;">KRT Saha · Murat Gıda • offline • Android • build 299</div>
     </div>
     <button type="button" id="themeToggleBtn" title="Tema seç" style="background:var(--panel2); border:1.5px solid var(--line); color:var(--text); width:34px; height:34px; border-radius:50%; font-size:15px; padding:0; display:flex; align-items:center; justify-content:center; flex-shrink:0;">🎨</button>
   </header>
@@ -723,12 +723,7 @@
   </div>
 
   <div style="display:flex; gap:8px; align-items:center; padding:8px 14px; background:var(--panel); border-top:1px solid var(--line); box-shadow:var(--sh-sm); position:relative; z-index:1;">
-    <select id="reyonSelect" style="flex:1; min-width:0; background:var(--panel2); border:1.5px solid var(--line); border-radius:var(--r-sm); padding:9px 9px; font-size:12.5px; font-weight:700; color:var(--text);">
-      <option value="Depo -1. Kat">📦 Depo -1. Kat</option>
-      <option value="Züccaciye 2. Kat">🍽️ Züccaciye 2. Kat</option>
-      <option value="Mağaza 1. Kat">🏪 Mağaza 1. Kat</option>
-      <option value="Kuruyemiş ve Dökme Ürünler">🥜 Kuruyemiş ve Dökme Ürünler</option>
-    </select>
+    <button type="button" id="reyonBtn" style="flex:1; min-width:0; background:var(--panel2); border:1.5px solid var(--accent); border-radius:var(--r-sm); padding:8px 10px; font-size:12.5px; font-weight:800; color:var(--text); text-align:left; line-height:1.3; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">📍 —</button>
     <button type="button" id="progressBtn" style="background:var(--panel2); border:1.5px solid var(--line); color:var(--text); padding:9px 12px; font-size:12px; white-space:nowrap;">📊 İlerleme</button>
   </div>
 
@@ -1089,6 +1084,18 @@
     <div id="tedarikBody" style="flex:1; overflow-y:auto; padding:12px 14px 24px;"><div class="hint">⏳ Yükleniyor…</div></div>
   </div>
 
+  <!-- 📍 Reyon seçimi: Bölge / Bölüm / Raf -->
+  <div id="reyonModal" class="hidden" style="position:fixed; inset:0; background:var(--bg); z-index:53; display:flex; flex-direction:column;">
+    <div style="padding:16px 16px 10px; border-bottom:1px solid var(--line); background:var(--panel); box-shadow:var(--sh-sm); display:flex; align-items:center; justify-content:space-between;">
+      <div style="font-weight:800; font-size:16px;">📍 Nerede sayıyorsun?</div>
+      <button type="button" data-reyonkapat="1" aria-label="Kapat" style="width:34px; height:34px; border-radius:50%; background:var(--panel2); border:1.5px solid var(--line); color:var(--text); font-size:18px; line-height:1; padding:0; display:flex; align-items:center; justify-content:center;">✕</button>
+    </div>
+    <div id="reyonBody" style="flex:1; overflow-y:auto; padding:12px 14px 90px;"></div>
+    <div style="position:absolute; left:0; right:0; bottom:0; padding:10px 14px calc(10px + env(safe-area-inset-bottom)); background:var(--panel); border-top:1px solid var(--line);">
+      <button type="button" class="btn-main" id="reyonTamam" style="margin:0;">✅ Seç</button>
+    </div>
+  </div>
+
   <!-- 🎯 Günün mini sayımı (kör sayım) ve 📊 Yönetici özeti -->
   <div id="miniScreen" class="hidden" style="position:fixed; inset:0; background:var(--bg); z-index:52; display:flex; flex-direction:column;">
     <div style="padding:16px 16px 10px; border-bottom:1px solid var(--line); background:var(--panel); box-shadow:var(--sh-sm);">
@@ -1099,7 +1106,7 @@
       <div class="hrkSekmeler hidden" id="miniSekmeler" style="margin:10px 0 0; gap:8px;">
         <button type="button" class="hrkSekme on" data-minisekme="liste" style="padding:9px 4px;"><b style="font-size:13px; font-family:inherit;">📋 Bugünkü liste</b></button>
         <button type="button" class="hrkSekme" data-minisekme="sonuc" style="padding:9px 4px;"><b style="font-size:13px; font-family:inherit;">📊 Sonuçlar</b></button>
-        <button type="button" class="hrkSekme" data-minisekme="kontrol" style="padding:9px 4px;"><b style="font-size:13px; font-family:inherit;">🔍 Bölüm kontrolü</b></button>
+        <button type="button" class="hrkSekme" data-minisekme="kontrol" style="padding:9px 4px;"><b style="font-size:13px; font-family:inherit;">📂 Bölümler</b></button>
       </div>
     </div>
     <div id="miniBody" style="flex:1; overflow-y:auto; padding:12px 14px 90px;"></div>
@@ -3908,18 +3915,90 @@
     save();
   });
 
-  // ---------- REYON / BÖLGE ETİKETİ ----------
-  // Her yeni okutma, o an seçili olan reyonla birlikte kaydedilir (satır
-  // bazında) — sayım oturumu boyunca reyon istenildiği zaman değiştirilebilir,
-  // aynı oturumda farklı reyonlardan ürün okutulmuş olabilir, sorun değil.
-  var REYON_DEFAULT = 'Depo -1. Kat';
-  if(!state.reyon) state.reyon = REYON_DEFAULT;
-  var reyonSelect = document.getElementById('reyonSelect');
-  reyonSelect.value = state.reyon;
-  reyonSelect.addEventListener('change', function(e){
-    state.reyon = e.target.value;
-    save();
+  // ---------- REYON: BÖLGE / BÖLÜM / RAF ----------
+  // Her yeni okutma o an seçili reyonla kaydedilir: "Mağaza / Atıştırmalık / Çikolata".
+  // Bölge ve bölüm SABİT listeden seçilir (bütün telefonlarda aynı yazılsın; sayım bölümleri ve ERP aktarımı
+  // bölüme göre gruplar). Raf serbest: listeden seç ya da yeni yaz. Depo bölgesi "Depo" ile başlar (ERP aktarımı bunu depo sayar).
+  var REYON_BOLGE = [['Depo', '📦'], ['Mağaza', '🏪'], ['Züccaciye', '🍽️'], ['Kuruyemiş ve Dökme', '🥜']];
+  var REYON_BOLUM = {
+    'Mağaza': ['Gıda', 'Atıştırmalık', 'İçecek', 'Kahvaltılık', 'Süt ve Şarküteri', 'Temizlik', 'Kozmetik ve Kişisel Bakım', 'Kırtasiye', 'Bebek', 'Ev ve Mutfak', 'Diğer'],
+    'Depo': ['Gıda', 'Atıştırmalık', 'İçecek', 'Kahvaltılık', 'Süt ve Şarküteri', 'Temizlik', 'Kozmetik ve Kişisel Bakım', 'Kırtasiye', 'Bebek', 'Ev ve Mutfak', 'Züccaciye', 'Diğer'],
+    'Züccaciye': ['Cam ve Porselen', 'Tencere ve Tava', 'Plastik', 'Elektrikli', 'Diğer'],
+    'Kuruyemiş ve Dökme': ['Kuruyemiş', 'Dökme Bakliyat', 'Baharat', 'Lokum ve Şekerleme', 'Diğer']
+  };
+  var REYON_RAF = {
+    'Gıda': ['Bakliyat', 'Makarna', 'Un ve Şeker', 'Yağ', 'Konserve', 'Salça ve Sos', 'Baharat', 'Çay ve Kahve'],
+    'Atıştırmalık': ['Çikolata', 'Bisküvi', 'Gofret', 'Cips', 'Kraker', 'Şekerleme', 'Sakız', 'Kek'],
+    'İçecek': ['Su', 'Gazlı İçecek', 'Meyve Suyu', 'Ayran ve Süt', 'Enerji İçeceği'],
+    'Kahvaltılık': ['Reçel ve Bal', 'Zeytin', 'Tahin ve Pekmez', 'Kahvaltılık Sos'],
+    'Süt ve Şarküteri': ['Peynir', 'Yoğurt', 'Tereyağı', 'Sucuk ve Salam', 'Yumurta'],
+    'Temizlik': ['Çamaşır', 'Bulaşık', 'Yüzey Temizleyici', 'Kağıt Ürünleri', 'Çöp Poşeti'],
+    'Kozmetik ve Kişisel Bakım': ['Şampuan', 'Sabun ve Duş Jeli', 'Diş Bakım', 'Deodorant', 'Kadın Bakım', 'Tıraş'],
+    'Kırtasiye': ['Defter', 'Kalem', 'Okul Malzemesi', 'Hediyelik']
+  };
+  var REYON_DEFAULT = 'Depo';
+  function reyonParca(r){ return String(r || '').split('/').map(function(x){ return x.trim(); }).filter(Boolean); }
+  // Eski kayıtlı seçim ("Depo -1. Kat", "Mağaza 1. Kat"...) yeni bölgelere çevrilir
+  (function(){ var e = { 'Depo -1. Kat': 'Depo', 'Züccaciye 2. Kat': 'Züccaciye', 'Mağaza 1. Kat': 'Mağaza', 'Kuruyemiş ve Dökme Ürünler': 'Kuruyemiş ve Dökme' }; if(!state.reyon) state.reyon = REYON_DEFAULT; if(e[state.reyon]) state.reyon = e[state.reyon]; })();
+  var reyonBtn = document.getElementById('reyonBtn'), reyonModalEl = document.getElementById('reyonModal'), reyonBodyEl = document.getElementById('reyonBody');
+  var reyonSec = { bolge: '', bolum: '', raf: '' };
+  function rafEkOku(){ try { return JSON.parse(localStorage.getItem('mkRafEk') || '{}') || {}; } catch(e){ return {}; } }
+  function rafEkYaz(o){ try { localStorage.setItem('mkRafEk', JSON.stringify(o)); } catch(e){} }
+  function reyonSonOku(){ try { return JSON.parse(localStorage.getItem('mkReyonSon') || '[]') || []; } catch(e){ return []; } }
+  function reyonBtnCiz(){
+    var p = reyonParca(state.reyon), ik = (REYON_BOLGE.filter(function(b){ return b[0] === p[0]; })[0] || [0, '📍'])[1];
+    var eksik = p[0] === 'Mağaza' && !p[1];
+    reyonBtn.style.borderColor = eksik ? 'var(--red)' : 'var(--accent)';
+    reyonBtn.innerHTML = ik + ' ' + escapeHtml(p.join(' / ') || '—') + (eksik ? ' <span style="color:var(--red);">⚠️ bölüm seç</span>' : '') + ' <span style="color:var(--muted); font-weight:600;">▾</span>';
+  }
+  function reyonChip(attr, deger, metin, on){
+    return '<button type="button" ' + attr + '="' + escapeHtml(deger) + '" style="margin:0 6px 6px 0; padding:9px 12px; border-radius:999px; font-size:13px; font-weight:700; border:1.5px solid ' + (on ? 'var(--accent)' : 'var(--line)') + '; background:' + (on ? 'var(--accent)' : 'var(--panel2)') + '; color:' + (on ? '#fff' : 'var(--text)') + ';">' + escapeHtml(metin) + '</button>';
+  }
+  function reyonCiz(){
+    var h = '', son = reyonSonOku();
+    if(son.length) h += '<div style="font-weight:800; font-size:12px; margin:0 0 6px; color:var(--muted);">SON KULLANILANLAR</div><div>' + son.map(function(r){ return reyonChip('data-reyonson', r, r, r === reyonSecMetin()); }).join('') + '</div>';
+    h += '<div style="font-weight:800; font-size:12px; margin:12px 0 6px; color:var(--muted);">1 · BÖLGE</div><div>' + REYON_BOLGE.map(function(b){ return reyonChip('data-reyonbolge', b[0], b[1] + ' ' + b[0], reyonSec.bolge === b[0]); }).join('') + '</div>';
+    if(reyonSec.bolge){
+      h += '<div style="font-weight:800; font-size:12px; margin:12px 0 6px; color:var(--muted);">2 · BÖLÜM</div><div>' + (REYON_BOLUM[reyonSec.bolge] || []).map(function(b){ return reyonChip('data-reyonbolum', b, b, reyonSec.bolum === b); }).join('') + '</div>';
+    }
+    if(reyonSec.bolum){
+      var ek = rafEkOku()[reyonSec.bolum] || [], raflar = (REYON_RAF[reyonSec.bolum] || []).concat(ek.filter(function(x){ return (REYON_RAF[reyonSec.bolum] || []).indexOf(x) === -1; }));
+      h += '<div style="font-weight:800; font-size:12px; margin:12px 0 6px; color:var(--muted);">3 · RAF (isteğe bağlı)</div><div>' + reyonChip('data-reyonraf', '', '— raf yok —', !reyonSec.raf) + raflar.map(function(b){ return reyonChip('data-reyonraf', b, b, reyonSec.raf === b); }).join('') + '</div>' +
+        '<div style="display:flex; gap:8px; margin-top:6px;"><input type="text" id="reyonYeniRaf" maxlength="40" placeholder="Yeni raf adı (ör. Kuru Meyve)" autocomplete="off" style="flex:1; min-width:0;"><button type="button" id="reyonRafEkle" class="geriBtn" style="margin:0; padding:0 14px;">➕</button></div>';
+    }
+    h += '<div class="hint" style="margin-top:14px;">Seçilecek: <b>' + escapeHtml(reyonSecMetin() || '—') + '</b><br>Bölüm değişince mutlaka buradan değiştir — ERP aktarımı ve bölüm kontrolü bölüme göre yapılır.</div>';
+    reyonBodyEl.innerHTML = h;
+    document.getElementById('reyonTamam').disabled = !reyonSec.bolge || (reyonSec.bolge === 'Mağaza' && !reyonSec.bolum);
+  }
+  function reyonSecMetin(){ return [reyonSec.bolge, reyonSec.bolum, reyonSec.raf].filter(Boolean).join(' / '); }
+  function reyonAc(){
+    var p = reyonParca(state.reyon); reyonSec = { bolge: p[0] || '', bolum: p[1] || '', raf: p.slice(2).join(' / ') };
+    if(!REYON_BOLGE.some(function(b){ return b[0] === reyonSec.bolge; })) reyonSec = { bolge: '', bolum: '', raf: '' };
+    reyonModalEl.classList.remove('hidden'); reyonCiz();
+  }
+  function reyonUygula(metin){
+    state.reyon = metin; save(); reyonBtnCiz(); reyonModalEl.classList.add('hidden');
+    var son = reyonSonOku().filter(function(x){ return x !== metin; }); son.unshift(metin); try { localStorage.setItem('mkReyonSon', JSON.stringify(son.slice(0, 6))); } catch(e){}
+    successToast('📍 ' + metin);
+  }
+  reyonBtn.addEventListener('click', reyonAc);
+  reyonModalEl.addEventListener('click', function(e){
+    var t = e.target.closest && e.target.closest('[data-reyonkapat],[data-reyonson],[data-reyonbolge],[data-reyonbolum],[data-reyonraf],#reyonRafEkle,#reyonTamam'); if(!t) return;
+    if(t.hasAttribute('data-reyonkapat')){ reyonModalEl.classList.add('hidden'); return; }
+    if(t.hasAttribute('data-reyonson')){ reyonUygula(t.getAttribute('data-reyonson')); return; }
+    if(t.hasAttribute('data-reyonbolge')){ var b = t.getAttribute('data-reyonbolge'); if(b !== reyonSec.bolge) reyonSec = { bolge: b, bolum: '', raf: '' }; reyonCiz(); return; }
+    if(t.hasAttribute('data-reyonbolum')){ var bl = t.getAttribute('data-reyonbolum'); if(bl !== reyonSec.bolum){ reyonSec.bolum = bl; reyonSec.raf = ''; } reyonCiz(); return; }
+    if(t.hasAttribute('data-reyonraf')){ reyonSec.raf = t.getAttribute('data-reyonraf'); reyonCiz(); return; }
+    if(t.id === 'reyonRafEkle'){
+      var v = String(document.getElementById('reyonYeniRaf').value || '').replace(/\//g, '-').replace(/\s+/g, ' ').trim(); if(!v) return;
+      v = v.charAt(0).toLocaleUpperCase('tr-TR') + v.slice(1);
+      var ek = rafEkOku(); ek[reyonSec.bolum] = (ek[reyonSec.bolum] || []).filter(function(x){ return x !== v; }).concat([v]); rafEkYaz(ek);
+      reyonSec.raf = v; reyonCiz(); return;
+    }
+    if(t.id === 'reyonTamam' && reyonSec.bolge) reyonUygula(reyonSecMetin());
   });
+  reyonModalEl.addEventListener('keydown', function(e){ if(e.target.id === 'reyonYeniRaf' && e.key === 'Enter'){ e.preventDefault(); document.getElementById('reyonRafEkle').click(); } });
+  reyonBtnCiz();
 
   // Bir kaydı hem yerel listeden hem de (daha önce senkronize edildiyse)
   // sunucudaki 'Sayim' tablosundan silinmek üzere işaretler. Sunucu bunu
@@ -5152,12 +5231,13 @@
   document.getElementById('menuMiniBtn').addEventListener('click', function(){ miniAc('liste'); });
 
   // ============================================================
-  // 🔍 BÖLÜM KONTROLÜ: bir bölüm sayıldıktan sonra o bölümün okutmalarından rastgele ürünler seçilir
-  // (çok satan / pahalı daha sık). Kontrolcü kör sayar; Karşılaştır'da okutulan toplamla kıyaslanır.
+  // 📂 SAYIM BÖLÜMLERİ: her bölüm (Bölge / Bölüm) ayrı: ilk–son okutma (tarih saat dakika), okutma, ürün, personel,
+  // raflar, kontrol sonucu; bölümün Excel'i. 🔍 Kontrol: bölümün okutmalarından rastgele ürünler (çok satan / pahalı
+  // daha sık) kör sayılır, Karşılaştır'da okutulan toplamla kıyaslanır.
   // ============================================================
-  var bk = { reyonlar: null, sec: {}, saat: 8, adet: 10, kid: '', liste: null, havuz: 0, d: {}, sonuc: null, yuk: false, hata: '' };
-  try { var bkT = JSON.parse(localStorage.getItem('mkBkTaslak') || 'null'); if(bkT && bkT.kid && Date.now() - bkT.z < 6 * 3600000){ bk.kid = bkT.kid; bk.liste = bkT.liste; bk.havuz = bkT.havuz; bk.d = bkT.d || {}; bk.sonuc = bkT.sonuc || null; bk.sec = bkT.sec || {}; bk.saat = bkT.saat || 8; } } catch(e){}
-  function bkTaslakYaz(){ try { localStorage.setItem('mkBkTaslak', JSON.stringify(bk.kid ? { kid: bk.kid, liste: bk.liste, havuz: bk.havuz, d: bk.d, sonuc: bk.sonuc, sec: bk.sec, saat: bk.saat, z: Date.now() } : null)); } catch(e){} }
+  var bk = { bolumler: null, bolum: '', adet: 10, kid: '', liste: null, havuz: 0, d: {}, sonuc: null, yuk: false, hata: '', zaman: 0 };
+  try { var bkT = JSON.parse(localStorage.getItem('mkBkTaslak') || 'null'); if(bkT && bkT.kid && bkT.bolum && Date.now() - bkT.z < 6 * 3600000){ bk.kid = bkT.kid; bk.bolum = bkT.bolum; bk.liste = bkT.liste; bk.havuz = bkT.havuz; bk.d = bkT.d || {}; bk.sonuc = bkT.sonuc || null; } } catch(e){}
+  function bkTaslakYaz(){ try { localStorage.setItem('mkBkTaslak', JSON.stringify(bk.kid ? { kid: bk.kid, bolum: bk.bolum, liste: bk.liste, havuz: bk.havuz, d: bk.d, sonuc: bk.sonuc, z: Date.now() } : null)); } catch(e){} }
   function bkIstek(param, bitti){
     var auth = currentAuth(); if(!auth){ bitti('Önce giriş yap'); return; }
     if(!navigator.onLine){ bitti('İnternet yok'); return; }
@@ -5165,36 +5245,41 @@
       if(err || !d || d.status !== 'ok') bitti(err || (d && d.message) || 'bilinmeyen hata'); else bitti(null, d);
     }, 90000);
   }
-  function bkAc(){ if(bk.liste){ miniCiz(); return; } bkReyonGetir(); }
-  function bkReyonGetir(){
+  function bkAc(){ if(bk.liste){ miniCiz(); return; } bkBolumGetir(); }
+  function bkBolumGetir(){
     bk.yuk = true; bk.hata = ''; miniCiz();
-    bkIstek({ ne: 'reyonlar', saat: bk.saat }, function(err, d){ bk.yuk = false; bk.hata = err || ''; if(d) bk.reyonlar = d.reyonlar || []; miniCiz(); });
+    bkIstek({ ne: 'bolumler' }, function(err, d){ bk.yuk = false; bk.hata = err || ''; if(d){ bk.bolumler = d.bolumler || []; bk.zaman = Date.now(); } miniCiz(); });
   }
-  function bkSaatSec(){
-    return '<select id="bkSaat" style="width:auto; padding:8px;">' + [2, 4, 8, 12, 24, 48].map(function(h){ return '<option value="' + h + '"' + (h === bk.saat ? ' selected' : '') + '>son ' + h + ' saat</option>'; }).join('') + '</select>';
-  }
+  function bkTarih(z){ var m = /^(\d{4})-(\d\d)-(\d\d) (\d\d:\d\d)/.exec(String(z || '')); return m ? m[3] + '.' + m[2] + '.' + m[1] + ' ' + m[4] : String(z || '—'); }
+  function bkSure(dk){ dk = Number(dk) || 0; return dk >= 60 ? Math.floor(dk / 60) + ' sa ' + (dk % 60) + ' dk' : dk + ' dk'; }
   function bkHtml(){
     if(bk.yuk) return '<div class="hint">⏳ Yükleniyor…</div>';
     var hata = bk.hata ? '<div class="hint" style="color:var(--red); margin:0 0 10px;">❌ ' + escapeHtml(bk.hata) + '</div>' : '';
     if(!bk.liste){
-      var l = bk.reyonlar || [], secili = Object.keys(bk.sec).filter(function(k){ return bk.sec[k]; });
-      return hata + '<div class="hint" style="margin:0 0 10px;">Bir bölümün sayımı bitince: reyonlarını seç, rastgele ürün listesi çıkar. Kontrolcü bu ürünleri <b>yalnız o bölümde</b> sayar; okutulan toplam gösterilmez.</div>' +
-        '<div style="display:flex; gap:8px; align-items:center; margin-bottom:10px; flex-wrap:wrap;">' + bkSaatSec() +
-        '<select id="bkAdet" style="width:auto; padding:8px;">' + [5, 10, 15, 20, 30].map(function(n){ return '<option value="' + n + '"' + (n === bk.adet ? ' selected' : '') + '>' + n + ' ürün</option>'; }).join('') + '</select></div>' +
-        (l.length ? l.map(function(r){
-          var on = !!bk.sec[r[0]];
-          return '<div class="chSatir" data-bkreyon="' + escapeHtml(r[0]) + '" style="cursor:pointer;' + (on ? ' border-color:var(--accent); background:var(--panel2);' : '') + '"><div class="ust"><span>' + (on ? '☑️ ' : '⬜ ') + escapeHtml(r[0]) + '</span><span style="font-family:var(--mono); font-size:12.5px;">' + r[2] + ' ürün</span></div>' +
-            '<div class="alt"><span>' + r[1] + ' okutma · son ' + escapeHtml(new Date(r[3]).toLocaleTimeString('tr-TR', { hour: '2-digit', minute: '2-digit' })) + '</span></div></div>';
-        }).join('') : '<div class="hint">Bu sürede okutma yok. Süreyi büyüt.</div>') +
-        '<button type="button" class="btn-main" id="bkOlustur" style="margin-top:12px;"' + (secili.length ? '' : ' disabled') + '>🎲 Rastgele liste oluştur' + (secili.length ? ' (' + secili.length + ' reyon)' : '') + '</button>';
+      var l = bk.bolumler || [];
+      var h = hata + '<div class="hint" style="margin:0 0 10px;">Her bölüm ayrı: ilk ve son okutma, kim saydı, hangi raflar. Bölüm bitince <b>🔍 Kontrol</b> ile rastgele ürünleri kör saydır. Okutulan toplam gösterilmez.</div>' +
+        '<div style="display:flex; gap:8px; align-items:center; margin-bottom:10px; flex-wrap:wrap;"><select id="bkAdet" style="width:auto; padding:8px;">' + [5, 10, 15, 20, 30].map(function(n){ return '<option value="' + n + '"' + (n === bk.adet ? ' selected' : '') + '>Kontrol: ' + n + ' ürün</option>'; }).join('') + '</select>' +
+        '<button type="button" id="bkYenile" class="geriBtn" style="margin:0; padding:8px 12px;">↻ Yenile</button>' +
+        (l.length ? '<button type="button" id="bkHepsiIndir" class="geriBtn" style="margin:0; padding:8px 12px;">⬇️ Tümü (Excel)</button>' : '') + '</div>';
+      if(!l.length) return h + '<div class="hint">Bu sayım döneminde henüz okutma yok.</div>';
+      return h + l.map(function(b){
+        var k = b.kontrol, kh = !k ? '<span style="color:var(--muted);">Kontrol yapılmadı</span>' : k.uyusmayan ? '<span style="color:var(--red); font-weight:800;">🔍 ' + k.urun + ' kontrol · ❌ ' + k.uyusmayan + ' uyuşmuyor</span>' : '<span style="color:var(--green); font-weight:800;">🔍 ' + k.urun + ' kontrol · ✅ hepsi tuttu</span>';
+        var depo = /^depo/i.test(b.ad);
+        return '<div class="chSatir" style="padding:11px 12px;"><div class="ust" style="align-items:center;"><span style="font-weight:800;">' + (depo ? '📦 ' : '📂 ') + escapeHtml(b.ad) + '</span><span style="font-family:var(--mono); font-size:12.5px; white-space:nowrap;">' + b.urun + ' ürün</span></div>' +
+          '<div class="alt"><span>🕘 ' + escapeHtml(bkTarih(b.ilk)) + ' → ' + escapeHtml(bkTarih(b.son)) + ' · ' + escapeHtml(bkSure(b.dk)) + '</span></div>' +
+          '<div class="alt"><span>' + b.okutma + ' okutma · ' + escapeHtml(fmtQty(b.adet)) + ' adet · 👥 ' + escapeHtml((b.kisi || []).join(', ')) + '</span></div>' +
+          (b.raflar && b.raflar.length ? '<div class="alt"><span>🗂️ ' + b.raflar.map(function(r){ return escapeHtml(r[0]) + ' (' + r[1] + ')'; }).join(' · ') + '</span></div>' : '') +
+          '<div class="alt"><span>' + kh + (k && k.son ? ' <span style="color:var(--muted);">· son ' + escapeHtml(bkTarih(k.son)) + '</span>' : '') + '</span></div>' +
+          '<div style="display:flex; gap:8px; margin-top:8px;"><button type="button" class="btn-main" data-bkkontrol="' + escapeHtml(b.ad) + '" style="margin:0; flex:1; padding:10px;">🔍 Kontrol</button>' +
+          '<button type="button" class="geriBtn" data-bkindir="' + escapeHtml(b.ad) + '" style="margin:0; padding:0 14px;">⬇️ Excel</button></div></div>';
+      }).join('') + '<div class="hint" style="margin-top:6px;">Güncelleme: ' + escapeHtml(new Date(bk.zaman || Date.now()).toLocaleTimeString('tr-TR', { hour: '2-digit', minute: '2-digit' })) + '</div>';
     }
-    var reyonAd = Object.keys(bk.sec).filter(function(k){ return bk.sec[k]; }).join(', ');
     var sonuc = {}; (bk.sonuc || []).forEach(function(x){ sonuc[x.k] = x; });
-    var html = hata + '<div class="hint" style="margin:0 0 10px;"><b>' + escapeHtml(reyonAd) + '</b> · ' + bk.liste.length + ' ürün (bölümde ' + bk.havuz + ' ürün okutulmuş)</div>';
+    var html = hata + '<div class="hint" style="margin:0 0 10px;">🔍 <b>' + escapeHtml(bk.bolum) + '</b> · ' + bk.liste.length + ' ürün (bölümde ' + bk.havuz + ' ürün okutulmuş). Ürünü <b>yalnız bu bölümde</b> say.</div>';
     if(bk.sonuc){
       var tutan = bk.sonuc.filter(function(x){ return !x.fark; }).length, n = bk.sonuc.length;
       html += '<div class="chOzet"><div>KONTROL<b>' + n + '</b></div><div>TUTTU<b style="color:var(--green);">' + tutan + '</b></div><div>UYUŞMADI<b style="color:' + (n - tutan ? 'var(--red)' : 'var(--green)') + ';">' + (n - tutan) + '</b></div></div>' +
-        (n - tutan ? '<div class="hint" style="margin:0 0 10px; color:var(--amber);">Uyuşmayan ürünleri bir kez daha saydırın. Okutma yanlışsa <b>Düzelt</b> ekranından düzeltin, sonra <b>Uyuşmayanları tekrar kontrol et</b>. Çok ürün uyuşmuyorsa bölümün tamamını yeniden saydırmayı düşünün.</div>' : '<div class="hint" style="margin:0 0 10px; color:var(--green);">✅ Hepsi tuttu. Bölüm tamam.</div>');
+        (n - tutan ? '<div class="hint" style="margin:0 0 10px; color:var(--amber);">Uyuşmayan ürünleri bir kez daha saydırın. Okutma yanlışsa <b>Düzelt</b> ekranından düzeltin, sonra <b>Uyuşmayanları tekrar kontrol et</b>. Çok ürün uyuşmuyorsa bölümün tamamını yeniden saydırmayı düşünün.</div>' : '<div class="hint" style="margin:0 0 10px; color:var(--green);">✅ Hepsi tuttu.</div>');
     }
     html += bk.liste.map(function(x){
       var s = sonuc[x.k], v = bk.d[x.k] !== undefined ? bk.d[x.k] : '';
@@ -5209,19 +5294,30 @@
     var eksik = bk.liste.some(function(x){ return !sonuc[x.k]; });
     if(eksik) html += '<button type="button" class="btn-main" id="bkKarsilastir" style="margin-top:12px;"' + (bekleyen ? '' : ' disabled') + '>⚖️ Karşılaştır' + (bekleyen ? ' (' + bekleyen + ' ürün)' : '') + '</button>';
     else if(hataliVar) html += '<button type="button" class="btn-main" id="bkTekrar" style="margin-top:12px;">🔁 Uyuşmayanları tekrar kontrol et</button>';
-    html += '<button type="button" class="geriBtn" id="bkYeni" style="margin-top:10px; width:100%;">🆕 Yeni kontrol (bu listeyi kapat)</button>';
+    html += '<button type="button" class="geriBtn" id="bkYeni" style="margin-top:10px; width:100%;">📂 Bölümlere dön (bu kontrolü kapat)</button>';
     return html;
   }
+  function bkIndir(bolum){
+    bkIstek({ ne: 'indir', bolum: bolum || '' }, function(err, d){
+      if(err){ warnToast('İndirilemedi: ' + err); return; }
+      var q = function(v){ v = String(v == null ? '' : v); return /[;"\n]/.test(v) ? '"' + v.replace(/"/g, '""') + '"' : v; };
+      var csv = 'Tarih;Saat;Personel;Ürün;Stok Kodu;Barkod;Birim;Adet;Reyon\n' + (d.satirlar || []).map(function(r){ return r.map(function(v, i){ return i === 7 ? String(v).replace('.', ',') : q(v); }).join(';'); }).join('\n');
+      var ad = 'sayim-' + (bolum ? bolum.replace(/[^\wığüşöçİĞÜŞÖÇ]+/g, '-') : 'tum-bolumler') + '-' + new Date().toISOString().slice(0, 16).replace(/[-:T]/g, '') + '.csv';
+      dosyaIndir(new Blob(['\ufeff' + csv], { type: 'text/csv;charset=utf-8;' }), ad);
+    });
+  }
   miniEl.addEventListener('click', function(e){
-    var t = e.target.closest && e.target.closest('[data-bkreyon],#bkOlustur,#bkKarsilastir,#bkTekrar,#bkYeni');
+    var t = e.target.closest && e.target.closest('[data-bkkontrol],[data-bkindir],#bkHepsiIndir,#bkYenile,#bkKarsilastir,#bkTekrar,#bkYeni');
     if(!t) return;
-    if(t.hasAttribute('data-bkreyon')){ var k = t.getAttribute('data-bkreyon'); bk.sec[k] = !bk.sec[k]; miniCiz(); return; }
-    if(t.id === 'bkOlustur'){
-      var secili = Object.keys(bk.sec).filter(function(k){ return bk.sec[k]; }); if(!secili.length) return;
+    if(t.id === 'bkYenile'){ bkBolumGetir(); return; }
+    if(t.id === 'bkHepsiIndir'){ bkIndir(''); return; }
+    if(t.hasAttribute('data-bkindir')){ bkIndir(t.getAttribute('data-bkindir')); return; }
+    if(t.hasAttribute('data-bkkontrol')){
+      var bolum = t.getAttribute('data-bkkontrol');
       bk.yuk = true; miniCiz();
-      bkIstek({ ne: 'liste', reyonlar: JSON.stringify(secili), saat: bk.saat, adet: bk.adet }, function(err, d){
+      bkIstek({ ne: 'liste', bolum: bolum, adet: bk.adet }, function(err, d){
         bk.yuk = false; bk.hata = err || '';
-        if(d){ bk.kid = d.kid; bk.liste = d.liste || []; bk.havuz = d.urunSayisi || 0; bk.d = {}; bk.sonuc = null; bkTaslakYaz(); }
+        if(d){ bk.bolum = bolum; bk.kid = d.kid; bk.liste = d.liste || []; bk.havuz = d.urunSayisi || 0; bk.d = {}; bk.sonuc = null; bkTaslakYaz(); }
         miniCiz();
       });
       return;
@@ -5240,13 +5336,10 @@
     if(t.id === 'bkTekrar'){ bk.sonuc = (bk.sonuc || []).filter(function(x){ return !x.fark; }); bkTaslakYaz(); miniCiz(); return; }
     if(t.id === 'bkYeni'){
       if(bk.liste && Object.keys(bk.d).length && !confirm('Girilen adetler gönderilmedi. Yine de kapatılsın mı?')) return;
-      bk.kid = ''; bk.liste = null; bk.d = {}; bk.sonuc = null; bkTaslakYaz(); bkReyonGetir();
+      bk.kid = ''; bk.liste = null; bk.d = {}; bk.sonuc = null; bkTaslakYaz(); bkBolumGetir();
     }
   });
-  miniEl.addEventListener('change', function(e){
-    if(e.target.id === 'bkSaat'){ bk.saat = Number(e.target.value) || 8; bkReyonGetir(); }
-    if(e.target.id === 'bkAdet'){ bk.adet = Number(e.target.value) || 10; }
-  });
+  miniEl.addEventListener('change', function(e){ if(e.target.id === 'bkAdet') bk.adet = Number(e.target.value) || 10; });
   miniEl.addEventListener('input', function(e){
     var k = e.target.getAttribute && e.target.getAttribute('data-bkm'); if(!k) return;
     var v = String(e.target.value).replace(',', '.').trim();
