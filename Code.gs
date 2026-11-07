@@ -2250,7 +2250,7 @@ function doPostIsle(e) {
     // ---- KİMLİK KAPISI (bkz. GÜVENLİK bölümü) ----
     // Katalog/cari listesinin tamamını değiştirmek: ERP anahtarı ya da
     // "ayarlar" yetkili kullanıcı. Diğer her yazma: giriş yapmış kullanıcı.
-    var topluMu = data.type === 'katalog_bulk' || data.type === 'cari_bulk' || data.type === 'iade_bulk' || data.type === 'insert_bulk';
+    var topluMu = data.type === 'katalog_bulk' || data.type === 'cari_bulk' || data.type === 'iade_bulk' || data.type === 'insert_bulk' || data.type === 'sayim_aktar_kontrol';
     var postKapi = (topluMu && erpAnahtarDogru(data.anahtar)) ? { ok: true }
       : kimlikGerek(data.user, data.pass,
           data.type === 'katalog_bulk' ? 'katalog gönderimi' : data.type === 'cari_bulk' ? 'cari gönderimi'
@@ -2316,6 +2316,7 @@ function doPostIsle(e) {
     }
     if (data.type === 'iade_bulk') return iadeBulkKaydet(data.fisler);
     if (data.type === 'insert_bulk') return insertBulkKaydet(data.satirlar);
+    if (data.type === 'sayim_aktar_kontrol') return sayimAktarKontrol();
     if (data.type === 'cari_bulk') {
       var cOut = saveCariBulk(data.entries || []);
       var cDegismedi = cOut.getContent().indexOf('degisiklikYok') !== -1;
@@ -4071,6 +4072,23 @@ function miniSayim(p, callback) {
     return outJson({ status: 'ok', satirlar: sat }, callback);
   }
   return outJson({ status: 'error', message: 'Bilinmeyen işlem' }, callback);
+}
+
+// ============================================================
+// 📦 SAYIM AKTAR KONTROLÜ (erp/sayim-aktar.ps1, ERP anahtarıyla): ERP programı okutmaları veri tabanı
+// kopyasından alır; yazmadan önce buradaki ASIL kayıtlarla (Sayim sekmesi) birebir karşılaştırır.
+// Kuyrukta gönderilmemiş / karantinada kayıt varsa ya da bir kayıt eksik/farklıysa ERP'ye yazılmaz.
+// ============================================================
+function sayimAktarKontrol() {
+  var sh = SpreadsheetApp.getActiveSpreadsheet().getSheetByName('Sayim'), l = [];
+  if (sh && sh.getLastRow() >= 2) {
+    sh.getRange(2, 1, sh.getLastRow() - 1, SAYIM_COL.KAYIT_ID).getValues().forEach(function (r) {
+      var id = String(r[SAYIM_COL.KAYIT_ID - 1] || ''); if (id) l.push([id, Number(r[SAYIM_COL.ADET - 1]) || 0]);
+    });
+  }
+  var k = dbKuyrukDurum();
+  return outJson({ status: 'ok', resetToken: PropertiesService.getScriptProperties().getProperty('RESET_TOKEN') || '',
+    kuyruk: { bekleyen: k.bekleyen, enEskiDk: k.enEskiDk, karantina: k.karantina, sonHata: k.sonHata }, kayitlar: l, sunucuMs: Date.now() });
 }
 
 // ============================================================

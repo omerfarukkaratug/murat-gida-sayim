@@ -31,6 +31,8 @@ $SqlServer        = "SERVER\ERP12"
 $Database         = ""     # bos: aktif yil veri tabani otomatik bulunur
 $DbUrl            = "https://wjyqempcmyrmruhdpcwk.supabase.co"
 $DbAnahtarDosyasi = "C:\Scripts\db-anahtar.txt"
+$SunucuUrl        = "https://sunucu.krtsaha.com/exec"
+$ErpAnahtarDosyasi = "C:\Scripts\erp-anahtar.txt"
 $LogFile          = "C:\Scripts\sayim-aktar-log.txt"
 $DurumDosyasi     = "C:\Scripts\sayim-aktar-durum.json"
 $RaporKlasoru     = "C:\Scripts\sayim-raporlari"
@@ -168,6 +170,25 @@ function Sayac($tx, $id, $tablo, $kodPc) {
 }
 
 # ---------------------------------------------------------------------
+#  ERP YEDEGI: ERP'ye yazmadan / silmeden HEMEN ONCE aktif veri tabaninin tam yedegi alinir ve dogrulanir.
+#  COPY_ONLY: muhasebenin / gece yedeginin zincirini bozmaz. Yedek alinamazsa ERP'ye YAZILMAZ.
+#  Dosya: SQL Server'in yedek klasorunde SAYIM_<veritabani>_<tarih>.bak (son 3 tanesi tutulur).
+# ---------------------------------------------------------------------
+function ErpYedekAl($neden) {
+    Write-Host "  ERP yedegi aliniyor ($neden)... birkac dakika surebilir, kapatmayin." -ForegroundColor Cyan
+    $klasor = [string](Deger $null "DECLARE @d nvarchar(4000); EXEC master.dbo.xp_instance_regread N'HKEY_LOCAL_MACHINE', N'Software\Microsoft\MSSQLServer\MSSQLServer', N'BackupDirectory', @d OUTPUT; SELECT ISNULL(@d, '')" $null)
+    if (-not $klasor) { throw "SQL Server yedek klasoru bulunamadi" }
+    $dosya = Join-Path $klasor ("SAYIM_{0}_{1}.bak" -f $Database, (Get-Date -Format "yyyyMMdd_HHmmss"))
+    try { [void](Sql $script:Bag $null "BACKUP DATABASE [$Database] TO DISK = @f WITH COPY_ONLY, CHECKSUM, INIT, COMPRESSION" @{ "@f" = $dosya }).ExecuteNonQuery() }
+    catch { [void](Sql $script:Bag $null "BACKUP DATABASE [$Database] TO DISK = @f WITH COPY_ONLY, CHECKSUM, INIT" @{ "@f" = $dosya }).ExecuteNonQuery() }   # Express: sikistirma yok
+    [void](Sql $script:Bag $null "RESTORE VERIFYONLY FROM DISK = @f WITH CHECKSUM" @{ "@f" = $dosya }).ExecuteNonQuery()
+    try { Get-ChildItem -Path $klasor -Filter "SAYIM_*.bak" -ErrorAction Stop | Sort-Object LastWriteTime -Descending | Select-Object -Skip 3 | Remove-Item -Force -ErrorAction SilentlyContinue } catch {}
+    Yaz-Log "ERP YEDEGI ($neden): $dosya (dogrulandi)"
+    Write-Host "  Yedek alindi ve dogrulandi: $dosya" -ForegroundColor Green
+    return $dosya
+}
+
+# ---------------------------------------------------------------------
 #  Durum dosyasi: hangi gece ne yazildi (ERP'deki belgeyle her acilista karsilastirilir)
 # ---------------------------------------------------------------------
 function Durum-Oku() {
@@ -216,6 +237,31 @@ function Hazirla() {
     Yaz-Log "ERP veri tabani: $Database, lokasyon: $script:Lokasyon"
 }
 
+# Bulut kopyasi (buradan okunan) ile sunucudaki ASIL sayim kayitlari birebir ayni mi? Degilse yazilmaz.
+function Asil-Karsilastir($satirlar) {
+    if (-not (Test-Path $ErpAnahtarDosyasi)) { return "ERP anahtari yok ($ErpAnahtarDosyasi) - asil kayitlarla karsilastirilamadi" }
+    $anahtar = ((Get-Content -Path $ErpAnahtarDosyasi -TotalCount 1) -as [string]).Trim()
+    $govde = [System.Text.Encoding]::UTF8.GetBytes((@{ type = "sayim_aktar_kontrol"; anahtar = $anahtar } | ConvertTo-Json -Compress))
+    try { $c = Invoke-RestMethod -Uri $SunucuUrl -Method Post -Body $govde -ContentType "application/json; charset=utf-8" -TimeoutSec 300 -UserAgent "KRT-Saha-Sayim/1.0" }
+    catch { return "Sunucuya ulasilamadi: $($_.Exception.Message)" }
+    if (-not $c -or $c.status -ne "ok") { return "Sunucu kontrolu reddetti: $(if ($c) { $c.message } else { 'bos yanit' })" }
+    $sorun = @()
+    if ([int]$c.kuyruk.bekleyen -gt 0) { $sorun += "sunucuda buluta henuz gonderilmemis $($c.kuyruk.bekleyen) kayit var (en eskisi $($c.kuyruk.enEskiDk) dk) - birkac dakika bekleyip tekrar deneyin" }
+    if ([int]$c.kuyruk.karantina -gt 0) { $sorun += "bulutun kabul etmedigi $($c.kuyruk.karantina) kayit var (DbKuyrukHata sekmesi) - bana haber verin" }
+    $asil = @{}; foreach ($x in @($c.kayitlar)) { $asil[[string]$x[0]] = [double]$x[1] }
+    $bulut = @{}; foreach ($x in $satirlar) { $bulut[[string]$x[0]] = [double]$x[4] }
+    $eksik = @($asil.Keys | Where-Object { -not $bulut.ContainsKey($_) })
+    $fazla = @($bulut.Keys | Where-Object { -not $asil.ContainsKey($_) })
+    $farkli = @($asil.Keys | Where-Object { $bulut.ContainsKey($_) -and [Math]::Abs($asil[$_] - $bulut[$_]) -gt 0.0001 })
+    if ($eksik.Count) { $sorun += "$($eksik.Count) okutma sunucuda var, bulut kopyasinda YOK (or. $(($eksik | Select-Object -First 3) -join ', '))" }
+    if ($fazla.Count) { $sorun += "$($fazla.Count) okutma bulutta var, sunucuda YOK (silinmis olabilir; or. $(($fazla | Select-Object -First 3) -join ', '))" }
+    if ($farkli.Count) { $sorun += "$($farkli.Count) okutmanin adedi sunucuyla farkli (or. $(($farkli | Select-Object -First 3) -join ', '))" }
+    if ($sorun.Count) { return ($sorun -join "; ") }
+    Write-Host "  Asil kayitlarla birebir ayni: $($asil.Count) okutma, kuyruk bos." -ForegroundColor Green
+    Yaz-Log "ASIL KARSILASTIRMA tamam: $($asil.Count) okutma"
+    return ""
+}
+
 function Donem-Sec($durum) {
     $r = Rpc "sayim_donemleri_ver" @{}
     if (-not $r -or $r.status -ne "ok") { throw "Sayim donemleri alinamadi (039_sayim_aktar.sql calistirildi mi?)" }
@@ -235,6 +281,16 @@ function Okutmalar($donem) {
     $r = Rpc "sayim_kayitlari_ver" @{ p_donem = $donem }
     if (-not $r -or $r.status -ne "ok") { throw "Okutmalar alinamadi" }
     $s = @($r.satirlar); Yaz-Log "Donem #$donem : $($s.Count) okutma"
+    # Ham kopya: her calistirmada butun okutmalar bu bilgisayara da yazilir (bulut / sunucu disinda 3. kopya)
+    try {
+        $hk = Join-Path $RaporKlasoru "ham"; if (-not (Test-Path $hk)) { New-Item -ItemType Directory -Path $hk -Force | Out-Null }
+        $hd = Join-Path $hk ("donem{0}-{1}.json" -f $donem, (Get-Date -Format "yyyyMMdd-HHmmss"))
+        [System.IO.File]::WriteAllText($hd, ($r | ConvertTo-Json -Depth 6 -Compress), [System.Text.Encoding]::UTF8)
+        $sb = New-Object System.Text.StringBuilder; [void]$sb.AppendLine("Kayit ID;Stok Kodu;Barkod;Urun;Adet;Birim;Reyon;Okutma Zamani;Personel")
+        foreach ($x in $s) { [void]$sb.AppendLine(("{0};{1};{2};{3};{4};{5};{6};{7};{8}" -f $x[0], $x[1], $x[2], ([string]$x[3] -replace ';', ','), ([double]$x[4]).ToString($Inv), $x[5], ([string]$x[6] -replace ';', ','), (EpochTarih $x[7]).ToString("dd.MM.yyyy HH:mm:ss"), $x[8])) }
+        [System.IO.File]::WriteAllText([System.IO.Path]::ChangeExtension($hd, ".csv"), "$([char]0xFEFF)" + $sb.ToString(), [System.Text.Encoding]::UTF8)
+        Write-Host "  Okutmalarin kopyasi bu bilgisayara kaydedildi: $hk" -ForegroundColor DarkGray
+    } catch { Uyari "Okutmalarin yerel kopyasi yazilamadi: $($_.Exception.Message)" }
     return $s
 }
 
@@ -319,6 +375,8 @@ function Gece-Aktar() {
     foreach ($g in @($durum.geceler)) { if ([datetime]$g.T -ge $T) { throw "Bu gecenin kesinlestirme ani, daha once yazilan '$($g.ad)' gecesinden ($(([datetime]$g.T).ToString('dd.MM.yyyy HH:mm'))) sonra olmali" } }
 
     $satirlar = Okutmalar $donem
+    $sonDonem = [long]((Rpc "sayim_donemleri_ver" @{}).donemler[0][0])
+    $asilSorun = if ($donem -eq $sonDonem) { Asil-Karsilastir $satirlar } else { "Secilen donem en son donem degil; sunucudaki asil kayitlarla karsilastirilamaz" }
     # Reyon ozeti
     $reyonlar = $satirlar | Group-Object { [string]$_[6] } | Sort-Object Count -Descending
     Write-Host "  Reyonlar (butun donem): $(($reyonlar | ForEach-Object { $_.Name + ' ' + $_.Count + $(if (DepoMu $_.Name) { ' [DEPO]' } else { '' }) }) -join ' | ')"
@@ -343,6 +401,7 @@ function Gece-Aktar() {
     # DENETIMLER
     Baslik "Denetimler"
     $engel = 0
+    if ($asilSorun) { Hata "Okutmalar sunucudaki asil kayitlarla dogrulanamadi: $asilSorun"; $engel++ }
     if ($b.eslesmeyen.Count) { Uyari "$($b.eslesmeyen.Count) okutma ERP'de bir urunle eslesmedi (stok kodu / barkod ERP'de yok, ya da uygulamada acilan yeni urun). Raporda 'ESLESMEYEN'. Bu urunler belgeye GIRMEZ." }
     if ($kartsiz.Count) { Uyari "$($kartsiz.Count) urunun ERP kartinda adet barkodu yok; belgeye girmez (raporda)." }
     $ids = ($plan | ForEach-Object { $_.sid }) -join ","
@@ -395,7 +454,8 @@ function Gece-Aktar() {
     $c = Read-Host "  Raporu kontrol ettiniz mi? ERP'ye SAYIM BELGESI olarak yazmak icin EVET yazin (baska her sey: vazgec)"
     if ($c -cne "EVET") { Write-Host "  Yazilmadi." -ForegroundColor Yellow; return }
 
-    # YAZ
+    # YAZ (once yedek: alinamazsa yazilmaz)
+    try { $yedek = ErpYedekAl "sayim '$ad' yazilmadan once" } catch { Hata "ERP yedegi alinamadi, ERP'ye YAZILMADI: $($_.Exception.Message)"; return }
     $tx = $script:Bag.BeginTransaction()
     try {
         $aciklama = Kisalt ($AciklamaOn + $ad + " " + $bas.ToString("dd.MM HH:mm") + "-" + $bit.ToString("dd.MM HH:mm")) 100
@@ -426,6 +486,8 @@ function Gece-Aktar() {
         Yaz-Log "YAZILDI '$ad': SAYIM $sayimId, $($plan.Count) urun, $n satir, kesinlestirme ani $($T.ToString('s'))"
         Baslik "ERP'ye yazildi"
         Write-Host "  Sayim belgesi: $aciklama  (SAYIM no $sayimId)" -ForegroundColor Green
+        Write-Host "  Yazmadan once alinan ERP yedegi: $yedek"
+        Write-Host "  Kesinlestirmeden once ERP'de ayrica yedek almaniza gerek yok; bu yedek o anki hali tutuyor." -ForegroundColor DarkGray
         Write-Host ""
         Write-Host "  SIMDI ERP'de:" -ForegroundColor Cyan
         Write-Host "   1) Stok > Sayim > Kesinlestirme ekranini acin, YALNIZ bu belgeyi secin."
@@ -481,6 +543,7 @@ function Sil() {
     $s = Read-Host "  Hangisi silinsin? (numara)"; if (-not $s) { return }
     $g = $acik[[int]$s - 1]
     if ((Read-Host "  '$($g.ad)' sayim belgesi ERP'den silinecek. Emin misiniz? EVET yazin") -cne "EVET") { return }
+    try { [void](ErpYedekAl "sayim '$($g.ad)' silinmeden once") } catch { Hata "ERP yedegi alinamadi, SILINMEDI: $($_.Exception.Message)"; return }
     $tx = $script:Bag.BeginTransaction()
     try {
         if ([int](Deger $tx "SELECT COUNT(*) FROM dbo.SAYIM WHERE ID = @i AND ISNULL(FIS, 0) = 0" @{ "@i" = [long]$g.sayimId }) -ne 1) { throw "Belge kesinlestirilmis ya da yok" }
