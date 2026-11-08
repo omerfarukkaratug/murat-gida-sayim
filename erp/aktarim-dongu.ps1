@@ -33,10 +33,11 @@ try {
         $tur++
         try {
             $p = Start-Process -FilePath "powershell.exe" -ArgumentList @("-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-WindowStyle", "Hidden", "-File", "`"$Program`"") -WindowStyle Hidden -PassThru
+            $null = $p.Handle   # PowerShell 5: tutamak hemen alinmazsa ExitCode bos doner ve her tur "hata" gibi gorunur
             if (-not $p.WaitForExit($TurSiniriMs)) {
                 try { $p.Kill() } catch {}
                 Yaz "UYARI: tur $tur 10 dakikada bitmedi (takildi) - kapatildi, devam ediliyor"
-            } elseif ($p.ExitCode -ne 0) {
+            } elseif ($p.ExitCode -ne $null -and $p.ExitCode -ne 0) {
                 Yaz "Tur $tur hata koduyla bitti ($($p.ExitCode)) - ayrinti siparis-aktar-log.txt"
             }
         } catch { Yaz "HATA: tur baslatilamadi: $($_.Exception.Message)" }
