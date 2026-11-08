@@ -597,6 +597,9 @@ function Kontrol() {
         if (-not $yanlis.Count) { Write-Host "  TAMAM: $($hedef.Count) urunun hepsinde ERP stogu (o anda) sayilana esit." -ForegroundColor Green; Yaz-Log "KONTROL '$($g.ad)': tamam ($($hedef.Count) urun)"; continue }
         Hata "$($yanlis.Count) / $($hedef.Count) urunde ERP stogu sayilana esit DEGIL:"
         $yanlis | Select-Object -First 15 | ForEach-Object { Write-Host ("     {0,-12} {1,-40} beklenen {2,9}  ERP {3,9}" -f $_[0], (Kisalt $_[1] 40), $_[2], $_[3]) }
+        # Hangi kesinlestirme secildi? Duz kesinlestirmede fis miktari = sayilan; "adet ver"de fis miktari = sayilan - stok.
+        $mod = @((Tablo $null "SELECT COUNT(*) AS N, SUM(CASE WHEN ABS(ISNULL(f.M, 0) - s.M) < 0.001 THEN 1 ELSE 0 END) AS AYNI FROM (SELECT STOK, BARKOD, SUM(MIKTAR * ISNULL(NULLIF(CARPAN, 0), 1)) AS M FROM dbo.SAYIM_DETAY WHERE SAYIM = @s GROUP BY STOK, BARKOD HAVING SUM(MIKTAR) <> 0) s LEFT JOIN (SELECT STOK, BARKOD, SUM(MIKTAR_FIS * ISNULL(NULLIF(CARPAN, 0), 1)) AS M FROM dbo.FIS_DETAY WHERE FIS = @f GROUP BY STOK, BARKOD) f ON f.STOK = s.STOK AND f.BARKOD = s.BARKOD" @{ "@s" = [long]$g.sayimId; "@f" = [long]$g.fis }).Rows)
+        if ($mod.Count -and [int]$mod[0].N -gt 0 -and [int]$mod[0].AYNI -ge [int]$mod[0].N * 0.8) { Hata "Fis satirlari sayilanla birebir ayni: kesinlestirmede DUZ (sayilani ekleyen) secenek secilmis. ERP'de bu sayim fisini silin, 'adet ver' (fark) secenegiyle tekrar kesinlestirin." }
         if ($yanlis.Count -gt $hedef.Count * 0.5) { Hata "Urunlerin cogu tutmuyor: buyuk ihtimalle kesinlestirmede 'sayilani EKLE' secildi ya da tarih yanlis verildi. ERP'de bu sayim fisini silip FARK secenegi ve dogru tarihle tekrar kesinlestirin, sonra KONTROL'u tekrar calistirin." }
         else { Uyari "Az sayida urun tutmuyor: bu urunlerde kesinlestirmeden sonra o tarihe geriye donuk belge girilmis olabilir." }
         Yaz-Log "KONTROL '$($g.ad)': $($yanlis.Count) urun tutmuyor"
