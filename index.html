@@ -593,7 +593,7 @@
   <header style="border:none; padding:0 0 16px; background:transparent; display:flex; align-items:flex-start; justify-content:space-between;">
     <div>
       <h1><img src="logo-header.png" alt="Murat Gıda" style="height:30px; width:auto; display:block;"></h1>
-      <div class="sub"><img src="icon.svg" alt="" style="width:15px;height:15px;vertical-align:-3px;margin-right:5px;">KRT Saha · Murat Gıda • offline • Android • build 299</div>
+      <div class="sub"><img src="icon.svg" alt="" style="width:15px;height:15px;vertical-align:-3px;margin-right:5px;">KRT Saha · Murat Gıda • offline • Android • build 300</div>
     </div>
     <button type="button" id="themeToggleBtn" title="Tema seç" style="background:var(--panel2); border:1.5px solid var(--line); color:var(--text); width:34px; height:34px; border-radius:50%; font-size:15px; padding:0; display:flex; align-items:center; justify-content:center; flex-shrink:0;">🎨</button>
   </header>
@@ -1443,6 +1443,8 @@
         <button type="button" id="adminCloseTopBtn" aria-label="Kapat" style="width:30px; height:30px; border-radius:50%; background:var(--panel2); border:1.5px solid var(--line); color:var(--text); font-size:16px; line-height:1; padding:0; display:flex; align-items:center; justify-content:center; flex-shrink:0;">✕</button>
       </div>
 
+      <button type="button" id="adminGuvenlikKisayol" class="hidden" style="width:100%; margin-bottom:12px; padding:10px 12px; text-align:left; font-size:12.5px; line-height:1.4; border-radius:var(--r-sm);"></button>
+
       <div id="adminSectionRapor" class="hidden">
         <button id="adminFinalizeBtn" style="width:100%; margin-bottom:10px; background:linear-gradient(135deg, var(--accent2), var(--accent)); color:#fff; padding:14px; text-align:left; line-height:1.5;">
           📊 Sayımı Bitir ve Rapor Oluştur<br><span style="font-weight:500; font-size:11px; opacity:.85;">Aynı stok kodlarını birleştirir, isimleri düzeltir, son stok listesini ve detaylı raporu oluşturur</span>
@@ -1487,7 +1489,7 @@
         <div class="hint" style="margin-bottom:8px;">"Sayımı Bitir ve Rapor Oluştur" her çalıştığında, Son Stok Sayımı bu adrese CSV eki olarak otomatik gönderilir. Boş bırakırsan mail gönderilmez.</div>
         <input type="text" id="adminBackupEmail" placeholder="ornek@murat-gida.com" style="margin-bottom:10px;">
         <button id="adminWakeLockSave" style="width:100%; background:var(--ink); color:#fff; padding:11px;">Ayarları Kaydet</button>
-        <div style="font-weight:800; font-size:13px; margin:18px 0 4px;">🔒 Veri Güvenliği</div>
+        <div id="adminGuvenlikBaslik" style="font-weight:800; font-size:13px; margin:18px 0 4px; scroll-margin-top:12px;">🔒 Veri Güvenliği</div>
         <div class="hint" style="margin-bottom:8px;">"Kimlik zorunlu" açıkken katalog, cari ve tüm kayıtlar sadece <b>giriş yapmış kullanıcıdan</b> (ERP bilgisayarından ise gizli anahtarla) kabul edilir; adresi bilen yabancı hiçbir şey okuyamaz, gönderemez. <b>Açmadan önce:</b> tüm telefonlar build 114 ya da üstü olmalı ve ERP anahtarı ERP bilgisayarına yazılmış olmalı.</div>
         <div id="adminGuvenlikDurum" class="hint" style="margin-bottom:8px; line-height:1.7;">⏳ Yükleniyor…</div>
         <div id="adminErpAnahtarKutu" class="hidden" style="margin-bottom:8px;">
@@ -8346,6 +8348,12 @@
         : 'ℹ️ Henüz kimliksiz istek görülmedi, ama ERP anahtarı kurulmadan açma.');
     }
     el.innerHTML = satir.join('<br>');
+    var kis = document.getElementById('adminGuvenlikKisayol');
+    kis.classList.remove('hidden');
+    kis.style.background = g.zorunlu ? 'var(--panel2)' : 'var(--amber)';
+    kis.style.border = '1.5px solid ' + (g.zorunlu ? 'var(--line)' : 'var(--amber)');
+    kis.style.color = g.zorunlu ? 'var(--text)' : '#fff';
+    kis.innerHTML = g.zorunlu ? '🔒 <b>Veri güvenliği: Kimlik zorunlu AÇIK</b> 🟢 — ayrıntı için dokun' : '⚠️ <b>Veri güvenliği: Kimlik zorunlu KAPALI</b> — açmak için dokun';
     btn.classList.remove('hidden');
     btn.textContent = g.zorunlu ? '🔓 Kimlik zorunlu: KAPAT' : '🔒 Kimlik zorunlu: AÇ';
     document.getElementById('adminErpAnahtarBtn').textContent = g.erpAnahtarVar ? '🔑 ERP anahtarını yenile' : '🔑 ERP anahtarı oluştur';
@@ -8378,6 +8386,9 @@
       if(err || !data || data.status !== 'ok'){ el.textContent = '❌ ' + (err || (data && data.message) || 'bilinmeyen hata'); return; }
       bakimYukle();
     }, 300000);
+  });
+  document.getElementById('adminGuvenlikKisayol').addEventListener('click', function(){
+    var h = document.getElementById('adminGuvenlikBaslik'); if(h && h.scrollIntoView) h.scrollIntoView({ behavior: 'smooth', block: 'start' });
   });
   function guvenlikYukle(){
     var auth = currentAuth(); if(!auth || !navigator.onLine) return;
