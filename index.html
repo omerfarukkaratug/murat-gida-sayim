@@ -593,7 +593,7 @@
   <header style="border:none; padding:0 0 16px; background:transparent; display:flex; align-items:flex-start; justify-content:space-between;">
     <div>
       <h1><img src="logo-header.png" alt="Murat Gıda" style="height:30px; width:auto; display:block;"></h1>
-      <div class="sub"><img src="icon.svg" alt="" style="width:15px;height:15px;vertical-align:-3px;margin-right:5px;">KRT Saha · Murat Gıda • offline • Android • build 300</div>
+      <div class="sub"><img src="icon.svg" alt="" style="width:15px;height:15px;vertical-align:-3px;margin-right:5px;">KRT Saha · Murat Gıda • offline • Android • build 301</div>
     </div>
     <button type="button" id="themeToggleBtn" title="Tema seç" style="background:var(--panel2); border:1.5px solid var(--line); color:var(--text); width:34px; height:34px; border-radius:50%; font-size:15px; padding:0; display:flex; align-items:center; justify-content:center; flex-shrink:0;">🎨</button>
   </header>
@@ -2786,11 +2786,15 @@
   }
   function hareketSatirHtml(r, gelenMi){
     // r: [tarih, cari, belge_no, miktar, birim, birim_fiyat (KDV dahil), fis_turu, belge türü adı (diğer belgelerde)]
-    var fiyat = (r[5] === null || r[5] === undefined || r[5] === '') ? '' : fmtPara(r[5]);
+    var fiyatVar = !(r[5] === null || r[5] === undefined || r[5] === '');
+    var fiyat = fiyatVar ? fmtPara(r[5]) : '';
+    // KDV hariç: ürünün KDV oranıyla (katalogdan) hesaplanır
+    var kc = catalogMap.get(hareketSon ? hareketSon.barkod : ''), kdvO = kc && kc.kdv !== '' && kc.kdv !== undefined ? Number(String(kc.kdv).replace(',', '.')) : NaN;
+    var haricHtml = fiyatVar && !isNaN(kdvO) ? '<div class="alt" style="margin-top:1px;"><span></span><span style="white-space:nowrap; font-size:11.5px; color:var(--muted);">KDV hariç <b style="color:var(--text);">' + escapeHtml(fmtPara(Number(r[5]) / (1 + kdvO / 100))) + '</b> · %' + escapeHtml(String(kdvO)) + '</span></div>' : '';
     var tur = r[7] || HAREKET_BELGE[r[6]] || 'Belge';
     var alis = gelenMi === undefined ? (r[6] === 1 || r[6] === 5) : gelenMi;
     return '<div class="hrkSatir"><div class="ust"><span style="overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">' + escapeHtml(r[1] || '—') + '</span>' +
-      '<span style="white-space:nowrap; color:var(--green);">' + escapeHtml(fiyat) + '</span></div>' +
+      '<span style="white-space:nowrap; color:var(--green);">' + escapeHtml(fiyat) + (fiyat && !isNaN(kdvO) ? ' <small style="font-size:10.5px; color:var(--muted); font-weight:700;">KDV dahil</small>' : '') + '</span></div>' + haricHtml +
       '<div class="alt"><span>' + escapeHtml(r[0]) + (r[2] ? ' · No ' + escapeHtml(r[2]) : '') + '</span><span style="white-space:nowrap; color:var(--text); font-weight:800;">' +
       escapeHtml(fmtQty(r[3]) + (r[4] ? ' ' + String(r[4]).toLowerCase() : '')) + '</span></div>' +
       '<div class="hrkTur ' + (alis ? 'alis' : 'satis') + '">' + escapeHtml(tur) + '</div></div>';
@@ -2818,7 +2822,7 @@
     }
     if(hareketSekme === 'gelen' && gelen.length) html += '<div class="hint">Girişlerin TÜMÜ listelenir (seçilen dönemden bağımsız): alışlar ve devir, transfer, sayım fazlası gibi diğer giriş belgeleri.</div>';
     if(hareketSekme === 'satilan' && satilan.length >= 200) html += '<div class="hint">İlk 200 belge gösteriliyor — daha kısa dönem seç.</div>';
-    html += '<div class="hint" style="margin-top:10px; font-size:11px;">Fiyatlar KDV dahil birim fiyattır.' + (d.sonVeri ? ' ERP verisi: ' + escapeHtml(d.sonVeri) : '') + '</div>';
+    html += '<div class="hint" style="margin-top:10px; font-size:11px;">Fiyatlar birim fiyattır: üstteki KDV dahil, alttaki KDV hariç (ürünün KDV oranıyla).' + (d.sonVeri ? ' ERP verisi: ' + escapeHtml(d.sonVeri) : '') + '</div>';
     hareketBodyEl.innerHTML = html;
   }
   document.getElementById('menuMalGirisBtn').addEventListener('click', function(){ openMalHareketScreen('giris'); });
@@ -4648,6 +4652,9 @@
   // Bilgisayar/harici klavye de çalışır: rakamlar, * x + - , . ⌫ ve Enter.
   function createCalcPad(displayEl, previewEl, padEl, onEnter){
     var expr = '', bulk = false, bosYazi = '';
+    // Gram modu (kilo ile satılan ürünlerde): farklı gramajlar toplanır (250 + 340 + 120 = 710 gr = 0,71 kg).
+    // Seçim telefonda hatırlanır; kaydedilen değer her zaman KG'dır.
+    var gram = false; try { gram = localStorage.getItem('mkGramModu') === '1'; } catch(e){}
     var OPS = '×+−';
     function lastNum(){ var parts = expr.split(/[×+−]/); return parts[parts.length - 1]; }
     function evaluate(){
@@ -4668,13 +4675,17 @@
       var sum = terms.reduce(function(a, b){ return a + b; }, 0);
       return Math.round(sum * 1000) / 1000;
     }
+    function gm(){ return bulk && gram; }
+    function kgDeger(){ var v = evaluate(); if(v === null) return null; return gm() ? Math.round(v) / 1000 : v; }
+    function trS(v){ return String(v).replace('.', ','); }
     function render(){
-      if(!expr){ displayEl.textContent = bulk ? 'Kg gir (örn: 1,5)' : (bosYazi || 'Adet gir'); displayEl.classList.add('calcEmpty'); previewEl.textContent = ''; return; }
+      if(!expr){ displayEl.textContent = bulk ? (gram ? 'Gram gir (örn: 250 + 340)' : 'Kg gir (örn: 1,5)') : (bosYazi || 'Adet gir'); displayEl.classList.add('calcEmpty'); previewEl.textContent = ''; return; }
       displayEl.classList.remove('calcEmpty');
-      displayEl.textContent = expr.replace(/([×+−])/g, ' $1 ');
+      displayEl.textContent = expr.replace(/([×+−])/g, ' $1 ') + (gm() ? ' gr' : '');
       displayEl.scrollLeft = displayEl.scrollWidth;
       var v = evaluate();
-      previewEl.textContent = /[×+−]/.test(expr) && v !== null ? ('= ' + String(v).replace('.', ',')) : '';
+      if(gm()) previewEl.textContent = v !== null ? ('= ' + (/[×+−]/.test(expr) ? trS(Math.round(v)) + ' gr = ' : '') + trS(kgDeger()) + ' kg') : '';
+      else previewEl.textContent = /[×+−]/.test(expr) && v !== null ? ('= ' + trS(v)) : '';
     }
     function press(k){
       if(k === '⌫'){ expr = expr.slice(0, -1); }
@@ -4685,7 +4696,7 @@
         expr += k;
       }
       else if(k === ','){
-        if(!bulk || lastNum().indexOf(',') !== -1) return;
+        if(!bulk || gram || lastNum().indexOf(',') !== -1) return;
         expr += (lastNum() === '' ? '0,' : ',');
       }
       else { // rakam veya 00
@@ -4700,8 +4711,11 @@
     }
     function build(){
       // İşlem tuşları SOLDA, rakamlar SAĞDA (sağ elle rakam, sol tarafta hesap).
-      var keys = ['⌫','1','2','3', '×','4','5','6', '+','7','8','9', '−', bulk ? ',' : '00','0','C'];   // klasik dizilim: 1-2-3 üstte
-      padEl.innerHTML = keys.map(function(k){
+      var keys = ['⌫','1','2','3', '×','4','5','6', '+','7','8','9', '−', bulk && !gram ? ',' : '00','0','C'];   // klasik dizilim: 1-2-3 üstte
+      var mod = !bulk ? '' : '<div style="grid-column:1 / -1; display:flex; gap:8px;">' +
+        ['kg', 'gr'].map(function(m){ var on = (m === 'gr') === gram;
+          return '<button type="button" class="calcMod" data-mod="' + m + '" style="flex:1; padding:9px; border-radius:10px; font-size:14px; font-weight:800; border:1.5px solid ' + (on ? 'var(--accent)' : 'var(--line)') + '; background:' + (on ? 'var(--accent)' : 'var(--panel2)') + '; color:' + (on ? '#fff' : 'var(--text)') + ';">' + (m === 'kg' ? '⚖️ Kilo ile gir' : '🥜 Gram ile gir (topla)') + '</button>'; }).join('') + '</div>';
+      padEl.innerHTML = mod + keys.map(function(k){
         var cls = 'calcKey' + (OPS.indexOf(k) !== -1 ? ' op' : '') + (k === '⌫' ? ' del' : '') + (k === 'C' ? ' clr' : '');
         return '<button type="button" class="' + cls + '" data-k="' + k + '">' + k + '</button>';
       }).join('');
@@ -4709,6 +4723,15 @@
     // pointerdown: parmak değer değmez işler (hızlı yazımda tuş kaçmaz)
     var lastDown = 0;
     padEl.addEventListener('pointerdown', function(e){
+      var md = e.target.closest('.calcMod');
+      if(md){
+        e.preventDefault(); var yeni = md.getAttribute('data-mod') === 'gr';
+        if(yeni !== gram){ var eskiKg = kgDeger(); gram = yeni; try { localStorage.setItem('mkGramModu', gram ? '1' : '0'); } catch(x){}
+          // Yazılmış tek bir sayı varsa yeni birime çevrilir; toplama ifadesi varsa sonucu yazılır
+          expr = eskiKg === null ? '' : (gram ? String(Math.round(eskiKg * 1000)) : trS(eskiKg));
+          build(); render(); }
+        return;
+      }
       var b = e.target.closest('.calcKey'); if(!b) return;
       e.preventDefault(); lastDown = Date.now(); press(b.getAttribute('data-k'));
     });
@@ -4736,7 +4759,7 @@
     });
     return {
       reset: function(isBulk, bos){ bulk = !!isBulk; bosYazi = bos || ''; expr = ''; build(); render(); },
-      value: evaluate,
+      value: kgDeger,
       isEmpty: function(){ return !expr; }
     };
   }
