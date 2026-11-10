@@ -98,7 +98,7 @@ function Birlestir($satirlar, $esle, $secili, $yapilan, [bool]$son, $atanmis) {
     $urunler = @{}
     foreach ($sid in $raf.Keys) {
         if ($yapilan.ContainsKey($sid)) { $urunler[$sid] = @{ depo = 0.0; raf = [double]$raf[$sid]; mod = "ekle"; ad = $ad[$sid]; barkodlar = @($bark[$sid].Keys); son = $sonRaf[$sid] } }
-        else { $urunler[$sid] = @{ depo = [double]($depo[$sid]); raf = [double]$raf[$sid]; mod = "esitle"; ad = $ad[$sid]; barkodlar = @($bark[$sid].Keys); son = $sonRaf[$sid] } }
+        else { $urunler[$sid] = @{ depo = [double]($depo[$sid]); raf = [double]$raf[$sid]; mod = "esitle"; ad = $ad[$sid]; barkodlar = @($bark[$sid].Keys); son = $sonRaf[$sid]; sonDepo = $sonDepo[$sid] } }
     }
     if ($son) {
         foreach ($sid in $depo.Keys) {
@@ -410,19 +410,25 @@ function Gece-Aktar() {
     if ($depoB.Count) { $dIlk = ($depoB | ForEach-Object { $_.ilk } | Sort-Object)[0]; $dSon = ($depoB | ForEach-Object { $_.son } | Sort-Object)[-1]; if (($dSon - $dIlk).TotalHours -gt 16) { Uyari "Depo okutmalari $([Math]::Round(($dSon - $dIlk).TotalHours)) saate yayiliyor ($($dIlk.ToString('dd.MM HH:mm')) - $($dSon.ToString('dd.MM HH:mm'))). Gece rafta sayarken reyonu 'Depo'da unutan olmus olabilir: uygulamada Bolumler / Duzelt ile bakin." } }
 
     Write-Host ""
-    $sec = (Read-Host "  Bu gecenin bolumleri (numaralar, or. 1,3)  |  hepsi bitince depoda kalan urunleri kapatmak icin: SON").Trim()
+    Write-Host "  HEPSI: depo dahil butun okutmalar TEK belgede (deneme / tek seferde yapilan sayim icin)" -ForegroundColor DarkGray
+    $sec = (Read-Host "  Bu gecenin bolumleri (numaralar, or. 1,3)  |  hepsi bitince depoda kalan urunleri kapatmak icin: SON  |  HEPSI").Trim()
     $son = (NormTr $sec) -eq "son"
+    $hepsi = (NormTr $sec) -eq "hepsi"
     $secili = @{}
     if ($son) {
         if (@($durum.geceler | Where-Object { $_.son }).Count) { throw "SON kapanis zaten yazilmis" }
         if ($secilebilir.Count) { Hata "Henuz yazilmamis $($secilebilir.Count) bolum var: $(($secilebilir | ForEach-Object { $_.ad }) -join ', '). SON'dan once bu bolumler gece olarak yazilmali."; if ((Read-Host "  Bu bolumler HIC aktarilmayacak. Bilerek devam icin DEVAM yazin") -cne "DEVAM") { return } }
         $ad = "SON kapanis"
+    } elseif ($hepsi) {
+        if (@($durum.geceler).Count) { throw "HEPSI yalniz hic gece yazilmamis bir donemde kullanilabilir" }
+        foreach ($x in $secilebilir) { $secili[$x.bolum] = $true }
+        $ad = "Hepsi (depo dahil)"
     } else {
         foreach ($n in ($sec -split '[,; ]+' | Where-Object { $_ })) { $k = 0; if (-not [int]::TryParse($n, [ref]$k) -or $k -lt 1 -or $k -gt $secilebilir.Count) { throw "Gecersiz numara: $n" }; $secili[$secilebilir[$k - 1].bolum] = $true }
         if (-not $secili.Count) { throw "Bolum secilmedi" }
         $ad = (@($secili.Keys) -join " + ")
     }
-    $sx = @($liste | Where-Object { -not $_.depo -and $secili.ContainsKey($_.bolum) })
+    $sx = @($liste | Where-Object { ($hepsi -and $_.depo) -or (-not $_.depo -and $secili.ContainsKey($_.bolum)) })
     if ($son) { $ilk = ($depoB | ForEach-Object { $_.ilk } | Sort-Object)[0] } else { $ilk = ($sx | ForEach-Object { $_.ilk } | Sort-Object)[0] }
     if (-not $ilk) { $ilk = Get-Date }
     $gun = if ($ilk.Hour -lt 6) { $ilk.Date.AddDays(-1) } else { $ilk.Date }
@@ -459,14 +465,19 @@ function Gece-Aktar() {
 
     $esle = Eslestir $satirlar
     $yapilan = Yapilanlar $durum
-    $b = Birlestir $satirlar $esle $secili $yapilan $son $atanmis
+    $b = Birlestir $satirlar $esle $secili $yapilan ($son -or $hepsi) $atanmis
     $u = $b.urunler
     if (-not $u.Count) { throw "Secilen bolumlerde aktarilacak urun yok." }
     Write-Host "  Bu gece: $($u.Count) urun ($(@($u.Values | Where-Object { $_.mod -eq 'esitle' }).Count) ilk kez, $(@($u.Values | Where-Object { $_.mod -eq 'ekle' }).Count) daha once baska bolumde sayilmis: ustune eklenir)"
 
     $tMap = $null
     if ($saatli) {
-        $tMap = @{}; foreach ($sid in $u.Keys) { $tMap[[long]$sid] = $(if ($u[$sid].son) { [datetime]$u[$sid].son } else { $T }) }
+        $tMap = @{}
+        foreach ($sid in $u.Keys) {
+            $t0 = $(if ($u[$sid].son) { [datetime]$u[$sid].son } else { $T })
+            if ($hepsi -and $u[$sid].sonDepo -and [datetime]$u[$sid].sonDepo -gt $t0) { $t0 = [datetime]$u[$sid].sonDepo }   # HEPSI: 'Depo' etiketli okutma da magaza acikken yapildi
+            $tMap[[long]$sid] = $t0
+        }
         if ($sonT) { $erken = @($tMap.Values | Where-Object { $_ -le $sonT }); if ($erken.Count) { throw "$($erken.Count) urunun okutmasi daha once yazilan son geceden ($($sonT.ToString('dd.MM HH:mm'))) once. Geceleri sirayla aktarin." } }
     }
     $bilgi = ErpBilgi @($u.Keys) $T $tMap
