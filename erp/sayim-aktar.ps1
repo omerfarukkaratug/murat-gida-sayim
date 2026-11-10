@@ -39,6 +39,7 @@ $LogFile          = "C:\Scripts\sayim-aktar-log.txt"
 $DurumDosyasi     = "C:\Scripts\sayim-aktar-durum.json"
 $RaporKlasoru     = "C:\Scripts\sayim-raporlari"
 $AciklamaOn       = "KRT Saha: "
+$SurumSA          = "2026-11-10c"
 
 try { [Net.ServicePointManager]::SecurityProtocol = [Net.ServicePointManager]::SecurityProtocol -bor [Net.SecurityProtocolType]::Tls12 } catch {}
 $Inv = [Globalization.CultureInfo]::InvariantCulture
@@ -512,7 +513,14 @@ function Gece-Aktar() {
     $yapilan = Yapilanlar $durum
     $b = Birlestir $satirlar $esle $secili $yapilan ($son -or $hepsi) $atanmis
     $u = $b.urunler
-    if (-not $u.Count) { throw "Secilen bolumlerde aktarilacak urun yok." }
+    if (-not $u.Count) {
+        if ($b.eslesmeyen.Count) {
+            Hata "Okutmalarin hicbiri ERP'de bir urunle eslesmedi ($($b.eslesmeyen.Count) okutma). Ornekler (stok kodu / barkod):"
+            $b.eslesmeyen | Select-Object -First 8 | ForEach-Object { Write-Host ("     kod '{0}'  barkod '{1}'  {2}" -f $_[1], $_[2], $_[3]) }
+            Write-Host ("     ERP'de bulunan kod sayisi: {0}" -f $esle.Count) -ForegroundColor Yellow
+        }
+        throw "Secilen bolumlerde aktarilacak urun yok."
+    }
     Write-Host "  Bu gece: $($u.Count) urun ($(@($u.Values | Where-Object { $_.mod -eq 'esitle' }).Count) ilk kez, $(@($u.Values | Where-Object { $_.mod -eq 'ekle' }).Count) daha once baska bolumde sayilmis: ustune eklenir)"
 
     $tMap = $null
@@ -868,7 +876,7 @@ function Sayilmayanlar() {
 #  MENU
 # ---------------------------------------------------------------------
 try {
-    Baslik "KRT Saha - Sayimi ERP12'ye aktarma"
+    Baslik "KRT Saha - Sayimi ERP12'ye aktarma   (surum $SurumSA)"
     Hazirla
     while ($true) {
         Write-Host ""
