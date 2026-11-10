@@ -593,7 +593,7 @@
   <header style="border:none; padding:0 0 16px; background:transparent; display:flex; align-items:flex-start; justify-content:space-between;">
     <div>
       <h1><img src="logo-header.png" alt="Murat Gıda" style="height:30px; width:auto; display:block;"></h1>
-      <div class="sub"><img src="icon.svg" alt="" style="width:15px;height:15px;vertical-align:-3px;margin-right:5px;">KRT Saha · Murat Gıda • offline • Android • build 302</div>
+      <div class="sub"><img src="icon.svg" alt="" style="width:15px;height:15px;vertical-align:-3px;margin-right:5px;">KRT Saha · Murat Gıda • offline • Android • build 303</div>
     </div>
     <button type="button" id="themeToggleBtn" title="Tema seç" style="background:var(--panel2); border:1.5px solid var(--line); color:var(--text); width:34px; height:34px; border-radius:50%; font-size:15px; padding:0; display:flex; align-items:center; justify-content:center; flex-shrink:0;">🎨</button>
   </header>
@@ -3639,10 +3639,20 @@
 
   // ---------- ADET GİRİŞ KARTI ----------
   var qtyEntryEl = document.getElementById('qtyEntry');
+  // HAYALET TIKLAMA: Onayla parmak değer değmez (pointerdown) çalışır ve pencere kapanır; parmak kalkınca
+  // tarayıcının "click"i alttaki düğmeye düşer (ör. "Bitir / Yeni" → bitirme ekranı açılıyordu).
+  // Hızlı dokunuştan sonraki 700 ms içinde, dokunulan düğme dışındaki her tıklama yutulur.
+  var hayaletBitis = 0, hayaletKaynak = null;
+  function hayaletTikEngelle(kaynak){ hayaletBitis = Date.now() + 700; hayaletKaynak = kaynak || null; }
+  document.addEventListener('click', function(e){
+    if(Date.now() > hayaletBitis || !e.isTrusted) return;
+    if(hayaletKaynak && hayaletKaynak.contains && hayaletKaynak.contains(e.target)) return;
+    e.preventDefault(); e.stopPropagation(); if(e.stopImmediatePropagation) e.stopImmediatePropagation();
+  }, true);
   // Miktar, Mal Giriş/Çıkış ile AYNI uygulama içi hesap makinesiyle girilir
   // (telefon klavyesi açılmaz; "8 × 12" doğrudan yazılır).
   var qtyPad = createCalcPad(document.getElementById('qtyDisplay'), document.getElementById('qtyPreview'),
-    document.getElementById('qtyPad'), function(){ confirmQtyEntry(); });
+    document.getElementById('qtyPad'), function(){ hayaletTikEngelle(document.getElementById('qtyPad')); confirmQtyEntry(); });
 
   // Barkodu 2'şerli gruplara ayırıp aralarına ayraç koymadan (bitişik)
   // iki rengi sırayla uygular — böylece göz uzun rakam dizisini daha kolay
@@ -9169,6 +9179,7 @@
     var handledAt = 0;
     el.addEventListener('pointerdown', function(e){
       handledAt = Date.now();
+      hayaletTikEngelle(el);
       handler(e);
     });
     el.addEventListener('click', function(e){
