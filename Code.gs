@@ -4197,6 +4197,15 @@ function bolumKontrol(p, callback) {
     }).sort(function (x, y) { return (x.ilkMs || 0) - (y.ilkMs || 0); });
     return outJson({ status: 'ok', bolumler: l, sunucuMs: Date.now() }, callback);
   }
+  if (ne === 'urun') {
+    // Bir ürünün bu sayım dönemindeki BÜTÜN okutmaları: nerede, ne zaman, kim, kaç (yeniden kontrol için)
+    var kod = String(p.stokKodu || '').trim(), bk = String(p.barkod || '').trim();
+    if (!kod && !bk) return outJson({ status: 'error', message: 'Ürün yok' }, callback);
+    var sat2 = bkSayimSatirlari().filter(function (x) { return (kod && x.kod === kod) || (bk && x.bk === bk); })
+      .sort(function (a, b) { return (a.ts || 0) - (b.ts || 0); })
+      .map(function (x) { return [x.tarih, x.saat, x.personel, x.reyon, x.adet, x.birim, x.bk]; });
+    return outJson({ status: 'ok', satirlar: sat2 }, callback);
+  }
   if (ne === 'indir') {
     var hedef = String(p.bolum || '');
     var sat = bkSayimSatirlari().filter(function (x) { return !hedef || x.bolum === hedef; }).map(function (x) {

@@ -190,6 +190,51 @@ function Sayac($tx, $id, $tablo, $kodPc) {
 }
 
 # ---------------------------------------------------------------------
+#  ANLASILIR RAPOR (HTML): tarayicida acilir. Ozet kartlari + urun urun tablo; urune tiklayinca okutmalari
+#  (nerede, ne zaman, kim, kac) gorunur. ERP'ye yazmadan once bakilir.
+# ---------------------------------------------------------------------
+function HtmlK($x) { return [System.Net.WebUtility]::HtmlEncode([string]$x) }
+function RaporHtml($dosya, $ad, $T, $kap, $saatli, $plan, $b, $satirlar, $esle, $engel, $ozet) {
+    $okutma = @{}
+    foreach ($s in $satirlar) {
+        $kod = ([string]$s[1]).Trim(); $bk = ([string]$s[2]).Trim()
+        $sid = if ($kod -and $esle.ContainsKey("K:" + $kod)) { $esle["K:" + $kod] } elseif ($bk -and $esle.ContainsKey("B:" + $bk)) { $esle["B:" + $bk] } else { $null }
+        if (-not $sid) { continue }
+        if (-not $okutma.ContainsKey([long]$sid)) { $okutma[[long]$sid] = New-Object System.Collections.ArrayList }
+        [void]$okutma[[long]$sid].Add($s)
+    }
+    $sb = New-Object System.Text.StringBuilder
+    [void]$sb.Append('<!doctype html><html lang="tr"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>KRT Saha say&#305;m raporu</title><style>')
+    [void]$sb.Append('body{font-family:Segoe UI,Arial,sans-serif;margin:0;background:#f5f6f8;color:#1d1d1f}header{background:#1f2a44;color:#fff;padding:16px 22px}h1{margin:0;font-size:20px}.alt{opacity:.8;font-size:13px;margin-top:4px}')
+    [void]$sb.Append('.kartlar{display:flex;flex-wrap:wrap;gap:10px;padding:16px 22px}.kart{background:#fff;border-radius:10px;padding:12px 16px;min-width:150px;box-shadow:0 1px 3px rgba(0,0,0,.08)}.kart small{display:block;color:#666;font-size:12px}.kart b{font-size:20px}')
+    [void]$sb.Append('.uyari{margin:0 22px 12px;padding:12px 16px;border-radius:10px;background:#fff3cd;border:1px solid #e0c060}.engel{background:#fde2e1;border-color:#d9534f}.iyi{background:#e3f6e8;border-color:#5cb85c}')
+    [void]$sb.Append('table{border-collapse:collapse;width:calc(100% - 44px);margin:0 22px 24px;background:#fff;border-radius:10px;overflow:hidden;font-size:13px}th,td{padding:7px 9px;border-bottom:1px solid #eee;text-align:left}th{background:#eef0f4;position:sticky;top:0;cursor:pointer}td.s{text-align:right;font-family:Consolas,monospace}')
+    [void]$sb.Append('.ar{color:#1a7f37;font-weight:700}.ek{color:#c0392b;font-weight:700}tr.u{cursor:pointer}tr.u:hover{background:#f7f9ff}tr.d td{background:#fafbfd;font-size:12px;color:#444}.ara{margin:0 22px 10px}.ara input{padding:8px 10px;width:320px;border:1px solid #ccc;border-radius:8px}')
+    [void]$sb.Append('</style></head><body>')
+    [void]$sb.Append('<header><h1>Say&#305;m: ' + (HtmlK $ad) + '</h1><div class="alt">' + $(if ($saatli) { 'Saat-dakika: her &#252;r&#252;n kendi okutma saatine g&#246;re' } else { 'Kesinle&#351;tirme an&#305; ' + $T.ToString('dd.MM.yyyy HH:mm:ss') + ' &middot; kapan&#305;&#351; ' + $kap.ToString('dd.MM.yyyy HH:mm') }) + ' &middot; haz&#305;rland&#305; ' + (Get-Date).ToString('dd.MM.yyyy HH:mm') + '</div></header>')
+    [void]$sb.Append('<div class="kartlar">')
+    foreach ($k in $ozet) { [void]$sb.Append('<div class="kart"><small>' + $k[0] + '</small><b' + $(if ($k[2]) { ' class="' + $k[2] + '"' }) + '>' + (HtmlK $k[1]) + '</b></div>') }
+    [void]$sb.Append('</div>')
+    if ($engel -gt 0) { [void]$sb.Append('<div class="uyari engel">&#10060; ENGEL VAR: program ERP&#39;ye yazmayacak. Siyah ekrandaki k&#305;rm&#305;z&#305; X sat&#305;rlar&#305;na bak&#305;n.</div>') } else { [void]$sb.Append('<div class="uyari iyi">&#9989; Engel yok. Tablo do&#287;ruysa siyah ekranda EVET yaz&#305;nca bu belge ERP&#39;ye yaz&#305;l&#305;r.</div>') }
+    if ($b.eslesmeyen.Count) { [void]$sb.Append('<div class="uyari">' + $b.eslesmeyen.Count + ' okutma ERP&#39;de bir &#252;r&#252;nle e&#351;le&#351;medi (belgeye girmez): ' + (HtmlK ((@($b.eslesmeyen | ForEach-Object { [string]$_[3] + ' (' + [string]$_[2] + ')' } | Select-Object -Unique -First 30)) -join ', ')) + '</div>') }
+    [void]$sb.Append('<div class="ara"><input id="q" placeholder="&#220;r&#252;n ara (ad ya da kod)&#8230;" oninput="ara()"> <span style="color:#666;font-size:12px">&#220;r&#252;ne t&#305;klay&#305;nca okutmalar&#305; a&#231;&#305;l&#305;r: nerede, ne zaman, kim, ka&#231;. Ba&#351;l&#305;&#287;a t&#305;klay&#305;nca s&#305;ralan&#305;r.</span></div>')
+    [void]$sb.Append('<table id="t"><thead><tr><th onclick="sirala(0)">&#220;r&#252;n</th><th onclick="sirala(1)">Stok kodu</th><th onclick="sirala(2)">Depo</th><th onclick="sirala(3)">Raf</th><th onclick="sirala(4)">Say&#305;lan (yaz&#305;lacak)</th><th onclick="sirala(5)">ERP stok</th><th onclick="sirala(6)">Fark</th><th onclick="sirala(7)">Fark TL</th><th>Ne olacak</th></tr></thead><tbody>')
+    $i = 0
+    foreach ($p in ($plan | Sort-Object { -[Math]::Abs($_.fark * $_.x.alis) })) {
+        $i++; $tl = [Math]::Round($p.fark * $p.x.alis, 2); $cls = if ($p.fark -gt 0) { 'ar' } elseif ($p.fark -lt 0) { 'ek' } else { '' }
+        $yon = if ($p.sifir) { 'S&#305;f&#305;rlanacak (hi&#231; say&#305;lmad&#305;)' } elseif ($p.u.mod -eq 'ekle') { '&#220;st&#252;ne eklenecek (ba&#351;ka b&#246;l&#252;mde de say&#305;ld&#305;)' } else { 'Stok say&#305;lana e&#351;itlenecek' }
+        [void]$sb.Append('<tr class="u" onclick="ac(' + $i + ')"><td>' + (HtmlK $p.x.ad) + '</td><td>' + (HtmlK $p.x.kod) + '</td><td class="s">' + $p.u.depo + '</td><td class="s">' + $p.u.raf + '</td><td class="s"><b>' + $p.s.hedefToplam + '</b></td><td class="s">' + $p.s.stokToplam + '</td><td class="s ' + $cls + '">' + $(if ($p.fark -gt 0) { '+' }) + $p.fark + '</td><td class="s ' + $cls + '">' + $tl.ToString('N2', $Tr) + '</td><td>' + $yon + '</td></tr>')
+        $ok = $okutma[[long]$p.sid]
+        $det = if ($ok) { (@($ok | Sort-Object { [long]$_[7] } | ForEach-Object { (EpochTarih $_[7]).ToString('dd.MM HH:mm') + ' &middot; ' + (HtmlK $_[6]) + ' &middot; ' + (HtmlK $_[8]) + ' &middot; <b>' + $_[4] + '</b> (' + (HtmlK $_[2]) + ')' })) -join '<br>' } else { '(okutma yok)' }
+        [void]$sb.Append('<tr class="d" id="d' + $i + '" style="display:none"><td colspan="9">' + $det + '</td></tr>')
+    }
+    [void]$sb.Append('</tbody></table>')
+    [void]$sb.Append('<script>function ac(i){var e=document.getElementById("d"+i);e.style.display=e.style.display=="none"?"":"none"}function ara(){var q=document.getElementById("q").value.toLocaleLowerCase("tr");document.querySelectorAll("#t tbody tr.u").forEach(function(r){var g=r.textContent.toLocaleLowerCase("tr").indexOf(q)>=0;r.style.display=g?"":"none";var d=r.nextElementSibling;if(!g)d.style.display="none"})}var yon={};function sirala(c){var tb=document.querySelector("#t tbody"),rs=[].slice.call(tb.querySelectorAll("tr.u"));yon[c]=!yon[c];rs.sort(function(a,b){var x=a.cells[c].textContent,y=b.cells[c].textContent,nx=parseFloat(x.replace(/\./g,"").replace(",",".")),ny=parseFloat(y.replace(/\./g,"").replace(",","."));var r=(!isNaN(nx)&&!isNaN(ny))?nx-ny:x.localeCompare(y,"tr");return yon[c]?r:-r});rs.forEach(function(r){var d=r.nextElementSibling;tb.appendChild(r);tb.appendChild(d)})}</script>')
+    [void]$sb.Append('</body></html>')
+    [System.IO.File]::WriteAllText($dosya, $sb.ToString(), (New-Object System.Text.UTF8Encoding($true)))
+}
+
+# ---------------------------------------------------------------------
 #  ERP YEDEGI: ERP'ye yazmadan / silmeden HEMEN ONCE aktif veri tabaninin tam yedegi alinir ve dogrulanir.
 #  COPY_ONLY: muhasebenin / gece yedeginin zincirini bozmaz. Yedek alinamazsa ERP'ye YAZILMAZ.
 #  Dosya: SQL Server'in yedek klasorunde SAYIM_<veritabani>_<tarih>.bak (son 3 tanesi tutulur).
@@ -555,6 +600,14 @@ function Gece-Aktar() {
     if ($son) { foreach ($s in $b.kalan) { [void]$csv.AppendLine(("HIC AKTARILMADI (bolumu yazilmadi);{0};{1};;{2};;;;;;barkod {3}, reyon {4}, {5}, {6}" -f $s[1], ([string]$s[3] -replace ';', ','), $s[4], $s[2], $s[6], (EpochTarih $s[7]).ToString('dd.MM HH:mm'), $s[8])) } }
     foreach ($sid in $kartsiz) { [void]$csv.AppendLine("KARTTA ADET BARKODU YOK;$sid;$($u[$sid].ad);;;;;;;;") }
     [System.IO.File]::WriteAllText($dosya, "$([char]0xFEFF)" + $csv.ToString(), [System.Text.Encoding]::UTF8)
+    $htmlDosya = [System.IO.Path]::ChangeExtension($dosya, ".html")
+    $ozet = @(
+        @("&#220;r&#252;n say&#305;s&#305; (belgeye girecek)", [string]$plan.Count, ""),
+        @("Fazla &#231;&#305;kan", ((Sayi $topFazla) + " adet / " + (Tl $tlFazla)), "ar"),
+        @("Eksik &#231;&#305;kan", ((Sayi $topEksik) + " adet / " + (Tl $tlEksik)), "ek"),
+        @("E&#351;le&#351;meyen okutma", [string]$b.eslesmeyen.Count, ""),
+        @("1.000 TL &#252;st&#252; fark", [string]@($plan | Where-Object { [Math]::Abs($_.fark * $_.x.alis) -ge 1000 }).Count, ""))
+    try { RaporHtml $htmlDosya $ad $T $kap $saatli $plan $b $satirlar $esle $engel $ozet; Start-Process $htmlDosya; Write-Host "  Anlasilir rapor tarayicida acildi: $htmlDosya" -ForegroundColor Green } catch { Uyari "HTML rapor yazilamadi: $($_.Exception.Message)" }
 
     Baslik "OZET: $ad"
     Write-Host "  Kesinlestirme ani: $($T.ToString('dd.MM.yyyy HH:mm:ss'))   kapanis: $($kap.ToString('dd.MM.yyyy HH:mm'))"
