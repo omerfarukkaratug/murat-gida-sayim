@@ -593,7 +593,7 @@
   <header style="border:none; padding:0 0 16px; background:transparent; display:flex; align-items:flex-start; justify-content:space-between;">
     <div>
       <h1><img src="logo-header.png" alt="Murat Gıda" style="height:30px; width:auto; display:block;"></h1>
-      <div class="sub"><img src="icon.svg" alt="" style="width:15px;height:15px;vertical-align:-3px;margin-right:5px;">KRT Saha · Murat Gıda • offline • Android • build 303</div>
+      <div class="sub"><img src="icon.svg" alt="" style="width:15px;height:15px;vertical-align:-3px;margin-right:5px;">KRT Saha · Murat Gıda • offline • Android • build 304</div>
     </div>
     <button type="button" id="themeToggleBtn" title="Tema seç" style="background:var(--panel2); border:1.5px solid var(--line); color:var(--text); width:34px; height:34px; border-radius:50%; font-size:15px; padding:0; display:flex; align-items:center; justify-content:center; flex-shrink:0;">🎨</button>
   </header>
@@ -1863,6 +1863,22 @@
     return !!(e && e.birim && KG_BIRIM.test(String(e.birim).trim().toLocaleUpperCase('tr-TR')));
   }
   function unitFor(barcode){ return isBulkBarcode(barcode) ? 'Kg' : 'Adet'; }
+
+  // ---------- TERAZİ ETİKETİ ----------
+  // 13 hane: önek(2) + ürün kodu(5) + değer(5) + kontrol(1). ERP'deki ürün barkodu ilk 7 hanedir (ör. 2900207).
+  // ERP ayarı: 26/28/29 = tartım (değer gram), 27 = adet, 24 = tutar (kuruş; birim fiyata bölünür).
+  // Etiketin kendisi katalogda varsa dokunulmaz (normal ürün sayılır).
+  function teraziCoz(barcode){
+    barcode = String(barcode || '').trim();
+    if(!/^\d{13}$/.test(barcode) || catalogMap.get(barcode)) return null;
+    var on = barcode.slice(0, 2); if(['24','26','27','28','29'].indexOf(on) === -1) return null;
+    var ana = barcode.slice(0, 7), e = catalogMap.get(ana); if(!e) return null;
+    var d = Number(barcode.slice(7, 12)), miktar = null, yazi = '';
+    if(on === '27'){ miktar = d; yazi = d + ' adet'; }
+    else if(on === '24'){ var f = Number(String(e.price || '').replace(',', '.')); if(f > 0){ miktar = Math.round(d / 100 / f * 1000) / 1000; yazi = fmtPara(d / 100) + ' ÷ ' + fmtPara(f) + ' = ' + String(miktar).replace('.', ',') + ' kg'; } }
+    else { miktar = d / 1000; yazi = String(miktar).replace('.', ',') + ' kg'; }
+    return { ana: ana, etiket: barcode, miktar: miktar, yazi: yazi };
+  }
 
   // ---------- TÜRKÇE SAYI OKUMA (build 211) ----------
   // Eskiden miktar kutuları "sayı" türündeydi: Android'de "2,5" yazınca virgül YUTULUYOR, 25 kaydediliyordu;
@@ -3518,6 +3534,7 @@
     barcode = (barcode||'').trim();
     if(!barcode) return;
     stopCamera(); // barkod bulunur bulunmaz kamera kapanır
+    var tz = teraziCoz(barcode); if(tz) barcode = tz.ana;   // terazi etiketi → ürünün kendi barkodu + etiketteki miktar
     var entry = catalogMap.get(barcode);
     if(!entry){
       beep(220, 320, 0.18); beep(220, 320, 0.18); // pes çift bip: dikkat, bulunamadı
@@ -3527,7 +3544,7 @@
     }
     beep(1046, 90, 0.16); // tiz kısa bip: doğru okuma
     if(navigator.vibrate) navigator.vibrate(40);
-    pendingScan = { barcode: barcode, name: entry.name, stockCode: entry.stockCode || '', oldStock: entry.oldStock || '', carpan: koliCarpani(entry) };
+    pendingScan = { barcode: barcode, name: entry.name, stockCode: entry.stockCode || '', oldStock: entry.oldStock || '', carpan: tz ? 0 : koliCarpani(entry), terazi: tz };
     openQtyEntry();
   }
 
@@ -3720,6 +3737,10 @@
     }
     else { kdvBoxEl.classList.add('hidden'); }
     qtyPad.reset(unit === 'Kg', pendingScan.carpan ? 'KOLİ sayısı gir' : '');
+    if(pendingScan.terazi && pendingScan.terazi.miktar){
+      qtyPad.set(pendingScan.terazi.miktar);
+      document.getElementById('qtyEntryMeta').textContent = '⚖️ Terazi etiketinden yazıldı: ' + pendingScan.terazi.yazi + ' — kontrol et, Onayla · ' + document.getElementById('qtyEntryMeta').textContent;
+    }
     // Açık bir telefon klavyesi varsa (örn. elle barkod yazıldıysa) kapansın.
     if(document.activeElement && document.activeElement.blur) document.activeElement.blur();
   }
@@ -4769,6 +4790,8 @@
     });
     return {
       reset: function(isBulk, bos){ bulk = !!isBulk; bosYazi = bos || ''; expr = ''; build(); render(); },
+      // Hazır değer (terazi etiketinden): KG ya da adet olarak verilir; gram modundaysa grama çevrilip yazılır
+      set: function(v){ v = Number(v); if(!(v > 0)) return; expr = gm() ? String(Math.round(v * 1000)) : (bulk ? trS(Math.round(v * 1000) / 1000) : String(Math.round(v))); render(); },
       value: kgDeger,
       isEmpty: function(){ return !expr; }
     };
@@ -7769,6 +7792,7 @@
     malStopCamera(); // Sayım'daki gibi: bir barkod bulununca kamera hemen durur, miktar kartı açılır
     barcode = (barcode || '').trim();
     if(!barcode) return;
+    var tz = teraziCoz(barcode); if(tz) barcode = tz.ana;   // terazi etiketi → ürünün kendi barkodu + etiketteki miktar
     var entry = catalogMap.get(barcode);
     malPendingBarcode = barcode;
     if(!entry){
@@ -7790,9 +7814,11 @@
       var listedToplam = listed.reduce(function(n, it){ return n + it.miktar; }, 0);
       meta += '\nListede bu üründen ' + listed.length + ' satır var (toplam ' + fmtQty(listedToplam) + ' ' + listed[0].birim + ') — yeni satır olarak eklenir';
     }
+    if(tz && tz.miktar) meta = '⚖️ Terazi etiketinden yazıldı: ' + tz.yazi + ' — kontrol et, Onayla\n' + meta;
     document.getElementById('malHareketQtyMeta').textContent = meta;
     var bulk = isBulkBarcode(barcode);
     malQtyPad.reset(bulk);
+    if(tz && tz.miktar) malQtyPad.set(tz.miktar);
     if(document.activeElement && document.activeElement.blur) document.activeElement.blur(); // telefon klavyesi kapansın
     document.getElementById('malHareketQtyModal').classList.remove('hidden');
     beep(1046, 90, 0.16);
