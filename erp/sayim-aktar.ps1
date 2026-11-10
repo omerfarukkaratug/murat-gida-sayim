@@ -171,7 +171,7 @@ function Sql($baglanti, $tx, $sql, $param) {
 }
 function Deger($tx, $sql, $param) { $v = (Sql $script:Bag $tx $sql $param).ExecuteScalar(); if ($v -is [DBNull]) { return $null }; return $v }
 function Tablo($tx, $sql, $param) { $da = New-Object System.Data.SqlClient.SqlDataAdapter((Sql $script:Bag $tx $sql $param)); $dt = New-Object System.Data.DataTable; [void]$da.Fill($dt); return ,$dt }
-function Parcala($liste, $boy) { $p = @(); for ($i = 0; $i -lt $liste.Count; $i += $boy) { $p += ,@($liste[$i..([Math]::Min($i + $boy, $liste.Count) - 1)]) }; return $p }
+function Parcala($liste, $boy) { $p = @(); $liste = @($liste); for ($i = 0; $i -lt $liste.Count; $i += $boy) { $p += ,@($liste[$i..([Math]::Min($i + $boy, $liste.Count) - 1)]) }; return ,$p }   # ",": tek parca da dizi olarak doner (yoksa tek parcanin ICI dolasilirdi)
 
 $script:KolonOnbellek = @{}
 function Kopyala($tx, $tablo, $kaynakId, $ust) {
