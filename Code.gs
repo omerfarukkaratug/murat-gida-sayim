@@ -234,6 +234,9 @@ function doGet(e) {
   if (e.parameter && e.parameter.action === 'son_stok_getir') {
     return getSonStokGetir(e.parameter.user, e.parameter.pass, e.parameter.callback);
   }
+  if (e.parameter && e.parameter.action === 'telefon_nabiz') {
+    return telefonNabiz(e.parameter, e.parameter.callback);
+  }
   if (e.parameter && e.parameter.action === 'canli_durum') {
     return getCanliDurum(e.parameter.user, e.parameter.pass, e.parameter.callback);
   }
@@ -3243,6 +3246,30 @@ function getSonStokGetir(user, pass, callback) {
 // görülme" göstergesi olarak sunuyoruz: 10 dakikadan yeniyse muhtemelen hâlâ
 // sayıyor, değilse durmuş/molada demektir.
 // ============================================================
+// 📱 TELEFON NABZI: her telefon (internet varken) dakikada bir "bende gönderilmeyen N kayıt var" der.
+// Canlı Durum bunu gösterir: gönderilmeyen kaydı olan telefonlar, bir süredir haber vermeyen telefonlar.
+// Kayıt: ScriptProperties 'tn|<kullanıcı>|<cihaz>' = {p, n, b, z, h, s} (7 günden eskiler okurken silinir).
+function telefonNabiz(p, callback) {
+  var auth = kimlikOnbellek(p.user, p.pass);
+  if (!auth.ok) return outJson({ status: 'error', kimlik: true, message: 'Giriş gerekli' }, callback);
+  var cihaz = String(p.cihaz || '').replace(/[^\w-]/g, '').substring(0, 24);
+  if (!cihaz) return outJson({ status: 'error', message: 'cihaz yok' }, callback);
+  var v = { p: String(p.personel || p.user || '').substring(0, 60), n: Math.max(0, parseInt(p.bekleyen, 10) || 0), b: String(p.build || '').substring(0, 20),
+    z: Date.now(), h: String(p.hata || '').substring(0, 160), s: Math.max(0, parseInt(p.oturum, 10) || 0) };
+  try { PropertiesService.getScriptProperties().setProperty('tn|' + String(p.user || '').substring(0, 60) + '|' + cihaz, JSON.stringify(v)); } catch (e) { /* nabız kaybı önemsiz */ }
+  return outJson({ status: 'ok' }, callback);
+}
+function telefonNabizListe() {
+  var props = PropertiesService.getScriptProperties(), all = props.getProperties(), simdi = Date.now(), l = [];
+  Object.keys(all).forEach(function (k) {
+    if (k.indexOf('tn|') !== 0) return;
+    var v; try { v = JSON.parse(all[k]); } catch (e) { v = null; }
+    if (!v || simdi - Number(v.z || 0) > 7 * 86400000) { try { props.deleteProperty(k); } catch (e) {} return; }
+    var parca = k.split('|');
+    l.push({ kullanici: parca[1] || '', cihaz: parca[2] || '', personel: v.p || parca[1] || '', bekleyen: v.n || 0, build: v.b || '', dakikaOnce: Math.round((simdi - v.z) / 60000), hata: v.h || '', oturumOkutma: v.s || 0 });
+  });
+  return l.sort(function (a, b) { return (b.bekleyen - a.bekleyen) || (a.dakikaOnce - b.dakikaOnce); });
+}
 function getCanliDurum(user, pass, callback) {
   var auth = requirePermission(user, pass, 'canli_durum');
   if (!auth.ok) return outJson({ status: 'error', message: auth.message }, callback);
@@ -3296,7 +3323,7 @@ function getCanliDurum(user, pass, callback) {
   }).sort(function (a, b) { return (a.dakikaOnce === null ? 1e9 : a.dakikaOnce) - (b.dakikaOnce === null ? 1e9 : b.dakikaOnce); });
   personeller.forEach(function (x) { var st = stats[x.personel]; x.son = st.son.slice().reverse().map(function (k) { return [k.saat, k.ad, k.adet, k.reyon]; }); x.saatlik = st.saatlik; });
   dikkat.sort(function (a, b) { return (b[1].ts || 0) - (a[1].ts || 0); });
-  return outJson({ status: 'ok', personeller: personeller, reyonlar: reyonListe, dikkat: dikkat.slice(0, 60).map(function (d) { var k = d[1]; return [d[0], k.saat, k.p, k.ad, k.b, k.adet, k.reyon]; }) }, callback);
+  return outJson({ status: 'ok', personeller: personeller, reyonlar: reyonListe, telefonlar: telefonNabizListe(), dikkat: dikkat.slice(0, 60).map(function (d) { var k = d[1]; return [d[0], k.saat, k.p, k.ad, k.b, k.adet, k.reyon]; }) }, callback);
 }
 
 // ============================================================

@@ -593,7 +593,7 @@
   <header style="border:none; padding:0 0 16px; background:transparent; display:flex; align-items:flex-start; justify-content:space-between;">
     <div>
       <h1><img src="logo-header.png" alt="Murat Gıda" style="height:30px; width:auto; display:block;"></h1>
-      <div class="sub"><img src="icon.svg" alt="" style="width:15px;height:15px;vertical-align:-3px;margin-right:5px;">KRT Saha · Murat Gıda • offline • Android • build 301</div>
+      <div class="sub"><img src="icon.svg" alt="" style="width:15px;height:15px;vertical-align:-3px;margin-right:5px;">KRT Saha · Murat Gıda • offline • Android • build 302</div>
     </div>
     <button type="button" id="themeToggleBtn" title="Tema seç" style="background:var(--panel2); border:1.5px solid var(--line); color:var(--text); width:34px; height:34px; border-radius:50%; font-size:15px; padding:0; display:flex; align-items:center; justify-content:center; flex-shrink:0;">🎨</button>
   </header>
@@ -8682,6 +8682,16 @@
     if(!data.personeller || data.personeller.length === 0){ listEl2.innerHTML = '<div class="hint">Henüz hiç kayıt yok.</div>'; return; }
     var aktif = data.personeller.filter(function(p){ return p.aktif; }).length, saatlik = data.personeller.reduce(function(t, p){ return t + (p.saatlik || 0); }, 0);
     var html = '<div class="hint" style="margin:0 0 8px;">🟢 <b>' + aktif + '</b> kişi şu an sayıyor · son 1 saatte <b>' + saatlik + '</b> okutma · ' + escapeHtml(new Date().toLocaleTimeString('tr-TR', { hour: '2-digit', minute: '2-digit', second: '2-digit' })) + '</div>';
+    var tl = data.telefonlar || [];
+    var tlBek = tl.filter(function(t){ return t.bekleyen > 0; }), tlSessiz = tl.filter(function(t){ return !t.bekleyen && t.dakikaOnce >= 10 && t.dakikaOnce <= 720 && t.oturumOkutma > 0; });
+    html += '<div style="font-weight:800; font-size:12px; margin:8px 0 6px; color:' + (tlBek.length ? 'var(--red)' : 'var(--green)') + ';">📱 Telefonlarda gönderilmeyen kayıt' + (tlBek.length ? ' (' + tlBek.length + ' telefon)' : ': yok ✅') + '</div>';
+    html += tlBek.map(function(t){
+      var eski = t.dakikaOnce >= 5;
+      return canliKutu('<div style="display:flex; justify-content:space-between; gap:8px; font-weight:700;"><span>' + escapeHtml(t.personel) + '</span><span style="color:var(--red); font-family:var(--mono);">' + t.bekleyen + ' kayıt</span></div>' +
+        '<div style="color:var(--muted); margin-top:3px;">' + (eski ? '<b style="color:var(--amber);">⚠️ ' + t.dakikaOnce + ' dk önce haber verdi — internet ya da telefon kapalı olabilir</b>' : 'şimdi bağlı, gönderiyor') + ' · ' + escapeHtml(t.build) + '</div>' +
+        (t.hata ? '<div style="color:var(--red); margin-top:3px;">Son hata: ' + escapeHtml(t.hata) + '</div>' : ''), ' border-left:3px solid var(--red);');
+    }).join('');
+    if(tlSessiz.length) html += '<div class="hint" style="margin:0 0 6px;">Bir süredir haber vermeyen (son bildirdiğinde bekleyen yoktu): ' + tlSessiz.map(function(t){ return escapeHtml(t.personel) + ' (' + t.dakikaOnce + ' dk)'; }).join(', ') + '</div>';
     var dk = data.dikkat || [];
     if(dk.length){
       html += '<div style="font-weight:800; font-size:12px; margin:8px 0 6px; color:var(--amber);">⚠️ Kontrol et (' + dk.length + ') — dokun, Düzelt\'te aç</div>' + dk.slice(0, 15).map(function(d){
@@ -9576,6 +9586,31 @@
     return 'telefon: ' + (state.personnel || (state.currentUser && state.currentUser.name) || '?');
   }
   var APP_BUILD = (function(){ var m = /build (\d+)/.exec(document.title + ' ' + (document.querySelector('.sub') ? document.querySelector('.sub').textContent : '')); return m ? 'build ' + m[1] : ''; })();
+  // 📱 Telefon nabzı: internet varken dakikada bir "bende gönderilmeyen N kayıt var" bildirilir;
+  // yönetici Canlı Durum'da gönderilmeyen kaydı olan ya da haber vermeyen telefonları görür.
+  function telBekleyenSayi(){
+    var n = state.pendingSessions.reduce(function(t, p){ return t + (p.rows || []).length + (p.deletedIds || []).length; }, 0);
+    var sc = (state.session && state.session.scans) || [];
+    return n + sc.filter(function(it){ return !isScanSent(it); }).length + ((state.session && state.session.deletedIds) || []).length;
+  }
+  function telCihazId(){
+    var id = ''; try { id = localStorage.getItem('mkCihazId') || ''; } catch(e){}
+    if(!id){ id = Date.now().toString(36) + Math.random().toString(36).slice(2, 8); try { localStorage.setItem('mkCihazId', id); } catch(e){} }
+    return id;
+  }
+  var telNabizSon = 0;
+  function telNabizGonder(){
+    var auth = currentAuth(); if(!auth || !navigator.onLine || document.hidden) return;
+    if(Date.now() - telNabizSon < 40000) return; telNabizSon = Date.now();
+    var h = state.sonGonderimHatasi;
+    jsonpRequestP(state.serverUrl || DEFAULT_SERVER_URL, { action: 'telefon_nabiz', user: auth.user, pass: auth.pass, cihaz: telCihazId(),
+      personel: state.personnel || (state.currentUser && state.currentUser.name) || '', bekleyen: telBekleyenSayi(), build: APP_BUILD,
+      oturum: ((state.session && state.session.scans) || []).length, hata: h ? (h.zaman + ' ' + h.mesaj) : '' }, function(){}, 20000);
+  }
+  setInterval(telNabizGonder, 60000);
+  window.addEventListener('online', function(){ telNabizSon = 0; setTimeout(telNabizGonder, 3000); });
+  document.addEventListener('visibilitychange', function(){ if(!document.hidden) setTimeout(telNabizGonder, 2000); });
+  setTimeout(telNabizGonder, 8000);
 
   // Gönderim hatalarını sunucudaki Sistem Durumu günlüğüne bildirir: sorun
   // sürerken en fazla 5 dakikada bir, düzelince de bir özet. Sunucuya hiç
