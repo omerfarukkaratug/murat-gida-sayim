@@ -593,7 +593,7 @@
   <header style="border:none; padding:0 0 16px; background:transparent; display:flex; align-items:flex-start; justify-content:space-between;">
     <div>
       <h1><img src="logo-header.png" alt="Murat Gıda" style="height:30px; width:auto; display:block;"></h1>
-      <div class="sub"><img src="icon.svg" alt="" style="width:15px;height:15px;vertical-align:-3px;margin-right:5px;">KRT Saha · Murat Gıda • offline • Android • build 307</div>
+      <div class="sub"><img src="icon.svg" alt="" style="width:15px;height:15px;vertical-align:-3px;margin-right:5px;">KRT Saha · Murat Gıda • offline • Android • build 308</div>
     </div>
     <button type="button" id="themeToggleBtn" title="Tema seç" style="background:var(--panel2); border:1.5px solid var(--line); color:var(--text); width:34px; height:34px; border-radius:50%; font-size:15px; padding:0; display:flex; align-items:center; justify-content:center; flex-shrink:0;">🎨</button>
   </header>
@@ -5913,7 +5913,10 @@
   }
   var IRS_DURUM = { ok: ['✅', 'ERP\'de', 'var(--green)'], bekliyor: ['⏳', 'Bekliyor', 'var(--amber)'], hata: ['❌', 'ERP\'ye yazılamadı', 'var(--red)'],
     degisti: ['⚠️', 'ERP\'ye gittikten sonra değişti', 'var(--red)'], degisti_bildirildi: ['⚠️', 'ERP\'ye gittikten sonra değişti', 'var(--red)'],
-    kuyruk: ['☁️', 'Buluta gitmedi', 'var(--red)'] };
+    kuyruk: ['☁️', 'Buluta gitmedi', 'var(--red)'],
+    iade_yanlis: ['🚫', 'ERP\'ye GİTMEDİ', 'var(--red)'], erpde_yok: ['❓', 'ERP\'de bulunamadı', 'var(--red)'],
+    fis: ['📄', 'Fiş — ERP\'ye gitmez', 'var(--muted)'], gitmez: ['📄', 'ERP\'ye gitmez', 'var(--muted)'] };
+  var IRS_ACIKLAMA = { erpde_yok: 'Aktarım "ERP\'ye yazıldı" dedi ama ERP\'den gelen veride bu belge 3 saattir yok — ERP\'de silinmiş ya da numarası değiştirilmiş olabilir. Muhasebeye sorun.' };
   function irsSure(dk){ dk = Number(dk) || 0; return dk < 60 ? dk + ' dakikadır' : dk < 1440 ? Math.round(dk / 60) + ' saattir' : Math.round(dk / 1440) + ' gündür'; }
   function irsGidenHtml(){
     if(irs.aktarimYuk && !irs.aktarim) return '<div class="hint">⏳ Yükleniyor…</div>';
@@ -5927,7 +5930,8 @@
     var kq = d.kuyruk;
     if(kq && kq.bekleyen && kq.enEskiDk >= 10) html += '<div class="chSatir" style="border-left:4px solid var(--red);">❌ <b>Sunucudan buluta gönderim takıldı</b> — ' + kq.bekleyen + ' kayıt ' + irsSure(kq.enEskiDk) + ' bekliyor<div class="hint" style="margin:4px 0 0;">Kayıtlar sunucuda güvende ama ERP programı onları göremiyor. Yöneticiye e-posta gitti.' + (kq.sonHata ? ' Son hata: ' + escapeHtml(kq.sonHata) : '') + '</div></div>';
     if(y && state.currentUser && state.currentUser.role === 'yonetici') html += '<div class="hint" style="margin:0 0 10px;">💾 ERP SQL yedeği: ' + escapeHtml(y.mesaj) + ' · ' + escapeHtml(y.zaman) + '</div>';
-    html += '<div class="chOzet"><div>✅ ERP\'DE<b>' + (o.ok || 0) + '</b></div><div>⏳ BEKLİYOR<b>' + (o.bekliyor || 0) + '</b></div><div>❌ HATA<b>' + (o.hata || 0) + '</b></div><div>⚠️ DEĞİŞTİ<b>' + (o.degisti || 0) + '</b></div></div>';
+    html += '<div class="chOzet"><div>✅ ERP\'DE<b>' + (o.ok || 0) + '</b></div><div>⏳ BEKLİYOR<b>' + (o.bekliyor || 0) + '</b></div><div>❌ HATA<b>' + ((o.hata || 0) + (o.gitmedi || 0)) + '</b></div><div>⚠️ DEĞİŞTİ<b>' + (o.degisti || 0) + '</b></div></div>';
+    if(o.gitmedi) html += '<div class="chSatir" style="border-left:4px solid var(--red);">🚫 <b>' + o.gitmedi + ' belge ERP\'ye gitmedi</b> — aşağıda kırmızı yazanlar<div class="hint" style="margin:4px 0 0;">Yöneticiye e-posta gitti. Belge kaybolmadı, düzeltilince gider.</div></div>';
     if(!l.length) return html + '<div class="hint">Son 7 günde telefondan ERP\'ye giden irsaliye yok.</div>';
     html += l.map(function(r){
       var dd = IRS_DURUM[r[5]] || ['•', r[5], 'var(--muted)'], gec = r[5] === 'bekliyor' && Number(r[8]) >= 20;
@@ -5935,7 +5939,8 @@
       return '<div class="chSatir" data-irsbelge="' + escapeHtml(r[0]) + '" style="cursor:pointer;"><div class="ust"><span style="min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">' + dd[0] + ' ' + escapeHtml(r[1]) + ' · ' + escapeHtml(r[2] || '') + '</span>' +
         '<span style="color:' + dd[2] + '; white-space:nowrap; font-size:12px;">' + dd[1] + '</span></div>' +
         '<div class="alt"><span>' + escapeHtml(r[3] || '') + ' · ' + escapeHtml(r[4]) + ' · ' + escapeHtml(String(r[9])) + ' satır</span><span style="font-family:var(--mono); white-space:nowrap;">' + escapeHtml(r[6] || '') + '</span></div>' +
-        (r[5] === 'hata' || r[5] === 'kuyruk' || r[5].indexOf('degisti') === 0 ? '<div style="color:var(--red); font-size:12px; margin-top:4px;">' + escapeHtml(r[5] === 'hata' || r[5] === 'kuyruk' ? r[7] : 'Telefonda değiştirildi; ERP\'deki belge ESKİ hâliyle duruyor — muhasebe ERP\'de elle düzeltmeli.') + '</div>' : '') +
+        (r[5] === 'hata' || r[5] === 'kuyruk' || r[5] === 'iade_yanlis' || r[5] === 'erpde_yok' || r[5].indexOf('degisti') === 0 ? '<div style="color:var(--red); font-size:12px; margin-top:4px;">' + escapeHtml(r[5] === 'hata' || r[5] === 'kuyruk' || r[5] === 'iade_yanlis' ? r[7] : r[5] === 'erpde_yok' ? IRS_ACIKLAMA.erpde_yok : 'Telefonda değiştirildi; ERP\'deki belge ESKİ hâliyle duruyor — muhasebe ERP\'de elle düzeltmeli.') + '</div>' : '') +
+        (r[5] === 'fis' || r[5] === 'gitmez' ? '<div class="hint" style="margin:4px 0 0;">' + escapeHtml(r[7]) + '</div>' : '') +
         (gec ? '<div style="color:var(--amber); font-size:12px; margin-top:4px;">' + irsSure(r[8]) + ' bekliyor — ERP bilgisayarı kapalı olabilir</div>' : '') +
         (ab ? irsBelgeHtml(ab, r) : '') + '</div>';
     }).join('');

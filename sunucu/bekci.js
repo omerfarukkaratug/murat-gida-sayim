@@ -143,6 +143,8 @@ function bekciOlustur({ ayar, depo, gunluk, epostaGonder, disIstek }) {
     else if (!n && bekleyen.length) s.push({ anahtar: 'nabiz:yok:' + new Date().toISOString().slice(0, 10), durum: 'uyari', metin: 'ERP aktarım programından hiç haber yok (siparis-aktar.ps1 yeni sürümü kurulu mu?), ' + bekleyen.length + ' belge bekliyor.' });
     else if (gec.length) s.push({ anahtar: 'gec:' + gec.map((r) => r[0]).join(',').slice(0, 200), durum: 'uyari', metin: gec.length + ' belge 20 dakikadan uzun süredir ERP\'ye gitmedi: ' + gec.slice(0, 5).map((r) => r[1] + ' / ' + r[2]).join('; ') });
     l.filter((r) => r[5] === 'hata').forEach((r) => s.push({ anahtar: 'hata:' + r[0] + ':' + String(r[7]).slice(0, 80), durum: 'acil', metin: 'ERP\'ye YAZILAMADI — ' + r[1] + ' / ' + r[2] + ' (' + r[3] + ', ' + r[4] + '): ' + r[7] }));
+    l.filter((r) => r[5] === 'iade_yanlis').forEach((r) => s.push({ anahtar: 'iade_yanlis:' + r[0], durum: 'acil', metin: 'Tedarikçi iadesi ERP\'ye GİTMEDİ — ' + r[2] + ' (' + r[3] + ', ' + r[4] + ', ' + r[9] + ' satır): "Satış İrsaliyesi" olarak işlenmiş, "Alıştan İade İrsaliyesi" olmalıydı.' }));
+    l.filter((r) => r[5] === 'erpde_yok').forEach((r) => s.push({ anahtar: 'erpde_yok:' + r[0], durum: 'acil', metin: 'ERP\'ye yazıldı görünüyor ama ERP\'de YOK — ' + r[6] + ' (' + r[1] + ' / ' + r[2] + ', ' + r[4] + '). ERP\'de silinmiş ya da numarası değişmiş olabilir.' }));
     l.filter((r) => r[5] === 'degisti' || r[5] === 'degisti_bildirildi').forEach((r) => s.push({ anahtar: 'degisti:' + r[0], durum: 'uyari', metin: 'ERP\'ye gittikten SONRA telefonda değiştirildi — ' + r[6] + ' (' + r[1] + ' / ' + r[2] + '). ERP\'deki belgeyi elle düzeltin.' }));
     return s;
   }

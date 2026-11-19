@@ -4345,6 +4345,9 @@ function yoneticiOzet(p, callback) {
         if (n && Number(n.dk) > 15 && Number(o.bekliyor) > 0) maddeler.push(['acil', 'ERP aktarım programı çalışmıyor', n.dk + ' dakikadır haber yok, ' + o.bekliyor + ' belge bekliyor. ERP bilgisayarını kontrol et.', 'irs']);
         if (Number(o.hata) > 0) maddeler.push(['acil', o.hata + ' belge ERP\'ye yazılamadı', 'İrsaliyeler ekranında sebebi yazıyor.', 'irs']);
         if (Number(o.degisti) > 0) maddeler.push(['uyari', o.degisti + ' belge ERP\'ye gittikten sonra değişti', 'ERP\'deki belge eski hâliyle duruyor; muhasebe düzeltmeli.', 'irs']);
+        var yanlis = (d.belgeler || []).filter(function (r) { return r[5] === 'iade_yanlis'; }), yok = (d.belgeler || []).filter(function (r) { return r[5] === 'erpde_yok'; });
+        if (yanlis.length) maddeler.push(['acil', yanlis.length + ' tedarikçi iadesi ERP\'ye GİTMEDİ (Satış İrsaliyesi olarak işlenmiş)', yanlis.slice(0, 5).map(function (r) { return r[2] + ' (' + r[4] + ')'; }).join('; ') + ' — "Alıştan İade İrsaliyesi" olmalıydı.', 'irs']);
+        if (yok.length) maddeler.push(['acil', yok.length + ' belge ERP\'ye yazıldı görünüyor ama ERP\'de YOK', yok.slice(0, 5).map(function (r) { return r[6] + ' / ' + r[2]; }).join('; ') + ' — ERP\'de silinmiş olabilir.', 'irs']);
         var gec = (d.belgeler || []).filter(function (r) { return r[5] === 'bekliyor' && Number(r[8]) >= 30; }).length;
         if (gec && !(n && Number(n.dk) > 15)) maddeler.push(['uyari', gec + ' belge 30 dakikadan uzun süredir bekliyor', '', 'irs']);
         var sy = (d.nabizlar || {}).erp_sql_yedek;
