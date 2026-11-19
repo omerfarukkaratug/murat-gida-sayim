@@ -593,7 +593,7 @@
   <header style="border:none; padding:0 0 16px; background:transparent; display:flex; align-items:flex-start; justify-content:space-between;">
     <div>
       <h1><img src="logo-header.png" alt="Murat Gıda" style="height:30px; width:auto; display:block;"></h1>
-      <div class="sub"><img src="icon.svg" alt="" style="width:15px;height:15px;vertical-align:-3px;margin-right:5px;">KRT Saha · Murat Gıda • offline • Android • build 305</div>
+      <div class="sub"><img src="icon.svg" alt="" style="width:15px;height:15px;vertical-align:-3px;margin-right:5px;">KRT Saha · Murat Gıda • offline • Android • build 306</div>
     </div>
     <button type="button" id="themeToggleBtn" title="Tema seç" style="background:var(--panel2); border:1.5px solid var(--line); color:var(--text); width:34px; height:34px; border-radius:50%; font-size:15px; padding:0; display:flex; align-items:center; justify-content:center; flex-shrink:0;">🎨</button>
   </header>
@@ -7979,9 +7979,12 @@
     if(ok){
       // Aynı firmadan arka arkaya mal geldiğinde: kaydedilen cari 5 dakika boyunca yeni kayıtta hazır seçili gelir (build 296)
       if(malCari && malCari.name){ state.malSonCari = { tip: malTip, cari: malCari, belge: malBelge, zaman: Date.now() }; }
+      try { if(malBatchId) telMalKapali.push([malBatchId, Date.now()]); } catch(e){}
       clearMalDraft();
       var n = malItems.length;
       malItems = [];
+      // Belge kapandı: ERP aktarımı beklemesin diye hemen haber ver.
+      try { telNabizSon = 0; setTimeout(telNabizGonder, 500); } catch(e){}
       closeMalHareketScreen();
       successToast((malTip === 'cikis' ? 'Mal çıkış' : 'Mal giriş') + ' kaydedildi (' + n + ' kalem)');
     } else {
@@ -9676,6 +9679,15 @@
     if(!id){ id = Date.now().toString(36) + Math.random().toString(36).slice(2, 8); try { localStorage.setItem('mkCihazId', id); } catch(e){} }
     return id;
   }
+  // Telefonda AÇIK (kaydedilmemiş ya da kaydedildikten sonra yeniden düzenlenen) mal belgeleri: ERP aktarımı
+  // bu belgeleri telefon "Kaydet"i bitirene kadar bekletir (belge ERP'ye yarım gitmesin).
+  function telMalAcik(){
+    var d = state.malDrafts || {}, l = [];
+    ['giris', 'cikis'].forEach(function(t){ var x = d[t]; if(x && x.batchId && x.items && x.items.length) l.push(x.batchId); });
+    if(typeof malBatchId !== 'undefined' && malBatchId && typeof malItems !== 'undefined' && malItems.length && l.indexOf(malBatchId) === -1) l.push(malBatchId);
+    return l.join(',');
+  }
+  var telMalKapali = [];   // [batchId, zaman]: telefonda onaylanıp kapanan belgeler (30 dk boyunca bildirilir)
   var telNabizSon = 0;
   function telNabizGonder(){
     var auth = currentAuth(); if(!auth || !navigator.onLine || document.hidden) return;
@@ -9683,7 +9695,7 @@
     var h = state.sonGonderimHatasi;
     jsonpRequestP(state.serverUrl || DEFAULT_SERVER_URL, { action: 'telefon_nabiz', user: auth.user, pass: auth.pass, cihaz: telCihazId(),
       personel: state.personnel || (state.currentUser && state.currentUser.name) || '', bekleyen: telBekleyenSayi(), build: APP_BUILD,
-      oturum: ((state.session && state.session.scans) || []).length, hata: h ? (h.zaman + ' ' + h.mesaj) : '' }, function(){}, 20000);
+      oturum: ((state.session && state.session.scans) || []).length, hata: h ? (h.zaman + ' ' + h.mesaj) : '', malAcik: telMalAcik(), malKapali: telMalKapali.filter(function(x){ return Date.now() - x[1] < 30 * 60000; }).map(function(x){ return x[0]; }).join(',') }, function(){}, 20000);
   }
   setInterval(telNabizGonder, 60000);
   window.addEventListener('online', function(){ telNabizSon = 0; setTimeout(telNabizGonder, 3000); });

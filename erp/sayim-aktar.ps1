@@ -39,7 +39,7 @@ $LogFile          = "C:\Scripts\sayim-aktar-log.txt"
 $DurumDosyasi     = "C:\Scripts\sayim-aktar-durum.json"
 $RaporKlasoru     = "C:\Scripts\sayim-raporlari"
 $AciklamaOn       = "KRT Saha: "
-$SurumSA          = "2026-11-10c"
+$SurumSA = "2026-11-19a"
 
 try { [Net.ServicePointManager]::SecurityProtocol = [Net.ServicePointManager]::SecurityProtocol -bor [Net.SecurityProtocolType]::Tls12 } catch {}
 $Inv = [Globalization.CultureInfo]::InvariantCulture
@@ -315,6 +315,8 @@ function Asil-Karsilastir($satirlar) {
     if (-not $c -or $c.status -ne "ok") { return "Sunucu kontrolu reddetti: $(if ($c) { $c.message } else { 'bos yanit' })" }
     $sorun = @()
     if ([int]$c.kuyruk.bekleyen -gt 0) { $sorun += "sunucuda buluta henuz gonderilmemis $($c.kuyruk.bekleyen) kayit var (en eskisi $($c.kuyruk.enEskiDk) dk) - birkac dakika bekleyip tekrar deneyin" }
+    $tel = @($c.telefonlar | Where-Object { $_ })
+    if ($tel.Count) { $sorun += "$($tel.Count) telefonda GONDERILMEMIS okutma var: $(($tel | ForEach-Object { "$($_[0]) $($_[1]) kayit ($($_[2]) dk once haber verdi)" }) -join ', ') - o telefonlarda interneti acip uygulamayi acin, gonderilince tekrar deneyin" }
     if ([int]$c.kuyruk.karantina -gt 0) { $sorun += "bulutun kabul etmedigi $($c.kuyruk.karantina) kayit var (DbKuyrukHata sekmesi) - bana haber verin" }
     $asil = @{}; foreach ($x in @($c.kayitlar)) { $asil[[string]$x[0]] = [double]$x[1] }
     $bulut = @{}; foreach ($x in $satirlar) { $bulut[[string]$x[0]] = [double]$x[4] }

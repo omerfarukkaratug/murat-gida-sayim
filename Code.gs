@@ -86,6 +86,11 @@ function doGet(e) {
     if (!etiketYetki(k.auth)) return etiketRed(k.auth, P.callback);
     return etiketKuyrukGetir(P.callback);
   }
+  // ---- ERP aktarım programı: hangi mal belgelerinin satırları henüz buluta ulaşmadı? (ERP anahtarıyla) ----
+  if (P.action === 'mal_aktar_engel') {
+    if (!erpAnahtarDogru(P.anahtar)) return outJson({ status: 'error', kimlik: true, message: 'Anahtar geçersiz' }, P.callback);
+    return malAktarEngel(P.callback);
+  }
   // ---- Baskı programı (yazıcının bağlı olduğu bilgisayar) : ERP anahtarıyla ----
   if (P.action === 'baski_ajan_al' || P.action === 'baski_ajan_bitti' || P.action === 'baski_ajan_veri') {
     if (!erpAnahtarDogru(P.anahtar)) return outJson({ status: 'error', kimlik: true, message: 'Anahtar geçersiz' }, P.callback);
@@ -2331,6 +2336,9 @@ function doPostIsle(e) {
     if (data.type === 'mal_hareket') {
       var mOut = saveMalHareket(data);
       dbKuyrugaEkle('mal', data);
+      // Telefon bu kaydı doğrulayıp "kaydedildi" diyene kadar belge ERP'ye aktarılmasın (yarım gitmesin): işaret.
+      // Telefon onaylayınca nabızla 'malKapali' gönderir ve işaret silinir; gelmezse 15 dk sonra kendiliğinden düşer.
+      try { if (data.batchId) PropertiesService.getScriptProperties().setProperty('ma|' + String(data.batchId).substring(0, 80), String(Date.now())); } catch (me) { /* işaret önemsiz */ }
       DB_HEMEN = true;   // mal kaydı ERP'ye irsaliye olarak gidecek: veri tabanına BEKLEMEDEN yazılsın
       var mr = {};
       try { mr = JSON.parse(mOut.getContent()); } catch (pe) { /* özet olmadan da günlüğe yaz */ }
@@ -3255,8 +3263,14 @@ function telefonNabiz(p, callback) {
   var cihaz = String(p.cihaz || '').replace(/[^\w-]/g, '').substring(0, 24);
   if (!cihaz) return outJson({ status: 'error', message: 'cihaz yok' }, callback);
   var v = { p: String(p.personel || p.user || '').substring(0, 60), n: Math.max(0, parseInt(p.bekleyen, 10) || 0), b: String(p.build || '').substring(0, 20),
-    z: Date.now(), h: String(p.hata || '').substring(0, 160), s: Math.max(0, parseInt(p.oturum, 10) || 0) };
+    z: Date.now(), h: String(p.hata || '').substring(0, 160), s: Math.max(0, parseInt(p.oturum, 10) || 0),
+    m: String(p.malAcik || '').replace(/[^\w,.-]/g, '').substring(0, 300) };
   try { PropertiesService.getScriptProperties().setProperty('tn|' + String(p.user || '').substring(0, 60) + '|' + cihaz, JSON.stringify(v)); } catch (e) { /* nabız kaybı önemsiz */ }
+  // Telefonda kaydı onaylanan mal belgeleri: ERP aktarımını bekleten işaret kaldırılır.
+  String(p.malKapali || '').split(',').forEach(function (b) {
+    b = b.replace(/[^\w.-]/g, '').substring(0, 80);
+    if (b) { try { PropertiesService.getScriptProperties().deleteProperty('ma|' + b); } catch (e) {} }
+  });
   return outJson({ status: 'ok' }, callback);
 }
 function telefonNabizListe() {
@@ -3266,7 +3280,8 @@ function telefonNabizListe() {
     var v; try { v = JSON.parse(all[k]); } catch (e) { v = null; }
     if (!v || simdi - Number(v.z || 0) > 7 * 86400000) { try { props.deleteProperty(k); } catch (e) {} return; }
     var parca = k.split('|');
-    l.push({ kullanici: parca[1] || '', cihaz: parca[2] || '', personel: v.p || parca[1] || '', bekleyen: v.n || 0, build: v.b || '', dakikaOnce: Math.round((simdi - v.z) / 60000), hata: v.h || '', oturumOkutma: v.s || 0 });
+    l.push({ kullanici: parca[1] || '', cihaz: parca[2] || '', personel: v.p || parca[1] || '', bekleyen: v.n || 0, build: v.b || '', dakikaOnce: Math.round((simdi - v.z) / 60000), hata: v.h || '', oturumOkutma: v.s || 0,
+      malAcik: String(v.m || '').split(',').filter(Boolean) });
   });
   return l.sort(function (a, b) { return (b.bekleyen - a.bekleyen) || (a.dakikaOnce - b.dakikaOnce); });
 }
@@ -4123,6 +4138,35 @@ function miniSayim(p, callback) {
 // kopyasından alır; yazmadan önce buradaki ASIL kayıtlarla (Sayim sekmesi) birebir karşılaştırır.
 // Kuyrukta gönderilmemiş / karantinada kayıt varsa ya da bir kayıt eksik/farklıysa ERP'ye yazılmaz.
 // ============================================================
+// Mal belgesi ERP'ye YARIM gitmesin: satırları hâlâ sunucu kuyruğunda (buluta yazılmamış), karantinada ya da
+// bir telefonda AÇIK (kaydedilmemiş / yeniden düzenlenen) olan belgeler. Aktarım programı bunları bekletir.
+// Telefon bilgisi son 12 saatte haber veren telefonlardan alınır (kapalı kalan telefon belgeyi süresiz kilitlemesin).
+function malAktarEngel(callback) {
+  var k = dbKuyrukDurum(), engel = {};
+  Object.keys(k.malBatch || {}).forEach(function (b) { engel[b] = 'sunucu kuyruğunda, buluta henüz yazılmadı'; });
+  try {
+    var ks = SpreadsheetApp.getActiveSpreadsheet().getSheetByName('DbKuyrukHata');
+    if (ks && ks.getLastRow() >= 2) {
+      ks.getRange(2, 1, ks.getLastRow() - 1, Math.max(ks.getLastColumn(), 5)).getValues().forEach(function (r) {
+        if (String(r[4]) !== 'mal') return;
+        var m = /"batchId":"([^"]+)"/.exec(r.slice(5).join('')); if (m) engel[m[1]] = 'bulut kabul etmedi (DbKuyrukHata sekmesi) — yöneticiye haber verin';
+      });
+    }
+  } catch (e) { /* karantina okunamazsa kuyruk bilgisi yine döner */ }
+  var props = PropertiesService.getScriptProperties(), tum = props.getProperties(), simdi = Date.now();
+  Object.keys(tum).forEach(function (key) {
+    if (key.indexOf('ma|') !== 0) return;
+    var yas = simdi - Number(tum[key] || 0);
+    if (!(yas >= 0 && yas < 15 * 60000)) { if (yas > 86400000 || isNaN(yas)) { try { props.deleteProperty(key); } catch (e) {} } return; }
+    var b = key.substring(3); if (!engel[b]) engel[b] = 'telefon kaydı henüz onaylamadı (' + Math.round(yas / 60000) + ' dk önce kaydedildi)';
+  });
+  telefonNabizListe().forEach(function (t) {
+    if (t.dakikaOnce > 720) return;
+    (t.malAcik || []).forEach(function (b) { if (!engel[b]) engel[b] = 'telefonda açık / kaydedilmemiş (' + t.personel + ', ' + t.dakikaOnce + ' dk önce)'; });
+  });
+  return outJson({ status: 'ok', engel: engel, kuyruk: k.bekleyen, sunucuMs: Date.now() }, callback);
+}
+
 function sayimAktarKontrol() {
   var sh = SpreadsheetApp.getActiveSpreadsheet().getSheetByName('Sayim'), l = [];
   if (sh && sh.getLastRow() >= 2) {
@@ -4132,7 +4176,11 @@ function sayimAktarKontrol() {
   }
   var k = dbKuyrukDurum();
   return outJson({ status: 'ok', resetToken: PropertiesService.getScriptProperties().getProperty('RESET_TOKEN') || '',
-    kuyruk: { bekleyen: k.bekleyen, enEskiDk: k.enEskiDk, karantina: k.karantina, sonHata: k.sonHata }, kayitlar: l, sunucuMs: Date.now() });
+    kuyruk: { bekleyen: k.bekleyen, enEskiDk: k.enEskiDk, karantina: k.karantina, sonHata: k.sonHata }, kayitlar: l,
+    // Telefonlarda gönderilmemiş okutma: bunlar ne sunucuda ne bulutta var, aktarım bunları göremez.
+    telefonlar: telefonNabizListe().filter(function (t) { return t.bekleyen > 0 && t.dakikaOnce <= 1440; })
+      .map(function (t) { return [t.personel, t.bekleyen, t.dakikaOnce]; }),
+    sunucuMs: Date.now() });
 }
 
 // ============================================================

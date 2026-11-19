@@ -39,6 +39,9 @@ $AktarilanDosya   = "C:\Scripts\siparis-aktarilan.txt"
 # Kart ERP'de ayni barkodla acilinca bir sonraki calismada belge kendiliginden aktarilir.
 $EksikKartDosya   = "C:\Scripts\acilacak-stok-kartlari.txt"
 $HataDosya        = "C:\Scripts\siparis-aktar-hata.txt"
+$SunucuUrl        = "https://sunucu.krtsaha.com/exec"
+$ErpAnahtarDosyasi = "C:\Scripts\erp-anahtar.txt"
+$EngelDosya       = "C:\Scripts\siparis-bekleyen.txt"   # yarim kalmasin diye bekletilen belgeler (log tekrarlanmasin)
 # STOK KARTI OLMAYAN URUN: ERP'deki sablon karttan (MK SAHA SABLON, barkod MKSABLON / 99999001) kopyalanarak
 # gecici kart acilir (KDV, grup, birim sablondaki gibi; fiyat 0; stok kodu MKS-000000001...). Muhasebe sonra duzenler.
 # Terazi barkodu (13 haneli 27/28/29 ile baslayan ya da 7 ve daha kisa) ve barkodsuz urune kart ACILMAZ.
@@ -74,6 +77,33 @@ function Rpc($fonksiyon, $govde) {
     $baytlar = [System.Text.Encoding]::UTF8.GetBytes($json)
     return Invoke-RestMethod -Uri "$DbUrl/rest/v1/rpc/$fonksiyon" -Method Post -Body $baytlar `
         -ContentType "application/json; charset=utf-8" -Headers @{ apikey = $script:Anahtar } -TimeoutSec 120 -UserAgent "MK-Sayim/1.0"
+}
+
+# Sunucuya sorar: hangi belgelerin satirlari henuz buluta ulasmadi / telefonda acik? Doner: @{ batch_id = sebep } ya da
+# $null (sorulamadi: guvenli taraf, bu tur yazilmaz). Ayni sorun log'a saatte bir yazilir.
+function Mal-Engel {
+    $sorun = $null
+    if (-not (Test-Path $ErpAnahtarDosyasi)) { $sorun = "$ErpAnahtarDosyasi yok" }
+    else {
+        try {
+            $anahtar = ((Get-Content -Path $ErpAnahtarDosyasi -TotalCount 1) -as [string]).Trim()
+            $c = Invoke-RestMethod -Uri ($SunucuUrl + "?action=mal_aktar_engel&anahtar=" + [uri]::EscapeDataString($anahtar)) -Method Get -TimeoutSec 60 -UserAgent "MK-Sayim/1.0"
+            if ($c -and [string]$c.status -eq "ok") {
+                $e = @{}
+                if ($c.engel) { foreach ($pr in $c.engel.PSObject.Properties) { $e[[string]$pr.Name] = [string]$pr.Value } }
+                return $e
+            }
+            $sorun = "sunucu reddetti: $(if ($c) { $c.message } else { 'bos yanit' })"
+        } catch { $sorun = "sunucuya ulasilamadi: $($_.Exception.Message)" }
+    }
+    $isaret = "C:\Scripts\siparis-engel-uyari.txt"
+    $son = $null; try { if (Test-Path $isaret) { $son = (Get-Item $isaret).LastWriteTime } } catch {}
+    if (-not $son -or ((Get-Date) - $son).TotalMinutes -ge 60) {
+        Yaz-Log "UYARI: belgelerin tamam olup olmadigi sunucuya sorulamadi ($sorun) - yarim belge gitmesin diye aktarim bekliyor"
+        try { Set-Content -Path $isaret -Value $sorun } catch {}
+    }
+    Write-Host "Sunucuya sorulamadi, bekleniyor: $sorun"
+    return $null
 }
 
 function Bildir($b, $siparisId, $belgeNo, $durum, $mesaj) {
@@ -544,6 +574,27 @@ function Tur-Calis {
 
     $belgeler = @($is.belgeler | Where-Object { $_ })
     if ($belgeler.Count -eq 0) { Write-Host "Aktarilacak belge yok."; return }   # sik calisir: log'a yazilmaz
+
+    # YARIM BELGE OLMASIN: satirlari hala sunucu kuyrugunda (buluta yazilmamis) ya da telefonda acik / onaylanmamis
+    # olan belgeler bekletilir. Sunucuya sorulamazsa bu tur HIC belge yazilmaz (bir sonraki turda tekrar denenir).
+    if (-not $Deneme) {
+        $engel = Mal-Engel
+        if ($engel -eq $null) { return }
+        $onceki = @{}
+        if (Test-Path $EngelDosya) { Get-Content $EngelDosya -Encoding UTF8 | ForEach-Object { $p = $_.Split("`t", 2); if ($p[0]) { $onceki[$p[0]] = $_ } } }
+        $simdiki = @{}; $kalan = @()
+        foreach ($b in $belgeler) {
+            $id = [string]$b.batch_id
+            if ($engel.ContainsKey($id)) {
+                $simdiki[$id] = "$id`t$($engel[$id])"
+                if (-not $onceki.ContainsKey($id)) { Yaz-Log "BEKLIYOR: $($b.cari) ($($b.belge_turu), $(@($b.satirlar).Count) satir) - $($engel[$id]). Tamamlaninca aktarilacak." }
+            } else { $kalan += $b }
+        }
+        foreach ($id in $onceki.Keys) { if (-not $simdiki.ContainsKey($id)) { Write-Host "Artik bekletilmiyor: $id" } }
+        try { [System.IO.File]::WriteAllText($EngelDosya, (($simdiki.Values) -join "`r`n"), [System.Text.Encoding]::UTF8) } catch {}
+        $belgeler = $kalan
+        if ($belgeler.Count -eq 0) { Write-Host "Bekleyen belgeler telefonda / sunucuda tamamlanmayi bekliyor."; return }
+    }
 
     if ($script:baglanti -eq $null) {
     $script:baglanti = New-Object System.Data.SqlClient.SqlConnection("Server=$SqlServer;Database=master;Integrated Security=SSPI;")
