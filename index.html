@@ -593,7 +593,7 @@
   <header style="border:none; padding:0 0 16px; background:transparent; display:flex; align-items:flex-start; justify-content:space-between;">
     <div>
       <h1><img src="logo-header.png" alt="Murat Gıda" style="height:30px; width:auto; display:block;"></h1>
-      <div class="sub"><img src="icon.svg" alt="" style="width:15px;height:15px;vertical-align:-3px;margin-right:5px;">KRT Saha · Murat Gıda • offline • Android • build 306</div>
+      <div class="sub"><img src="icon.svg" alt="" style="width:15px;height:15px;vertical-align:-3px;margin-right:5px;">KRT Saha · Murat Gıda • offline • Android • build 307</div>
     </div>
     <button type="button" id="themeToggleBtn" title="Tema seç" style="background:var(--panel2); border:1.5px solid var(--line); color:var(--text); width:34px; height:34px; border-radius:50%; font-size:15px; padding:0; display:flex; align-items:center; justify-content:center; flex-shrink:0;">🎨</button>
   </header>
@@ -7405,6 +7405,16 @@
     renderBelgeSeg();
   });
 
+  // Tedarikçiye iade SATIŞ İRSALİYESİ olarak işlenirse ERP'ye gitmez (fiş yoluna düşer): sebep "Tedarikçiye iade"
+  // seçilince belge türü kendiliğinden "Alıştan İade İrsaliyesi" olur (ERP'ye alıştan iade irsaliyesi olarak gider).
+  function malIadeTuruDuzelt(){
+    if(malTip !== 'cikis' || malSebepSelectEl.value !== 'Tedarikçiye iade' || malBelge !== 'Satış İrsaliyesi') return false;
+    malBelge = 'Alıştan İade İrsaliyesi'; renderBelgeSeg();
+    warnToast('Tedarikçiye iade: belge türü "Alıştan İade İrsaliyesi" yapıldı (ERP\'ye böyle gider)');
+    return true;
+  }
+  malSebepSelectEl.addEventListener('change', malIadeTuruDuzelt);
+
   // ---- Taslak (yarım kalan kayıt) ----
   function saveMalDraft(){
     state.malDrafts[malTip] = { belgeTuru: malBelge, cari: malCari, faturaNo: malFatura, sebep: malSebep, aciklama: malAciklama, items: malItems, batchId: malBatchId, updated: Date.now() };
@@ -7563,6 +7573,7 @@
       cari = { name: typed, code: '', balance: '' };   // liste hiç inmemişse elle yazılana izin ver
     }
     if(malTip === 'cikis' && !malSebepSelectEl.value){ warnToast('Çıkış sebebini seç'); return; }
+    malIadeTuruDuzelt();
     malCari = cari;
     var basla = function(){
       malFatura = malFaturaInputEl.value.trim();
@@ -8040,6 +8051,7 @@
     if(malSaving) return;
     if(malItems.length === 0){ warnToast('Hiç ürün okutmadın'); return; }
     if(!navigator.onLine){ warnToast('İnternet yok — ürünler telefonda saklı, bağlantı gelince tekrar bas'); return; }
+    if(malTip === 'cikis' && malSebep === 'Tedarikçiye iade' && malBelge === 'Satış İrsaliyesi'){ malBelge = 'Alıştan İade İrsaliyesi'; try { renderBelgeSeg(); saveMalDraft(); } catch(e){} }
     var url = state.serverUrl || DEFAULT_SERVER_URL;
     var payload = {
       type: 'mal_hareket', batchId: malBatchId, tip: malTip, belgeTuru: malBelge,
