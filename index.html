@@ -593,7 +593,7 @@
   <header style="border:none; padding:0 0 16px; background:transparent; display:flex; align-items:flex-start; justify-content:space-between;">
     <div>
       <h1><img src="logo-header.png" alt="Murat Gıda" style="height:30px; width:auto; display:block;"></h1>
-      <div class="sub"><img src="icon.svg" alt="" style="width:15px;height:15px;vertical-align:-3px;margin-right:5px;">KRT Saha · Murat Gıda • offline • Android • build 308</div>
+      <div class="sub"><img src="icon.svg" alt="" style="width:15px;height:15px;vertical-align:-3px;margin-right:5px;">KRT Saha · Murat Gıda • offline • Android • build 309</div>
     </div>
     <button type="button" id="themeToggleBtn" title="Tema seç" style="background:var(--panel2); border:1.5px solid var(--line); color:var(--text); width:34px; height:34px; border-radius:50%; font-size:15px; padding:0; display:flex; align-items:center; justify-content:center; flex-shrink:0;">🎨</button>
   </header>
@@ -4272,7 +4272,9 @@
     });
     return zxingLoadPromise;
   }
-  var BARCODE_FORMATS = ['ean_13','ean_8','upc_a','upc_e','code_128','code_39','itf','qr_code'];   // codabar çıkarıldı: gıdada yok, yanlış okuma kaynağı
+  // QR OKUNMAZ (build 309): bu ekranlarda QR'ın işi yok; okunursa ürün yerine anlamsız yazı geliyordu ve motoru yavaşlatıyordu.
+  // QR yalnızca Etiket > QR Etiket Doğrulama'da (etiket.html) okunur. codabar: gıdada yok, yanlış okuma kaynağı.
+  var BARCODE_FORMATS = ['ean_13','ean_8','upc_a','upc_e','code_128','code_39','itf'];
   // iPhone kamerayı varsayılan olarak DÜŞÜK çözünürlükte (640×480) açar; barkod
   // çizgileri seçilemez. iPhone'da yüksek çözünürlük istenir (Android'e dokunulmadı:
   // orada yerleşik okuyucu zaten iyi çalışıyor).
@@ -4289,9 +4291,10 @@
       warnToast('Kamera görüntü vermiyor — telefonda kamerayı kullanan başka bir uygulama ya da sayfa açık olabilir. Onu kapatıp tekrar dene.');
     }, 3000);
   }
+  // Android da artık 1280×720 ister (varsayılan 640×480'de ince çizgili / küçük yazı tipli barkodlar seçilemiyordu).
   var CAMERA_CONSTRAINTS = IOS_CIHAZ
     ? { video: { facingMode: 'environment', width: { ideal: 1920 }, height: { ideal: 1080 } } }
-    : { video: { facingMode: 'environment' } };
+    : { video: { facingMode: 'environment', width: { ideal: 1280 }, height: { ideal: 720 } } };
 
   // Üç kameranın (Sayım, hızlı tarama, Mal Giriş/Çıkış) hepsi bu TEK fonksiyonu
   // kullanır: sırasıyla native BarcodeDetector → WebAssembly (ZBar) yedeği →
@@ -4317,38 +4320,62 @@
     }
     // Aynı anda TEK okuma: önceki kare bitmeden yenisi başlamaz (eskiden her
     // karede yeni okuma başlıyor, iPhone'da üst üste binip telefonu yoruyordu).
-    var mesgul = false, sonOkuma = 0, tuval = null, tuvalCtx = null, kesitSira = 0;
+    var mesgul = false, sonOkuma = 0, kesitSira = 0;
     // iPhone (yazılım motoru): tüm kare yerine sadece ekranda görünen
-    // çerçevenin çevresi okunur, gerekirse küçültülür — hem hızlı hem net.
+    // çerçevenin çevresi okunur, gerekirse büyütülür — hem hızlı hem net.
+    // Her kesit türünün KENDİ tuvali var ve boyutu yalnızca değişince ayarlanır: eskiden tek tuval her
+    // karede yeniden boyutlanıyordu; iPhone'da bu sürekli bellek ayırıp bırakmak demek (uygulama atabiliyordu).
+    var tuvaller = [];
+    function tuvalAl(tur, w, h){
+      var t = tuvaller[tur];
+      if(!t){ var c = document.createElement('canvas'); t = tuvaller[tur] = { c: c, x: c.getContext('2d', { willReadFrequently: true }) }; }
+      w = Math.max(16, Math.round(w)); h = Math.max(16, Math.round(h));
+      if(t.c.width !== w || t.c.height !== h){ t.c.width = w; t.c.height = h; }
+      return t;
+    }
     function kirpilmisKare(){
       var vw = videoEl.videoWidth, vh = videoEl.videoHeight;
       var W = videoEl.clientWidth, H = videoEl.clientHeight;
       if(!vw || !vh || !W || !H) return videoEl;
       var olcek = Math.max(W / vw, H / vh);           // object-fit: cover
       var gw = W / olcek, gh = H / olcek;              // ekranda görünen kısım (video pikseli)
-      // Her karede sırayla dört farklı kesit denenir (bir barkod birinde okunmazsa diğerinde okunur):
-      //  0: çerçeve + pay (eskisi) · 1: ekranda görünen alanın tamamı (uzak/yamuk tutulan barkod)
-      //  2: ortadaki dar şerit BÜYÜTÜLEREK (küçük barkodlar, EAN-8, sigara/ilaç kutusu gibi ince çizgiler)
-      //  3: ortadaki DİKEY şerit 90° ÇEVRİLEREK (ürün yan/dik duruyorsa barkod dikey görünür;
-      //     telefonu çevirmeye gerek kalmaz). Baş aşağı (ters) barkodu motor zaten okur.
-      var tur = (kesitSira++) % 4;
-      if(!tuval){ tuval = document.createElement('canvas'); tuvalCtx = tuval.getContext('2d', { willReadFrequently: true }); }
+      // Her karede sırayla beş farklı kesit denenir (bir barkod birinde okunmazsa diğerinde okunur):
+      //  0: çerçeve + pay · 1: ekranda görünen alanın tamamı (uzak/yamuk tutulan barkod)
+      //  2: ortadaki dar şerit BÜYÜTÜLEREK (küçük barkodlar, EAN-8, ince çizgiler)
+      //  3: ortadaki DİKEY şerit 90° ÇEVRİLEREK (ürün yan/dik duruyorsa)
+      //  4: ortadaki şerit 2 kat büyütülüp KONTRASTI AÇILARAK (soluk baskı, ince yazı tipiyle
+      //     basılmış barkod, parlak/ışık yansıyan ambalaj)
+      var tur = (kesitSira++) % 5, t;
       if(tur === 3){
         var dw = Math.min(gw, gh) * 0.7, dh = gh, dk = Math.min(1.4, 1400 / dh);
         var dx = (vw - dw) / 2, dy = (vh - gh) / 2;
-        tuval.width = Math.round(dh * dk); tuval.height = Math.round(dw * dk);   // en/boy yer değiştirir
-        tuvalCtx.translate(tuval.width, 0); tuvalCtx.rotate(Math.PI / 2);
-        tuvalCtx.drawImage(videoEl, dx, dy, dw, dh, 0, 0, dw * dk, dh * dk);
-        tuvalCtx.setTransform(1, 0, 0, 1, 0, 0);
-        return tuval;
+        t = tuvalAl(3, dh * dk, dw * dk);   // en/boy yer değiştirir
+        t.x.setTransform(1, 0, 0, 1, 0, 0); t.x.translate(t.c.width, 0); t.x.rotate(Math.PI / 2);
+        t.x.drawImage(videoEl, dx, dy, dw, dh, 0, 0, dw * dk, dh * dk);
+        t.x.setTransform(1, 0, 0, 1, 0, 0);
+        return t.c;
       }
-      var oranW = tur === 1 ? 1 : tur === 2 ? 0.6 : 0.84, oranH = tur === 1 ? 1 : tur === 2 ? 0.42 : 0.76;
+      var oranW = tur === 1 ? 1 : tur === 2 ? 0.6 : tur === 4 ? 0.8 : 0.84, oranH = tur === 1 ? 1 : tur === 2 ? 0.42 : tur === 4 ? 0.3 : 0.76;
       var sw = gw * oranW, sh = gh * oranH;
       var sx = (vw - gw) / 2 + (gw - sw) / 2, sy = (vh - gh) / 2 + (gh - sh) / 2;
-      var kucult = tur === 2 ? Math.min(1.8, 1400 / sw) : Math.min(1, 1280 / sw);
-      tuval.width = Math.round(sw * kucult); tuval.height = Math.round(sh * kucult);
-      tuvalCtx.drawImage(videoEl, sx, sy, sw, sh, 0, 0, tuval.width, tuval.height);
-      return tuval;
+      var kucult = tur === 2 ? Math.min(1.8, 1400 / sw) : tur === 4 ? Math.min(2, 1600 / sw) : Math.min(1, 1280 / sw);
+      t = tuvalAl(tur, sw * kucult, sh * kucult);
+      t.x.drawImage(videoEl, sx, sy, sw, sh, 0, 0, t.c.width, t.c.height);
+      if(tur === 4) kontrastAc(t);
+      return t.c;
+    }
+    // Gri tona çevirip en koyu %2'yi siyaha, en açık %2'yi beyaza çeker (soluk barkod belirginleşir).
+    function kontrastAc(t){
+      var w = t.c.width, h = t.c.height, img = t.x.getImageData(0, 0, w, h), d = img.data, n = w * h, hist = new Uint32Array(256), i, g;
+      var gri = new Uint8Array(n);
+      for(i = 0; i < n; i++){ g = (d[i * 4] * 77 + d[i * 4 + 1] * 150 + d[i * 4 + 2] * 29) >> 8; gri[i] = g; hist[g]++; }
+      var esik = n * 0.02, top = 0, lo = 0, hi = 255;
+      for(i = 0; i < 256; i++){ top += hist[i]; if(top > esik){ lo = i; break; } }
+      top = 0; for(i = 255; i >= 0; i--){ top += hist[i]; if(top > esik){ hi = i; break; } }
+      if(hi - lo < 12) return;
+      var k = 255 / (hi - lo);
+      for(i = 0; i < n; i++){ g = (gri[i] - lo) * k; g = g < 0 ? 0 : g > 255 ? 255 : g; d[i * 4] = d[i * 4 + 1] = d[i * 4 + 2] = g; }
+      t.x.putImageData(img, 0, 0);
     }
     function nativeLoop(detector){
       if(stopped) return;
@@ -4375,9 +4402,9 @@
         var hints = new Map();
         hints.set(ZXing.DecodeHintType.POSSIBLE_FORMATS, [
           ZXing.BarcodeFormat.EAN_13, ZXing.BarcodeFormat.EAN_8, ZXing.BarcodeFormat.UPC_A, ZXing.BarcodeFormat.UPC_E,
-          ZXing.BarcodeFormat.CODE_128, ZXing.BarcodeFormat.CODE_39, ZXing.BarcodeFormat.ITF,
-          ZXing.BarcodeFormat.QR_CODE
+          ZXing.BarcodeFormat.CODE_128, ZXing.BarcodeFormat.CODE_39, ZXing.BarcodeFormat.ITF
         ]);
+        hints.set(ZXing.DecodeHintType.TRY_HARDER, true);
         zxingReader = new ZXing.BrowserMultiFormatReader(hints);
         zxingReader.decodeFromStream(stream, videoEl, function(result){
           if(!result || stopped) return;
@@ -7422,9 +7449,47 @@
 
   // ---- Taslak (yarım kalan kayıt) ----
   function saveMalDraft(){
-    state.malDrafts[malTip] = { belgeTuru: malBelge, cari: malCari, faturaNo: malFatura, sebep: malSebep, aciklama: malAciklama, items: malItems, batchId: malBatchId, updated: Date.now() };
+    if(!malTip) return true;
+    var acikUrun = '';
+    try { if(!document.getElementById('malHareketQtyModal').classList.contains('hidden') || !document.getElementById('malHareketNewProductAsk').classList.contains('hidden')) acikUrun = malPendingBarcode || ''; } catch(e){}
+    try { if(malFaturaInputEl && malFaturaInputEl.value !== undefined) malFatura = malFaturaInputEl.value.trim(); } catch(e){}
+    var bos = !malItems.length && !malCari && !malFatura && !acikUrun;
+    state.malDrafts[malTip] = bos ? null : { belgeTuru: malBelge, cari: malCari, faturaNo: malFatura, sebep: malSebep, aciklama: malAciklama, items: malItems, batchId: malBatchId, acikUrun: acikUrun, updated: Date.now() };
+    taslakYedekYaz();
     return save();
   }
+  // Taslakların İKİNCİ kopyası IndexedDB'de (ayrı veritabanı): telefonun kısa hafızası (localStorage)
+  // dolsa ya da bir sorun olsa bile yarım mal kabulü kaybolmasın. Açılışta hangisi daha yeniyse o kullanılır.
+  function taslakDb(){
+    return new Promise(function(ok, hata){
+      try { var r = indexedDB.open('krtTaslak', 1); r.onupgradeneeded = function(){ r.result.createObjectStore('kv'); }; r.onsuccess = function(){ ok(r.result); }; r.onerror = function(){ hata(r.error); }; } catch(e){ hata(e); }
+    });
+  }
+  function taslakYedekYaz(){
+    try { var kopya = JSON.parse(JSON.stringify(state.malDrafts || {})); } catch(e){ return; }
+    taslakDb().then(function(db){ try { db.transaction('kv', 'readwrite').objectStore('kv').put(kopya, 'malDrafts'); } catch(e){} }).catch(function(){});
+  }
+  taslakDb().then(function(db){
+    var q = db.transaction('kv').objectStore('kv').get('malDrafts');
+    q.onsuccess = function(){
+      var y = q.result; if(!y) return; var degisti = false;
+      ['giris', 'cikis'].forEach(function(tip){
+        var a = state.malDrafts[tip], b = y[tip];
+        var silindi = (state.malDraftSilindi || {})[tip] || 0;
+        if(b && (b.updated || 0) > silindi && (!a || (b.updated || 0) > (a.updated || 0))){ state.malDrafts[tip] = b; degisti = true; }
+      });
+      if(degisti){ try { save(); } catch(e){} }
+    };
+  }).catch(function(){});
+  // Mal ekranı açıkken 3 sn'de bir taslak tazelenir (cari seçimi, belge no, açıklama gibi kalem dışı alanlar da kaybolmasın).
+  var malTaslakImza = '';
+  setInterval(function(){
+    try {
+      if(malScreenEl.classList.contains('hidden') || malSaving) return;
+      var im = JSON.stringify([malTip, malBelge, malCari && malCari.name, malFaturaInputEl.value, malSebep, malAciklama, malItems.length, malPendingBarcode, document.getElementById('malHareketQtyModal').classList.contains('hidden')]);
+      if(im !== malTaslakImza){ malTaslakImza = im; saveMalDraft(); }
+    } catch(e){}
+  }, 3000);
   // Kalem listesindeki bir değişikliği telefona yazar. Yazılamazsa değişikliği
   // geri alır (önceki listeye döner), kullanıcıyı uyarır ve false döner —
   // bu durumda çağıran taraf başarı göstermez.
@@ -7439,7 +7504,12 @@
   }
   // Kalem sürümü: miktar her değiştiğinde artar; sunucu onayında kontrol edilir.
   function malBump(it){ it.v = (it.v || 1) + 1; }
-  function clearMalDraft(){ state.malDrafts[malTip] = null; save(); }
+  function clearMalDraft(){
+    state.malDrafts[malTip] = null;
+    if(!state.malDraftSilindi) state.malDraftSilindi = {};
+    state.malDraftSilindi[malTip] = Date.now();   // IndexedDB'deki eski kopya geri getirilmesin
+    taslakYedekYaz(); save();
+  }
 
   function openMalHareketScreen(tip){
     malTip = tip;
@@ -7452,14 +7522,14 @@
     refreshCariHint();
     malCariResultsEl.classList.add('hidden');
     var d = state.malDrafts && state.malDrafts[tip];
-    if(d && d.items && d.items.length > 0){
+    if(d && ((d.items && d.items.length > 0) || d.cari)){
       // Yarım kalmış kayıt var — kaldığı yerden devam
       malBelge = d.belgeTuru || MAL_BELGE[tip][0];
       malCari = d.cari || null;
       malFatura = d.faturaNo || '';
       malAciklama = d.aciklama || '';
       malSebep = d.sebep || '';
-      malItems = d.items.slice();
+      malItems = (d.items || []).slice();
       malItems.forEach(function(it){ if(!it.v) it.v = 1; }); // eski taslaklar: sürüm 1
       malSiparis = { kod: '', liste: [], yukleniyor: false, sec: '', acik: false };
       malBatchId = d.batchId || makeId();
@@ -7469,7 +7539,8 @@
       malScreenEl.classList.remove('hidden');
       enterMalScan();
       malCariFiyatGetir();
-      toast('Yarım kalan kayıt açıldı (' + malItems.length + ' ürün)', 'warn', 3000);
+      toast('Yarım kalan kayıt açıldı (' + malItems.length + ' ürün' + (d.acikUrun ? ' + miktarı girilmemiş 1 ürün' : '') + ')', 'warn', 3000);
+      if(d.acikUrun){ var au = d.acikUrun; setTimeout(function(){ try { malHareketHandleBarcode(au); } catch(e){} }, 350); }   // kapanmadan önce okutulan ürünün miktar kartı tekrar açılır
       return;
     }
     malBelge = MAL_BELGE[tip][0];
@@ -10091,7 +10162,18 @@
       else localStorage.removeItem(SON_EKRAN);
     } catch(x){}
   }
-  function arkayaGitti(){ sonEkranYaz(); try { save(); } catch(x){} }
+  function arkayaGitti(){
+    try { if(!malScreenEl.classList.contains('hidden')) saveMalDraft(); } catch(x){}   // mal ekranındaki her şey (cari, belge no, açık ürün) taslağa
+    sonEkranYaz(); try { save(); } catch(x){}
+    // Uygulama arka plana geçince açık kamera bırakılır: iPhone'da arkada açık kalan kamera belleği şişirip
+    // uygulamanın kapanmasına yol açabiliyor, dönüşte de görüntü siyah kalıyordu. Dönünce bir dokunuşla yeniden açılır.
+    try { var malKamAcik = !!malCameraStream; malStopCamera(); if(malKamAcik) showMalPlaceholder(); } catch(x){}
+    try { stopQuickScan(); } catch(x){}
+    try { priceStopCamera(); } catch(x){}
+    try { hareketStopCamera(); } catch(x){}
+    try { stokHrkKameraKapat(); } catch(x){}
+    try { if(cameraStream){ stopCamera(); var ph = document.getElementById('scanPlaceholder'); if(ph) ph.classList.remove('hidden'); } } catch(x){}
+  }
   document.addEventListener('visibilitychange', function(){ if(document.visibilityState === 'hidden') arkayaGitti(); });
   window.addEventListener('pagehide', arkayaGitti);
   setInterval(sonEkranYaz, 4000);
