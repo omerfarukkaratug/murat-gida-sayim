@@ -593,7 +593,7 @@
   <header style="border:none; padding:0 0 16px; background:transparent; display:flex; align-items:flex-start; justify-content:space-between;">
     <div>
       <h1><img src="logo-header.png" alt="Murat Gıda" style="height:30px; width:auto; display:block;"></h1>
-      <div class="sub"><img src="icon.svg" alt="" style="width:15px;height:15px;vertical-align:-3px;margin-right:5px;">KRT Saha · Murat Gıda • offline • Android • build 309</div>
+      <div class="sub"><img src="icon.svg" alt="" style="width:15px;height:15px;vertical-align:-3px;margin-right:5px;">KRT Saha · Murat Gıda • offline • Android • build 310</div>
     </div>
     <button type="button" id="themeToggleBtn" title="Tema seç" style="background:var(--panel2); border:1.5px solid var(--line); color:var(--text); width:34px; height:34px; border-radius:50%; font-size:15px; padding:0; display:flex; align-items:center; justify-content:center; flex-shrink:0;">🎨</button>
   </header>
@@ -1599,6 +1599,7 @@
 <div id="toast"></div>
 
 <script src="barkod-teyit.js?v=256"></script>
+<script src="ean-kurtar.js?v=310"></script>
 <script>
 (function(){
   "use strict";
@@ -4272,7 +4273,7 @@
     });
     return zxingLoadPromise;
   }
-  // QR OKUNMAZ (build 309): bu ekranlarda QR'ın işi yok; okunursa ürün yerine anlamsız yazı geliyordu ve motoru yavaşlatıyordu.
+  // QR OKUNMAZ (build 310): bu ekranlarda QR'ın işi yok; okunursa ürün yerine anlamsız yazı geliyordu ve motoru yavaşlatıyordu.
   // QR yalnızca Etiket > QR Etiket Doğrulama'da (etiket.html) okunur. codabar: gıdada yok, yanlış okuma kaynağı.
   var BARCODE_FORMATS = ['ean_13','ean_8','upc_a','upc_e','code_128','code_39','itf'];
   // iPhone kamerayı varsayılan olarak DÜŞÜK çözünürlükte (640×480) açar; barkod
@@ -4377,6 +4378,33 @@
       for(i = 0; i < n; i++){ g = (gri[i] - lo) * k; g = g < 0 ? 0 : g > 255 ? 255 : g; d[i * 4] = d[i * 4 + 1] = d[i * 4 + 2] = g; }
       t.x.putImageData(img, 0, 0);
     }
+    // KURTARMA MOTORU (build 310, ean-kurtar.js): ZBar/ML Kit'in okuyamadığı EAN-13/UPC barkodlar —
+    // kalın/taşmış çubuk, yaldızlı-buruşuk folyo, barkodun hemen yanında yazı/desen (sessiz bölge yok).
+    // Kenardan kenara ölçer; çubuk şişmesinden etkilenmez. Güvence: koruma çizgileri + parite + sağlama hanesi
+    // + aynı karede ≥2 tarama çizgisi + ARDIŞIK 2 KAREDE aynı sonuç. Tutmazsa hiçbir şey dönmez.
+    // Sadece asıl motor boş döndüğünde ve en fazla ~150 ms'de bir çalışır (telefonu yormaz).
+    var kurtarSon = 0, kurtarAday = '', kurtarAdayZaman = 0, kurtarTuval = null;
+    function kurtarDene(tuval){
+      if(stopped || !window.MKEanKurtar) return;
+      var simdi = Date.now(); if(simdi - kurtarSon < (bdYedekMotor ? 150 : 300)) return; kurtarSon = simdi;
+      var kod = null;
+      try {
+        if(tuval === videoEl){
+          // Android: videonun ortasındaki yatay şerit küçük tuvale (en fazla 1000 px) alınır
+          var vw = videoEl.videoWidth, vh = videoEl.videoHeight; if(!vw || !vh) return;
+          var sw = vw * 0.92, sh = vh * 0.34, k = Math.min(1, 1000 / sw);
+          if(!kurtarTuval) kurtarTuval = document.createElement('canvas');
+          var cw = Math.round(sw * k), ch = Math.round(sh * k);
+          if(kurtarTuval.width !== cw || kurtarTuval.height !== ch){ kurtarTuval.width = cw; kurtarTuval.height = ch; }
+          kurtarTuval.getContext('2d', { willReadFrequently: true }).drawImage(videoEl, (vw - sw) / 2, (vh - sh) / 2, sw, sh, 0, 0, cw, ch);
+          tuval = kurtarTuval;
+        }
+        kod = window.MKEanKurtar.tuvaldenOku(tuval);
+      } catch(e){ kod = null; }
+      if(!kod) return;
+      if(kurtarAday === kod && simdi - kurtarAdayZaman < 2500){ kurtarAday = ''; emit(kod); return; }
+      kurtarAday = kod; kurtarAdayZaman = simdi;
+    }
     function nativeLoop(detector){
       if(stopped) return;
       var simdi = Date.now();
@@ -4385,6 +4413,7 @@
         var kaynak = videoEl;
         try { if(bdYedekMotor) kaynak = kirpilmisKare(); } catch(e){ kaynak = videoEl; }
         detector.detect(kaynak).then(function(codes){
+          if(!codes || !codes.length) kurtarDene(kaynak);
           kareSonuc(codes, kaynak.videoWidth || kaynak.width, kaynak.videoHeight || kaynak.height);
         }).catch(function(){}).then(function(){ mesgul = false; });
       }

@@ -676,6 +676,7 @@
 
 <script src="bt-yazici.js?v=239"></script>
 <script src="barkod-teyit.js?v=256"></script>
+<script src="ean-kurtar.js?v=310"></script>
 <script>
 (function(){
   'use strict';
@@ -1551,6 +1552,27 @@
     fenerAcik = !fenerAcik;
     iz.applyConstraints({ advanced: [{ torch: fenerAcik }] }).then(function(){ $('kamFener').classList.toggle('acik', fenerAcik); }).catch(function(){ fenerAcik = false; });
   });
+  var etKurtarSon = 0, etKurtarAday = '', etKurtarZaman = 0, etKurtarTuval = null;
+  function etKurtar(kaynak, v){
+    if(!window.MKEanKurtar) return null;
+    var simdi = Date.now(); if(simdi - etKurtarSon < 150) return null; etKurtarSon = simdi;
+    var kod = null;
+    try {
+      if(kaynak === v){
+        var vw = v.videoWidth, vh = v.videoHeight; if(!vw || !vh) return null;
+        var sw = vw * 0.92, sh = vh * 0.34, o = Math.min(1, 1000 / sw);
+        if(!etKurtarTuval) etKurtarTuval = document.createElement('canvas');
+        var cw = Math.round(sw * o), ch = Math.round(sh * o);
+        if(etKurtarTuval.width !== cw || etKurtarTuval.height !== ch){ etKurtarTuval.width = cw; etKurtarTuval.height = ch; }
+        etKurtarTuval.getContext('2d', { willReadFrequently: true }).drawImage(v, (vw - sw) / 2, (vh - sh) / 2, sw, sh, 0, 0, cw, ch);
+        kaynak = etKurtarTuval;
+      }
+      kod = window.MKEanKurtar.tuvaldenOku(kaynak);
+    } catch(e){ kod = null; }
+    if(!kod) return null;
+    if(etKurtarAday === kod && simdi - etKurtarZaman < 2500){ etKurtarAday = ''; return kod; }
+    etKurtarAday = kod; etKurtarZaman = simdi; return null;
+  }
   function tara(){
     if(!okuyucu || !akis) return;
     if(okuyucuKip !== dogrulaKip) okuyucuKur();   // kamera açıkken kip değiştiyse (doğrulama ↔ normal) okunan biçimler de değişir
@@ -1565,6 +1587,8 @@
         var tk = etiketTeyit.kare(k, kaynak.videoWidth || kaynak.width, kaynak.videoHeight || kaynak.height);
         k = tk ? [{ rawValue: tk }] : [];
       }
+      // Kurtarma motoru (ean-kurtar.js): kalın çubuklu / folyo / yanında yazı olan EAN'lar. 2 ardışık kare aynı olmalı.
+      if(!dogrulaKip && (!k || !k.length)){ var kk = etKurtar(kaynak, v); if(kk) k = [{ rawValue: kk }]; }
       if(k && k.length && k[0].rawValue){
         var kod = String(k[0].rawValue).trim();
         if(dogrulaKip){ dogrulaOku(kod); taraZ = setTimeout(tara, 350); return; }
