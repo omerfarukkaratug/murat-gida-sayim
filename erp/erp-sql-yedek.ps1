@@ -29,6 +29,18 @@ $LogFile          = "C:\Scripts\erp-sql-yedek-log.txt"
 # -----------------------------------------------------
 
 $Kontrol = $args -contains "KONTROL"
+# SAYIM modu (ERP-YEDEK-SAYIM.bat): kesinlestirme oncesi zorunlu yedek. C: dar oldugu icin alt sinir 1.500 MB'a iner
+# (gercek sikistirilmis yedek ~1,3-1,6 GB; tahmin %30 ile bol paylidir) ve takili USB bellek varsa yedek oraya da kopyalanir.
+$SayimModu = $args -contains "SAYIM"
+if ($SayimModu) {
+    $MinBosMb = 1500
+    if (-not $IkinciKlasor) {
+        try {
+            $usb = @(Get-WmiObject Win32_LogicalDisk -Filter "DriveType=2" -ErrorAction Stop | Where-Object { $_.FreeSpace -gt 3GB } | Sort-Object FreeSpace -Descending)
+            if ($usb.Count) { $IkinciKlasor = Join-Path ($usb[0].DeviceID + "\") "KRT-ERP-Yedek" }
+        } catch {}
+    }
+}
 try { [Net.ServicePointManager]::SecurityProtocol = [Net.ServicePointManager]::SecurityProtocol -bor [Net.SecurityProtocolType]::Tls12 } catch {}
 function Yaz-Log($m) { $s = "$(Get-Date -Format 'yyyy-MM-dd HH:mm:ss') - $m"; Write-Host $s; try { Add-Content -Path $LogFile -Value $s } catch {} }
 function Bildir($durum, $mesaj) {
