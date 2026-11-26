@@ -775,7 +775,7 @@ function Belge-Yaz($durum, $plan, $ad, $aciklama, $T, $kap, $son, $bolumler, [bo
             if ($n % 500 -eq 0) { Write-Host "    $n satir..." }
         }
         $tx.Commit()
-        $g = [pscustomobject]@{ ad = $ad; bolumler = @($bolumler); kapanis = $kap.ToString("s"); T = $T.ToString("s"); sayimId = $sayimId; aciklama = $aciklama; fis = 0; son = $son; saatli = $saatli; yazildi = (Get-Date).ToString("s"); kesim = $(if ($kesim) { ([datetime]$kesim).ToString("yyyy-MM-ddTHH:mm:ss.fff") } else { "" })   # milisaniye: son okutma "sonradan" sayilmasin; urunler = $urunKayit }
+        $g = [pscustomobject]@{ ad = $ad; bolumler = @($bolumler); kapanis = $kap.ToString("s"); T = $T.ToString("s"); sayimId = $sayimId; aciklama = $aciklama; fis = 0; son = $son; saatli = $saatli; yazildi = (Get-Date).ToString("s"); kesim = $(if ($kesim) { ([datetime]$kesim).ToString("yyyy-MM-ddTHH:mm:ss.fff") } else { "" }); urunler = $urunKayit }
         $durum.geceler = @($durum.geceler) + $g
         Durum-Yaz $durum
         Yaz-Log "YAZILDI '$ad': SAYIM $sayimId, $($plan.Count) urun, $n satir, kesinlestirme ani $($T.ToString('s'))"
