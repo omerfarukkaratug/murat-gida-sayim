@@ -39,7 +39,7 @@ $LogFile          = "C:\Scripts\sayim-aktar-log.txt"
 $DurumDosyasi     = "C:\Scripts\sayim-aktar-durum.json"
 $RaporKlasoru     = "C:\Scripts\sayim-raporlari"
 $AciklamaOn       = "KRT Saha: "
-$SurumSA = "2026-11-26b"
+$SurumSA = "2026-11-27a"
 
 try { [Net.ServicePointManager]::SecurityProtocol = [Net.ServicePointManager]::SecurityProtocol -bor [Net.SecurityProtocolType]::Tls12 } catch {}
 $Inv = [Globalization.CultureInfo]::InvariantCulture
@@ -77,22 +77,36 @@ function Sor-Tarih($soru, $varsayilan) {
 #  $esle: stok_kodu/barkod -> ERP STOK ID (hashtable); bulunamayanlar "eslesmeyen" olur.
 #  Doner: @{ urunler = @{ stokId = @{ depo; raf; mod (esitle|ekle); ad; barkodlar } }; eslesmeyen; kalan }
 # ---------------------------------------------------------------------
-function Birlestir($satirlar, $esle, $secili, $yapilan, [bool]$son, $atanmis) {
+function Birlestir($satirlar, $esle, $secili, $yapilan, [bool]$son, $atanmis, $kesimler, $sinir, [bool]$kalanMod) {
     # $secili: bu gecenin bolumleri (ad -> $true). $atanmis: daha once yazilan gecelerin bolumleri.
+    # $kesimler: yazilmis bolum -> o belgeye alinan okutmalarin kesim ani. Bu andan SONRA ayni bolume yapilan okutmalar
+    #   ("sonradan gelen") hicbir belgede yoktur: KALAN modunda alinir, diger modlarda KALAN listesine duser (atlanmaz).
+    # $kalanMod: bolum secimi yerine henuz hicbir belgeye girmemis BUTUN raf okutmalari ($sinir anina kadar) alinir.
     # Depo okutmalari (bolge "Depo...") urunun ILK raf gecesinde ya da SON'da depo miktari olarak eklenir.
     # KALAN: ne depo ne bu gece ne onceki bir gece olan bolumlerin okutmalari (sonraki gecelere kalir; SON'da engel).
-    $depo = @{}; $raf = @{}; $ad = @{}; $bark = @{}; $sonRaf = @{}; $sonDepo = @{}
+    $depo = @{}; $raf = @{}; $ad = @{}; $bark = @{}; $sonRaf = @{}; $sonDepo = @{}; $dokunulan = @{}
     $eslesmeyen = New-Object System.Collections.ArrayList; $kalan = New-Object System.Collections.ArrayList
+    $gecAlinan = New-Object System.Collections.ArrayList; $ilkAl = $null; $sonAl = $null
+    if (-not $kesimler) { $kesimler = @{} }
     foreach ($s in $satirlar) {
         $kod = ([string]$s[1]).Trim(); $bk = ([string]$s[2]).Trim(); $adet = [double]$s[4]; $reyon = [string]$s[6]
         $depoMu = DepoMu $reyon; $bolum = BolumAdi $reyon
-        if (-not $depoMu -and -not $secili.ContainsKey($bolum)) { if (-not $atanmis.ContainsKey($bolum)) { [void]$kalan.Add($s) }; continue }
+        $ts = EpochTarih $s[7]
+        if (-not $depoMu) {
+            $gec = $false
+            if ($kesimler.ContainsKey($bolum)) { if ($ts -le $kesimler[$bolum]) { continue }; $gec = $true }
+            elseif ($atanmis -and $atanmis.ContainsKey($bolum)) { continue }   # kesimi bilinmeyen eski kayit: eskisi gibi
+            $al = if ($kalanMod) { (-not $sinir) -or ($ts -le $sinir) } elseif ($gec) { $false } else { $secili.ContainsKey($bolum) }
+            if (-not $al) { [void]$kalan.Add($s); continue }
+            if ($gec) { [void]$gecAlinan.Add($s) }
+            $dokunulan[$bolum] = $true
+            if ($ilkAl -eq $null -or $ts -lt $ilkAl) { $ilkAl = $ts }; if ($sonAl -eq $null -or $ts -gt $sonAl) { $sonAl = $ts }
+        }
         $sid = $null
         if ($kod -and $esle.ContainsKey("K:" + $kod)) { $sid = $esle["K:" + $kod] } elseif ($bk -and $esle.ContainsKey("B:" + $bk)) { $sid = $esle["B:" + $bk] }
         if ($sid -eq $null) { if (-not $depoMu -or $son) { [void]$eslesmeyen.Add($s) }; continue }
         if (-not $ad.ContainsKey($sid)) { $ad[$sid] = [string]$s[3]; $bark[$sid] = @{} }
         if ($bk) { $bark[$sid][$bk] = $true }
-        $ts = EpochTarih $s[7]
         if ($depoMu) { $depo[$sid] = [double]($depo[$sid]) + $adet; if (-not $sonDepo.ContainsKey($sid) -or $ts -gt $sonDepo[$sid]) { $sonDepo[$sid] = $ts } }
         else { $raf[$sid] = [double]($raf[$sid]) + $adet; if (-not $sonRaf.ContainsKey($sid) -or $ts -gt $sonRaf[$sid]) { $sonRaf[$sid] = $ts } }
     }
@@ -107,7 +121,7 @@ function Birlestir($satirlar, $esle, $secili, $yapilan, [bool]$son, $atanmis) {
             $urunler[$sid] = @{ depo = [double]$depo[$sid]; raf = 0.0; mod = "esitle"; ad = $ad[$sid]; barkodlar = @($bark[$sid].Keys); son = $sonDepo[$sid] }
         }
     }
-    return @{ urunler = $urunler; eslesmeyen = $eslesmeyen; kalan = $kalan }
+    return @{ urunler = $urunler; eslesmeyen = $eslesmeyen; kalan = $kalan; dokunulan = $dokunulan; gecAlinan = $gecAlinan; ilk = $ilkAl; son = $sonAl }
 }
 
 # Donemin bolumleri: ad, ilk / son okutma, okutma, urun, personel, depo mu
@@ -365,6 +379,7 @@ function Donem-Sec($durum) {
 
 function Okutmalar($donem) {
     Write-Host "  Okutmalar buluttan aliniyor..."
+    $script:CekimZamani = Get-Date
     $r = Rpc "sayim_kayitlari_ver" @{ p_donem = $donem }
     if (-not $r -or $r.status -ne "ok") { $ne = if ($r -is [string]) { "metin " + $r.Length + " karakter: " + (Kisalt $r 200) } elseif ($r) { "status=" + $r.status } else { "bos yanit" }; throw "Okutmalar alinamadi ($ne)" }
     $s = @($r.satirlar); Yaz-Log "Donem #$donem : $($s.Count) okutma"
@@ -431,6 +446,20 @@ function ErpBilgi($ids, $T, $tMap) {
     return $bilgi
 }
 
+# Yazilmis her bolum icin: o bolumden belgeye alinan okutmalarin kesim ani (sonrakiler "sonradan gelen" okutmadir).
+# Eski kayitlarda (kesim alani yok) belgenin yazildigi an kullanilir: okutmalar yazmadan birkac dakika once cekiliyor.
+function Kesimler($durum) {
+    $k = @{}
+    if ($durum) {
+        foreach ($g in @($durum.geceler)) {
+            if ($g.son) { continue }
+            $t = if ($g.kesim) { [datetime]$g.kesim } elseif ($g.yazildi) { [datetime]$g.yazildi } else { $null }
+            if (-not $t) { continue }
+            foreach ($b in @($g.bolumler)) { if ($b -and (-not $k.ContainsKey([string]$b) -or $t -gt $k[[string]$b])) { $k[[string]$b] = $t } }
+        }
+    }
+    return $k
+}
 function Yapilanlar($durum) {
     $y = @{}
     if ($durum) { foreach ($g in @($durum.geceler)) { foreach ($u in @($g.urunler)) { $y[[long]$u[0]] = $true } } }
@@ -461,24 +490,65 @@ function Gece-Aktar() {
     $sonDonem = [long]((Rpc "sayim_donemleri_ver" @{}).donemler[0][0])
     $asilSorun = if ($donem -eq $sonDonem) { Asil-Karsilastir $satirlar } else { "Secilen donem en son donem degil; sunucudaki asil kayitlarla karsilastirilamaz" }
     $atanmis = @{}; foreach ($g in @($durum.geceler)) { foreach ($x in @($g.bolumler)) { if ($x) { $atanmis[[string]$x] = [string]$g.ad } } }
+    $kesimler = Kesimler $durum
+    # Yazilmis bolumlere belge yazildiktan SONRA yapilan okutmalar (hicbir belgede yok)
+    $gecSay = @{}; $gecToplam = 0
+    foreach ($s in $satirlar) {
+        if (DepoMu $s[6]) { continue }
+        $bo = BolumAdi $s[6]
+        if ($kesimler.ContainsKey($bo) -and (EpochTarih $s[7]) -gt $kesimler[$bo]) { $gecSay[$bo] = [int]$gecSay[$bo] + 1; $gecToplam++ }
+    }
 
     Baslik "Sayim bolumleri (ilk okutma -> son okutma)"
     $liste = Bolumler $satirlar; $secilebilir = @()
     foreach ($x in $liste) {
-        $durumM = if ($x.depo) { "depo: urunun ilk raf gecesinde / SON'da eklenir" } elseif ($atanmis.ContainsKey($x.bolum)) { "YAZILDI: " + $atanmis[$x.bolum] } else { $secilebilir += $x; "[" + $secilebilir.Count + "]" }
+        $durumM = if ($x.depo) { "depo: urunun ilk raf gecesinde / SON'da eklenir" } elseif ($atanmis.ContainsKey($x.bolum)) { $(if ($gecSay[$x.bolum]) { "YAZILDI + SONRADAN " + $gecSay[$x.bolum] + " okutma (KALAN ile aktarilir) | " } else { "YAZILDI: " }) + $atanmis[$x.bolum] } else { $secilebilir += $x; "[" + $secilebilir.Count + "]" }
         Write-Host ("  {0,-6} {1,-38} {2} -> {3}  {4,6} okutma {5,5} urun  {6}" -f $(if ($x.depo -or $atanmis.ContainsKey($x.bolum)) { "" } else { "[" + $secilebilir.Count + "]" }), (Kisalt $x.ad 38), $x.ilk.ToString("dd.MM HH:mm"), $x.son.ToString("dd.MM HH:mm"), $x.okutma, $x.urun.Count, $(if ($x.depo -or $atanmis.ContainsKey($x.bolum)) { $durumM } else { (@($x.kisi.Keys) -join ', ') }))
     }
     $depoB = @($liste | Where-Object { $_.depo })
     if ($depoB.Count) { $dIlk = ($depoB | ForEach-Object { $_.ilk } | Sort-Object)[0]; $dSon = ($depoB | ForEach-Object { $_.son } | Sort-Object)[-1]; if (($dSon - $dIlk).TotalHours -gt 16) { Uyari "Depo okutmalari $([Math]::Round(($dSon - $dIlk).TotalHours)) saate yayiliyor ($($dIlk.ToString('dd.MM HH:mm')) - $($dSon.ToString('dd.MM HH:mm'))). Gece rafta sayarken reyonu 'Depo'da unutan olmus olabilir: uygulamada Bolumler / Duzelt ile bakin." } }
 
+    if ($gecToplam) {
+        Write-Host ""
+        Uyari "Daha once YAZILAN bolumlere belge yazildiktan SONRA $gecToplam okutma yapilmis (ayni reyon adi secilerek). Bunlar henuz hicbir belgede YOK."
+        Write-Host "    Bunlari almak icin KALAN yazin: henuz belgeye girmemis BUTUN raf okutmalari (secilmemis bolumler + sonradan gelenler)" -ForegroundColor Yellow
+        Write-Host "    saat-dakika moduyla tek belgede alinir; isterseniz bir saate kadar olanlar (or. once 25.11 gecesi, sonra 26.11)." -ForegroundColor Yellow
+    }
     Write-Host ""
     Write-Host "  HEPSI: depo dahil butun okutmalar TEK belgede (deneme / tek seferde yapilan sayim icin)" -ForegroundColor DarkGray
-    $sec = (Read-Host "  Bu gecenin bolumleri (numaralar, or. 1,3)  |  hepsi bitince depoda kalan urunleri kapatmak icin: SON  |  HEPSI").Trim()
+    Write-Host "  KALAN: henuz hicbir belgeye girmemis butun raf okutmalari (secilmemis bolumler + yazilmis bolumlere sonradan yapilanlar), saat-dakika" -ForegroundColor DarkGray
+    $sec = (Read-Host "  Bu gecenin bolumleri (numaralar, or. 1,3)  |  KALAN  |  hepsi bitince depoda kalan urunleri kapatmak icin: SON  |  HEPSI").Trim()
     $son = (NormTr $sec) -eq "son"
     $hepsi = (NormTr $sec) -eq "hepsi"
+    $kalanMod = (NormTr $sec) -eq "kalan"
+    $sinir = $null; $bOnce = $null
     $secili = @{}
-    if ($son) {
+    if ($kalanMod) {
+        $esle = Eslestir $satirlar
+        $hepsiB = Birlestir $satirlar $esle @{} (Yapilanlar $durum) $false $atanmis $kesimler $null $true
+        if ($hepsiB.ilk -eq $null) { throw "Belgeye girmemis raf okutmasi yok." }
+        Write-Host ("  Belgeye girmemis raf okutmalari: {0} -> {1}" -f $hepsiB.ilk.ToString('dd.MM.yyyy HH:mm'), $hepsiB.son.ToString('dd.MM.yyyy HH:mm'))
+        # Saat dilimi dagilimi: arada bosluk varsa geceler ayri belgeye bolunebilir
+        $saatler = @{}; foreach ($s in $satirlar) { if (DepoMu $s[6]) { continue }; $t = EpochTarih $s[7]; $bo = BolumAdi $s[6]; if (($kesimler.ContainsKey($bo) -and $t -le $kesimler[$bo]) -or (-not $kesimler.ContainsKey($bo) -and $atanmis.ContainsKey($bo))) { continue }; $k = $t.ToString('dd.MM HH:00'); $saatler[$k] = [int]$saatler[$k] + 1 }
+        Write-Host "  Saat saat okutma sayisi:" -ForegroundColor DarkGray
+        ($saatler.Keys | Sort-Object { [datetime]::ParseExact($_, 'dd.MM HH:mm', $Inv) }) | ForEach-Object { Write-Host ("     {0}  {1,6}" -f $_, $saatler[$_]) -ForegroundColor DarkGray }
+        $sinir = Sor-Tarih "  Bu belgeye HANGI ANA KADARKI okutmalar girsin? (gecelere bolmek icin bos saati yazin, or. 26.11.2026 10:00)" $hepsiB.son
+        $bOnce = Birlestir $satirlar $esle @{} (Yapilanlar $durum) $false $atanmis $kesimler $sinir $true
+        if ($bOnce.ilk -eq $null) { throw "Bu ana kadar belgeye girmemis okutma yok." }
+        foreach ($k in $bOnce.dokunulan.Keys) { $secili[$k] = $true }
+        $ad = "Kalan okutmalar " + $bOnce.ilk.ToString('dd.MM HH:mm') + " - " + $bOnce.son.ToString('dd.MM HH:mm')
+        # Sonradan gelen okutmalarin dokumu: hangi reyon, kim, ne zaman (EVET'ten once kontrol icin)
+        if ($bOnce.gecAlinan.Count) {
+            Write-Host ""
+            Write-Host "  Yazilmis bolumlere SONRADAN yapilan ve bu belgeye girecek $($bOnce.gecAlinan.Count) okutma (reyon / kisi / saat):" -ForegroundColor Yellow
+            $grp = @{}
+            foreach ($s in $bOnce.gecAlinan) { $r = (ReyonParca $s[6]) -join ' / '; if (-not $grp.ContainsKey($r)) { $grp[$r] = @{ n = 0; kisi = @{}; ilk = $null; son = $null } }; $x = $grp[$r]; $x.n++; $x.kisi[[string]$s[8]] = 1; $t = EpochTarih $s[7]; if ($x.ilk -eq $null -or $t -lt $x.ilk) { $x.ilk = $t }; if ($x.son -eq $null -or $t -gt $x.son) { $x.son = $t } }
+            foreach ($r in ($grp.Keys | Sort-Object { -$grp[$_].n })) { $x = $grp[$r]; Write-Host ("     {0,-45} {1,5} okutma  {2} -> {3}  {4}" -f (Kisalt $r 45), $x.n, $x.ilk.ToString('dd.MM HH:mm'), $x.son.ToString('dd.MM HH:mm'), (@($x.kisi.Keys) -join ', ')) }
+            Write-Host "     Bunlar ayni raflarin TEKRAR sayimi ise (ilk sayim zaten aktarildi) bu belge onlari IKINCI KEZ ekler: o zaman EVET demeyin, bana sorun." -ForegroundColor Yellow
+        }
+    } elseif ($son) {
         if (@($durum.geceler | Where-Object { $_.son }).Count) { throw "SON kapanis zaten yazilmis" }
+        if ($gecToplam) { Hata "Yazilmis bolumlere sonradan yapilan $gecToplam okutma henuz aktarilmadi. Once KALAN ile aktarin."; if ((Read-Host "  Bu okutmalar HIC aktarilmayacak. Bilerek devam icin DEVAM yazin") -cne "DEVAM") { return } }
         if ($secilebilir.Count) { Hata "Henuz yazilmamis $($secilebilir.Count) bolum var: $(($secilebilir | ForEach-Object { $_.ad }) -join ', '). SON'dan once bu bolumler gece olarak yazilmali."; if ((Read-Host "  Bu bolumler HIC aktarilmayacak. Bilerek devam icin DEVAM yazin") -cne "DEVAM") { return } }
         $ad = "SON kapanis"
     } elseif ($hepsi) {
@@ -491,7 +561,7 @@ function Gece-Aktar() {
         $ad = (@($secili.Keys) -join " + ")
     }
     $sx = @($liste | Where-Object { ($hepsi -and $_.depo) -or (-not $_.depo -and $secili.ContainsKey($_.bolum)) })
-    if ($son) { $ilk = ($depoB | ForEach-Object { $_.ilk } | Sort-Object)[0] } else { $ilk = ($sx | ForEach-Object { $_.ilk } | Sort-Object)[0] }
+    if ($son) { $ilk = ($depoB | ForEach-Object { $_.ilk } | Sort-Object)[0] } elseif ($kalanMod) { $ilk = $bOnce.ilk } else { $ilk = ($sx | ForEach-Object { $_.ilk } | Sort-Object)[0] }
     if (-not $ilk) { $ilk = Get-Date }
     $gun = if ($ilk.Hour -lt 6) { $ilk.Date.AddDays(-1) } else { $ilk.Date }
     $sonT = (@($durum.geceler) | ForEach-Object { [datetime]$_.T } | Sort-Object | Select-Object -Last 1)
@@ -502,14 +572,19 @@ function Gece-Aktar() {
         $kap = Sor-Tarih "  Depo sayiminin BASLADIGI an (bundan sonra depodaki mallarda ERP hareketi olmamali)" $ilk
         $T = Sor-Tarih "  ERP kesinlestirme ani" $(if ($sonT) { $sonT.AddMinutes(1) } else { $gun.AddHours(23).AddMinutes(59).AddSeconds(59) })
     } else {
-        $sonOk = (($sx | ForEach-Object { $_.son } | Sort-Object)[-1])
-        Write-Host "  Secilen bolumlerin ilk okutmasi: $($ilk.ToString('dd.MM.yyyy HH:mm')), son okutmasi: $($sonOk.ToString('dd.MM.yyyy HH:mm'))"
+        $sonOk = if ($kalanMod) { $bOnce.son } else { (($sx | ForEach-Object { $_.son } | Sort-Object)[-1]) }
+        Write-Host "  Secilen okutmalarin ilki: $($ilk.ToString('dd.MM.yyyy HH:mm')), sonuncusu: $($sonOk.ToString('dd.MM.yyyy HH:mm'))"
+        if ($kalanMod) {
+            Write-Host "  KALAN her zaman saat-dakika moduyla aktarilir (okutmalar farkli gun ve saatlerde)." -ForegroundColor Cyan
+            $saatli = $true
+        } else {
         Write-Host ""
         Write-Host "  Bu sayim nasil yapildi?"
         Write-Host "   1) Gece, magaza KAPALIYKEN (butun urunler tek bir ana gore)"
         Write-Host "   2) Magaza ACIKKEN / saat-dakika: her urun KENDI okutma saatindeki stokla karsilastirilir;"
         Write-Host "      okutmadan sonra yapilan satislar dogru duser (deneme sayimi, gunduz sayimi)"
         $saatli = ((Read-Host "  Secim [Enter = 1]").Trim() -eq "2")
+        }
     }
     if ($saatli) {
         $kap = $ilk
@@ -525,9 +600,10 @@ function Gece-Aktar() {
     if ($sonT -and $T -le $sonT) { throw "Kesinlestirme ani, daha once yazilan son geceden ($($sonT.ToString('dd.MM.yyyy HH:mm'))) sonra olmali. Geceleri sirayla aktarin." }
     if (@($durum.geceler | Where-Object { (NormTr $_.ad) -eq (NormTr $ad) }).Count) { throw "'$ad' adiyla bir gece zaten yazilmis." }
 
-    $esle = Eslestir $satirlar
+    if (-not $esle) { $esle = Eslestir $satirlar }
     $yapilan = Yapilanlar $durum
-    $b = Birlestir $satirlar $esle $secili $yapilan ($son -or $hepsi) $atanmis
+    $b = if ($kalanMod) { $bOnce } else { Birlestir $satirlar $esle $secili $yapilan ($son -or $hepsi) $atanmis $kesimler $null $false }
+    if (-not $kalanMod -and -not $son -and $gecToplam) { Uyari "Yazilmis bolumlere sonradan yapilan $gecToplam okutma bu belgeye GIRMEZ (sonra KALAN ile aktarin)." }
     $u = $b.urunler
     if (-not $u.Count) {
         if ($b.eslesmeyen.Count) {
@@ -651,11 +727,12 @@ function Gece-Aktar() {
     if ($c -cne "EVET") { Write-Host "  Yazilmadi." -ForegroundColor Yellow; return }
 
     $aciklama = Kisalt ($AciklamaOn + $ad + " " + $(if ($saatli) { $T.ToString("dd.MM.yyyy HH:mm") + " saatli" } else { $T.ToString("dd.MM.yyyy") })) 100
-    Belge-Yaz $durum $plan $ad $aciklama $T $kap $son @($secili.Keys) $saatli
+    $kesim = if ($kalanMod) { $sinir } else { $script:CekimZamani }
+    Belge-Yaz $durum $plan $ad $aciklama $T $kap $son @($secili.Keys) $saatli $kesim
 }
 
 # Sayim belgesini tek islemde yazar (once dogrulanmis ERP yedegi), durum dosyasina isler, ERP talimatini gosterir.
-function Belge-Yaz($durum, $plan, $ad, $aciklama, $T, $kap, $son, $bolumler, [bool]$saatli) {
+function Belge-Yaz($durum, $plan, $ad, $aciklama, $T, $kap, $son, $bolumler, [bool]$saatli, $kesim) {
     try { $yedek = ErpYedekAl "sayim '$ad' yazilmadan once" } catch { Hata "ERP yedegi alinamadi, ERP'ye YAZILMADI: $($_.Exception.Message)"; return }
     $tx = $script:Bag.BeginTransaction()
     try {
@@ -680,7 +757,7 @@ function Belge-Yaz($durum, $plan, $ad, $aciklama, $T, $kap, $son, $bolumler, [bo
             if ($n % 500 -eq 0) { Write-Host "    $n satir..." }
         }
         $tx.Commit()
-        $g = [pscustomobject]@{ ad = $ad; bolumler = @($bolumler); kapanis = $kap.ToString("s"); T = $T.ToString("s"); sayimId = $sayimId; aciklama = $aciklama; fis = 0; son = $son; saatli = $saatli; yazildi = (Get-Date).ToString("s"); urunler = $urunKayit }
+        $g = [pscustomobject]@{ ad = $ad; bolumler = @($bolumler); kapanis = $kap.ToString("s"); T = $T.ToString("s"); sayimId = $sayimId; aciklama = $aciklama; fis = 0; son = $son; saatli = $saatli; yazildi = (Get-Date).ToString("s"); kesim = $(if ($kesim) { ([datetime]$kesim).ToString("s") } else { "" }); urunler = $urunKayit }
         $durum.geceler = @($durum.geceler) + $g
         Durum-Yaz $durum
         Yaz-Log "YAZILDI '$ad': SAYIM $sayimId, $($plan.Count) urun, $n satir, kesinlestirme ani $($T.ToString('s'))"
