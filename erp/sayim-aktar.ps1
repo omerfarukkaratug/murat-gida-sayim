@@ -39,7 +39,7 @@ $LogFile          = "C:\Scripts\sayim-aktar-log.txt"
 $DurumDosyasi     = "C:\Scripts\sayim-aktar-durum.json"
 $RaporKlasoru     = "C:\Scripts\sayim-raporlari"
 $AciklamaOn       = "KRT Saha: "
-$SurumSA = "2026-11-27b"
+$SurumSA = "2026-11-27c"
 
 try { [Net.ServicePointManager]::SecurityProtocol = [Net.ServicePointManager]::SecurityProtocol -bor [Net.SecurityProtocolType]::Tls12 } catch {}
 $Inv = [Globalization.CultureInfo]::InvariantCulture
@@ -471,7 +471,7 @@ function Kesimler($durum) {
     if ($durum) {
         foreach ($g in @($durum.geceler)) {
             if ($g.son) { continue }
-            $t = if ($g.kesim) { [datetime]$g.kesim } elseif ($g.yazildi) { [datetime]$g.yazildi } else { $null }
+            $t = if ($g.kesim) { $kt = [datetime]$g.kesim; if ($kt.Millisecond -eq 0) { $kt = $kt.AddSeconds(1) }; $kt } elseif ($g.yazildi) { [datetime]$g.yazildi } else { $null }
             if (-not $t) { continue }
             foreach ($b in @($g.bolumler)) { if ($b -and (-not $k.ContainsKey([string]$b) -or $t -gt $k[[string]$b])) { $k[[string]$b] = $t } }
         }
@@ -775,7 +775,7 @@ function Belge-Yaz($durum, $plan, $ad, $aciklama, $T, $kap, $son, $bolumler, [bo
             if ($n % 500 -eq 0) { Write-Host "    $n satir..." }
         }
         $tx.Commit()
-        $g = [pscustomobject]@{ ad = $ad; bolumler = @($bolumler); kapanis = $kap.ToString("s"); T = $T.ToString("s"); sayimId = $sayimId; aciklama = $aciklama; fis = 0; son = $son; saatli = $saatli; yazildi = (Get-Date).ToString("s"); kesim = $(if ($kesim) { ([datetime]$kesim).ToString("s") } else { "" }); urunler = $urunKayit }
+        $g = [pscustomobject]@{ ad = $ad; bolumler = @($bolumler); kapanis = $kap.ToString("s"); T = $T.ToString("s"); sayimId = $sayimId; aciklama = $aciklama; fis = 0; son = $son; saatli = $saatli; yazildi = (Get-Date).ToString("s"); kesim = $(if ($kesim) { ([datetime]$kesim).ToString("yyyy-MM-ddTHH:mm:ss.fff") } else { "" })   # milisaniye: son okutma "sonradan" sayilmasin; urunler = $urunKayit }
         $durum.geceler = @($durum.geceler) + $g
         Durum-Yaz $durum
         Yaz-Log "YAZILDI '$ad': SAYIM $sayimId, $($plan.Count) urun, $n satir, kesinlestirme ani $($T.ToString('s'))"
