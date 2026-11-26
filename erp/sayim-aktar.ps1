@@ -39,7 +39,7 @@ $LogFile          = "C:\Scripts\sayim-aktar-log.txt"
 $DurumDosyasi     = "C:\Scripts\sayim-aktar-durum.json"
 $RaporKlasoru     = "C:\Scripts\sayim-raporlari"
 $AciklamaOn       = "KRT Saha: "
-$SurumSA = "2026-11-26a"
+$SurumSA = "2026-11-26b"
 
 try { [Net.ServicePointManager]::SecurityProtocol = [Net.ServicePointManager]::SecurityProtocol -bor [Net.SecurityProtocolType]::Tls12 } catch {}
 $Inv = [Globalization.CultureInfo]::InvariantCulture
@@ -155,11 +155,24 @@ if ($env:SAYIM_AKTAR_TEST -eq "1") { return }   # yalnizca hesap fonksiyonlari y
 # ---------------------------------------------------------------------
 #  ERP ve bulut baglantilari
 # ---------------------------------------------------------------------
+# Buyuk JSON cozucu: Windows Server 2012'nin PowerShell'i (3.0/4.0) Invoke-RestMethod'da 2 MB'tan buyuk JSON'u
+# COZEMEZ ve nesne yerine duz metin dondurur (2026-11-26: 17.392 okutma ~4 MB -> "Okutmalar alinamadi").
+Add-Type -AssemblyName System.Web.Extensions
+function JsonCoz($metin) {
+    $js = New-Object System.Web.Script.Serialization.JavaScriptSerializer
+    $js.MaxJsonLength = [int]::MaxValue; $js.RecursionLimit = 1000
+    return $js.DeserializeObject([string]$metin)
+}
 function Rpc($fonksiyon, $govde) {
     $json = $govde | ConvertTo-Json -Depth 6 -Compress
     $baytlar = [System.Text.Encoding]::UTF8.GetBytes($json)
-    return Invoke-RestMethod -Uri "$DbUrl/rest/v1/rpc/$fonksiyon" -Method Post -Body $baytlar -ContentType "application/json; charset=utf-8" `
-        -Headers @{ apikey = $script:Anahtar; Authorization = "Bearer $script:Anahtar" } -TimeoutSec 300 -UserAgent "KRT-Saha-Sayim/1.0"
+    $r = Invoke-RestMethod -Uri "$DbUrl/rest/v1/rpc/$fonksiyon" -Method Post -Body $baytlar -ContentType "application/json; charset=utf-8" `
+        -Headers @{ apikey = $script:Anahtar; Authorization = "Bearer $script:Anahtar" } -TimeoutSec 600 -UserAgent "KRT-Saha-Sayim/1.0"
+    if ($r -is [string]) {
+        $boy = $r.Length
+        try { $r = JsonCoz $r } catch { throw "Sunucu yaniti cozulemedi ($fonksiyon, $boy karakter): $($_.Exception.Message)" }
+    }
+    return $r
 }
 function Baglan() {
     $c = New-Object System.Data.SqlClient.SqlConnection("Server=$SqlServer;Database=$Database;Integrated Security=True;Connect Timeout=30")
@@ -353,13 +366,14 @@ function Donem-Sec($durum) {
 function Okutmalar($donem) {
     Write-Host "  Okutmalar buluttan aliniyor..."
     $r = Rpc "sayim_kayitlari_ver" @{ p_donem = $donem }
-    if (-not $r -or $r.status -ne "ok") { throw "Okutmalar alinamadi" }
+    if (-not $r -or $r.status -ne "ok") { $ne = if ($r -is [string]) { "metin " + $r.Length + " karakter: " + (Kisalt $r 200) } elseif ($r) { "status=" + $r.status } else { "bos yanit" }; throw "Okutmalar alinamadi ($ne)" }
     $s = @($r.satirlar); Yaz-Log "Donem #$donem : $($s.Count) okutma"
     # Ham kopya: her calistirmada butun okutmalar bu bilgisayara da yazilir (bulut / sunucu disinda 3. kopya)
     try {
         $hk = Join-Path $RaporKlasoru "ham"; if (-not (Test-Path $hk)) { New-Item -ItemType Directory -Path $hk -Force | Out-Null }
         $hd = Join-Path $hk ("donem{0}-{1}.json" -f $donem, (Get-Date -Format "yyyyMMdd-HHmmss"))
-        [System.IO.File]::WriteAllText($hd, ($r | ConvertTo-Json -Depth 6 -Compress), [System.Text.Encoding]::UTF8)
+        $jsY = New-Object System.Web.Script.Serialization.JavaScriptSerializer; $jsY.MaxJsonLength = [int]::MaxValue
+        [System.IO.File]::WriteAllText($hd, $jsY.Serialize(@{ status = $r.status; donem = $r.donem; baslangic = $r.baslangic; satirlar = @($s) }), [System.Text.Encoding]::UTF8)
         $sb = New-Object System.Text.StringBuilder; [void]$sb.AppendLine("Kayit ID;Stok Kodu;Barkod;Urun;Adet;Birim;Reyon;Okutma Zamani;Personel")
         foreach ($x in $s) { [void]$sb.AppendLine(("{0};{1};{2};{3};{4};{5};{6};{7};{8}" -f $x[0], $x[1], $x[2], ([string]$x[3] -replace ';', ','), ([double]$x[4]).ToString($Inv), $x[5], ([string]$x[6] -replace ';', ','), (EpochTarih $x[7]).ToString("dd.MM.yyyy HH:mm:ss"), $x[8])) }
         [System.IO.File]::WriteAllText([System.IO.Path]::ChangeExtension($hd, ".csv"), "$([char]0xFEFF)" + $sb.ToString(), [System.Text.Encoding]::UTF8)
