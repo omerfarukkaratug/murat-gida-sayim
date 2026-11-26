@@ -39,7 +39,7 @@ $LogFile          = "C:\Scripts\sayim-aktar-log.txt"
 $DurumDosyasi     = "C:\Scripts\sayim-aktar-durum.json"
 $RaporKlasoru     = "C:\Scripts\sayim-raporlari"
 $AciklamaOn       = "KRT Saha: "
-$SurumSA = "2026-11-27a"
+$SurumSA = "2026-11-27b"
 
 try { [Net.ServicePointManager]::SecurityProtocol = [Net.ServicePointManager]::SecurityProtocol -bor [Net.SecurityProtocolType]::Tls12 } catch {}
 $Inv = [Globalization.CultureInfo]::InvariantCulture
@@ -284,13 +284,31 @@ function ErpYedekAl($neden) {
 # ---------------------------------------------------------------------
 #  Durum dosyasi: hangi gece ne yazildi (ERP'deki belgeyle her acilista karsilastirilir)
 # ---------------------------------------------------------------------
+# JavaScriptSerializer sonucunu (Dictionary / object[]) PowerShell nesnesine cevirir (ConvertFrom-Json ile ayni sekil)
+function JsonNesne($x) {
+    if ($x -is [System.Collections.IDictionary]) {
+        $o = New-Object PSObject
+        foreach ($k in $x.Keys) { Add-Member -InputObject $o -MemberType NoteProperty -Name $k -Value (JsonNesne $x[$k]) }
+        return $o
+    }
+    if ($x -is [System.Array]) { $l = New-Object System.Collections.ArrayList; foreach ($e in $x) { [void]$l.Add((JsonNesne $e)) }; return ,($l.ToArray()) }
+    return $x
+}
+# Durum dosyasi: Windows Server 2012'nin PowerShell'inde ConvertFrom-Json 2 MB'tan buyuk dosyayi OKUYAMAZ
+# (2026-11-27: 3 gece + 11.000 urun ~ 2 MB'i asti). Bu yuzden sinirsiz cozucu kullanilir.
 function Durum-Oku() {
-    if (Test-Path $DurumDosyasi) { try { return (Get-Content $DurumDosyasi -Raw -Encoding UTF8 | ConvertFrom-Json) } catch { throw "Durum dosyasi okunamadi: $DurumDosyasi ($($_.Exception.Message)) - silmeyin, bana gonderin." } }
+    if (Test-Path $DurumDosyasi) {
+        try { return (JsonNesne (JsonCoz ([System.IO.File]::ReadAllText($DurumDosyasi, [System.Text.Encoding]::UTF8)))) }
+        catch { throw "Durum dosyasi okunamadi: $DurumDosyasi ($($_.Exception.Message)) - silmeyin, bana gonderin." }
+    }
     return $null
 }
 function Durum-Yaz($d) {
     if (Test-Path $DurumDosyasi) { Copy-Item $DurumDosyasi "$DurumDosyasi.yedek" -Force }
-    [System.IO.File]::WriteAllText($DurumDosyasi, ($d | ConvertTo-Json -Depth 8), [System.Text.Encoding]::UTF8)
+    $metin = $d | ConvertTo-Json -Depth 8 -Compress
+    # Yazilan dosya geri okunabiliyor mu? (okunamazsa yedek korunur, hata verilir)
+    try { $dene = JsonCoz $metin; if (-not $dene) { throw "bos" } } catch { throw "Durum dosyasi yazilamadi (JSON dogrulanamadi): $($_.Exception.Message)" }
+    [System.IO.File]::WriteAllText($DurumDosyasi, $metin, [System.Text.Encoding]::UTF8)
 }
 function Durum-Uzlastir($d) {
     # ERP'de silinmis belgeler durumdan dusulur; kesinlestirme bilgisi guncellenir
