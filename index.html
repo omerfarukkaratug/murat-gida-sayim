@@ -593,7 +593,7 @@
   <header style="border:none; padding:0 0 16px; background:transparent; display:flex; align-items:flex-start; justify-content:space-between;">
     <div>
       <h1><img src="logo-header.png" alt="Murat Gıda" style="height:30px; width:auto; display:block;"></h1>
-      <div class="sub"><img src="icon.svg" alt="" style="width:15px;height:15px;vertical-align:-3px;margin-right:5px;">KRT Saha · Murat Gıda • offline • Android • build 310</div>
+      <div class="sub"><img src="icon.svg" alt="" style="width:15px;height:15px;vertical-align:-3px;margin-right:5px;">KRT Saha · Murat Gıda • offline • Android • build 311</div>
     </div>
     <button type="button" id="themeToggleBtn" title="Tema seç" style="background:var(--panel2); border:1.5px solid var(--line); color:var(--text); width:34px; height:34px; border-radius:50%; font-size:15px; padding:0; display:flex; align-items:center; justify-content:center; flex-shrink:0;">🎨</button>
   </header>
@@ -2713,7 +2713,8 @@
     f.className = 'camFlash ' + color; f.style.opacity = 1;
     setTimeout(function(){ f.style.opacity = 0; }, 140);
   }
-  function hareketStartCamera(){
+  function hareketStartCamera(tekrar){
+    tekrar = tekrar === true;
     if(hareketCamStream) return;
     if(document.activeElement) document.activeElement.blur();
     document.getElementById('hareketCamLive').classList.remove('hidden');
@@ -2723,7 +2724,7 @@
         hareketCamStream = stream;
         var v = document.getElementById('hareketVideo');
         v.srcObject = stream;
-        kameraIzle(v, null);
+        kameraIzle(v, tekrar ? null : function(){ hareketStopCamera(); setTimeout(function(){ hareketStartCamera(true); }, 400); });
         hareketCamTrack = stream.getVideoTracks()[0];
         var caps = hareketCamTrack.getCapabilities ? hareketCamTrack.getCapabilities() : {};
         document.getElementById('hareketTorchBtn').classList.toggle('hidden', !caps.torch);
@@ -4273,7 +4274,7 @@
     });
     return zxingLoadPromise;
   }
-  // QR OKUNMAZ (build 310): bu ekranlarda QR'ın işi yok; okunursa ürün yerine anlamsız yazı geliyordu ve motoru yavaşlatıyordu.
+  // QR OKUNMAZ (build 311): bu ekranlarda QR'ın işi yok; okunursa ürün yerine anlamsız yazı geliyordu ve motoru yavaşlatıyordu.
   // QR yalnızca Etiket > QR Etiket Doğrulama'da (etiket.html) okunur. codabar: gıdada yok, yanlış okuma kaynağı.
   var BARCODE_FORMATS = ['ean_13','ean_8','upc_a','upc_e','code_128','code_39','itf'];
   // iPhone kamerayı varsayılan olarak DÜŞÜK çözünürlükte (640×480) açar; barkod
@@ -4283,14 +4284,17 @@
   // iOS bazen kamerayı açar (üstte kamera simgesi yanar) ama görüntü siyah kalır. Video oynatılmaya zorlanır;
   // 3 sn içinde görüntü gelmezse bir kez kapatılıp yeniden açılır, yine gelmezse kişiye söylenir.
   function kameraIzle(v, yenidenAc){
+    // iPhone: uygulama arka plandan dönünce ya da izin penceresinden sonra ilk görüntü bazen hiç gelmiyor (siyah kutu).
+    // Önce play() bir kez daha denenir; yine görüntü yoksa kamera kapatılıp kendiliğinden bir kez yeniden açılır.
     try { var p = v.play(); if(p && p.catch) p.catch(function(){}); } catch(e){}
+    setTimeout(function(){ if(v.srcObject && !(v.videoWidth > 0)){ try { var p2 = v.play(); if(p2 && p2.catch) p2.catch(function(){}); } catch(e){} } }, 700);
     setTimeout(function(){
       if(!v.srcObject || v.videoWidth > 0) return;
       var izler = v.srcObject.getVideoTracks ? v.srcObject.getVideoTracks() : [];
       if(!izler.length || izler.every(function(t){ return t.readyState === 'ended'; }) || !v.offsetParent) return;   // kamera kapatılmış / ekran değişmiş
       if(yenidenAc){ yenidenAc(); return; }
-      warnToast('Kamera görüntü vermiyor — telefonda kamerayı kullanan başka bir uygulama ya da sayfa açık olabilir. Onu kapatıp tekrar dene.');
-    }, 3000);
+      warnToast('Kamera görüntü vermiyor — uygulamayı tamamen kapatıp (yukarı kaydırarak) yeniden açın. Telefonda kamerayı kullanan başka bir uygulama açıksa onu kapatın.');
+    }, 2000);
   }
   // Android da artık 1280×720 ister (varsayılan 640×480'de ince çizgili / küçük yazı tipli barkodlar seçilemiyordu).
   var CAMERA_CONSTRAINTS = IOS_CIHAZ
@@ -4378,7 +4382,7 @@
       for(i = 0; i < n; i++){ g = (gri[i] - lo) * k; g = g < 0 ? 0 : g > 255 ? 255 : g; d[i * 4] = d[i * 4 + 1] = d[i * 4 + 2] = g; }
       t.x.putImageData(img, 0, 0);
     }
-    // KURTARMA MOTORU (build 310, ean-kurtar.js): ZBar/ML Kit'in okuyamadığı EAN-13/UPC barkodlar —
+    // KURTARMA MOTORU (build 311, ean-kurtar.js): ZBar/ML Kit'in okuyamadığı EAN-13/UPC barkodlar —
     // kalın/taşmış çubuk, yaldızlı-buruşuk folyo, barkodun hemen yanında yazı/desen (sessiz bölge yok).
     // Kenardan kenara ölçer; çubuk şişmesinden etkilenmez. Güvence: koruma çizgileri + parite + sağlama hanesi
     // + aynı karede ≥2 tarama çizgisi + ARDIŞIK 2 KAREDE aynı sonuç. Tutmazsa hiçbir şey dönmez.
@@ -4508,7 +4512,8 @@
   var quickScanStream = null;
   var quickScanEngine = null;
   var quickScanOnResult = null;
-  function startQuickScan(onResult){
+  function startQuickScan(onResult, tekrar){
+    tekrar = tekrar === true;
     quickScanOnResult = onResult;
     document.getElementById('quickScanOverlay').classList.remove('hidden');
     navigator.mediaDevices.getUserMedia(CAMERA_CONSTRAINTS)
@@ -4516,7 +4521,7 @@
         quickScanStream = stream;
         var v = document.getElementById('quickScanVideo');
         v.srcObject = stream;
-        kameraIzle(v, null);
+        kameraIzle(v, tekrar ? null : function(){ var cb = quickScanOnResult; stopQuickScan(); setTimeout(function(){ startQuickScan(cb, true); }, 400); });
         quickScanEngine = startBarcodeEngine(stream, v, function(val){
           if(navigator.vibrate) navigator.vibrate(30);
           var cb = quickScanOnResult;
@@ -4588,7 +4593,8 @@
     f.className = 'camFlash ' + color; f.style.opacity = 1;
     setTimeout(function(){ f.style.opacity = 0; }, 140);
   }
-  function priceStartCamera(){
+  function priceStartCamera(tekrar){
+    tekrar = tekrar === true;
     if(priceCamStream) return;
     if(priceNameMode) setPriceMode(false, false);
     if(document.activeElement) document.activeElement.blur(); // klavye kapansın, kamera görünsün
@@ -4599,7 +4605,7 @@
         priceCamStream = stream;
         var v = document.getElementById('priceVideo');
         v.srcObject = stream;
-        kameraIzle(v, null);
+        kameraIzle(v, tekrar ? null : function(){ priceStopCamera(); setTimeout(function(){ priceStartCamera(true); }, 400); });
         priceCamTrack = stream.getVideoTracks()[0];
         var caps = priceCamTrack.getCapabilities ? priceCamTrack.getCapabilities() : {};
         priceTorchBtn.classList.toggle('hidden', !caps.torch);
@@ -4940,7 +4946,7 @@
       .then(function(stream){
         malCameraStream = stream;
         malVideo.srcObject = stream;
-        kameraIzle(malVideo, tekrar ? null : function(){ malStopCamera(); malStartCamera(true); });
+        kameraIzle(malVideo, tekrar ? null : function(){ malStopCamera(); setTimeout(function(){ malStartCamera(true); }, 400); });
         malCameraTrack = stream.getVideoTracks()[0];
         setupMalTorch();
         malEngine = startBarcodeEngine(stream, malVideo, function(val){
@@ -7173,14 +7179,15 @@
   // Kamera: Ürün Hareketleri'ndeki gibi ekranın üstünde, açık kaldıkça okur.
   var stokHrkCam = { stream: null, motor: null, track: null, fener: false };
   function stokHrkFlash(renk){ var f = document.getElementById('stokHrkFlash'); f.className = 'camFlash ' + renk; f.style.opacity = 1; setTimeout(function(){ f.style.opacity = 0; }, 140); }
-  function stokHrkKameraAc(){
+  function stokHrkKameraAc(tekrar){
+    tekrar = tekrar === true;
     if(stokHrkCam.stream) return;
     if(document.activeElement) document.activeElement.blur();
     document.getElementById('stokHrkCamLive').classList.remove('hidden');
     navigator.mediaDevices.getUserMedia(CAMERA_CONSTRAINTS).then(function(stream){
       if(document.getElementById('stokHrkScreen').classList.contains('hidden')){ stream.getTracks().forEach(function(t){ t.stop(); }); return; }
       stokHrkCam.stream = stream;
-      var v = document.getElementById('stokHrkVideo'); v.srcObject = stream; kameraIzle(v, null);
+      var v = document.getElementById('stokHrkVideo'); v.srcObject = stream; kameraIzle(v, tekrar ? null : function(){ stokHrkKameraKapat(); setTimeout(function(){ stokHrkKameraAc(true); }, 400); });
       stokHrkCam.track = stream.getVideoTracks()[0];
       var caps = stokHrkCam.track.getCapabilities ? stokHrkCam.track.getCapabilities() : {};
       document.getElementById('stokHrkTorchBtn').classList.toggle('hidden', !caps.torch);
@@ -9594,7 +9601,8 @@
   document.getElementById('startScanBtn').addEventListener('click', startCamera);
   document.getElementById('closeCamBtn').addEventListener('click', function(){ stopCamera(); showPlaceholder(); });
 
-  function startCamera(){
+  function startCamera(tekrar){
+    tekrar = tekrar === true;
     document.getElementById('scanPlaceholder').classList.add('hidden');
     document.getElementById('qtyEntry').classList.add('hidden');
     document.getElementById('camLive').classList.remove('hidden');
@@ -9602,7 +9610,7 @@
       .then(function(stream){
         cameraStream = stream;
         video.srcObject = stream;
-        kameraIzle(video, null);
+        kameraIzle(video, tekrar ? null : function(){ stopCamera(); setTimeout(function(){ startCamera(true); }, 400); });
         cameraTrack = stream.getVideoTracks()[0];
         setupTorch();
         scanEngine = startBarcodeEngine(stream, video, function(val){
