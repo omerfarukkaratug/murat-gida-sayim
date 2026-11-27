@@ -593,7 +593,7 @@
   <header style="border:none; padding:0 0 16px; background:transparent; display:flex; align-items:flex-start; justify-content:space-between;">
     <div>
       <h1><img src="logo-header.png" alt="Murat Gıda" style="height:30px; width:auto; display:block;"></h1>
-      <div class="sub"><img src="icon.svg" alt="" style="width:15px;height:15px;vertical-align:-3px;margin-right:5px;">KRT Saha · Murat Gıda • offline • Android • build 311</div>
+      <div class="sub"><img src="icon.svg" alt="" style="width:15px;height:15px;vertical-align:-3px;margin-right:5px;">KRT Saha · Murat Gıda • offline • Android • build 312</div>
     </div>
     <button type="button" id="themeToggleBtn" title="Tema seç" style="background:var(--panel2); border:1.5px solid var(--line); color:var(--text); width:34px; height:34px; border-radius:50%; font-size:15px; padding:0; display:flex; align-items:center; justify-content:center; flex-shrink:0;">🎨</button>
   </header>
@@ -4274,16 +4274,56 @@
     });
     return zxingLoadPromise;
   }
-  // QR OKUNMAZ (build 311): bu ekranlarda QR'ın işi yok; okunursa ürün yerine anlamsız yazı geliyordu ve motoru yavaşlatıyordu.
+  // QR OKUNMAZ (build 312): bu ekranlarda QR'ın işi yok; okunursa ürün yerine anlamsız yazı geliyordu ve motoru yavaşlatıyordu.
   // QR yalnızca Etiket > QR Etiket Doğrulama'da (etiket.html) okunur. codabar: gıdada yok, yanlış okuma kaynağı.
   var BARCODE_FORMATS = ['ean_13','ean_8','upc_a','upc_e','code_128','code_39','itf'];
   // iPhone kamerayı varsayılan olarak DÜŞÜK çözünürlükte (640×480) açar; barkod
   // çizgileri seçilemez. iPhone'da yüksek çözünürlük istenir (Android'e dokunulmadı:
   // orada yerleşik okuyucu zaten iyi çalışıyor).
+  // KAMERA TANI MODU: adres sonuna ?kamtani=1 eklenince (ya da bir kez açıldıysa) ekranın altında kamera günlüğü görünür.
+  // Kapatmak için ?kamtani=0. Normal kullanımda hiçbir şey yapmaz.
+  var KAM_TANI = (function(){
+    try {
+      var q = location.search;
+      if(/kamtani=1/.test(q)) localStorage.setItem('kamTani', '1');
+      if(/kamtani=0/.test(q)) localStorage.removeItem('kamTani');
+      return localStorage.getItem('kamTani') === '1';
+    } catch(e){ return false; }
+  })();
+  var kamT0 = Date.now(), kamLogEl = null;
+  function kamLog(m){
+    if(!KAM_TANI) return;
+    try {
+      if(!kamLogEl){
+        kamLogEl = document.createElement('div');
+        kamLogEl.style.cssText = 'position:fixed;left:0;right:0;bottom:0;max-height:38vh;overflow:auto;z-index:2147483647;background:rgba(0,0,0,.85);color:#7CFC9A;font:11px ui-monospace,Menlo,monospace;padding:6px 8px;white-space:pre-wrap;pointer-events:auto';
+        document.body.appendChild(kamLogEl);
+      }
+      var d = document.createElement('div'); d.textContent = ((Date.now() - kamT0) / 1000).toFixed(1) + ' ' + m;
+      kamLogEl.appendChild(d); kamLogEl.scrollTop = kamLogEl.scrollHeight;
+    } catch(e){}
+  }
+  if(KAM_TANI){
+    window.addEventListener('error', function(e){ kamLog('JS HATA: ' + e.message + ' @' + (e.lineno || '')); });
+    window.addEventListener('unhandledrejection', function(e){ kamLog('PROMISE HATA: ' + (e.reason && (e.reason.name + ' ' + e.reason.message) || e.reason)); });
+    setTimeout(function(){ kamLog('tanı açık · ' + (document.title || '') + ' · ' + (document.body.innerHTML.match(/build \d+/) || [''])[0] + ' · ' + navigator.userAgent.replace(/^.*?\(/, '(').slice(0, 60) + (navigator.standalone ? ' · simge' : ' · tarayıcı')); }, 500);
+    try {
+      var gumAsil = navigator.mediaDevices.getUserMedia.bind(navigator.mediaDevices);
+      navigator.mediaDevices.getUserMedia = function(k){
+        kamLog('getUserMedia istendi ' + JSON.stringify(k));
+        var b = false; setTimeout(function(){ if(!b) kamLog('getUserMedia 6 sn CEVAPSIZ'); }, 6000);
+        return gumAsil(k).then(function(st){ b = true; var t = st.getVideoTracks()[0]; kamLog('kamera verildi: ' + (t && t.label) + ' ' + (t && t.readyState) + ' muted=' + (t && t.muted)); if(t){ t.addEventListener('ended', function(){ kamLog('iz ended'); }); t.addEventListener('mute', function(){ kamLog('iz mute'); }); } return st; },
+                            function(err){ b = true; kamLog('getUserMedia HATA ' + err.name + ' ' + err.message); throw err; });
+      };
+    } catch(e){ kamLog('getUserMedia sarılamadı ' + e.message); }
+  }
   var IOS_CIHAZ = /iPad|iPhone|iPod/.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
   // iOS bazen kamerayı açar (üstte kamera simgesi yanar) ama görüntü siyah kalır. Video oynatılmaya zorlanır;
   // 3 sn içinde görüntü gelmezse bir kez kapatılıp yeniden açılır, yine gelmezse kişiye söylenir.
   function kameraIzle(v, yenidenAc){
+    if(KAM_TANI && !v._kamTani){ v._kamTani = 1; ['loadedmetadata','playing','pause','suspend','stalled','emptied','error'].forEach(function(o){ v.addEventListener(o, function(){ kamLog(v.id + ': ' + o + ' ' + v.videoWidth + 'x' + v.videoHeight + ' görünür=' + !!v.offsetParent); }); }); }
+    kamLog((v.id || 'video') + ' kameraIzle, yeniden=' + !!yenidenAc + ', boyut ' + v.clientWidth + 'x' + v.clientHeight);
+    setTimeout(function(){ kamLog((v.id || 'video') + ' 1.5 sn: ' + v.videoWidth + 'x' + v.videoHeight + ' readyState=' + v.readyState + ' paused=' + v.paused); }, 1500);
     // iPhone: uygulama arka plandan dönünce ya da izin penceresinden sonra ilk görüntü bazen hiç gelmiyor (siyah kutu).
     // Önce play() bir kez daha denenir; yine görüntü yoksa kamera kapatılıp kendiliğinden bir kez yeniden açılır.
     try { var p = v.play(); if(p && p.catch) p.catch(function(){}); } catch(e){}
@@ -4306,6 +4346,7 @@
   // saf JavaScript (ZXing) yedeği dener, hangisi tutarsa onunla sürekli taramaya
   // başlar. Döndürdüğü nesnenin .stop() metodu taramayı (ve varsa ZXing'i) durdurur.
   function startBarcodeEngine(stream, videoEl, onBarcode, onFail){
+    kamLog('barkod motoru başlıyor: native=' + ('BarcodeDetector' in window));
     var stopped = false;
     var lastCode = null, lastTime = 0;
     var zxingReader = null;
@@ -4382,7 +4423,7 @@
       for(i = 0; i < n; i++){ g = (gri[i] - lo) * k; g = g < 0 ? 0 : g > 255 ? 255 : g; d[i * 4] = d[i * 4 + 1] = d[i * 4 + 2] = g; }
       t.x.putImageData(img, 0, 0);
     }
-    // KURTARMA MOTORU (build 311, ean-kurtar.js): ZBar/ML Kit'in okuyamadığı EAN-13/UPC barkodlar —
+    // KURTARMA MOTORU (build 312, ean-kurtar.js): ZBar/ML Kit'in okuyamadığı EAN-13/UPC barkodlar —
     // kalın/taşmış çubuk, yaldızlı-buruşuk folyo, barkodun hemen yanında yazı/desen (sessiz bölge yok).
     // Kenardan kenara ölçer; çubuk şişmesinden etkilenmez. Güvence: koruma çizgileri + parite + sağlama hanesi
     // + aynı karede ≥2 tarama çizgisi + ARDIŞIK 2 KAREDE aynı sonuç. Tutmazsa hiçbir şey dönmez.
