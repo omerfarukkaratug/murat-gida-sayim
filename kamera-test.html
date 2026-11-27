@@ -1,0 +1,61 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>KRT Saha — Kamera testi</title>
+<style>
+  body { font: 16px -apple-system, system-ui, sans-serif; margin: 0; padding: 14px; background: #f4f4f7; color: #111; }
+  h1 { font-size: 20px; margin: 0 0 10px; }
+  button { font: 600 17px -apple-system, system-ui, sans-serif; padding: 14px; border: 0; border-radius: 12px; background: #3b2fd9; color: #fff; width: 100%; margin: 6px 0; }
+  button.ikinci { background: #555; }
+  video { width: 100%; height: 240px; background: #000; border-radius: 12px; object-fit: cover; margin-top: 8px; }
+  #log { white-space: pre-wrap; font: 13px ui-monospace, Menlo, monospace; background: #fff; border-radius: 12px; padding: 10px; margin-top: 10px; min-height: 120px; }
+  .ok { color: #0a7a2f; } .hata { color: #c0142b; font-weight: 700; }
+</style>
+</head>
+<body>
+<h1>📷 Kamera testi</h1>
+<div>Sırayla düğmelere bas. Sonra bu ekranın görüntüsünü gönder.</div>
+<button id="b1">1) Arka kamerayı aç (uygulamadaki ayar)</button>
+<button id="b2" class="ikinci">2) Basit ayarla aç</button>
+<button id="b3" class="ikinci">3) Herhangi bir kamerayı aç</button>
+<video id="v" playsinline autoplay muted></video>
+<div id="log"></div>
+<script>
+// Uygulamaya dokunmaz; yalnızca bu telefonda kameranın neden açılmadığını görmek için.
+var logEl = document.getElementById('log'), v = document.getElementById('v'), akis = null, t0 = Date.now();
+function yaz(m, s){ var d = document.createElement('div'); if(s) d.className = s; d.textContent = ((Date.now() - t0) / 1000).toFixed(1) + 's  ' + m; logEl.appendChild(d); }
+yaz('Cihaz: ' + navigator.userAgent);
+yaz('Adres: ' + location.href + (navigator.standalone ? '  (ana ekran simgesinden)' : '  (tarayıcıdan)'));
+yaz('Güvenli bağlantı: ' + window.isSecureContext + ', mediaDevices: ' + !!(navigator.mediaDevices && navigator.mediaDevices.getUserMedia));
+if(navigator.permissions && navigator.permissions.query){
+  navigator.permissions.query({ name: 'camera' }).then(function(p){ yaz('Kamera izni durumu: ' + p.state); }).catch(function(e){ yaz('İzin durumu okunamadı: ' + e.name); });
+}
+if(navigator.mediaDevices && navigator.mediaDevices.enumerateDevices){
+  navigator.mediaDevices.enumerateDevices().then(function(l){ yaz('Kamera sayısı: ' + l.filter(function(d){ return d.kind === 'videoinput'; }).length); });
+}
+['loadedmetadata', 'playing', 'pause', 'stalled', 'suspend', 'error'].forEach(function(o){ v.addEventListener(o, function(){ yaz('video: ' + o + ' (' + v.videoWidth + 'x' + v.videoHeight + ')'); }); });
+function kapat(){ if(akis){ akis.getTracks().forEach(function(t){ t.stop(); }); akis = null; } v.srcObject = null; }
+function dene(ad, kisit){
+  kapat();
+  yaz('— ' + ad + ' isteniyor: ' + JSON.stringify(kisit));
+  var bitti = false;
+  setTimeout(function(){ if(!bitti) yaz('8 saniyedir cevap yok: telefon izin penceresini göstermiyor / kamerayı vermiyor', 'hata'); }, 8000);
+  navigator.mediaDevices.getUserMedia(kisit).then(function(s){
+    bitti = true; akis = s;
+    var tr = s.getVideoTracks()[0];
+    yaz('Kamera verildi: ' + (tr ? tr.label : 'iz yok') + ', durum ' + (tr ? tr.readyState : '-') + ', sessiz ' + (tr ? tr.muted : '-'), 'ok');
+    try { yaz('Ayar: ' + JSON.stringify(tr.getSettings())); } catch(e){}
+    if(tr){ tr.onmute = function(){ yaz('iz: mute (görüntü kesildi)', 'hata'); }; tr.onunmute = function(){ yaz('iz: unmute'); }; tr.onended = function(){ yaz('iz: ended (kamera kapandı)', 'hata'); }; }
+    v.srcObject = s;
+    var p = v.play(); if(p && p.catch) p.catch(function(e){ yaz('play() hatası: ' + e.name + ' ' + e.message, 'hata'); });
+    [1000, 3000].forEach(function(ms){ setTimeout(function(){ yaz(ms / 1000 + ' sn sonra görüntü: ' + v.videoWidth + 'x' + v.videoHeight + (v.videoWidth ? '' : '  ← GÖRÜNTÜ YOK'), v.videoWidth ? 'ok' : 'hata'); }, ms); });
+  }).catch(function(e){ bitti = true; yaz('HATA: ' + e.name + ' — ' + e.message, 'hata'); });
+}
+document.getElementById('b1').onclick = function(){ dene('Uygulama ayarı', { video: { facingMode: 'environment', width: { ideal: 1920 }, height: { ideal: 1080 } } }); };
+document.getElementById('b2').onclick = function(){ dene('Basit', { video: { facingMode: 'environment' } }); };
+document.getElementById('b3').onclick = function(){ dene('Herhangi', { video: true }); };
+</script>
+</body>
+</html>
