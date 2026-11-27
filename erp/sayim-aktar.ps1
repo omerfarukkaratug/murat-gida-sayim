@@ -39,7 +39,7 @@ $LogFile          = "C:\Scripts\sayim-aktar-log.txt"
 $DurumDosyasi     = "C:\Scripts\sayim-aktar-durum.json"
 $RaporKlasoru     = "C:\Scripts\sayim-raporlari"
 $AciklamaOn       = "KRT Saha: "
-$SurumSA = "2026-11-27d"
+$SurumSA = "2026-11-27e"
 
 try { [Net.ServicePointManager]::SecurityProtocol = [Net.ServicePointManager]::SecurityProtocol -bor [Net.SecurityProtocolType]::Tls12 } catch {}
 $Inv = [Globalization.CultureInfo]::InvariantCulture
@@ -589,6 +589,13 @@ function Gece-Aktar() {
     if ($son) {
         $kap = Sor-Tarih "  Depo sayiminin BASLADIGI an (bundan sonra depodaki mallarda ERP hareketi olmamali)" $ilk
         $T = Sor-Tarih "  ERP kesinlestirme ani" $(if ($sonT) { $sonT.AddMinutes(1) } else { $gun.AddHours(23).AddMinutes(59).AddSeconds(59) })
+        Write-Host ""
+        Write-Host "  Yalniz depoda sayilan (hicbir rafta cikmayan) urunler:"
+        Write-Host "   1) Depo sayimindan sonra bu mallara DOKUNULMADI: stok = depo sayimi"
+        Write-Host "   2) Bu mallar DEPODAN satildi / iade edildi (rafta yoklar): her urun KENDI depo okutma anindaki stokla"
+        Write-Host "      karsilastirilir, depo sayimindan sonraki satis / iade / alislar stoktan dogru duser (saat-dakika)"
+        $saatli = ((Read-Host "  Secim [Enter = 2]").Trim() -ne "1")
+        if ($saatli) { Write-Host "  Saat-dakika: her urunun stogu kendi depo okutma anina gore hesaplanir; sifirlananlar $($T.ToString('dd.MM.yyyy HH:mm')) itibariyla 0 olur." -ForegroundColor Cyan }
     } else {
         $sonOk = if ($kalanMod) { $bOnce.son } else { (($sx | ForEach-Object { $_.son } | Sort-Object)[-1]) }
         Write-Host "  Secilen okutmalarin ilki: $($ilk.ToString('dd.MM.yyyy HH:mm')), sonuncusu: $($sonOk.ToString('dd.MM.yyyy HH:mm'))"
@@ -604,7 +611,7 @@ function Gece-Aktar() {
         $saatli = ((Read-Host "  Secim [Enter = 1]").Trim() -eq "2")
         }
     }
-    if ($saatli) {
+    if ($saatli -and -not $son) {
         $kap = $ilk
         $T = Sor-Tarih "  Belge / kesinlestirme ani (son okutmadan sonra olmali)" ($sonOk.AddSeconds(60 - $sonOk.Second))
         if ($T -lt $sonOk) { throw "Kesinlestirme ani son okutmadan ($($sonOk.ToString('dd.MM HH:mm:ss'))) once olamaz" }
@@ -641,7 +648,7 @@ function Gece-Aktar() {
             if ($hepsi -and $u[$sid].sonDepo -and [datetime]$u[$sid].sonDepo -gt $t0) { $t0 = [datetime]$u[$sid].sonDepo }   # HEPSI: 'Depo' etiketli okutma da magaza acikken yapildi
             $tMap[[long]$sid] = $t0
         }
-        if ($sonT) { $erken = @($tMap.Values | Where-Object { $_ -le $sonT }); if ($erken.Count) { throw "$($erken.Count) urunun okutmasi daha once yazilan son geceden ($($sonT.ToString('dd.MM HH:mm'))) once. Geceleri sirayla aktarin." } }
+        if ($sonT -and -not $son) { $erken = @($tMap.Values | Where-Object { $_ -le $sonT }); if ($erken.Count) { throw "$($erken.Count) urunun okutmasi daha once yazilan son geceden ($($sonT.ToString('dd.MM HH:mm'))) once. Geceleri sirayla aktarin." } }
     }
     $bilgi = ErpBilgi @($u.Keys) $T $tMap
     # Belge satirlari
