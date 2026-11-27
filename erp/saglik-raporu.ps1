@@ -17,6 +17,8 @@
 #   10) Oneriler (uygulamada Karlilik -> Oneriler): musteri ceken urunler, kar firsati, fiyat sonu,
 #       sepet dagilimi, birlikte alinanlar, kasa onu adaylari, one cikarilacaklar
 #    8) Her ayda kari en cok dusuren urunler (dusuk marjli ayin nedeni)
+#   11) KDV durumu (uygulamada Karlilik -> KDV): alis faturasi / satis faturasi / perakende satis fisi, ay ay, oranlar, stoktaki KDV
+#   12) Stok marji (uygulamada Karlilik -> Sermaye): alis / satis / marj, grup bazinda stokla agirlikli ortalama marj
 #  Rapor KRT Saha'ya da gonderilir: uygulamada Karlilik -> Saglik sekmesinde gorunur (038_saglik_raporu.sql).
 #  -Gorev ile (SAGLIK-RAPORU-GOREV.bat 30 dakikada bir calistirir): rapor yalniz uygulamadan istenmisse
 #  ya da son rapor 20 saatten eskiyse hazirlanir; pencere/tarayici acilmaz.
@@ -61,7 +63,7 @@ function M($v) { if ($v -is [DBNull] -or $v -eq $null) { return "" }; return ([s
 function I($v) { if ($v -is [DBNull] -or $v -eq $null) { return 0 }; return [int]$v }
 function T($v) { if ($v -is [DBNull] -or $v -eq $null) { return "" }; return ([datetime]$v).ToString("dd.MM.yyyy") }
 
-$veri = [ordered]@{ surum = "7"; olusturma = (Get-Date).ToString("yyyy-MM-dd HH:mm"); firma = ""; veritabani = ""; enflasyon = $AylikEnflasyon; hatalar = @() }
+$veri = [ordered]@{ surum = "8"; olusturma = (Get-Date).ToString("yyyy-MM-dd HH:mm"); firma = ""; veritabani = ""; enflasyon = $AylikEnflasyon; hatalar = @() }
 $hatalar = New-Object System.Collections.ArrayList
 
 try {
@@ -700,6 +702,104 @@ FROM #sd d JOIN dbo.STOK s ON s.ID = d.STOK LEFT JOIN dbo.STOK_GRUP g ON g.ID = 
         } catch {}
         $veri.oneri.gruplar = @($grp.Keys | ForEach-Object { $x = $grp[$_]; ,@($_, $x.urun, $x.ciro, $x.kar, $x.ciroM, $x.fis, $x.stok, $x.olu, $x.cesit) })
     } catch { [void]$hatalar.Add("Oneriler (reyon karnesi): " + $_.Exception.Message); Yaz "HATA oneri reyon: $($_.Exception.Message)" }
+
+    # ---- 11) KDV durumu: yalniz ALIS FATURASI, SATIS FATURASI ve PERAKENDE SATIS FISI (sayim fisleri haric) ----
+    # Indirilecek KDV = alis faturalari; hesaplanan = satis faturalari + perakende satis fisleri. Net > 0: odenecek (acik), < 0: devreden (fazla).
+    # Belge turu ERP'nin FIS_TURU adindan bulunur (iade ve irsaliyeler dahil DEGIL; bilgi icin ayrica listelenir).
+    try {
+        Yaz "11) KDV durumu..."
+        $veri.kdv = [ordered]@{}
+        $turler = @((Tablo "SELECT ID, ISNULL(AD, '') AS AD FROM dbo.FIS_TURU").Rows)
+        $alisT = @(); $satT = @(); $perT = @(); $turBilgi = @()
+        foreach ($t in $turler) {
+            $ad = ([string]$t.AD).ToLower([Globalization.CultureInfo]::GetCultureInfo("tr-TR")).Replace([string][char]0x131, "i").Replace([string][char]0x15F, "s").Replace([string][char]0x11F, "g").Replace([string][char]0xFC, "u").Replace([string][char]0xF6, "o").Replace([string][char]0xE7, "c")
+            if ($ad -match 'iade' -or $ad -match 'sayim') { continue }
+            if ($ad -match 'alis' -and $ad -match 'fatura') { $alisT += [int]$t.ID }
+            elseif ($ad -match 'satis' -and $ad -match 'fatura' -and $ad -notmatch 'perakende') { $satT += [int]$t.ID }
+            elseif ($ad -match 'perakende' -and $ad -match 'satis') { $perT += [int]$t.ID }
+        }
+        if (-not $alisT.Count) { $alisT = @(1) }; if (-not $satT.Count) { $satT = @(2) }; if (-not $perT.Count) { $perT = @(11) }
+        $hepsi = ($alisT + $satT + $perT) -join ','
+        $kalemSql = "CASE WHEN f.FIS_TURU IN ($($alisT -join ',')) THEN 'A' WHEN f.FIS_TURU IN ($($satT -join ',')) THEN 'S' ELSE 'P' END"
+        $kRows = @((Tablo @"
+SELECT CONVERT(char(7), f.FIS_TARIHI, 120) AS AY, $kalemSql AS K, CAST(ISNULL(d.KDV_TOPTAN, 0) AS float) AS ORAN,
+       SUM(CAST(ISNULL(d.TOPLAM_KDV_MATRAHI, 0) AS float)) AS MATRAH, SUM(CAST(ISNULL(d.TOPLAM_KDV, 0) AS float)) AS KDV, COUNT(DISTINCT f.ID) AS BELGE
+FROM dbo.FIS f JOIN dbo.FIS_DETAY d ON d.FIS = f.ID
+WHERE f.FIS_TURU IN ($hepsi) AND ISNULL(f.AKTIF, 1) = 1
+  AND f.FIS_TARIHI >= DATEADD(month, DATEDIFF(month, 0, GETDATE()) - 23, 0)
+GROUP BY CONVERT(char(7), f.FIS_TARIHI, 120), $kalemSql, CAST(ISNULL(d.KDV_TOPTAN, 0) AS float)
+"@).Rows)
+        $ay = [ordered]@{}; $oran = [ordered]@{}
+        foreach ($r in ($kRows | Sort-Object AY)) {
+            $a = [string]$r.AY; if (-not $ay.Contains($a)) { $ay[$a] = @{ A = 0.0; AK = 0.0; S = 0.0; SK = 0.0; P = 0.0; PK = 0.0; AB = 0; SB = 0; PB = 0 } }
+            $k = [string]$r.K; $ay[$a][$k] += [double]$r.MATRAH; $ay[$a][$k + 'K'] += [double]$r.KDV; $ay[$a][$k + 'B'] += [int]$r.BELGE
+            $o = [string][double]$r.ORAN; if (-not $oran.Contains($o)) { $oran[$o] = @{ A = 0.0; AK = 0.0; S = 0.0; SK = 0.0 } }
+            if ($k -eq 'A') { $oran[$o].A += [double]$r.MATRAH; $oran[$o].AK += [double]$r.KDV } else { $oran[$o].S += [double]$r.MATRAH; $oran[$o].SK += [double]$r.KDV }
+        }
+        # aylar: [ay, alisMatrah, alisKdv, satisFatMatrah, satisFatKdv, perakendeMatrah, perakendeKdv, alisBelge, satisBelge, perakendeBelge]
+        $veri.kdv.aylar = @($ay.Keys | ForEach-Object { $x = $ay[$_]; ,@($_, [Math]::Round($x.A, 2), [Math]::Round($x.AK, 2), [Math]::Round($x.S, 2), [Math]::Round($x.SK, 2), [Math]::Round($x.P, 2), [Math]::Round($x.PK, 2), $x.AB, $x.SB, $x.PB) })
+        # oranlar (son 24 ay toplami): [oran, alisMatrah, alisKdv, satisMatrah, satisKdv]
+        $veri.kdv.oranlar = @($oran.Keys | Sort-Object { [double]$_ } | ForEach-Object { $x = $oran[$_]; ,@([double]$_, [Math]::Round($x.A, 2), [Math]::Round($x.AK, 2), [Math]::Round($x.S, 2), [Math]::Round($x.SK, 2)) })
+        $veri.kdv.turler = [ordered]@{ alis = @($turler | Where-Object { $alisT -contains [int]$_.ID } | ForEach-Object { [string]$_.AD }); satis = @($turler | Where-Object { $satT -contains [int]$_.ID } | ForEach-Object { [string]$_.AD }); perakende = @($turler | Where-Object { $perT -contains [int]$_.ID } | ForEach-Object { [string]$_.AD }) }
+        # Hesaba katilmayan ama KDV'li belge turleri (bilgi; son 12 ay): iadeler, irsaliyeler vb.
+        $veri.kdv.disari = @((Tablo @"
+SELECT TOP 12 ISNULL(FT.AD, '') AS TUR, SUM(CAST(ISNULL(d.TOPLAM_KDV, 0) AS float)) AS KDV
+FROM dbo.FIS f JOIN dbo.FIS_DETAY d ON d.FIS = f.ID JOIN dbo.FIS_TURU FT ON FT.ID = f.FIS_TURU
+WHERE f.FIS_TURU NOT IN ($hepsi, 17, 18) AND ISNULL(f.AKTIF, 1) = 1 AND ISNULL(d.FATRALANDIRILMIS_IRSALIYEMI, 0) = 0
+  AND f.FIS_TARIHI >= DATEADD(month, -12, GETDATE())
+GROUP BY FT.AD HAVING ABS(SUM(CAST(ISNULL(d.TOPLAM_KDV, 0) AS float))) > 1 ORDER BY ABS(SUM(CAST(ISNULL(d.TOPLAM_KDV, 0) AS float))) DESC
+"@).Rows | ForEach-Object { ,@((M $_.TUR), (D $_.KDV)) })
+        # Stoktaki KDV: bugunku arti stok x son net alis x KDV orani (mal icinde odenmis, henuz satilmamis KDV)
+        $veri.kdv.stok = @((Tablo @"
+SELECT k.KDV AS ORAN, COUNT(*) AS URUN, SUM(st.MIKTAR * s.MALIYET) AS DEGER
+FROM #stok st JOIN #kdv k ON k.STOK = st.STOK JOIN #son s ON s.STOK = st.STOK
+WHERE st.MIKTAR > 0 GROUP BY k.KDV ORDER BY k.KDV
+"@).Rows | ForEach-Object { ,@([double]$_.ORAN, (I $_.URUN), (D $_.DEGER), [Math]::Round([double]$(if ($_.DEGER -is [DBNull]) { 0 } else { $_.DEGER }) * [double]$_.ORAN / 100, 2)) })
+    } catch { [void]$hatalar.Add("KDV durumu: " + $_.Exception.Message); Yaz "HATA KDV: $($_.Exception.Message)" }
+
+    # ---- 12) Stok marji: alis (son net alis, KDV haric) / satis (KDV haric) / marj; grup bazinda, stokla agirlikli ----
+    try {
+        Yaz "12) Stok marji..."
+        Calistir @"
+IF OBJECT_ID('tempdb..#mj') IS NOT NULL DROP TABLE #mj;
+SELECT st.STOK, k.KOD, k.AD, k.KDV, st.MIKTAR, s.MALIYET AS ALIS, p.FIYAT AS SATIS,
+       CASE WHEN p.FIYAT > 0 THEN p.FIYAT / (1 + k.KDV / 100.0) END AS SATIS_H,
+       ISNULL(ug.AD, ISNULL(g.AD, '(grupsuz)')) AS UST, ISNULL(g.AD, '(grupsuz)') AS GRUP
+INTO #mj
+FROM #stok st JOIN #kdv k ON k.STOK = st.STOK LEFT JOIN #son s ON s.STOK = st.STOK LEFT JOIN #fiyat p ON p.STOK = st.STOK
+JOIN dbo.STOK sk ON sk.ID = st.STOK LEFT JOIN dbo.STOK_GRUP g ON g.ID = sk.STOK_GRUP LEFT JOIN dbo.STOK_GRUP ug ON ug.ID = g.USTID
+WHERE st.MIKTAR > 0;
+"@
+        $mo = (Tablo @"
+SELECT COUNT(*) AS CESIT,
+  SUM(CASE WHEN ALIS > 0 AND SATIS_H > 0 THEN 1 ELSE 0 END) AS HESAP,
+  SUM(CASE WHEN ALIS > 0 AND SATIS_H > 0 THEN MIKTAR * ALIS ELSE 0 END) AS ALIS_D,
+  SUM(CASE WHEN ALIS > 0 AND SATIS_H > 0 THEN MIKTAR * SATIS_H ELSE 0 END) AS SATIS_D,
+  SUM(CASE WHEN ALIS > 0 THEN MIKTAR * ALIS ELSE 0 END) AS TUM_ALIS_D,
+  SUM(CASE WHEN ALIS > 0 AND SATIS_H > 0 THEN (SATIS_H - ALIS) / SATIS_H * 100 ELSE 0 END) AS MARJ_TOP,
+  SUM(CASE WHEN ALIS > 0 AND SATIS_H > 0 AND SATIS_H < ALIS THEN 1 ELSE 0 END) AS ZARAR,
+  SUM(CASE WHEN ALIS > 0 AND SATIS_H > 0 AND SATIS_H < ALIS THEN MIKTAR * (ALIS - SATIS_H) ELSE 0 END) AS ZARAR_TL,
+  SUM(CASE WHEN ISNULL(ALIS, 0) <= 0 THEN 1 ELSE 0 END) AS ALISSIZ, SUM(CASE WHEN ISNULL(SATIS_H, 0) <= 0 THEN 1 ELSE 0 END) AS SATISSIZ
+FROM #mj
+"@).Rows[0]
+        $veri.marj = [ordered]@{ cesit = I $mo.CESIT; hesap = I $mo.HESAP; alis = D $mo.ALIS_D; satis = D $mo.SATIS_D; tumAlis = D $mo.TUM_ALIS_D
+            basitMarj = $(if ((I $mo.HESAP) -gt 0) { [Math]::Round([double]$mo.MARJ_TOP / (I $mo.HESAP), 2) } else { $null })
+            zarar = I $mo.ZARAR; zararTl = D $mo.ZARAR_TL; alissiz = I $mo.ALISSIZ; satissiz = I $mo.SATISSIZ }
+        # gruplar: [ust, grup, cesit, alisDegeri, satisDegeriKdvHaric, zararUrun]
+        $veri.marj.gruplar = @((Tablo @"
+SELECT UST, GRUP, COUNT(*) AS CESIT, SUM(CASE WHEN ALIS > 0 AND SATIS_H > 0 THEN MIKTAR * ALIS ELSE 0 END) AS A,
+       SUM(CASE WHEN ALIS > 0 AND SATIS_H > 0 THEN MIKTAR * SATIS_H ELSE 0 END) AS S, SUM(CASE WHEN ALIS > 0 AND SATIS_H > 0 AND SATIS_H < ALIS THEN 1 ELSE 0 END) AS Z
+FROM #mj GROUP BY UST, GRUP ORDER BY SUM(CASE WHEN ALIS > 0 THEN MIKTAR * ALIS ELSE 0 END) DESC
+"@).Rows | ForEach-Object { ,@((M $_.UST), (M $_.GRUP), (I $_.CESIT), (D $_.A), (D $_.S), (I $_.Z)) })
+        # urun listeleri: [kod, ad, miktar, alis, satisKdvDahil, kdv, marj%, stokAlisDegeri]
+        $urunSec = "SELECT TOP 40 KOD, AD, MIKTAR, ALIS, SATIS, KDV, CASE WHEN SATIS_H > 0 AND ALIS > 0 THEN (SATIS_H - ALIS) / SATIS_H * 100 END AS MARJ, MIKTAR * ISNULL(ALIS, 0) AS DEGER FROM #mj"
+        $donus = { param($t) @($t.Rows | ForEach-Object { ,@((M $_.KOD), (M $_.AD), (D $_.MIKTAR), (D $_.ALIS), (D $_.SATIS), (D $_.KDV), (D $_.MARJ), (D $_.DEGER)) }) }
+        $veri.marj.zararina = & $donus (Tablo "$urunSec WHERE ALIS > 0 AND SATIS_H > 0 AND SATIS_H < ALIS ORDER BY MIKTAR * (ALIS - SATIS_H) DESC")
+        $veri.marj.dusuk = & $donus (Tablo "$urunSec WHERE ALIS > 0 AND SATIS_H > 0 AND SATIS_H >= ALIS AND (SATIS_H - ALIS) / SATIS_H < 0.08 ORDER BY MIKTAR * ALIS DESC")
+        $veri.marj.yuksek = & $donus (Tablo "$urunSec WHERE ALIS > 0 AND SATIS_H > 0 AND (SATIS_H - ALIS) / SATIS_H > 0.6 ORDER BY MIKTAR * ALIS DESC")
+        $veri.marj.fiyatsiz = & $donus (Tablo "$urunSec WHERE ISNULL(ALIS, 0) <= 0 OR ISNULL(SATIS_H, 0) <= 0 ORDER BY MIKTAR * ISNULL(ALIS, ISNULL(SATIS_H, 0)) DESC")
+        $veri.marj.buyuk = & $donus (Tablo "$urunSec WHERE ALIS > 0 ORDER BY MIKTAR * ALIS DESC")
+    } catch { [void]$hatalar.Add("Stok marji: " + $_.Exception.Message); Yaz "HATA marj: $($_.Exception.Message)" }
 
 
 } catch {

@@ -225,18 +225,19 @@
   }
 
   // ---------- Çizim ----------
-  var SEKMELER = [['ozet', '📊 Özet'], ['urunler', '🛒 Ürünler'], ['enflasyon', '📈 Enflasyon'], ['firmalar', '🏭 Firmalar'], ['sermaye', '💼 Sermaye'], ['oneri', '💡 Öneriler'], ['saglik', '🩺 Sağlık'], ['tufe', '⚙️ TÜFE']];
+  var SEKMELER = [['ozet', '📊 Özet'], ['urunler', '🛒 Ürünler'], ['enflasyon', '📈 Enflasyon'], ['firmalar', '🏭 Firmalar'], ['sermaye', '💼 Sermaye'], ['kdv', '🧾 KDV'], ['oneri', '💡 Öneriler'], ['saglik', '🩺 Sağlık'], ['tufe', '⚙️ TÜFE']];
   function sekmeCiz(){
     $('sekmeler').innerHTML = SEKMELER.map(function(s){ return '<button type="button" data-sekme="' + s[0] + '"' + (s[0] === sekme ? ' class="on"' : '') + '>' + s[1] + '</button>'; }).join('');
   }
   function kutu(b, d, a, sinif){ return '<div class="kutu"><div class="b">' + b + '</div><div class="d ' + (sinif || '') + '">' + d + '</div>' + (a ? '<div class="a">' + a + '</div>' : '') + '</div>'; }
   // Geniş ekranda iki sütun olacak sekmeler (Öneriler'in geniş tablolu alt bölümleri tek sütun kalır)
-  function ikiSutun(){ var ik = sekme === 'ozet' || sekme === 'sermaye' || (sekme === 'oneri' && (oAlt === 'fiyat' || oAlt === 'sepet' || oAlt === 'yerlesim')); $('icerik').classList.toggle('iki', !!ik); }
+  function ikiSutun(){ var ik = sekme === 'ozet' || sekme === 'sermaye' || sekme === 'kdv' || (sekme === 'oneri' && (oAlt === 'fiyat' || oAlt === 'sepet' || oAlt === 'yerlesim')); $('icerik').classList.toggle('iki', !!ik); }
   function ciz(){
     sekmeCiz(); ikiSutun();
     if(sekme === 'saglik'){ saglikCiz(); return; }
     if(sekme === 'oneri'){ oneriCiz(); return; }
     if(sekme === 'sermaye'){ sermayeCiz(); return; }
+    if(sekme === 'kdv'){ kdvCiz(); return; }
     if(!V){ if(getirHata) $('icerik').innerHTML = getirHata; return; }
     var h = '';
     if(sekme === 'ozet') h = ozetHtml();
@@ -398,7 +399,7 @@
   // ve veri tabanına bırakılır; burada son rapor erp/saglik-sablon.html görünümüyle gösterilir.
   var S = null, sSablon = null, sYukleniyor = false, sSecili = '';
   function saglikYukle(id, iste){
-    sYukleniyor = true; if(sekme === 'saglik') saglikCiz(); if(sekme === 'oneri') oneriCiz(); if(sekme === 'sermaye') sermayeCiz();
+    sYukleniyor = true; if(sekme === 'saglik') saglikCiz(); if(sekme === 'oneri') oneriCiz(); if(sekme === 'sermaye') sermayeCiz(); if(sekme === 'kdv') kdvCiz();
     var q = { action: 'karlilik', ne: iste ? 'saglik_iste' : 'saglik' }; if(id) q.id = id;
     istek(q, function(r){
       sYukleniyor = false;
@@ -407,6 +408,7 @@
       if(sekme === 'saglik') saglikCiz();
       if(sekme === 'oneri') oneriCiz();
       if(sekme === 'sermaye') sermayeCiz();
+      if(sekme === 'kdv') kdvCiz();
     });
   }
   function saglikCiz(){
@@ -476,7 +478,82 @@
         '<div class="tablo"><table><tr><th>Ay</th><th>Brüt kâr</th><th>Stoğa bağlanan</th><th>Sermaye değişimi</th><th>Nakde / masrafa</th></tr>' +
         satir.slice(1).map(function(x, j){ var d = x.toplam - satir[j].toplam, g = x.kar != null ? x.kar - d : null; return '<tr><td>' + aySon(x.ay) + (x.ay === buAy ? ' <span class="ipucu">devam</span>' : '') + '</td><td>' + tl(x.kar) + '</td><td class="' + (x.net > 0 ? 'uyari' : 'iyi') + '">' + isaretTl(x.net) + '</td><td class="' + renk(d) + '">' + isaretTl(d) + '</td><td>' + tl(g) + '</td></tr>'; }).join('') + '</table></div></div>';
     } else h += '<div class="kart"><div class="ipucu">Aylık toplam sermaye için ERP bilgisayarındaki saglik-raporu.ps1\'in yeni sürümü gerekiyor (cari ay sonu bakiyeleri). Şimdilik yalnız bugünkü durum görünüyor.</div></div>';
+    h += marjHtml(R);
     h += '<div class="ipucu">Ayrıntı (hızlı / yavaş stok, alacak ve borç listeleri, nakit döngüsü): 🩺 Sağlık sekmesinde "Sermaye" ve "Sermaye hareketi".</div>';
+    $('icerik').innerHTML = h;
+  }
+
+  // ---------- 📐 STOK MARJI (Sermaye sekmesinin altında; saglik-raporu.ps1 bölüm 12) ----------
+  // Alış = son net alış (KDV hariç, iskontolar düşülmüş), satış = varsayılan fiyat listesi (KDV dahil → KDV hariç çevrilir).
+  // Ortalama marj iki türlü: stokla ağırlıklı (büyük stoklu ürün daha çok sayılır — sermaye için doğru olan) ve ürün başına basit ortalama.
+  var mjListe = 'zararina';
+  function marjHtml(R){
+    var M = R && R.marj;
+    if(!M) return '<div class="kart"><div class="ipucu">Stok marjı (alış / satış / marj) ERP bilgisayarındaki saglik-raporu.ps1\'in yeni sürümüyle gelir. 🩺 Sağlık sekmesinden "Yeniden hazırlat" de.</div></div>';
+    var kar = (M.satis || 0) - (M.alis || 0), am = M.satis > 0 ? kar / M.satis : null, ak = M.alis > 0 ? kar / M.alis : null;
+    var h = '<div class="kart"><div class="kartBaslik"><span>📐 Stoktaki malın marjı</span><span class="' + renk(am) + '">' + yuzde(am) + '</span></div>' +
+      '<div class="kutular">' + kutu('Stok alış değeri', tl(M.tumAlis), sayi(M.cesit, 0) + ' çeşit (KDV hariç)') +
+      kutu('Satış değeri (KDV hariç)', tl(M.satis), sayi(M.hesap, 0) + ' üründe iki fiyat da var') +
+      kutu('Stoktaki brüt kâr', tl(kar), 'bu mallar bugünkü fiyattan satılırsa', renk(kar)) +
+      kutu('Ortalama marj', yuzde(am), 'stokla ağırlıklı · ürün başına ' + (M.basitMarj != null ? yuzde(M.basitMarj / 100) : '—') + ' · alış üstü ' + yuzde(ak)) + '</div>' +
+      '<div class="ipucu" style="margin-top:6px;">' + (M.zarar ? '<span class="kotu">' + sayi(M.zarar, 0) + ' ürün alışının altında fiyatlı</span> (stokta ' + tl(M.zararTl) + ' zarar) · ' : '') +
+      sayi(M.alissiz, 0) + ' ürünün alışı, ' + sayi(M.satissiz, 0) + ' ürünün satış fiyatı yok (marja girmedi).</div></div>';
+    var G = (M.gruplar || []).map(function(g){ return { ust: g[0], grup: g[1], cesit: g[2], a: g[3] || 0, s: g[4] || 0, z: g[5] || 0 }; });
+    var ust = {}; G.forEach(function(g){ var u = ust[g.ust] || (ust[g.ust] = { ad: g.ust, cesit: 0, a: 0, s: 0, z: 0, alt: [] }); u.cesit += g.cesit; u.a += g.a; u.s += g.s; u.z += g.z; u.alt.push(g); });
+    var UL = Object.keys(ust).map(function(k){ return ust[k]; }).sort(function(a, b){ return b.a - a.a; });
+    if(UL.length) h += '<div class="kart"><div class="kartBaslik">Grup bazında marj</div><div class="ipucu" style="margin-bottom:6px;">Satıra dokununca alt gruplar açılır. Marj = (satış − alış) / satış, KDV hariç, stokla ağırlıklı.</div><div class="tablo"><table><tr><th>Grup</th><th>Çeşit</th><th>Alış değeri</th><th>Satış değeri</th><th>Brüt kâr</th><th>Marj</th></tr>' +
+      UL.map(function(u, i){ var m = u.s > 0 ? (u.s - u.a) / u.s : null;
+        return '<tr data-mjgrup="' + i + '" style="cursor:pointer;"><td><b>' + esc(u.ad) + '</b>' + (u.z ? ' <span class="ipucu kotu">' + u.z + ' zararına</span>' : '') + '</td><td>' + sayi(u.cesit, 0) + '</td><td>' + tl(u.a) + '</td><td>' + tl(u.s) + '</td><td class="' + renk(u.s - u.a) + '">' + tl(u.s - u.a) + '</td><td class="' + renk(m) + '"><b>' + yuzde(m) + '</b></td></tr>' +
+          u.alt.sort(function(a, b){ return b.a - a.a; }).map(function(g){ var mm = g.s > 0 ? (g.s - g.a) / g.s : null; return '<tr class="mjalt mjalt' + i + '" style="display:none;"><td style="padding-left:18px;">' + esc(g.grup) + '</td><td>' + sayi(g.cesit, 0) + '</td><td>' + tl(g.a) + '</td><td>' + tl(g.s) + '</td><td>' + tl(g.s - g.a) + '</td><td class="' + renk(mm) + '">' + yuzde(mm) + '</td></tr>'; }).join('');
+      }).join('') + '</table></div></div>';
+    var L = { zararina: ['🔻 Alışın altında fiyatlı', M.zararina], dusuk: ['⚠️ Marjı %8\'in altında', M.dusuk], yuksek: ['🔍 Marjı %60\'ın üstünde (kontrol)', M.yuksek], fiyatsiz: ['❔ Fiyatı eksik', M.fiyatsiz], buyuk: ['💼 En çok sermaye bağlayan', M.buyuk] };
+    var l = L[mjListe] || L.zararina, sat = l[1] || [];
+    h += '<div class="kart"><div class="kartBaslik">Ürün listeleri</div><div style="display:flex; gap:6px; flex-wrap:wrap; margin-bottom:8px;">' +
+      Object.keys(L).map(function(k){ return '<button type="button" class="kucuk' + (k === mjListe ? ' on' : '') + '" data-mjliste="' + k + '"' + (k === mjListe ? ' style="background:var(--accent); color:#fff; border-color:var(--accent);"' : '') + '>' + L[k][0] + ' (' + (L[k][1] || []).length + ')</button>'; }).join('') + '</div>' +
+      (sat.length ? '<div class="tablo"><table><tr><th>Ürün</th><th>Stok</th><th>Alış</th><th>Satış (KDV dahil)</th><th>KDV</th><th>Marj</th><th>Stok değeri</th></tr>' +
+        sat.map(function(x){ return '<tr><td>' + esc(x[1]) + '<div class="ipucu">' + esc(x[0]) + '</div></td><td>' + sayi(x[2]) + '</td><td>' + tl(x[3], 2) + '</td><td>' + tl(x[4], 2) + '</td><td>%' + sayi(x[5], 0) + '</td><td class="' + renk(x[6]) + '">' + (x[6] != null ? yuzde(x[6] / 100) : '—') + '</td><td>' + tl(x[7]) + '</td></tr>'; }).join('') + '</table></div>' : '<div class="ipucu">Bu listede ürün yok.</div>') +
+      '<div class="ipucu" style="margin-top:6px;">En fazla 40 ürün; stok değerine göre sıralı.</div></div>';
+    return h;
+  }
+
+  // ---------- 🧾 KDV DURUMU (saglik-raporu.ps1 bölüm 11) ----------
+  // Yalnız alış faturası (indirilecek), satış faturası + perakende satış fişi (hesaplanan). Sayım, iade ve irsaliyeler dahil değil.
+  // Net > 0: o ay ödenecek KDV (açık); < 0: devreden (fazla). Yıl başından birikimli devir de gösterilir.
+  function kdvCiz(){
+    if(!S && !sYukleniyor){ saglikYukle(); return; }
+    if(sYukleniyor && !S){ $('icerik').innerHTML = '<div class="bekle">KDV getiriliyor…</div>'; return; }
+    if(S.hata){ $('icerik').innerHTML = '<div class="kart"><div class="kotu" style="font-weight:800;">Alınamadı</div><div class="ipucu" style="margin-top:6px;">' + esc(S.hata) + '</div><button type="button" id="sYenidenDene" class="kucuk" style="margin-top:10px;">Tekrar dene</button></div>'; return; }
+    var r = S.rapor, R = r && r.veri, K = R && R.kdv;
+    if(!K || !K.aylar){ $('icerik').innerHTML = '<div class="kart"><div style="font-weight:800;">KDV bilgisi henüz yok</div><div class="ipucu" style="margin-top:6px;">ERP bilgisayarındaki saglik-raporu.ps1 yeni sürümüyle çalışınca gelir (rapor: ' + esc(r ? r.zaman : '—') + '). 🩺 Sağlık sekmesinden "Yeniden hazırlat" diyebilirsin.' +
+      ((R && R.hatalar || []).filter(function(x){ return /KDV/.test(x); }).map(function(x){ return '<br><span class="kotu">' + esc(x) + '</span>'; }).join('')) + '</div></div>'; return; }
+    var A = K.aylar.map(function(x){ return { ay: x[0], am: x[1], ak: x[2], sm: x[3], sk: x[4], pm: x[5], pk: x[6], ab: x[7], sb: x[8], pb: x[9] }; });
+    var yil = String(new Date().getFullYear()), buAy = yil + '-' + ('0' + (new Date().getMonth() + 1)).slice(-2);
+    var Y = A.filter(function(x){ return x.ay.slice(0, 4) === yil; }), kum = 0;
+    A.forEach(function(x){ x.hes = x.sk + x.pk; x.net = x.hes - x.ak; });
+    Y.forEach(function(x){ kum += x.net; x.kum = kum; });
+    var hes = Y.reduce(function(t, x){ return t + x.hes; }, 0), ind = Y.reduce(function(t, x){ return t + x.ak; }, 0), net = hes - ind;
+    var bu = A.filter(function(x){ return x.ay === buAy; })[0];
+    var stokKdv = (K.stok || []).reduce(function(t, x){ return t + (x[3] || 0); }, 0), stokDeg = (K.stok || []).reduce(function(t, x){ return t + (x[2] || 0); }, 0);
+    var h = '<div class="ipucu" style="margin-bottom:8px;">Rapor: <b>' + esc(r.zaman) + '</b> · ERP belgelerinden: <b>alış faturası</b> (indirilecek), <b>satış faturası + perakende satış fişi</b> (hesaplanan). Sayım, iade ve irsaliyeler dahil değil.</div>';
+    h += '<div class="kutular">' + kutu(yil + ' net', (net >= 0 ? '' : '−') + tl(Math.abs(net)), net >= 0 ? 'ÖDENECEK KDV (açık)' : 'DEVREDEN KDV (fazla)', net >= 0 ? 'kotu' : 'iyi') +
+      kutu('Hesaplanan (satış)', tl(hes), 'satış faturası ' + tl(Y.reduce(function(t, x){ return t + x.sk; }, 0)) + ' · perakende ' + tl(Y.reduce(function(t, x){ return t + x.pk; }, 0))) +
+      kutu('İndirilecek (alış)', tl(ind), 'alış faturaları') +
+      kutu('Stoktaki KDV', tl(stokKdv), 'raftaki / depodaki malın içindeki KDV (' + tl(stokDeg) + ' stok)') + '</div>';
+    if(bu) h += '<div class="kart"><div class="kartBaslik"><span>Bu ay (' + aySon(bu.ay) + ', devam ediyor)</span><span class="' + (bu.net >= 0 ? 'kotu' : 'iyi') + '">' + (bu.net >= 0 ? 'ödenecek ' : 'devreden ') + tl(Math.abs(bu.net)) + '</span></div>' +
+      '<div class="ipucu">Hesaplanan ' + tl(bu.hes) + ' − indirilecek ' + tl(bu.ak) + '. Ay bitmeden alış faturaları gelmeye devam eder; son rakam ay sonunda belli olur.</div></div>';
+    h += '<div class="kart"><div class="kartBaslik">Ay ay (son 24 ay)</div><div class="tablo"><table><tr><th>Ay</th><th>Satış fat. KDV</th><th>Perakende KDV</th><th>Hesaplanan</th><th>Alış fat. KDV</th><th>Net</th><th>' + yil + ' birikimli</th></tr>' +
+      A.slice().reverse().map(function(x){ return '<tr><td>' + aySon(x.ay) + (x.ay === buAy ? ' <span class="ipucu">devam</span>' : '') + '</td><td>' + tl(x.sk) + '</td><td>' + tl(x.pk) + '</td><td>' + tl(x.hes) + '</td><td>' + tl(x.ak) + '</td><td class="' + (x.net >= 0 ? 'kotu' : 'iyi') + '"><b>' + (x.net >= 0 ? '' : '−') + tl(Math.abs(x.net)) + '</b></td><td>' + (x.kum != null ? ((x.kum >= 0 ? '' : '−') + tl(Math.abs(x.kum))) : '') + '</td></tr>'; }).join('') +
+      '</table></div><div class="ipucu" style="margin-top:6px;">Net kırmızı = o ay ödenecek (açık), yeşil eksi = devreden (fazla). Birikimli sütun yıl başından toplamdır.</div></div>';
+    if((K.oranlar || []).length) h += '<div class="kart"><div class="kartBaslik">KDV oranına göre (son 24 ay)</div><div class="tablo"><table><tr><th>Oran</th><th>Satış matrahı</th><th>Hesaplanan</th><th>Alış matrahı</th><th>İndirilecek</th><th>Fark</th></tr>' +
+      K.oranlar.map(function(x){ var f = x[4] - x[2]; return '<tr><td>%' + sayi(x[0], 0) + '</td><td>' + tl(x[3]) + '</td><td>' + tl(x[4]) + '</td><td>' + tl(x[1]) + '</td><td>' + tl(x[2]) + '</td><td class="' + (f >= 0 ? 'kotu' : 'iyi') + '">' + (f >= 0 ? '' : '−') + tl(Math.abs(f)) + '</td></tr>'; }).join('') +
+      '</table></div><div class="ipucu" style="margin-top:6px;">Düşük oranlı (gıda %1) alıp yüksek oranlı satılan ya da tersi ürünler KDV fazlası / açığı yaratır.</div></div>';
+    if((K.stok || []).length) h += '<div class="kart"><div class="kartBaslik">Stoktaki KDV (oran bazında)</div><div class="tablo"><table><tr><th>Oran</th><th>Ürün</th><th>Stok değeri (KDV hariç)</th><th>İçindeki KDV</th></tr>' +
+      K.stok.map(function(x){ return '<tr><td>%' + sayi(x[0], 0) + '</td><td>' + sayi(x[1], 0) + '</td><td>' + tl(x[2]) + '</td><td>' + tl(x[3]) + '</td></tr>'; }).join('') + '</table></div></div>';
+    if((K.disari || []).length) h += '<div class="kart"><div class="kartBaslik">Hesaba katılmayan KDV\'li belgeler (son 12 ay, bilgi)</div><div class="tablo"><table><tr><th>Belge türü</th><th>KDV</th></tr>' +
+      K.disari.map(function(x){ return '<tr><td>' + esc(x[0]) + '</td><td>' + tl(x[1]) + '</td></tr>'; }).join('') + '</table></div><div class="ipucu" style="margin-top:6px;">İadeler, irsaliyeler vb. Bunlar istenirse hesaba eklenebilir.</div></div>';
+    var T = K.turler || {};
+    h += '<div class="ipucu">Sayılan belge türleri — alış: ' + esc((T.alis || []).join(', ')) + ' · satış: ' + esc((T.satis || []).join(', ')) + ' · perakende: ' + esc((T.perakende || []).join(', ')) +
+      '. Bu bir yönetim raporudur; gider / hizmet faturaları, demirbaş, tevkifat ve önceki yıldan devreden KDV muhasebede ayrıca girer — resmi beyanname muhasebeden.</div>';
     $('icerik').innerHTML = h;
   }
 
@@ -759,6 +836,8 @@
     var t;
     if((t = e.target.closest('[data-sekme]'))){ sekme = t.getAttribute('data-sekme'); ciz(); window.scrollTo(0, 0); return; }
     if(e.target.id === 'sIste'){ saglikYukle(null, true); return; }
+    if((t = e.target.closest('[data-mjliste]'))){ mjListe = t.getAttribute('data-mjliste'); sermayeCiz(); return; }
+    if((t = e.target.closest('[data-mjgrup]'))){ var ac = document.querySelectorAll('.mjalt' + t.getAttribute('data-mjgrup')); for(var q = 0; q < ac.length; q++) ac[q].style.display = ac[q].style.display === 'none' ? '' : 'none'; return; }
     if((t = e.target.closest('[data-oalt]'))){ oAlt = t.getAttribute('data-oalt'); oneriCiz(); window.scrollTo(0, 0); return; }
     if((t = e.target.closest('[data-ohep]'))){ oHepsi[t.getAttribute('data-ohep')] = true; oneriCiz(); return; }
     if(e.target.id === 'sYenidenDene'){ S = null; saglikCiz(); return; }
@@ -801,7 +880,7 @@
   window.mkGeri = function(){ if(!$('detay').classList.contains('gizli')){ $('detay').classList.add('gizli'); return true; } return false; };
 
   var getirNo = 0, getirHata = '';
-  function raporSekmesi(){ return sekme === 'saglik' || sekme === 'oneri' || sekme === 'sermaye'; }
+  function raporSekmesi(){ return sekme === 'saglik' || sekme === 'oneri' || sekme === 'sermaye' || sekme === 'kdv'; }
   function icerik(h){ if(!raporSekmesi()) $('icerik').innerHTML = h; }
   function getir(){
     if(!kimlik){ $('icerik').innerHTML = '<div class="bekle">Önce uygulamada giriş yap.</div>'; return; }

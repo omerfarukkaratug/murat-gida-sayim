@@ -593,7 +593,7 @@
   <header style="border:none; padding:0 0 16px; background:transparent; display:flex; align-items:flex-start; justify-content:space-between;">
     <div>
       <h1><img src="logo-header.png" alt="Murat Gıda" style="height:30px; width:auto; display:block;"></h1>
-      <div class="sub"><img src="icon.svg" alt="" style="width:15px;height:15px;vertical-align:-3px;margin-right:5px;">KRT Saha · Murat Gıda • offline • Android • build 313</div>
+      <div class="sub"><img src="icon.svg" alt="" style="width:15px;height:15px;vertical-align:-3px;margin-right:5px;">KRT Saha · Murat Gıda • offline • Android • build 314</div>
     </div>
     <button type="button" id="themeToggleBtn" title="Tema seç" style="background:var(--panel2); border:1.5px solid var(--line); color:var(--text); width:34px; height:34px; border-radius:50%; font-size:15px; padding:0; display:flex; align-items:center; justify-content:center; flex-shrink:0;">🎨</button>
   </header>
@@ -4274,7 +4274,7 @@
     });
     return zxingLoadPromise;
   }
-  // QR OKUNMAZ (build 313): bu ekranlarda QR'ın işi yok; okunursa ürün yerine anlamsız yazı geliyordu ve motoru yavaşlatıyordu.
+  // QR OKUNMAZ (build 314): bu ekranlarda QR'ın işi yok; okunursa ürün yerine anlamsız yazı geliyordu ve motoru yavaşlatıyordu.
   // QR yalnızca Etiket > QR Etiket Doğrulama'da (etiket.html) okunur. codabar: gıdada yok, yanlış okuma kaynağı.
   var BARCODE_FORMATS = ['ean_13','ean_8','upc_a','upc_e','code_128','code_39','itf'];
   // iPhone kamerayı varsayılan olarak DÜŞÜK çözünürlükte (640×480) açar; barkod
@@ -4423,7 +4423,7 @@
       for(i = 0; i < n; i++){ g = (gri[i] - lo) * k; g = g < 0 ? 0 : g > 255 ? 255 : g; d[i * 4] = d[i * 4 + 1] = d[i * 4 + 2] = g; }
       t.x.putImageData(img, 0, 0);
     }
-    // KURTARMA MOTORU (build 313, ean-kurtar.js): ZBar/ML Kit'in okuyamadığı EAN-13/UPC barkodlar —
+    // KURTARMA MOTORU (build 314, ean-kurtar.js): ZBar/ML Kit'in okuyamadığı EAN-13/UPC barkodlar —
     // kalın/taşmış çubuk, yaldızlı-buruşuk folyo, barkodun hemen yanında yazı/desen (sessiz bölge yok).
     // Kenardan kenara ölçer; çubuk şişmesinden etkilenmez. Güvence: koruma çizgileri + parite + sağlama hanesi
     // + aynı karede ≥2 tarama çizgisi + ARDIŞIK 2 KAREDE aynı sonuç. Tutmazsa hiçbir şey dönmez.
