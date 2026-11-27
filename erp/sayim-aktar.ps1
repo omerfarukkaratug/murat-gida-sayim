@@ -39,7 +39,7 @@ $LogFile          = "C:\Scripts\sayim-aktar-log.txt"
 $DurumDosyasi     = "C:\Scripts\sayim-aktar-durum.json"
 $RaporKlasoru     = "C:\Scripts\sayim-raporlari"
 $AciklamaOn       = "KRT Saha: "
-$SurumSA = "2026-11-27c"
+$SurumSA = "2026-11-27d"
 
 try { [Net.ServicePointManager]::SecurityProtocol = [Net.ServicePointManager]::SecurityProtocol -bor [Net.SecurityProtocolType]::Tls12 } catch {}
 $Inv = [Globalization.CultureInfo]::InvariantCulture
@@ -664,7 +664,8 @@ function Gece-Aktar() {
             Write-Host ""
             Write-Host "  Hic okutulmayan ama ERP'de stogu olan $($sz.Count) urun var (arti stok $(Tl $art), eksi stok $(Tl $eks))." -ForegroundColor Yellow
             Write-Host "  Listesi icin once 4) Sayilmayanlar'a bakabilirsiniz. SIFIRLANIRSA bu urunlerin stogu $($T.ToString('dd.MM.yyyy HH:mm')) itibariyla 0 olur." -ForegroundColor Yellow
-            if ((Read-Host "  Bunlar da sifirlansin mi? Evet icin SIFIRLA yazin (Enter: hayir, dokunulmaz)") -ceq "SIFIRLA") {
+            $cevapS = (Read-Host "  Bunlar da sifirlansin mi? Evet icin SIFIRLA yazin (Enter: hayir, dokunulmaz)").Trim()
+            if ((NormTr $cevapS) -eq "sifirla") {
                 $sb2 = $sz | ForEach-Object { [long]$_.ID }
                 $bilgi2 = ErpBilgi @($sb2) $T
                 foreach ($sid in $sb2) {
@@ -675,7 +676,7 @@ function Gece-Aktar() {
                     [void]$plan.Add(@{ sid = [long]$sid; x = $x; u = $uu; s = $st; fark = $st.hedefToplam - $st.stokToplam; sifir = $true }); $sifirlanan[[long]$sid] = $true
                 }
                 Write-Host "  $($sifirlanan.Count) urun SIFIRLANMAK uzere belgeye eklendi (raporda 'SIFIRLANAN')." -ForegroundColor Yellow
-            }
+            } else { Write-Host "  Sifirlama YAPILMAYACAK (cevap: '$cevapS'). Hic sayilmayan urunlere dokunulmaz." -ForegroundColor Yellow }
         }
     }
 
@@ -689,7 +690,27 @@ function Gece-Aktar() {
     foreach ($p in (Parcala @($plan | Where-Object { -not $_.sifir -and -not $saatli } | ForEach-Object { $_.sid }) 400)) {
         $hareket += @((Tablo $null "SELECT TOP 50 d.STOK, f.BELGENO, FT.AD AS TUR, d.FIS_TARIHI, d.MIKTAR_GIRIS - d.MIKTAR_CIKIS AS M FROM dbo.FIS_DETAY d WITH (NOLOCK) JOIN dbo.FIS f WITH (NOLOCK) ON f.ID = d.FIS JOIN dbo.FIS_TURU FT ON FT.ID = f.FIS_TURU WHERE d.FATRALANDIRILMIS_IRSALIYEMI = 0 AND d.FIS_TARIHI > @k AND d.FIS_TARIHI <= @t AND d.LOKASYON = @l AND f.FIS_TURU <> 17 AND d.STOK IN ($(($p | ForEach-Object { [long]$_ }) -join ',')) ORDER BY d.FIS_TARIHI" @{ "@k" = $kap; "@t" = $T; "@l" = $script:Lokasyon }).Rows)
     }
-    if ($hareket.Count) {
+    if ($hareket.Count -and $son) {
+        # SON: bu urunler YALNIZ depoda sayildi, hicbir rafta cikmadi. Depo sayimindan sonraki satislar raftaki maldan yapildi;
+        # raflar sonradan sayildi ve bu urun bulunmadi (raf bosaldi). Yani bugunku gercek stok = depo sayimi: hareket beklenen durum.
+        # Tek risk: depo sayimindan SONRA gelip depoya konan ama okutulmayan mal (ALIS). Onlar ayrica gosterilir.
+        $tumH = @(); foreach ($p in (Parcala @($plan | Where-Object { -not $_.sifir } | ForEach-Object { $_.sid }) 400)) {
+            $tumH += @((Tablo $null "SELECT d.STOK, s.AD AS URUN, f.BELGENO, FT.AD AS TUR, d.FIS_TARIHI, d.MIKTAR_GIRIS - d.MIKTAR_CIKIS AS M FROM dbo.FIS_DETAY d WITH (NOLOCK) JOIN dbo.FIS f WITH (NOLOCK) ON f.ID = d.FIS JOIN dbo.FIS_TURU FT ON FT.ID = f.FIS_TURU JOIN dbo.STOK s WITH (NOLOCK) ON s.ID = d.STOK WHERE d.FATRALANDIRILMIS_IRSALIYEMI = 0 AND d.FIS_TARIHI > @k AND d.FIS_TARIHI <= @t AND d.LOKASYON = @l AND f.FIS_TURU <> 17 AND d.STOK IN ($(($p | ForEach-Object { [long]$_ }) -join ',')) ORDER BY d.FIS_TARIHI" @{ "@k" = $kap; "@t" = $T; "@l" = $script:Lokasyon }).Rows)
+        }
+        $hDosya = Join-Path $RaporKlasoru ("son-depo-hareketleri-" + (Get-Date).ToString("yyyyMMdd-HHmm") + ".csv")
+        try { $tumH | Select-Object @{n='Tarih';e={([datetime]$_.FIS_TARIHI).ToString('dd.MM.yyyy HH:mm')}}, @{n='Urun';e={$_.URUN}}, @{n='Belge turu';e={$_.TUR}}, @{n='Belge no';e={$_.BELGENO}}, @{n='Miktar (+giris/-cikis)';e={[double]$_.M}} | Export-Csv $hDosya -NoTypeInformation -Encoding UTF8 -Delimiter ';' } catch {}
+        $giris = @($tumH | Where-Object { [double]$_.M -gt 0 })
+        $urunSay = @($tumH | ForEach-Object { $_.STOK } | Select-Object -Unique).Count
+        Uyari "Yalniz depoda sayilan $urunSay urunde depo sayimindan ($($kap.ToString('dd.MM HH:mm'))) sonra ERP hareketi var ($($tumH.Count) satir; liste: $hDosya)."
+        Write-Host "     Bu urunler hicbir rafta bulunmadi: depo sayimindan sonraki satislar raftaki maldan yapildi ve raf sayilirken bitmisti." -ForegroundColor Yellow
+        Write-Host "     Yani gercek stok = depo sayimi; belge bunu yazar (sonraki satislar ikinci kez dusulmez). Bu beklenen durumdur." -ForegroundColor Yellow
+        if ($giris.Count) {
+            Write-Host "     DIKKAT - depo sayimindan SONRA GIRIS (alis / iade) olan $(@($giris | ForEach-Object { $_.STOK } | Select-Object -Unique).Count) urun:" -ForegroundColor Yellow
+            $giris | Select-Object -First 15 | ForEach-Object { Write-Host ("       {0}  {1,-34} {2,-22} {3,8}" -f ([datetime]$_.FIS_TARIHI).ToString('dd.MM HH:mm'), (Kisalt ([string]$_.URUN) 34), (Kisalt ([string]$_.TUR) 22), [double]$_.M) }
+            Write-Host "       Bu mal depoya konduysa ve okutulmadiysa stokta gorunmez; rafa konduysa raf sayiminda zaten yoktu (satildi)." -ForegroundColor Yellow
+        }
+        if ((Read-Host "  Depo sayimi esas alinsin mi? Devam icin DEVAM yazin (Enter: vazgec)") -cne "DEVAM") { $engel++ }
+    } elseif ($hareket.Count) {
         Hata "Kapanis ($($kap.ToString('dd.MM HH:mm'))) ile kesinlestirme ani ($($T.ToString('dd.MM HH:mm'))) arasinda sayilan urunlerde ERP hareketi var:"
         $hareket | Select-Object -First 15 | ForEach-Object { Write-Host ("     {0}  {1}  {2}  {3}" -f ([datetime]$_.FIS_TARIHI).ToString('dd.MM HH:mm'), $_.TUR, $_.BELGENO, $_.M) }
         Write-Host "     Bu belgeler sayimdan once mi sonra mi? Sayimdan SONRAki mal ise belge tarihi ertesi gune alinmali; ONCEyse kapanis saatini duzeltin." -ForegroundColor Yellow
