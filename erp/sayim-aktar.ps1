@@ -39,7 +39,7 @@ $LogFile          = "C:\Scripts\sayim-aktar-log.txt"
 $DurumDosyasi     = "C:\Scripts\sayim-aktar-durum.json"
 $RaporKlasoru     = "C:\Scripts\sayim-raporlari"
 $AciklamaOn       = "KRT Saha: "
-$SurumSA = "2026-11-27f"
+$SurumSA = "2026-11-27g"
 
 try { [Net.ServicePointManager]::SecurityProtocol = [Net.ServicePointManager]::SecurityProtocol -bor [Net.SecurityProtocolType]::Tls12 } catch {}
 $Inv = [Globalization.CultureInfo]::InvariantCulture
@@ -696,7 +696,7 @@ function Gece-Aktar() {
                         if (-not $neden -and $adN -match 'fiyat\s*fark') { $neden = 'fiyat farki' }
                         if (-not $neden) { foreach ($k in $haricKodOn) { if ($kodN.StartsWith($k)) { $neden = 'kod ' + $k; break } } }
                     }
-                    if ($neden) { [void]$atlanan.Add([pscustomobject]@{ Kod = $x.kod; Ad = $x.ad; Neden = $neden }); continue }
+                    if ($neden) { [void]$atlanan.Add([pscustomobject]@{ Kod = $x.kod; Ad = $x.ad; Neden = $neden; Sid = [long]$sid }); continue }
                     $uu = @{ depo = 0.0; raf = 0.0; mod = "esitle"; ad = $x.ad; barkodlar = @() }
                     $st = Satirlar $uu @($x.barkodlar.Values) @()
                     if (-not $st) { [void]$kartsiz.Add($sid); continue }
@@ -710,6 +710,17 @@ function Gece-Aktar() {
                     $atlanan | Select-Object -First 25 | ForEach-Object { Write-Host ("     {0,-16} {1,-40} ({2})" -f (Kisalt ([string]$_.Kod) 16), (Kisalt ([string]$_.Ad) 40), $_.Neden) -ForegroundColor DarkCyan }
                     if ($atlanan.Count -gt 25) { Write-Host "     ... (tamami dosyada)" -ForegroundColor DarkCyan }
                     Write-Host "  Baska bir karti da haric tutmak icin stok kodunu $haricDosya dosyasina (satir basina bir kod) yazip tekrar calistirin." -ForegroundColor DarkGray
+                    # Isletme karari: bu kartlarin stok miktari anlamsiz ve toplam stok degerini (sermaye) bozuyor -> istenirse onlar da 0'lanir
+                    if ((NormTr ((Read-Host "  Bu kartlar da SIFIRLANSIN mi? (stok degeri raporlarini bozuyorsa) Evet icin HEPSI yazin (Enter: hayir)").Trim())) -eq "hepsi") {
+                        foreach ($a in $atlanan) {
+                            $x = $bilgi2[[long]$a.Sid]
+                            $uu = @{ depo = 0.0; raf = 0.0; mod = "esitle"; ad = $x.ad; barkodlar = @() }
+                            $st = Satirlar $uu @($x.barkodlar.Values) @()
+                            if (-not $st) { [void]$kartsiz.Add($a.Sid); continue }
+                            [void]$plan.Add(@{ sid = [long]$a.Sid; x = $x; u = $uu; s = $st; fark = $st.hedefToplam - $st.stokToplam; sifir = $true }); $sifirlanan[[long]$a.Sid] = $true
+                        }
+                        Write-Host "  Hizmet / masraf kartlari da eklendi: toplam $($sifirlanan.Count) kart SIFIRLANACAK." -ForegroundColor Yellow
+                    }
                 }
             } else { Write-Host "  Sifirlama YAPILMAYACAK (cevap: '$cevapS'). Hic sayilmayan urunlere dokunulmaz." -ForegroundColor Yellow }
         }
