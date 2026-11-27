@@ -39,7 +39,7 @@ $LogFile          = "C:\Scripts\sayim-aktar-log.txt"
 $DurumDosyasi     = "C:\Scripts\sayim-aktar-durum.json"
 $RaporKlasoru     = "C:\Scripts\sayim-raporlari"
 $AciklamaOn       = "KRT Saha: "
-$SurumSA = "2026-11-27e"
+$SurumSA = "2026-11-27f"
 
 try { [Net.ServicePointManager]::SecurityProtocol = [Net.ServicePointManager]::SecurityProtocol -bor [Net.SecurityProtocolType]::Tls12 } catch {}
 $Inv = [Globalization.CultureInfo]::InvariantCulture
@@ -675,14 +675,42 @@ function Gece-Aktar() {
             if ((NormTr $cevapS) -eq "sifirla") {
                 $sb2 = $sz | ForEach-Object { [long]$_.ID }
                 $bilgi2 = ErpBilgi @($sb2) $T
+                # MAL OLMAYAN KARTLAR SIFIRLANMAZ: hizmet / masraf / fiyat farki / demirbas kartlari (elektrik tuketimi, komisyon,
+                # servis gideri, Sodexo, guvence bedeli, istif makinesi...) muhasebe icin kullaniliyor; sayimla 0'lanmamali.
+                # Ad ya da stok kodu bu kelimeleri iceriyorsa, ya da C:\Scripts\sifirlama-haric.txt'te (satir basina stok kodu) yaziyorsa atlanir.
+                # Kelime BASI ile eslesir (kok): giderleri, masrafi, hizmeti, bedeli... | TAM kelime: kisa / cok anlamli olanlar (fon, kira, prim...)
+                $haricKok = @('gider','masraf','hizmet','bedel','komisyon','tuketim','sodexo','sodexso','multinet','setcard','guvence','nakliye','navlun','akaryakit','istif','transpalet','forklift','demirbas','danismanlik','iscilik','depozito','tutari')
+                $haricTam = @('fon','fonlar','kira','prim','tutar','odeme','yakit','avans','kesinti','aidat','kargo','reklam','vergi','farki')
+                $haricKodOn = @('ff','sodexo','yakit','guvence','gider','masraf','hizmet','demirbas')
+                $haricDosya = Join-Path (Split-Path $DurumDosyasi) "sifirlama-haric.txt"
+                $haricKod = @{}; if (Test-Path $haricDosya) { foreach ($l in (Get-Content $haricDosya -Encoding UTF8)) { $k = (NormTr $l).Trim(); if ($k) { $haricKod[$k] = $true } } }
+                $atlanan = New-Object System.Collections.ArrayList
                 foreach ($sid in $sb2) {
                     $x = $bilgi2[[long]$sid]; if (-not $x) { continue }
+                    $adN = NormTr $x.ad; $kodN = (NormTr $x.kod).Trim()
+                    $neden = $null
+                    if ($haricKod.ContainsKey($kodN)) { $neden = 'liste' }
+                    else {
+                        foreach ($k in $haricKok) { if ($adN -match ('(^|[^a-z0-9])' + $k)) { $neden = $k; break } }
+                        if (-not $neden) { foreach ($k in $haricTam) { if ($adN -match ('(^|[^a-z0-9])' + $k + '($|[^a-z0-9])')) { $neden = $k; break } } }
+                        if (-not $neden -and $adN -match 'fiyat\s*fark') { $neden = 'fiyat farki' }
+                        if (-not $neden) { foreach ($k in $haricKodOn) { if ($kodN.StartsWith($k)) { $neden = 'kod ' + $k; break } } }
+                    }
+                    if ($neden) { [void]$atlanan.Add([pscustomobject]@{ Kod = $x.kod; Ad = $x.ad; Neden = $neden }); continue }
                     $uu = @{ depo = 0.0; raf = 0.0; mod = "esitle"; ad = $x.ad; barkodlar = @() }
                     $st = Satirlar $uu @($x.barkodlar.Values) @()
                     if (-not $st) { [void]$kartsiz.Add($sid); continue }
                     [void]$plan.Add(@{ sid = [long]$sid; x = $x; u = $uu; s = $st; fark = $st.hedefToplam - $st.stokToplam; sifir = $true }); $sifirlanan[[long]$sid] = $true
                 }
                 Write-Host "  $($sifirlanan.Count) urun SIFIRLANMAK uzere belgeye eklendi (raporda 'SIFIRLANAN')." -ForegroundColor Yellow
+                if ($atlanan.Count) {
+                    $aDosya = Join-Path $RaporKlasoru ("sifirlanmayan-hizmet-kartlari-" + (Get-Date).ToString("yyyyMMdd-HHmm") + ".csv")
+                    try { $atlanan | Export-Csv $aDosya -NoTypeInformation -Encoding UTF8 -Delimiter ';' } catch {}
+                    Write-Host "  $($atlanan.Count) kart MAL DEGIL (hizmet / masraf / fiyat farki / demirbas) diye SIFIRLANMADI. Liste: $aDosya" -ForegroundColor Cyan
+                    $atlanan | Select-Object -First 25 | ForEach-Object { Write-Host ("     {0,-16} {1,-40} ({2})" -f (Kisalt ([string]$_.Kod) 16), (Kisalt ([string]$_.Ad) 40), $_.Neden) -ForegroundColor DarkCyan }
+                    if ($atlanan.Count -gt 25) { Write-Host "     ... (tamami dosyada)" -ForegroundColor DarkCyan }
+                    Write-Host "  Baska bir karti da haric tutmak icin stok kodunu $haricDosya dosyasina (satir basina bir kod) yazip tekrar calistirin." -ForegroundColor DarkGray
+                }
             } else { Write-Host "  Sifirlama YAPILMAYACAK (cevap: '$cevapS'). Hic sayilmayan urunlere dokunulmaz." -ForegroundColor Yellow }
         }
     }
