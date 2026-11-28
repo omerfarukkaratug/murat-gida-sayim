@@ -593,7 +593,7 @@
   <header style="border:none; padding:0 0 16px; background:transparent; display:flex; align-items:flex-start; justify-content:space-between;">
     <div>
       <h1><img src="logo-header.png" alt="Murat Gıda" style="height:30px; width:auto; display:block;"></h1>
-      <div class="sub"><img src="icon.svg" alt="" style="width:15px;height:15px;vertical-align:-3px;margin-right:5px;">KRT Saha · Murat Gıda • offline • Android • build 314</div>
+      <div class="sub"><img src="icon.svg" alt="" style="width:15px;height:15px;vertical-align:-3px;margin-right:5px;">KRT Saha · Murat Gıda • offline • Android • build 315</div>
     </div>
     <button type="button" id="themeToggleBtn" title="Tema seç" style="background:var(--panel2); border:1.5px solid var(--line); color:var(--text); width:34px; height:34px; border-radius:50%; font-size:15px; padding:0; display:flex; align-items:center; justify-content:center; flex-shrink:0;">🎨</button>
   </header>
@@ -4274,7 +4274,7 @@
     });
     return zxingLoadPromise;
   }
-  // QR OKUNMAZ (build 314): bu ekranlarda QR'ın işi yok; okunursa ürün yerine anlamsız yazı geliyordu ve motoru yavaşlatıyordu.
+  // QR OKUNMAZ (build 315): bu ekranlarda QR'ın işi yok; okunursa ürün yerine anlamsız yazı geliyordu ve motoru yavaşlatıyordu.
   // QR yalnızca Etiket > QR Etiket Doğrulama'da (etiket.html) okunur. codabar: gıdada yok, yanlış okuma kaynağı.
   var BARCODE_FORMATS = ['ean_13','ean_8','upc_a','upc_e','code_128','code_39','itf'];
   // iPhone kamerayı varsayılan olarak DÜŞÜK çözünürlükte (640×480) açar; barkod
@@ -4333,9 +4333,58 @@
       var izler = v.srcObject.getVideoTracks ? v.srcObject.getVideoTracks() : [];
       if(!izler.length || izler.every(function(t){ return t.readyState === 'ended'; }) || !v.offsetParent) return;   // kamera kapatılmış / ekran değişmiş
       if(yenidenAc){ yenidenAc(); return; }
+      // iPhone ana ekran uygulaması (iOS 16): kapatıp açmak da görüntü getirmezse sayfa bir kez yenilenir — iOS'un
+      // kamera hattı ancak sayfa yeniden yüklenince düzeliyor. Taslaklar ve açık ekran yenilemeden önce kaydedilir,
+      // yenilendikten sonra aynı ekran açılır ve kamera kendiliğinden yeniden başlar (2 dakikada en fazla bir kez).
+      if(IOS_CIHAZ && v.id){
+        var once = 0; try { once = Number(sessionStorage.getItem('kamYenileZ') || 0); } catch(x){}
+        if(Date.now() - once > 120000){
+          kamLog('siyah kamera: sayfa yenileniyor (' + v.id + ')');
+          try { sessionStorage.setItem('kamYenileZ', String(Date.now())); sessionStorage.setItem('kamYenileId', v.id); } catch(x){}
+          try { arkayaGitti(); } catch(x){}
+          setTimeout(function(){ location.reload(); }, 150);
+          return;
+        }
+      }
       warnToast('Kamera görüntü vermiyor — uygulamayı tamamen kapatıp (yukarı kaydırarak) yeniden açın. Telefonda kamerayı kullanan başka bir uygulama açıksa onu kapatın.');
     }, 2000);
   }
+  // getUserMedia hiç cevap vermezse (iPhone ana ekran uygulamasında izin sorusu çıkmadan bekleyebiliyor) kullanıcıya söylenir
+  (function(){
+    try {
+      if(!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia || navigator.mediaDevices._bekci) return;
+      var asil = navigator.mediaDevices.getUserMedia.bind(navigator.mediaDevices);
+      navigator.mediaDevices.getUserMedia = function(k){
+        var bitti = false;
+        setTimeout(function(){ if(!bitti){ kamLog('getUserMedia 6 sn cevapsız'); warnToast('Kamera açılamadı: telefon izin vermiyor. Ayarlar → Safari → Kamera → "İzin Ver" seçin, sonra uygulamayı yukarı kaydırıp kapatıp yeniden açın.'); } }, 6000);
+        return asil(k).then(function(st){ bitti = true; return st; }, function(e){ bitti = true; throw e; });
+      };
+      navigator.mediaDevices._bekci = true;
+    } catch(x){}
+  })();
+  // Kamera tanı günlüğünü telefondan açıp kapatmak (ana ekran uygulamasında adres çubuğu yok): üst satıra 5 kez hızlı dokun
+  (function(){
+    var n = 0, z = 0;
+    document.addEventListener('click', function(e){
+      var t = e.target && e.target.closest && e.target.closest('.sub'); if(!t) return;
+      var simdi = Date.now(); n = simdi - z < 600 ? n + 1 : 1; z = simdi;
+      if(n >= 5){ n = 0; try { if(localStorage.getItem('kamTani') === '1') localStorage.removeItem('kamTani'); else localStorage.setItem('kamTani', '1'); } catch(x){}
+        toast(localStorage.getItem('kamTani') === '1' ? 'Kamera tanı günlüğü AÇILDI — sayfa yenileniyor' : 'Kamera tanı günlüğü kapatıldı'); setTimeout(function(){ location.reload(); }, 800); }
+    });
+  })();
+  // Siyah kamera yüzünden sayfa yenilendiyse: aynı ekran açılınca kamera kendiliğinden yeniden başlatılır
+  (function(){
+    var id = null, z = 0; try { id = sessionStorage.getItem('kamYenileId'); z = Number(sessionStorage.getItem('kamYenileZ') || 0); sessionStorage.removeItem('kamYenileId'); } catch(x){}
+    if(!id || Date.now() - z > 60000) return;
+    setTimeout(function(){
+      try {
+        var v = document.getElementById(id); if(!v || !v.offsetParent && id !== 'malVideo' && id !== 'video') { toast('Kamera yenilendi — kamera düğmesine tekrar dokun'); return; }
+        var ac = { malVideo: function(){ malStartCamera(true); }, priceVideo: function(){ priceStartCamera(true); }, hareketVideo: function(){ hareketStartCamera(true); }, stokHrkVideo: function(){ stokHrkKameraAc(true); }, video: function(){ startCamera(true); } }[id];
+        kamLog('yenileme sonrası kamera açılıyor: ' + id);
+        if(ac) ac(); else toast('Kamera yenilendi — kamera düğmesine tekrar dokun');
+      } catch(x){ toast('Kamera yenilendi — kamera düğmesine tekrar dokun'); }
+    }, 2500);
+  })();
   // Android da artık 1280×720 ister (varsayılan 640×480'de ince çizgili / küçük yazı tipli barkodlar seçilemiyordu).
   var CAMERA_CONSTRAINTS = IOS_CIHAZ
     ? { video: { facingMode: 'environment', width: { ideal: 1920 }, height: { ideal: 1080 } } }
@@ -4423,7 +4472,7 @@
       for(i = 0; i < n; i++){ g = (gri[i] - lo) * k; g = g < 0 ? 0 : g > 255 ? 255 : g; d[i * 4] = d[i * 4 + 1] = d[i * 4 + 2] = g; }
       t.x.putImageData(img, 0, 0);
     }
-    // KURTARMA MOTORU (build 314, ean-kurtar.js): ZBar/ML Kit'in okuyamadığı EAN-13/UPC barkodlar —
+    // KURTARMA MOTORU (build 315, ean-kurtar.js): ZBar/ML Kit'in okuyamadığı EAN-13/UPC barkodlar —
     // kalın/taşmış çubuk, yaldızlı-buruşuk folyo, barkodun hemen yanında yazı/desen (sessiz bölge yok).
     // Kenardan kenara ölçer; çubuk şişmesinden etkilenmez. Güvence: koruma çizgileri + parite + sağlama hanesi
     // + aynı karede ≥2 tarama çizgisi + ARDIŞIK 2 KAREDE aynı sonuç. Tutmazsa hiçbir şey dönmez.
